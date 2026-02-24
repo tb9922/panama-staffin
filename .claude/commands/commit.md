@@ -3,15 +3,27 @@ allowed-tools: Bash(git status:*), Bash(git add:*), Bash(git diff:*), Bash(git l
 description: Commit all changes and push to GitHub
 ---
 
+## Pre-computed context
+
+```bash
+$ git status --short
+```
+
+```bash
+$ git diff --stat
+```
+
+```bash
+$ git log --oneline -5
+```
+
 ## Your task
 
-Commit the current changes and push to GitHub. Follow these steps exactly:
+Commit the current changes and push to GitHub. The git status, diff, and log are above — use them to understand what changed and match the commit style.
 
-1. Run `git status` and `git diff --stat` to see what changed
-2. Run `git log --oneline -5` to see recent commit message style
-3. Stage the relevant changed files by name (not `git add -A`)
-4. Write a concise commit message (1 line, no emojis, no co-author tags)
-5. Commit and push to origin
+1. Stage the relevant changed files by name (not `git add -A`)
+2. Write a concise commit message (1 line, no emojis, no co-author tags)
+3. Commit and push to origin
 
 Rules:
 - Never add co-author tags

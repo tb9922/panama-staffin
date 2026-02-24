@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node test_rotation.js)",
+      "Bash(node test_costs.js)",
+      "Bash(node test_coverage.js)",
+      "Bash(npm run dev)",
+      "Bash(npm run build)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
