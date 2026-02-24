@@ -35,23 +35,30 @@ export default function SickTrends({ data }) {
   const [filterStaff, setFilterStaff] = useState('All');
   const [filterMonth, setFilterMonth] = useState('All');
 
-  // Calculate sick days per staff per month
+  // Calculate sick days per staff per month — includes exact dates
   const sickData = useMemo(() => {
     return activeStaff.map(s => {
-      const monthCounts = months.map(m => {
-        let sickDays = 0;
+      const monthDetails = months.map(m => {
+        const sickDates = [];
         m.dates.forEach(date => {
           const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
-          if (actual.shift === 'SICK') sickDays++;
+          if (actual.shift === 'SICK') {
+            sickDates.push({
+              date: formatDate(date),
+              day: date.getDate(),
+              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+              reason: actual.reason || '',
+            });
+          }
         });
-        return sickDays;
+        return { count: sickDates.length, dates: sickDates };
       });
+      const monthCounts = monthDetails.map(d => d.count);
       const total = monthCounts.reduce((a, b) => a + b, 0);
-      // Trend: compare last 3 months avg vs first 3 months avg
       const firstHalf = monthCounts.slice(0, 3).reduce((a, b) => a + b, 0) / 3;
       const secondHalf = monthCounts.slice(3).reduce((a, b) => a + b, 0) / 3;
       const trend = secondHalf > firstHalf + 0.5 ? 'worsening' : secondHalf < firstHalf - 0.5 ? 'improving' : 'stable';
-      return { ...s, monthCounts, total, trend };
+      return { ...s, monthCounts, monthDetails, total, trend };
     }).sort((a, b) => b.total - a.total);
   }, [activeStaff, months, data]);
 
@@ -232,7 +239,7 @@ export default function SickTrends({ data }) {
         </div>
       </div>
 
-      {/* Detailed Table */}
+      {/* Detailed Table — shows exact sick dates in each cell */}
       <div className="bg-white rounded-lg shadow overflow-x-auto mt-6">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
@@ -255,12 +262,21 @@ export default function SickTrends({ data }) {
                   <td className="py-1.5 px-3 font-medium">{s.name}</td>
                   <td className="py-1.5 px-3 text-xs text-gray-500">{s.team}</td>
                   <td className="py-1.5 px-3 text-xs text-gray-500">{s.role}</td>
-                  {s.monthCounts.map((count, mi) => (
-                    <td key={mi} className="py-1.5 px-2 text-center">
-                      {count > 0 ? (
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
-                          count >= 3 ? 'bg-red-200 text-red-800' : count >= 2 ? 'bg-amber-200 text-amber-800' : 'bg-yellow-100 text-yellow-700'
-                        }`}>{count}</span>
+                  {s.monthDetails.map((md, mi) => (
+                    <td key={mi} className="py-1.5 px-2 text-center align-top">
+                      {md.count > 0 ? (
+                        <div>
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium mb-1 ${
+                            md.count >= 3 ? 'bg-red-200 text-red-800' : md.count >= 2 ? 'bg-amber-200 text-amber-800' : 'bg-yellow-100 text-yellow-700'
+                          }`}>{md.count}</span>
+                          <div className="space-y-0.5">
+                            {md.dates.map(d => (
+                              <div key={d.date} className="text-[10px] text-gray-500" title={d.reason || 'Sick'}>
+                                {d.dayOfWeek} {d.day}{d.reason ? ` — ${d.reason}` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
