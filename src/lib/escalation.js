@@ -69,6 +69,9 @@ export function getEscalationLevel(coverage, staffForDay) {
   if (coverage.isCovered && hasAgency) {
     return { level: 3, status: 'LVL3 Agency', color: 'yellow', label: 'Agency Required' };
   }
+  if (!coverage.isCovered && coverage.headGap === 0 && coverage.skillGap > 0) {
+    return { level: 4, status: 'LVL4 Skill Gap', color: 'red', label: 'Skill Gap — heads met, skill mix insufficient' };
+  }
   if (!coverage.isCovered && coverage.headGap <= 1) {
     return { level: 4, status: 'LVL4 Short', color: 'red', label: 'Short-Staffed' };
   }
@@ -164,11 +167,13 @@ export function calculateDayCost(staffForDay, config) {
 
 // Fatigue risk check — consecutive working days
 export function checkFatigueRisk(staffMember, date, overrides, config) {
+  // Scan up to 14 days (full Panama cycle) in each direction to catch heavy OT override runs
+  const scanRadius = Math.max(config.max_consecutive_days + 3, 14);
   let backward = 0;
   let checkDate = new Date(date);
   checkDate.setHours(0, 0, 0, 0);
 
-  for (let i = 0; i < config.max_consecutive_days + 3; i++) {
+  for (let i = 0; i < scanRadius; i++) {
     checkDate = addDays(checkDate, -1);
     const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
     if (!isWorkingShift(actual.shift)) break;
@@ -181,7 +186,7 @@ export function checkFatigueRisk(staffMember, date, overrides, config) {
   const todayActual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
   if (isWorkingShift(todayActual.shift)) {
     forward = 1;
-    for (let i = 0; i < config.max_consecutive_days + 3; i++) {
+    for (let i = 0; i < scanRadius; i++) {
       checkDate = addDays(checkDate, 1);
       const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
       if (!isWorkingShift(actual.shift)) break;
@@ -235,6 +240,12 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
 // Swap validator matching Excel DAILY_STATUS swap checker
 export function validateSwap(fromStaff, toStaff, date, overrides, config) {
   const issues = [];
+
+  // Self-swap guard
+  if (fromStaff.id === toStaff.id) {
+    issues.push({ type: 'error', msg: 'Cannot swap a staff member with themselves' });
+    return { safe: false, issues };
+  }
 
   // Skill safety: does removing fromStaff and adding toStaff maintain coverage?
   if (fromStaff.skill > toStaff.skill) {

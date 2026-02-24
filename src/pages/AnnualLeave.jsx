@@ -44,7 +44,7 @@ export default function AnnualLeave({ data, updateData }) {
 
   const entitlement = data.config.al_entitlement_days || 28;
 
-  // Book AL — only on scheduled working days
+  // Book AL — only on scheduled working days, enforces entitlement cap
   function bookAL() {
     if (!bookingStaff || !bookingStart || !bookingEnd) return;
     const start = parseDate(bookingStart);
@@ -53,6 +53,13 @@ export default function AnnualLeave({ data, updateData }) {
 
     const staff = data.staff.find(s => s.id === bookingStaff);
     if (!staff) return;
+
+    const used = alUsed[bookingStaff] || 0;
+    const remaining = entitlement - used;
+    if (remaining <= 0) {
+      alert(`${staff.name} has used all ${entitlement} AL days. No more leave can be booked.`);
+      return;
+    }
 
     const newOverrides = JSON.parse(JSON.stringify(data.overrides));
     const issues = [];
@@ -72,6 +79,8 @@ export default function AnnualLeave({ data, updateData }) {
       const alOnDay = countALOnDate(d, newOverrides);
       if (alOnDay >= data.config.max_al_same_day) {
         issues.push(`${dateKey}: max AL reached (${data.config.max_al_same_day})`);
+      } else if (booked >= remaining) {
+        issues.push(`${dateKey}: entitlement exhausted (${entitlement} days)`);
       } else {
         if (!newOverrides[dateKey]) newOverrides[dateKey] = {};
         newOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al' };

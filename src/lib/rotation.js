@@ -83,7 +83,12 @@ export function getTeamBase(team) {
   return match ? match[0] : null;
 }
 
-export function getScheduledShift(staff, cycleDay) {
+export function getScheduledShift(staff, cycleDay, date) {
+  // If date is provided and staff has a start_date, don't schedule before they start
+  if (date && staff.start_date) {
+    const checkDate = typeof date === 'string' ? date : formatDate(date);
+    if (checkDate < staff.start_date) return 'OFF';
+  }
   if (staff.team === 'Float') return 'AVL';
   const teamBase = getTeamBase(staff.team);
   if (!teamBase) return 'OFF';
@@ -103,7 +108,7 @@ export function getActualShift(staff, date, overrides, cycleStartDate) {
     return overrides[dateKey][staff.id];
   }
   const cycleDay = getCycleDay(date, cycleStartDate);
-  return { shift: getScheduledShift(staff, cycleDay) };
+  return { shift: getScheduledShift(staff, cycleDay, date) };
 }
 
 // Shift classification
@@ -187,17 +192,27 @@ export function getStaffForDay(staff, date, overrides, config) {
   const result = [];
   const activeStaff = staff.filter(s => s.active !== false);
   const staffIds = new Set(activeStaff.map(s => s.id));
+  const bankHol = isBankHoliday(date, config);
   for (const s of activeStaff) {
     const actual = getActualShift(s, date, overrides, config.cycle_start_date);
     const cycleDay = getCycleDay(date, config.cycle_start_date);
-    const scheduled = getScheduledShift(s, cycleDay);
+    const scheduled = getScheduledShift(s, cycleDay, date);
+    let shift = actual.shift;
+    // If staff hasn't started yet, force OFF regardless of overrides
+    if (scheduled === 'OFF' && s.start_date && formatDate(date) < s.start_date) {
+      shift = 'OFF';
+    }
+    // Auto-upgrade to BH-D/BH-N on bank holidays (unless already BH, agency, OT, or non-working)
+    if (bankHol && isWorkingShift(shift) && !isBHShift(shift) && !isAgencyShift(shift) && !isOTShift(shift)) {
+      shift = NIGHT_SHIFTS.includes(shift) ? 'BH-N' : 'BH-D';
+    }
     result.push({
       ...s,
-      shift: actual.shift,
+      shift,
       scheduledShift: scheduled,
       reason: actual.reason || null,
       source: actual.source || 'scheduled',
-      isOverride: actual.shift !== scheduled,
+      isOverride: shift !== scheduled,
     });
   }
 

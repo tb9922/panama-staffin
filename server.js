@@ -133,15 +133,51 @@ app.get('/api/data', (req, res) => {
   }
 });
 
+// Validate overrides before saving
+function validateOverrides(data) {
+  const warnings = [];
+  if (!data.overrides || !data.config || !data.staff) return warnings;
+
+  const maxAL = data.config.max_al_same_day || 2;
+  const entitlement = data.config.al_entitlement_days || 28;
+
+  // Check max AL per day
+  for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
+    const alCount = Object.values(dayOverrides).filter(o => o.shift === 'AL').length;
+    if (alCount > maxAL) {
+      warnings.push(`${dateKey}: ${alCount} AL bookings exceeds max ${maxAL}`);
+    }
+  }
+
+  // Check AL entitlement per staff
+  const alUsed = {};
+  for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
+    for (const [staffId, override] of Object.entries(dayOverrides)) {
+      if (override.shift === 'AL') {
+        alUsed[staffId] = (alUsed[staffId] || 0) + 1;
+      }
+    }
+  }
+  for (const [staffId, used] of Object.entries(alUsed)) {
+    if (used > entitlement) {
+      const staff = data.staff.find(s => s.id === staffId);
+      warnings.push(`${staff?.name || staffId}: ${used} AL days exceeds entitlement of ${entitlement}`);
+    }
+  }
+
+  return warnings;
+}
+
 // Save data for a specific home
 app.post('/api/data', (req, res) => {
   try {
     const homeId = req.query.home || req.body?.config?.home_name?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
+    const warnings = validateOverrides(req.body);
     backupData(homeId);
     const dataFile = getDataFile(homeId);
     fs.writeFileSync(dataFile, JSON.stringify(req.body, null, 2));
-    logAudit('save', homeId, req.query.user || 'unknown');
-    res.json({ ok: true });
+    logAudit('save', homeId, req.query.user || 'unknown', warnings.length > 0 ? warnings.join('; ') : '');
+    res.json({ ok: true, warnings });
   } catch (err) {
     res.status(500).json({ error: 'Failed to write data file' });
   }
