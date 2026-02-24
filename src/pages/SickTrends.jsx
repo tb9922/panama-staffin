@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { formatDate, isCareRole, getActualShift } from '../lib/rotation.js';
+import { useMemo, useState } from 'react';
+import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -32,6 +32,8 @@ export default function SickTrends({ data }) {
   const MONTHS_BACK = 6;
   const months = useMemo(() => getMonthRange(MONTHS_BACK), []);
   const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+  const [filterStaff, setFilterStaff] = useState('All');
+  const [filterMonth, setFilterMonth] = useState('All');
 
   // Calculate sick days per staff per month
   const sickData = useMemo(() => {
@@ -57,6 +59,50 @@ export default function SickTrends({ data }) {
   const monthTotals = useMemo(() => {
     return months.map((_, mi) => sickData.reduce((sum, s) => sum + s.monthCounts[mi], 0));
   }, [sickData, months]);
+
+  // Build detailed sick log — every individual sick day with exact date and who was sick
+  const sickLog = useMemo(() => {
+    const log = [];
+    activeStaff.forEach(s => {
+      months.forEach(m => {
+        m.dates.forEach(date => {
+          const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
+          if (actual.shift === 'SICK') {
+            log.push({
+              date: formatDate(date),
+              dateObj: date,
+              staffId: s.id,
+              staffName: s.name,
+              team: s.team,
+              role: s.role,
+              reason: actual.reason || '',
+              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+            });
+          }
+        });
+      });
+    });
+    log.sort((a, b) => b.date.localeCompare(a.date)); // most recent first
+    return log;
+  }, [activeStaff, months, data]);
+
+  // Filtered sick log
+  const filteredLog = useMemo(() => {
+    return sickLog.filter(entry => {
+      if (filterStaff !== 'All' && entry.staffId !== filterStaff) return false;
+      if (filterMonth !== 'All') {
+        const entryMonth = entry.date.slice(0, 7); // YYYY-MM
+        if (entryMonth !== filterMonth) return false;
+      }
+      return true;
+    });
+  }, [sickLog, filterStaff, filterMonth]);
+
+  // Unique months for filter dropdown
+  const uniqueMonths = useMemo(() => {
+    const set = new Set(sickLog.map(e => e.date.slice(0, 7)));
+    return [...set].sort().reverse();
+  }, [sickLog]);
 
   const maxMonthTotal = Math.max(...monthTotals, 1);
   const grandTotal = monthTotals.reduce((a, b) => a + b, 0);
@@ -243,6 +289,63 @@ export default function SickTrends({ data }) {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      {/* Detailed Sick Log — exact dates */}
+      <div className="bg-white rounded-lg shadow overflow-x-auto mt-6">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase">Sick Day Log — Exact Dates</h2>
+          <div className="flex gap-2">
+            <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className="border rounded px-2 py-1 text-xs">
+              <option value="All">All Staff</option>
+              {staffWithSick.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border rounded px-2 py-1 text-xs">
+              <option value="All">All Months</option>
+              {uniqueMonths.map(m => {
+                const [y, mo] = m.split('-');
+                const label = new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                return <option key={m} value={m}>{label}</option>;
+              })}
+            </select>
+          </div>
+        </div>
+        {filteredLog.length === 0 ? (
+          <div className="text-sm text-gray-400 p-4 text-center">No sick days recorded{filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+              <tr>
+                <th className="py-2 px-3 text-left">Date</th>
+                <th className="py-2 px-3 text-left">Day</th>
+                <th className="py-2 px-3 text-left">Staff</th>
+                <th className="py-2 px-3 text-left">Team</th>
+                <th className="py-2 px-3 text-left">Role</th>
+                <th className="py-2 px-3 text-left">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLog.map((entry, i) => (
+                <tr key={`${entry.date}-${entry.staffId}`} className="border-b hover:bg-gray-50">
+                  <td className="py-1.5 px-3 font-mono text-xs">{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.dayOfWeek}</td>
+                  <td className="py-1.5 px-3 font-medium">{entry.staffName}</td>
+                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.team}</td>
+                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.role}</td>
+                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.reason || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 border-t-2">
+                <td className="py-2 px-3 font-bold text-xs" colSpan={2}>Total: {filteredLog.length} sick day{filteredLog.length !== 1 ? 's' : ''}</td>
+                <td className="py-2 px-3 text-xs text-gray-500" colSpan={4}>
+                  {new Set(filteredLog.map(e => e.staffId)).size} staff member{new Set(filteredLog.map(e => e.staffId)).size !== 1 ? 's' : ''}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
 
       {/* Legend */}
