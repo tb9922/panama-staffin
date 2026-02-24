@@ -272,13 +272,33 @@ UI terminology (consistent across AnnualLeave, Dashboard, booking alerts):
 - **Used** = `used` (AL overrides counted in the leave year)
 - **Left** = `remaining` (earned - used; can be negative if over-booked)
 
-## Known Gaps / Future Work
+## Full Platform Roadmap
 
-- No mobile app or staff self-service portal
-- No email/SMS/push notifications
-- No payroll integration (Sage, Xero, etc.)
-- No time & attendance / GPS clock-in
-- No DBS expiry tracking
+Phase 2 features (detailed micro-step spec exists — see session memory):
+
+### Compliance & Onboarding
+- Staff onboarding: DBS checks (Enhanced + Adults' Barred List), right to work, references, health declarations, Day 1 induction checklist, policy acknowledgement pack
+- Care Certificate: 16 standards (2025 update incl. Oliver McGowan), knowledge + practical observation tracking, 8/12 week alerts, progress dashboard
+- Training expansion: tiered levels (L1/L2/L3), fire drill tracking, supervision scheduling, annual appraisals, bulk CSV import from e-learning platforms
+- CQC evidence: quality statement tagging, weighted compliance scoring, evidence pack generator for inspections
+- GDPR: retention schedules, SAR workflow, breach notification, right to erasure
+
+### Operations
+- Incident & safety reporting: internal log, CQC statutory notifications (Reg 16/18), RIDDOR tracking, safeguarding referral workflow, root cause analysis
+- Communication: structured digital handover notes, in-app messaging (WhatsApp replacement), mandatory read receipts
+- GPS clock-in: geofenced attendance, planned vs actual reconciliation, automated timesheets, break recording
+
+### Integration & Payroll
+- Payroll: NMW deep compliance (sleep-in calc, deduction check, age-based rates), WTR full tracking (11hr rest, weekly rest, night worker limits), Sage/Xero CSV export
+- Clinical API: read-only connectors to Nourish/PCS/Access Group, unified portfolio KPI dashboard
+
+### Platform
+- Per-staff auth + mobile-friendly staff portal (view rota, request AL, see training status)
+- Group/owner dashboard: portfolio-level KPIs, cross-home benchmarking, aggregate compliance
+- Database migration: PostgreSQL (prerequisite for multi-user, staff portal, scaling)
+- Email/SMS notifications (SendGrid/Twilio)
+
+### Current Known Gaps
 - Shift swap feature discussed but not built (approach: swap staff `team` field)
 - Audit log only viewable in-app, not exportable
 - AL carryover is set manually — no automatic year-end rollover

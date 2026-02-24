@@ -220,6 +220,51 @@ function validateOverrides(data) {
     }
   }
 
+  // Onboarding compliance check
+  if (data.staff) {
+    const careRoles = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
+    const activeCarers = data.staff.filter(s => s.active !== false && careRoles.includes(s.role));
+    const onboarding = data.onboarding || {};
+    let dbsMissing = 0;
+    let onboardingIncomplete = 0;
+
+    for (const s of activeCarers) {
+      const staffOnb = onboarding[s.id] || {};
+      const dbs = staffOnb.dbs_check;
+      if (!dbs || dbs.status !== 'completed') {
+        dbsMissing++;
+      }
+
+      // Check RTW expiry
+      const rtw = staffOnb.right_to_work;
+      if (rtw && rtw.expiry_date) {
+        const expiry = new Date(rtw.expiry_date);
+        const now = new Date();
+        const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+        if (daysLeft < 0) {
+          warnings.push(`${s.name}: Right to Work EXPIRED`);
+        } else if (daysLeft <= 60) {
+          warnings.push(`${s.name}: Right to Work expires in ${daysLeft} days`);
+        }
+      }
+
+      // Count sections completed
+      let completed = 0;
+      const sections = ['dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration', 'qualifications', 'contract', 'day1_induction', 'policy_acknowledgement'];
+      for (const sec of sections) {
+        if (staffOnb[sec]?.status === 'completed') completed++;
+      }
+      if (completed < sections.length) onboardingIncomplete++;
+    }
+
+    if (dbsMissing > 0) {
+      warnings.push(`Onboarding: ${dbsMissing} active care staff without completed DBS check`);
+    }
+    if (onboardingIncomplete > 0) {
+      warnings.push(`Onboarding: ${onboardingIncomplete} active care staff with incomplete onboarding`);
+    }
+  }
+
   return warnings;
 }
 
