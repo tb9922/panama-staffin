@@ -1,0 +1,53 @@
+R1: STAFFING COST SCENARIOS (v7 — Fully Adaptive) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R2: All rates, counts, and costs dynamically linked to ROSTER, CONFIG, STAFF_DB, and DAILY_COSTS |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R4: ASSUMPTIONS |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R5: Total Active Staff | [F:STAFF_DB!B38=25] |  | Adaptive: STAFF_DB |  |  |  |  |  |  |  |  |  |  |  |  | 
+R6: Days in Period | 28 |  | 4-week rota cycle |  |  |  |  |  |  |  |  |  |  |  |  | 
+R7: Day Shift Hours | [F:CONFIG!B11=12.25] | hrs | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R8: Night Shift Hours | [F:CONFIG!B12=12.25] | hrs | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R9: Avg Day Staff Rate | [F:IFERROR(SUMPRODUCT((ROSTER!$AG$4:$AG$50)*(ROSTER!$C$4:$C$50<>"N")*(ROSTER!$B$4:$B$50<>"Float"))/COUNTIFS(ROSTER!$C$4:$C$50,"<>N",ROSTER!$B$4:$B$50,"<>Float"),0)=5.03947368421053] | £/hr | Adaptive: ROSTER rates |  |  |  |  |  |  |  |  |  |  |  |  | 
+R10: Avg Night Staff Rate | [F:IFERROR(SUMPRODUCT((ROSTER!$AG$4:$AG$50)*(ROSTER!$C$4:$C$50="N"))/COUNTIF(ROSTER!$C$4:$C$50,"N"),0)=12] | £/hr | Adaptive: ROSTER rates |  |  |  |  |  |  |  |  |  |  |  |  | 
+R11: OT Premium | [F:CONFIG!B28=2] | £/hr | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R12: Agency Day Rate | [F:CONFIG!B29=22] | £/hr | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R13: Agency Night Rate | [F:CONFIG!B30=28] | £/hr | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R14: Rostered Day Heads/day | [F:IFERROR(SUMPRODUCT((ROSTER!$B$4:$B$50<>"Float")*(ROSTER!$C$4:$C$50<>"N")*(ROSTER!$B$4:$B$50<>""))/2,0)=8] |  | Adaptive: ÷2 for Panama rotation |  |  |  |  |  |  |  |  |  |  |  |  | 
+R15: Rostered Night Heads/day | [F:IFERROR(SUMPRODUCT((ROSTER!$C$4:$C$50="N")*(ROSTER!$B$4:$B$50<>""))/2,0)=3] |  | Adaptive: ÷2 for Panama rotation |  |  |  |  |  |  |  |  |  |  |  |  | 
+R16: Float Pool Size | [F:COUNTIF(ROSTER!$B$4:$B$50,"Float")=3] |  | Adaptive: ROSTER |  |  |  |  |  |  |  |  |  |  |  |  | 
+R17: Short-Week OT Pool | 4 |  | Input: max rested staff/day for OT |  |  |  |  |  |  |  |  |  |  |  |  | 
+R18: Night Gap % (of total) | [F:CONFIG!B52=0.3] | % | Adaptive: CONFIG |  |  |  |  |  |  |  |  |  |  |  |  | 
+R19: Float Deploy Rate | [F:IFERROR(SUMPRODUCT((ROSTER!$AG$4:$AG$50)*(ROSTER!$B$4:$B$50="Float"))/COUNTIF(ROSTER!$B$4:$B$50,"Float"),0)=12] | £/hr | Adaptive: avg float rate |  |  |  |  |  |  |  |  |  |  |  |  | 
+R22: SCENARIO | Sick
+/day | AL
+/day | Total
+Gaps | Float
+Fills | OT
+Fills | AG Day
+Fills | AG Night
+Fills | Base Staff
+£ (28d) | Float Deploy
+£ (28d) | OT Prem
+£ (28d) | AG Day
+£ (28d) | AG Night
+£ (28d) | BH Prem
+£ (28d) | TOTAL
+28-DAY £ | Monthly
+£ | ANNUAL £
+R23: CLEAN (Zero disruption) | 0 | 0 | [F:B23+C23=0] | [F:MIN(D23,$B$16)=0] | [F:MIN(MAX(D23-E23,0),$B$17)=0] | [F:ROUND(MAX(D23-E23-F23,0)*(1-$B$18),0)=0] | [F:MAX(D23-E23-F23,0)-G23=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E23*$B$7*$B$19*$B$6=0] | [F:F23*$B$7*$B$11*$B$6=0] | [F:G23*$B$7*$B$12*$B$6=0] | [F:H23*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I23+J23+K23+L23+M23+N23=43221.5] | [F:O23/28*30.44=46987.945] | [F:O23/28*365=563423.125]
+R24: TYPICAL WEEK | 1 | 1 | [F:B24+C24=2] | [F:MIN(D24,$B$16)=2] | [F:MIN(MAX(D24-E24,0),$B$17)=0] | [F:ROUND(MAX(D24-E24-F24,0)*(1-$B$18),0)=0] | [F:MAX(D24-E24-F24,0)-G24=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E24*$B$7*$B$19*$B$6=8232] | [F:F24*$B$7*$B$11*$B$6=0] | [F:G24*$B$7*$B$12*$B$6=0] | [F:H24*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I24+J24+K24+L24+M24+N24=51453.5] | [F:O24/28*30.44=55937.305] | [F:O24/28*365=670733.125]
+R25: BAD WEEK | 2 | 2 | [F:B25+C25=4] | [F:MIN(D25,$B$16)=3] | [F:MIN(MAX(D25-E25,0),$B$17)=1] | [F:ROUND(MAX(D25-E25-F25,0)*(1-$B$18),0)=0] | [F:MAX(D25-E25-F25,0)-G25=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E25*$B$7*$B$19*$B$6=12348] | [F:F25*$B$7*$B$11*$B$6=686] | [F:G25*$B$7*$B$12*$B$6=0] | [F:H25*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I25+J25+K25+L25+M25+N25=56255.5] | [F:O25/28*30.44=61157.765] | [F:O25/28*365=733330.625]
+R26: CRISIS WEEK | 3 | 2 | [F:B26+C26=5] | [F:MIN(D26,$B$16)=3] | [F:MIN(MAX(D26-E26,0),$B$17)=2] | [F:ROUND(MAX(D26-E26-F26,0)*(1-$B$18),0)=0] | [F:MAX(D26-E26-F26,0)-G26=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E26*$B$7*$B$19*$B$6=12348] | [F:F26*$B$7*$B$11*$B$6=1372] | [F:G26*$B$7*$B$12*$B$6=0] | [F:H26*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I26+J26+K26+L26+M26+N26=56941.5] | [F:O26/28*30.44=61903.545] | [F:O26/28*365=742273.125]
+R27: WORST CASE (Winter/Flu) | 4 | 2 | [F:B27+C27=6] | [F:MIN(D27,$B$16)=3] | [F:MIN(MAX(D27-E27,0),$B$17)=3] | [F:ROUND(MAX(D27-E27-F27,0)*(1-$B$18),0)=0] | [F:MAX(D27-E27-F27,0)-G27=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E27*$B$7*$B$19*$B$6=12348] | [F:F27*$B$7*$B$11*$B$6=2058] | [F:G27*$B$7*$B$12*$B$6=0] | [F:H27*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I27+J27+K27+L27+M27+N27=57627.5] | [F:O27/28*30.44=62649.325] | [F:O27/28*365=751215.625]
+R28: PANDEMIC / NOROVIRUS | 6 | 2 | [F:B28+C28=8] | [F:MIN(D28,$B$16)=3] | [F:MIN(MAX(D28-E28,0),$B$17)=4] | [F:ROUND(MAX(D28-E28-F28,0)*(1-$B$18),0)=1] | [F:MAX(D28-E28-F28,0)-G28=0] | [F:DAILY_COSTS!C31=43221.5] | [F:E28*$B$7*$B$19*$B$6=12348] | [F:F28*$B$7*$B$11*$B$6=2744] | [F:G28*$B$7*$B$12*$B$6=7546] | [F:H28*$B$8*$B$13*$B$6=0] | [F:DAILY_COSTS!G31=0] | [F:I28+J28+K28+L28+M28+N28=65859.5] | [F:O28/28*30.44=71598.685] | [F:O28/28*365=858525.625]
+R30: AGENCY KILL IMPACT |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R31: WITHOUT Agency Kill (all gaps → agency day + night split) | [F:I24+D24*(1-$B$18)*$B$7*$B$12*$B$6+D24*$B$18*$B$8*$B$13*$B$6=59548.3] | 28-day | [F:B31/28*365=776254.625] | /year |  |  |  |  |  |  |  |  |  |  |  | 
+R32: WITH Agency Kill (float → OT → agency last) | [F:O24=51453.5] | 28-day | [F:B32/28*365=670733.125] |  |  |  |  |  |  |  |  |  |  |  |  | 
+R34: ANNUAL SAVING PER HOME | [F:D31-D32=105521.5] |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R35: Across 10 homes | [F:B34*10=1055215] |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R36: Across 30 homes | [F:B34*30=3165645] |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R40: WINTER SCENARIOS (Weekly OT Cap) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R42: Scenario | Gaps/d | ×7 | Float/wk | OT/wk cap | Agency/wk | Ag £/wk |  |  |  |  |  |  |  |  |  | 
+R43: WINTER TYPICAL | 3 | [F:B43*7=21] | [F:MIN(C43,15)=15] | [F:MIN(MAX(C43-D43,0),CONFIG!$B$59)=6] | [F:MAX(C43-D43-E43,0)=0] | [F:(F43*0.7*12.25*CONFIG!$B$29+F43*0.3*12.25*CONFIG!$B$30)=0] |  |  |  |  |  |  |  |  |  | 
+R44: WINTER BAD | 5 | [F:B44*7=35] | [F:MIN(C44,15)=15] | [F:MIN(MAX(C44-D44,0),CONFIG!$B$59)=8] | [F:MAX(C44-D44-E44,0)=12] | [F:(F44*0.7*12.25*CONFIG!$B$29+F44*0.3*12.25*CONFIG!$B$30)=3498.6] |  |  |  |  |  |  |  |  |  | 
+R45: WINTER CRISIS | 7 | [F:B45*7=49] | [F:MIN(C45,15)=15] | [F:MIN(MAX(C45-D45,0),CONFIG!$B$59)=8] | [F:MAX(C45-D45-E45,0)=26] | [F:(F45*0.7*12.25*CONFIG!$B$29+F45*0.3*12.25*CONFIG!$B$30)=7580.3] |  |  |  |  |  |  |  |  |  | 
+R46: WINTER WORST | 9 | [F:B46*7=63] | [F:MIN(C46,15)=15] | [F:MIN(MAX(C46-D46,0),CONFIG!$B$59)=8] | [F:MAX(C46-D46-E46,0)=40] | [F:(F46*0.7*12.25*CONFIG!$B$29+F46*0.3*12.25*CONFIG!$B$30)=11662] |  |  |  |  |  |  |  |  |  | 
+R47: NOROVIRUS PEAK | 9 | [F:B47*7=63] | [F:MIN(C47,15)=15] | [F:MIN(MAX(C47-D47,0),CONFIG!$B$59)=8] | [F:MAX(C47-D47-E47,0)=40] | [F:(F47*0.7*12.25*CONFIG!$B$29+F47*0.3*12.25*CONFIG!$B$30)=11662] |  |  |  |  |  |  |  |  |  | 

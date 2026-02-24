@@ -1,0 +1,477 @@
+{
+  "config": {
+    "home_name": "Oakwood Care Home",
+    "registered_beds": 40,
+    "care_type": "Residential",
+    "cycle_start_date": "2025-01-06",
+    "cycle_length": 14,
+    "shifts": {
+      "E": {
+        "name": "Early",
+        "hours": 6,
+        "start": "08:00",
+        "end": "14:00"
+      },
+      "L": {
+        "name": "Late",
+        "hours": 6,
+        "start": "14:00",
+        "end": "20:00"
+      },
+      "EL": {
+        "name": "Full Day",
+        "hours": 12.25,
+        "start": "07:45",
+        "end": "20:00"
+      },
+      "N": {
+        "name": "Night",
+        "hours": 12.25,
+        "start": "19:45",
+        "end": "08:00"
+      }
+    },
+    "handover_mins": 15,
+    "break_deduction": 0,
+    "minimum_staffing": {
+      "early": {
+        "heads": 3,
+        "skill_points": 2
+      },
+      "late": {
+        "heads": 3,
+        "skill_points": 2
+      },
+      "night": {
+        "heads": 3,
+        "skill_points": 1.5
+      }
+    },
+    "ot_premium": 2,
+    "agency_rate_day": 22,
+    "agency_rate_night": 28,
+    "max_consecutive_days": 5,
+    "max_al_same_day": 2,
+    "float_retainer_weekly": 50,
+    "al_entitlement_days": 28,
+    "ft_target_el": 42.875,
+    "ft_target_partial": 36,
+    "night_ft_target": 42.875,
+    "bh_premium_multiplier": 1.5,
+    "sickness_rate": 0.06,
+    "avg_al_per_day": 1,
+    "night_gap_pct": 0.3,
+    "night_float_priority": true,
+    "emergency_callin_premium": 1.5,
+    "manager_floor_rate": 18,
+    "winter_sick_uplift": 1.8,
+    "weekly_ot_cap": 8,
+    "agency_availability_pct": 1,
+    "nlw_rate": 12.21,
+    "bank_staff_pool_size": 4,
+    "agency_target_pct": 0.05,
+    "bank_holidays": [
+      {
+        "date": "2025-01-01",
+        "name": "New Year's Day"
+      },
+      {
+        "date": "2025-04-18",
+        "name": "Good Friday"
+      },
+      {
+        "date": "2025-04-21",
+        "name": "Easter Monday"
+      },
+      {
+        "date": "2025-05-05",
+        "name": "Early May Bank Holiday"
+      },
+      {
+        "date": "2025-05-26",
+        "name": "Spring Bank Holiday"
+      },
+      {
+        "date": "2025-08-25",
+        "name": "Summer Bank Holiday"
+      },
+      {
+        "date": "2025-12-25",
+        "name": "Christmas Day"
+      },
+      {
+        "date": "2025-12-26",
+        "name": "Boxing Day"
+      },
+      {
+        "date": "2026-01-01",
+        "name": "New Year's Day"
+      },
+      {
+        "date": "2026-04-03",
+        "name": "Good Friday"
+      },
+      {
+        "date": "2026-04-06",
+        "name": "Easter Monday"
+      },
+      {
+        "date": "2026-05-04",
+        "name": "Early May Bank Holiday"
+      },
+      {
+        "date": "2026-05-25",
+        "name": "Spring Bank Holiday"
+      },
+      {
+        "date": "2026-08-31",
+        "name": "Summer Bank Holiday"
+      },
+      {
+        "date": "2026-12-25",
+        "name": "Christmas Day"
+      },
+      {
+        "date": "2026-12-26",
+        "name": "Boxing Day"
+      }
+    ]
+  },
+  "staff": [
+    {
+      "id": "S001",
+      "name": "Alice Johnson",
+      "role": "Senior Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S002",
+      "name": "Bob Smith",
+      "role": "Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S003",
+      "name": "Carol Davis",
+      "role": "Senior Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S004",
+      "name": "David Wilson",
+      "role": "Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S005",
+      "name": "Emma Brown",
+      "role": "Team Lead",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 1.5,
+      "hourly_rate": 14,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S006",
+      "name": "Fiona Hart",
+      "role": "Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S007",
+      "name": "George King",
+      "role": "Senior Carer",
+      "team": "Day A",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S008",
+      "name": "Hannah Lee",
+      "role": "Senior Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S009",
+      "name": "Ian Clark",
+      "role": "Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S010",
+      "name": "Julia Martin",
+      "role": "Senior Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S011",
+      "name": "Kevin White",
+      "role": "Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S012",
+      "name": "Laura Adams",
+      "role": "Team Lead",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 1.5,
+      "hourly_rate": 14,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S013",
+      "name": "Mike Taylor",
+      "role": "Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 0.5,
+      "hourly_rate": 11,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S014",
+      "name": "Nina Patel",
+      "role": "Senior Carer",
+      "team": "Day B",
+      "pref": "EL",
+      "skill": 1,
+      "hourly_rate": 12.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S015",
+      "name": "Oliver Ross",
+      "role": "Night Senior",
+      "team": "Night A",
+      "pref": "N",
+      "skill": 1,
+      "hourly_rate": 13,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S016",
+      "name": "Paula Young",
+      "role": "Night Carer",
+      "team": "Night A",
+      "pref": "N",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S017",
+      "name": "Quentin Fox",
+      "role": "Night Carer",
+      "team": "Night A",
+      "pref": "N",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S018",
+      "name": "Rachel Green",
+      "role": "Night Senior",
+      "team": "Night B",
+      "pref": "N",
+      "skill": 1,
+      "hourly_rate": 13,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S019",
+      "name": "Steve Black",
+      "role": "Night Carer",
+      "team": "Night B",
+      "pref": "N",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S020",
+      "name": "Tina Hall",
+      "role": "Night Carer",
+      "team": "Night B",
+      "pref": "N",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S021",
+      "name": "Uma Shah",
+      "role": "Float Senior",
+      "team": "Float",
+      "pref": "ANY",
+      "skill": 1,
+      "hourly_rate": 13,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S022",
+      "name": "Victor Chen",
+      "role": "Float Carer",
+      "team": "Float",
+      "pref": "ANY",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S023",
+      "name": "Wendy Jones",
+      "role": "Float Carer",
+      "team": "Float",
+      "pref": "ANY",
+      "skill": 0.5,
+      "hourly_rate": 11.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S024",
+      "name": "Xena Price",
+      "role": "Carer",
+      "team": "Day A",
+      "pref": "E",
+      "skill": 0.5,
+      "hourly_rate": 10.5,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "Early only - school run",
+      "wtr_opt_out": true
+    },
+    {
+      "id": "S025",
+      "name": "Yasmin Reed",
+      "role": "Senior Carer",
+      "team": "Day B",
+      "pref": "L",
+      "skill": 1,
+      "hourly_rate": 12,
+      "active": true,
+      "start_date": "2025-01-06",
+      "notes": "Late only - prefers afternoons",
+      "wtr_opt_out": true
+    }
+  ],
+  "overrides": {
+    "2026-02-13": {
+      "S007": {
+        "shift": "SICK",
+        "reason": "Manual edit"
+      }
+    }
+  },
+  "annual_leave": {},
+  "day_notes": {}
+}

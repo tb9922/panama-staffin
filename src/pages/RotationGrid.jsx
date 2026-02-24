@@ -1,0 +1,642 @@
+import { useState, useMemo } from 'react';
+import {
+  getStaffForDay, formatDate, getActualShift, getCycleDay,
+  getScheduledShift, isCareRole,
+  calculateStaffPeriodHours, SHIFT_COLORS,
+} from '../lib/rotation.js';
+import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
+
+const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
+
+const SHIFT_OPTIONS = [
+  { value: 'E',     label: 'E — Early',          group: 'Standard' },
+  { value: 'L',     label: 'L — Late',           group: 'Standard' },
+  { value: 'EL',    label: 'EL — Full Day',      group: 'Standard' },
+  { value: 'N',     label: 'N — Night',          group: 'Standard' },
+  { value: 'OFF',   label: 'OFF — Day Off',      group: 'Standard' },
+  { value: 'AVL',   label: 'AVL — Available',    group: 'Standard' },
+  { value: 'AL',    label: 'AL — Annual Leave',  group: 'Absence' },
+  { value: 'SICK',  label: 'SICK — Sick',        group: 'Absence' },
+  { value: 'ADM',   label: 'ADM — Admin',        group: 'Absence' },
+  { value: 'TRN',   label: 'TRN — Training',     group: 'Absence' },
+  { value: 'OC-E',  label: 'OC-E — OT Early',   group: 'Overtime' },
+  { value: 'OC-L',  label: 'OC-L — OT Late',    group: 'Overtime' },
+  { value: 'OC-EL', label: 'OC-EL — OT Full',   group: 'Overtime' },
+  { value: 'OC-N',  label: 'OC-N — OT Night',   group: 'Overtime' },
+  { value: 'AG-E',  label: 'AG-E — Agency Early', group: 'Agency' },
+  { value: 'AG-L',  label: 'AG-L — Agency Late',  group: 'Agency' },
+  { value: 'AG-N',  label: 'AG-N — Agency Night', group: 'Agency' },
+  { value: 'BH-D',  label: 'BH-D — Bank Hol Day', group: 'Bank Hol' },
+  { value: 'BH-N',  label: 'BH-N — Bank Hol Night', group: 'Bank Hol' },
+];
+
+function downloadCSV(filename, headers, rows) {
+  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function getMonthDates(year, month) {
+  const dates = [];
+  const d = new Date(year, month, 1);
+  while (d.getMonth() === month) {
+    dates.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+function parseLocalDate(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export default function RotationGrid({ data, updateData }) {
+  const [filterTeam, setFilterTeam] = useState('All');
+  const [editing, setEditing] = useState(null);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [bulkModal, setBulkModal] = useState(null);
+
+  // Dynamic calendar month dates
+  const { monthDates, monthLabel } = useMemo(() => {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    const dates = getMonthDates(target.getFullYear(), target.getMonth());
+    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    return { monthDates: dates, monthLabel: label };
+  }, [monthOffset]);
+
+  const activeStaff = useMemo(() => {
+    let list = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+    if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
+    const teamOrder = { 'Day A': 0, 'Day B': 1, 'Night A': 2, 'Night B': 3, 'Float': 4 };
+    list.sort((a, b) => (teamOrder[a.team] ?? 9) - (teamOrder[b.team] ?? 9) || a.name.localeCompare(b.name));
+    return list;
+  }, [data.staff, filterTeam]);
+
+  const staffStats = useMemo(() => {
+    const map = {};
+    activeStaff.forEach(s => {
+      map[s.id] = calculateStaffPeriodHours(s, monthDates, data.overrides, data.config);
+    });
+    return map;
+  }, [activeStaff, monthDates, data]);
+
+  // Impact preview
+  const impact = useMemo(() => {
+    if (!editing || !editing.proposedShift) return null;
+    const { staffId, dateStr, currentShift, proposedShift } = editing;
+    if (proposedShift === currentShift) return null;
+
+    const staff = data.staff.find(s => s.id === staffId);
+    if (!staff) return null;
+
+    const date = parseLocalDate(dateStr);
+
+    const staffForDayBefore = getStaffForDay(data.staff, date, data.overrides, data.config);
+    const coverageBefore = getDayCoverageStatus(staffForDayBefore, data.config);
+    const costBefore = calculateDayCost(staffForDayBefore, data.config);
+    const statsBefore = calculateStaffPeriodHours(staff, monthDates, data.overrides, data.config);
+    const fatigueBefore = checkFatigueRisk(staff, date, data.overrides, data.config);
+
+    const simOverrides = JSON.parse(JSON.stringify(data.overrides));
+    const scheduled = getScheduledShift(staff, getCycleDay(date, data.config.cycle_start_date));
+    if (proposedShift === scheduled) {
+      if (simOverrides[dateStr]) {
+        delete simOverrides[dateStr][staffId];
+        if (Object.keys(simOverrides[dateStr]).length === 0) delete simOverrides[dateStr];
+      }
+    } else {
+      if (!simOverrides[dateStr]) simOverrides[dateStr] = {};
+      simOverrides[dateStr][staffId] = { shift: proposedShift, reason: 'Manual edit' };
+    }
+
+    const staffForDayAfter = getStaffForDay(data.staff, date, simOverrides, data.config);
+    const coverageAfter = getDayCoverageStatus(staffForDayAfter, data.config);
+    const costAfter = calculateDayCost(staffForDayAfter, data.config);
+    const statsAfter = calculateStaffPeriodHours(staff, monthDates, simOverrides, data.config);
+    const fatigueAfter = checkFatigueRisk(staff, date, simOverrides, data.config);
+
+    const wtrBefore = statsBefore.wtrStatus;
+    const wtrAfter = statsAfter.wtrStatus;
+
+    const warnings = [];
+    const errors = [];
+
+    ['early', 'late', 'night'].forEach(period => {
+      const before = coverageBefore[period];
+      const after = coverageAfter[period];
+      if (!before || !after) return;
+      if (after.coverage.headCount < before.coverage.headCount) {
+        const msg = `${period} heads: ${before.coverage.headCount} → ${after.coverage.headCount}`;
+        if (after.coverage.headCount < after.coverage.required.heads) errors.push(msg + ` (below min ${after.coverage.required.heads})`);
+        else warnings.push(msg);
+      }
+      if (after.coverage.skillPoints < before.coverage.skillPoints) {
+        const msg = `${period} skill: ${before.coverage.skillPoints.toFixed(1)} → ${after.coverage.skillPoints.toFixed(1)}`;
+        if (after.coverage.skillPoints < after.coverage.required.skill_points) errors.push(msg + ` (below min ${after.coverage.required.skill_points})`);
+        else warnings.push(msg);
+      }
+      if (after.escalation.level > before.escalation.level) {
+        warnings.push(`${period} escalation: ${before.escalation.status} → ${after.escalation.status}`);
+      }
+    });
+
+    if (wtrAfter === 'BREACH' && wtrBefore !== 'BREACH') {
+      errors.push(`WTR BREACH: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk (max 48)`);
+    } else if (wtrAfter === 'HIGH' && wtrBefore !== 'HIGH') {
+      warnings.push(`WTR HIGH: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk`);
+    }
+
+    if (fatigueAfter.exceeded && !fatigueBefore.exceeded) {
+      errors.push(`Fatigue: ${fatigueAfter.consecutive} consecutive days (max ${data.config.max_consecutive_days})`);
+    } else if (fatigueAfter.atRisk && !fatigueBefore.atRisk) {
+      warnings.push(`Fatigue risk: ${fatigueAfter.consecutive} consecutive days`);
+    }
+
+    const costDelta = costAfter.total - costBefore.total;
+    const approved = errors.length === 0;
+
+    return {
+      staff, date, dateStr,
+      currentShift, proposedShift,
+      coverageBefore, coverageAfter,
+      costBefore, costAfter, costDelta,
+      statsBefore, statsAfter,
+      fatigueBefore, fatigueAfter,
+      wtrBefore, wtrAfter,
+      warnings, errors, approved,
+    };
+  }, [editing, data, monthDates]);
+
+  function openEditor(staffId, dateStr) {
+    const actual = data.overrides[dateStr]?.[staffId]?.shift;
+    const staff = data.staff.find(s => s.id === staffId);
+    const cycleDay = getCycleDay(parseLocalDate(dateStr), data.config.cycle_start_date);
+    const scheduled = getScheduledShift(staff, cycleDay);
+    const currentShift = actual || scheduled;
+    setEditing({ staffId, dateStr, currentShift, proposedShift: currentShift });
+  }
+
+  function applyChange() {
+    if (!editing || !editing.proposedShift) return;
+    const { staffId, dateStr, proposedShift } = editing;
+    const staff = data.staff.find(s => s.id === staffId);
+    const date = parseLocalDate(dateStr);
+    const scheduled = getScheduledShift(staff, getCycleDay(date, data.config.cycle_start_date));
+
+    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    if (proposedShift === scheduled) {
+      if (newOverrides[dateStr]) {
+        delete newOverrides[dateStr][staffId];
+        if (Object.keys(newOverrides[dateStr]).length === 0) delete newOverrides[dateStr];
+      }
+    } else {
+      if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
+      newOverrides[dateStr][staffId] = { shift: proposedShift, reason: 'Manual edit' };
+    }
+    updateData({ ...data, overrides: newOverrides });
+    setEditing(null);
+  }
+
+  function bulkSickWeek(staffId, startDateStr) {
+    const staff = data.staff.find(s => s.id === staffId);
+    if (!staff) return;
+    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(parseLocalDate(startDateStr));
+      d.setDate(d.getDate() + i);
+      const dk = formatDate(d);
+      const cycleDay = getCycleDay(d, data.config.cycle_start_date);
+      const sched = getScheduledShift(staff, cycleDay);
+      if (sched !== 'OFF') {
+        if (!newOverrides[dk]) newOverrides[dk] = {};
+        newOverrides[dk][staffId] = { shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' };
+      }
+    }
+    updateData({ ...data, overrides: newOverrides });
+    setBulkModal(null);
+  }
+
+  function revertAllOverrides() {
+    if (!confirm(`Revert ALL overrides for ${monthLabel}? This cannot be undone (but you can use Ctrl+Z).`)) return;
+    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    monthDates.forEach(d => {
+      const dk = formatDate(d);
+      delete newOverrides[dk];
+    });
+    updateData({ ...data, overrides: newOverrides });
+    setBulkModal(null);
+  }
+
+  function exportCSV() {
+    const headers = ['ID', 'Name', 'Team', 'Role', 'Pref',
+      ...monthDates.map(d => formatDate(d)),
+      'Hours', 'Pay £', 'OT Hrs', 'WTR'];
+    const rows = activeStaff.map(s => {
+      const stats = staffStats[s.id];
+      return [
+        s.id, s.name, s.team, s.role, s.pref,
+        ...monthDates.map(d => {
+          const actual = getActualShift(s, d, data.overrides, data.config.cycle_start_date);
+          return actual.shift;
+        }),
+        stats?.totalHours.toFixed(1) ?? '',
+        stats?.grossPay.toFixed(0) ?? '',
+        stats?.otHours > 0 ? stats.otHours.toFixed(1) : '0',
+        stats?.wtrStatus ?? '',
+      ];
+    });
+    downloadCSV(`roster_${monthLabel.replace(' ', '_')}.csv`, headers, rows);
+  }
+
+  let lastTeam = null;
+
+  const CoverageRow = ({ label, before, after }) => {
+    if (!before || !after) return null;
+    const headChanged = after.coverage.headCount !== before.coverage.headCount;
+    const skillChanged = after.coverage.skillPoints !== before.coverage.skillPoints;
+    const headBad = after.coverage.headCount < after.coverage.required.heads;
+    const skillBad = after.coverage.skillPoints < after.coverage.required.skill_points;
+    return (
+      <div className="flex items-center justify-between text-xs py-0.5">
+        <span className="text-gray-500 capitalize w-12">{label}</span>
+        <span className="flex items-center gap-1">
+          <span>Heads:</span>
+          {headChanged ? (
+            <>
+              <span className="text-gray-400">{before.coverage.headCount}</span>
+              <span>&rarr;</span>
+              <span className={headBad ? 'text-red-600 font-bold' : 'font-medium'}>{after.coverage.headCount}</span>
+            </>
+          ) : (
+            <span className="font-medium">{after.coverage.headCount}</span>
+          )}
+          <span className="text-gray-300">/{after.coverage.required.heads}</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span>Skill:</span>
+          {skillChanged ? (
+            <>
+              <span className="text-gray-400">{before.coverage.skillPoints.toFixed(1)}</span>
+              <span>&rarr;</span>
+              <span className={skillBad ? 'text-red-600 font-bold' : 'font-medium'}>{after.coverage.skillPoints.toFixed(1)}</span>
+            </>
+          ) : (
+            <span className="font-medium">{after.coverage.skillPoints.toFixed(1)}</span>
+          )}
+          <span className="text-gray-300">/{after.coverage.required.skill_points}</span>
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4">
+      {/* Print header */}
+      <div className="hidden print:block print-header">
+        <h1 className="text-xl font-bold">{data.config.home_name} — Roster: {monthLabel}</h1>
+        <p className="text-xs text-gray-500">{monthDates.length} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
+      </div>
+
+      <div className="flex items-center justify-between mb-3 print:hidden">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
+          {/* Month Navigation */}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setMonthOffset(monthOffset - 1)}
+              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-xs">&larr;</button>
+            {monthOffset !== 0 && (
+              <button onClick={() => setMonthOffset(0)}
+                className="px-2 py-1 text-blue-600 text-xs hover:underline">Current</button>
+            )}
+            <button onClick={() => setMonthOffset(monthOffset + 1)}
+              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-xs">&rarr;</button>
+          </div>
+          <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
+          <span className="text-xs text-gray-400">({monthDates.length} days)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
+            className="border border-gray-300 rounded px-2 py-1 text-xs">
+            <option value="All">All Teams</option>
+            {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button onClick={() => setBulkModal({ type: 'revert-all' })}
+            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-2 py-1 rounded text-xs">Revert All</button>
+          <button onClick={exportCSV}
+            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-xs">Export CSV</button>
+          <button onClick={() => window.print()}
+            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-xs">Print</button>
+          <span className="text-xs text-gray-500">{activeStaff.length} staff</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="text-[11px] border-collapse">
+          <thead>
+            <tr className="bg-gray-800 text-white">
+              <th className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
+              <th className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
+              {monthDates.map((d, i) => {
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const isMonday = d.getDay() === 1 && i > 0;
+                return (
+                  <th key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
+                    isWeekend ? 'bg-gray-700' : ''
+                  } ${isMonday ? 'border-l border-gray-600' : ''}`}>
+                    <div className="text-[9px] text-gray-400">{d.toLocaleDateString('en-GB', { weekday: 'short' })[0]}</div>
+                    <div>{d.getDate()}</div>
+                  </th>
+                );
+              })}
+              <th className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
+              <th className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
+              <th className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
+              <th className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeStaff.map(s => {
+              const showTeamHeader = s.team !== lastTeam;
+              lastTeam = s.team;
+              const stats = staffStats[s.id];
+              return [
+                showTeamHeader && (
+                  <tr key={`team-${s.team}`} className="bg-gray-100">
+                    <td colSpan={monthDates.length + 6} className="py-1 px-2 font-bold text-xs text-gray-600 uppercase">{s.team}</td>
+                  </tr>
+                ),
+                <tr key={s.id} className="border-b hover:bg-gray-50">
+                  <td className="py-1 px-2 font-medium sticky left-0 bg-white z-10 border-r">
+                    <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})`}>{s.name}</div>
+                    <div className="text-[9px] text-gray-400">{s.role}</div>
+                  </td>
+                  <td className="py-1 px-1 text-[10px] text-gray-500">{s.pref}</td>
+                  {monthDates.map((date, i) => {
+                    const dateKey = formatDate(date);
+                    const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
+                    const shift = actual.shift;
+                    const isOverride = !!data.overrides[dateKey]?.[s.id];
+                    const isEditing = editing?.staffId === s.id && editing?.dateStr === dateKey;
+                    const isMonday = date.getDay() === 1 && i > 0;
+                    return (
+                      <td key={i} className={`py-0.5 px-0.5 text-center ${isMonday ? 'border-l border-gray-200' : ''}`}>
+                        <button
+                          onClick={() => openEditor(s.id, dateKey)}
+                          className={`inline-block w-full px-0.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
+                            SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
+                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'}`}
+                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}\nClick to change`}>
+                          {shift === 'OFF' ? '-' : shift}
+                        </button>
+                      </td>
+                    );
+                  })}
+                  <td className="py-1 px-2 text-right font-mono">{stats?.totalHours.toFixed(1)}</td>
+                  <td className="py-1 px-2 text-right font-mono">£{stats?.grossPay.toFixed(0)}</td>
+                  <td className="py-1 px-2 text-right font-mono text-orange-600">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
+                  <td className="py-1 px-2 text-center">
+                    <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
+                      stats?.wtrStatus === 'BREACH' ? 'bg-red-100 text-red-700' :
+                      stats?.wtrStatus === 'HIGH' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                    }`}>{stats?.wtrStatus}</span>
+                  </td>
+                </tr>
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-2 mt-4 text-[10px]">
+        {[
+          ['EL', 'Full Day'], ['E', 'Early'], ['L', 'Late'], ['N', 'Night'],
+          ['OFF', 'Off'], ['AVL', 'Available'], ['AL', 'Ann. Leave'], ['SICK', 'Sick'],
+          ['OC-*', 'On-Call/OT'], ['AG-*', 'Agency'], ['BH-*', 'Bank Holiday'],
+        ].map(([code, label]) => (
+          <span key={code} className={`px-1.5 py-0.5 rounded ${SHIFT_COLORS[code] || 'bg-gray-100'}`}>
+            {code} = {label}
+          </span>
+        ))}
+      </div>
+
+      {/* Bulk Revert Modal */}
+      {bulkModal?.type === 'revert-all' && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setBulkModal(null); }}>
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-semibold mb-3">Revert All Overrides</h2>
+            <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
+            <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month. You can undo with Ctrl+Z.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setBulkModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={revertAllOverrides} className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700">Revert All</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift Editor Modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gray-800 text-white px-5 py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">{data.staff.find(s => s.id === editing.staffId)?.name}</h2>
+                  <p className="text-xs text-gray-400">
+                    {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLORS[editing.currentShift] || 'bg-gray-600'}`}>
+                    {editing.currentShift}
+                  </span>
+                  <p className="text-[10px] text-gray-400 mt-1">current</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {/* Shift Selector Dropdown */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Change shift to:</label>
+                <select
+                  value={editing.proposedShift}
+                  onChange={e => setEditing({ ...editing, proposedShift: e.target.value })}
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                  <optgroup label="Standard">
+                    {SHIFT_OPTIONS.filter(o => o.group === 'Standard').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Absence">
+                    {SHIFT_OPTIONS.filter(o => o.group === 'Absence').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Overtime / On-Call">
+                    {SHIFT_OPTIONS.filter(o => o.group === 'Overtime').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Agency">
+                    {SHIFT_OPTIONS.filter(o => o.group === 'Agency').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Bank Holiday">
+                    {SHIFT_OPTIONS.filter(o => o.group === 'Bank Hol').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Impact Preview */}
+              {impact ? (
+                <div className="space-y-3">
+                  <div className={`rounded-lg px-4 py-2.5 flex items-center gap-2 ${
+                    impact.errors.length > 0 ? 'bg-red-50 border border-red-200' :
+                    impact.warnings.length > 0 ? 'bg-amber-50 border border-amber-200' :
+                    'bg-green-50 border border-green-200'
+                  }`}>
+                    <span className="text-lg">{impact.errors.length > 0 ? '!' : impact.warnings.length > 0 ? '~' : 'OK'}</span>
+                    <div>
+                      <div className={`font-semibold text-sm ${
+                        impact.errors.length > 0 ? 'text-red-800' : impact.warnings.length > 0 ? 'text-amber-800' : 'text-green-800'
+                      }`}>
+                        {impact.errors.length > 0 ? 'Issues Found — Review Before Approving' :
+                         impact.warnings.length > 0 ? 'Warnings — Proceed With Caution' :
+                         'All Clear — Safe to Apply'}
+                      </div>
+                      <div className="text-[10px] text-gray-500">
+                        {editing.currentShift} &rarr; {editing.proposedShift}
+                      </div>
+                    </div>
+                  </div>
+
+                  {impact.errors.length > 0 && (
+                    <div className="space-y-1">
+                      {impact.errors.map((e, i) => (
+                        <div key={i} className="text-xs bg-red-50 text-red-700 px-3 py-1.5 rounded flex items-start gap-1.5">
+                          <span className="font-bold mt-px">!</span> {e}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {impact.warnings.length > 0 && (
+                    <div className="space-y-1">
+                      {impact.warnings.map((w, i) => (
+                        <div key={i} className="text-xs bg-amber-50 text-amber-700 px-3 py-1.5 rounded flex items-start gap-1.5">
+                          <span className="font-bold mt-px">~</span> {w}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="border rounded-lg p-3">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Day Coverage Impact</h4>
+                    <CoverageRow label="Early" before={impact.coverageBefore.early} after={impact.coverageAfter.early} />
+                    <CoverageRow label="Late" before={impact.coverageBefore.late} after={impact.coverageAfter.late} />
+                    <CoverageRow label="Night" before={impact.coverageBefore.night} after={impact.coverageAfter.night} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="border rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Day Cost</h4>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-gray-400 text-xs">£{impact.costBefore.total.toFixed(0)}</span>
+                        <span className="text-xs">&rarr;</span>
+                        <span className="font-bold text-sm">£{impact.costAfter.total.toFixed(0)}</span>
+                      </div>
+                      <div className={`text-xs mt-0.5 font-medium ${
+                        impact.costDelta > 0 ? 'text-red-600' : impact.costDelta < 0 ? 'text-green-600' : 'text-gray-400'
+                      }`}>
+                        {impact.costDelta > 0 ? '+' : ''}{impact.costDelta !== 0 ? `£${impact.costDelta.toFixed(2)}` : 'No change'}
+                      </div>
+                    </div>
+                    <div className="border rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Staff Month</h4>
+                      <div className="text-xs space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Hours:</span>
+                          <span className="font-medium">
+                            {impact.statsBefore.totalHours.toFixed(1)} &rarr; {impact.statsAfter.totalHours.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Pay:</span>
+                          <span className="font-medium">
+                            £{impact.statsBefore.grossPay.toFixed(0)} &rarr; £{impact.statsAfter.grossPay.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">WTR:</span>
+                          <span className={`font-medium ${
+                            impact.wtrAfter === 'BREACH' ? 'text-red-600' : impact.wtrAfter === 'HIGH' ? 'text-amber-600' : 'text-green-600'
+                          }`}>{impact.wtrAfter}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Fatigue:</span>
+                          <span className={`font-medium ${
+                            impact.fatigueAfter.exceeded ? 'text-red-600' : impact.fatigueAfter.atRisk ? 'text-amber-600' : 'text-green-600'
+                          }`}>{impact.fatigueAfter.consecutive}d consec</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : editing.proposedShift === editing.currentShift ? (
+                <div className="text-sm text-gray-400 text-center py-4">Select a different shift to see the impact</div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t px-5 py-3 flex items-center justify-between bg-gray-50">
+              <button onClick={() => setEditing(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                Cancel
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
+                  className="px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded">
+                  Sick 7 Days
+                </button>
+                {editing.currentShift !== getScheduledShift(data.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date)) && (
+                  <button onClick={() => {
+                    const staff = data.staff.find(s => s.id === editing.staffId);
+                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date));
+                    setEditing({ ...editing, proposedShift: scheduled });
+                  }} className="px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                    Revert to Scheduled
+                  </button>
+                )}
+                <button
+                  onClick={applyChange}
+                  disabled={!editing.proposedShift || editing.proposedShift === editing.currentShift}
+                  className={`px-5 py-2 rounded text-sm font-medium text-white disabled:opacity-30 ${
+                    impact?.errors.length > 0
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : impact?.warnings.length > 0
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }`}>
+                  {impact?.errors.length > 0 ? 'Apply Anyway' :
+                   impact?.warnings.length > 0 ? 'Apply (with warnings)' :
+                   'Approve & Apply'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

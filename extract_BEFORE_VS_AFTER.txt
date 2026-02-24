@@ -1,0 +1,64 @@
+R1: BEFORE vs AFTER: THE ACQUISITION BUSINESS CASE |  |  | 
+R2: Drop in real numbers from target home. Use in pitch deck and seller meetings. |  |  | 
+R4: CURRENT STATE (Seller's Operation) |  |  | 
+R5: Total Beds | 40 |  | Blue = editable input
+R6: Occupancy Rate | 0.85 | % | 
+R7: Private Pay Mix | 0.15 | % | 
+R8: Council Weekly Fee | 750 | £/wk | Local authority funded
+R9: Private Weekly Fee | 1100 | £/wk | Self-funder rate
+R10: Agency Dependency | 0.25 | % | % of shifts filled by agency
+R11: Avg Shifts Needing Cover/day | 2.5 |  | Sick + AL + vacancies
+R12: Avg Staff Rate | 11.86 | £/hr | 
+R13: Agency Rate (Day) | [F:CONFIG!B29=22] | £/hr | 
+R14: Shift Length (Day) | [F:CONFIG!B11=12.25] | hrs | 
+R15: Agency Rate (Night) | [F:CONFIG!B30=28] | £/hr | 
+R16: Night Shift Length | [F:CONFIG!B12=12.25] | hrs | 
+R17: Occupied Beds | [F:B5*B6=34] |  | 
+R18: Council Beds | [F:B17*(1-B7)=28.9] |  | 
+R19: Private Beds | [F:B17*B7=5.1] |  | 
+R20: Annual Revenue | [F:(B18*B8+B19*B9)*52=1418820] |  | 
+R21: Annual Agency Spend | [F:B11*B10*((1-CONFIG!B52)*B13*B14+CONFIG!B52*B15*B16)*365=66509.84375] |  | 
+R22: Annual Base Staff Cost | [F:DAILY_COSTS!C31/28*365=563423.125] |  | 
+R23: Total Annual Staff Cost | [F:B21+B22=629932.96875] |  | 
+R24: Est. Annual EBITDA | [F:B20*0.18=255387.6] |  | 
+R25: EBITDA Margin | [F:B24/B20=0.18] |  | 
+R28: PROJECTED STATE (12 Months Under Our Management) |  |  | 
+R29: Total Beds | [F:B5=40] |  | Same facility
+R30: Occupancy Rate | 0.92 | % | Marketing funnel impact
+R31: Private Pay Mix | 0.35 | % | Lead magnet + ads + funnel
+R32: Council Weekly Fee | [F:B8=750] | £/wk | Same rates
+R33: Private Weekly Fee | 1200 | £/wk | Premium positioning
+R34: Agency Dependency | 0.05 | % | Panama + Agency Kill
+R35: Avg Shifts Needing Cover/day | 1.5 |  | Better retention = fewer gaps
+R36: Avg Staff Rate | 12.2 | £/hr | Slight increase for retention
+R37: Agency Rate (Day) | [F:B13=22] | £/hr | Same market rate
+R38: Shift Length (Day) | [F:B14=12.25] | hrs | 
+R39: Agency Rate (Night) | [F:B15=28] | £/hr | 
+R40: Night Shift Length | [F:B16=12.25] | hrs | 
+R41: Occupied Beds | [F:B29*B30=36.8] |  | 
+R42: CALCULATED METRICS | [F:B41*(1-B31)=23.92] |  | 
+R43: Occupied Beds | [F:B29*B30=36.8] |  | 
+R44: Council Beds | [F:B43*(1-B31)=23.92] |  | 
+R45: Private Beds | [F:B43*B31=12.88] |  | 
+R46: Annual Revenue | [F:(B44*B32+B45*B33)*52=1736592] |  | 
+R47: Annual Agency Spend | [F:B35*B34*((1-CONFIG!B52)*B37*B38+CONFIG!B52*B39*B40)*365=7981.18125] |  | 
+R48: Annual Base Staff Cost | [F:B22*(1+(B36-B12)/B12)=579575.221332209] |  | 
+R49: Total Annual Staff Cost | [F:B47+B48=587556.402582209] |  | 
+R50: Est. Annual EBITDA | [F:B46*0.28=486245.76] |  | 
+R51: EBITDA Margin | [F:B50/B46=0.28] |  | 
+R52: VALUE CREATION SUMMARY |  |  | 
+R53: Revenue Uplift | [F:B44-B20=-1418796.08] |  | 
+R54: VALUE CREATION SUMMARY | [F:B48-B24=324187.621332209] |  | 
+R55: Revenue Uplift | [F:B46-B20=317772] |  | 
+R56: EBITDA Uplift | [F:B50-B24=230858.16] |  | 
+R57: Agency Cost Reduction | [F:B21-B47=58528.6625] |  | 
+R58: Agency Dependency Reduction | [F:B10-B34=0.2] |  | 
+R60: ENTERPRISE VALUE IMPACT |  |  | 
+R61: EBITDA Multiple | 6 | x (editable) | 
+R62: Before EV | [F:B24*B61=1532325.6] | x (editable) | 
+R63: After EV | [F:B50*B61=2917474.56] |  | 
+R64: VALUE CREATED PER HOME | [F:B63-B62=1385148.96] |  | 
+R65: VALUE CREATED PER HOME | [F:B64-B63=-1532325.6] |  | 
+R66: Value across 10 homes | [F:B64*10=13851489.6] |  | 
+R67: Value across 30 homes | [F:B64*30=41554468.8] |  | 
+R68: Value across 30 homes | [F:B65*30=-45969768] |  | 

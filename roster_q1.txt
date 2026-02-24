@@ -1,0 +1,18 @@
+R1: DYNAMIC ROSTER - Self-Organizing |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R2: Gold cells = "Agency Kill" targets (rested staff on short week) |  |  |  | Week 1 |  |  |  |  |  |  | Week 2 |  |  |  |  |  |  | Week 3 |  |  |  |  |  |  | Week 4 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+R3: Name | Team | Pref | Skill | 06
+Mon | 07
+Tue | 08
+Wed | 09
+Thu | 10
+Fri | 11
+Sat | 12
+Sun | 13
+Mon | 14
+Tue | 15
+Wed | 16
+Thu | 17
+Fri | 18
+Sat | 19
+Sun | 20
+Mon | 21

@@ -1,0 +1,41 @@
+R1: STAFFING DASHBOARD (v7) |  |  |  |  |  | 
+R3: 28-DAY METRICS |  |  |  | SHIFT CODES |  | 
+R4: Total Hours Worked | [F:SUM(ROSTER!AH4:AH50)=3598] |  |  | E | Early 6hrs | 08:00-14:00
+R5: Base Wage Cost | [F:DAILY_COSTS!C31=43221.5] |  |  | L | Late 6hrs | 14:00-20:00
+R6: OT Premium Paid | [F:DAILY_COSTS!D31=0] |  |  | EL | Full Day 12hrs | 08:00-20:00
+R7: Agency Day Cost | [F:DAILY_COSTS!E31=0] |  |  | N | Night 12hrs | 19:30-08:30
+R8: Agency Night Cost | [F:DAILY_COSTS!F31=0] |  |  | OFF | Day Off | 
+R9: Bank Holiday Premium | [F:DAILY_COSTS!G31=0] |  |  | AL | Annual Leave | 
+R10: TOTAL 28-DAY COST | [F:DAILY_COSTS!H31=43221.5] |  |  | SICK | Sickness | 
+R11: Agency % of Total | [F:IF(DAILY_COSTS!H31>0,(DAILY_COSTS!E31+DAILY_COSTS!F31)/DAILY_COSTS!H31*100,0)=0] | % |  | ADM | Admin | Float base
+R12: Avg Daily Cost | [F:DAILY_COSTS!H31/28=1543.625] |  |  | TRN | Training | 
+R13:  |  |  |  | AVL | Available | Float standby
+R14: STAFF DEPLOYMENT |  |  |  | OC-E | On-Call Early | +£2/hr (6hrs)
+R15: Day A | [F:COUNTIFS(ROSTER!$B$4:$B$50,"Day A")=8] |  |  | OC-L | On-Call Late | +£2/hr (6hrs)
+R16: Day B | [F:COUNTIFS(ROSTER!$B$4:$B$50,"Day B")=8] |  |  | OC-EL | On-Call Full | +£2/hr (12hrs)
+R17: Night A | [F:COUNTIFS(ROSTER!$B$4:$B$50,"Night A")=3] |  |  | OC-N | On-Call Night | +£2/hr (12hrs)
+R18: Night B | [F:COUNTIFS(ROSTER!$B$4:$B$50,"Night B")=3] |  |  | AG-E | Agency Early | £22/hr
+R19: Float | [F:COUNTIFS(ROSTER!$B$4:$B$50,"Float")=3] |  |  | AG-L | Agency Late | £22/hr
+R20: TOTAL | [F:SUM(B15:B19)=25] |  |  | AG-N | Agency Night | £28/hr
+R22: SCENARIO PROJECTIONS (Annual) |  |  |  | BH-D | Bank Holiday Day | rate x 1.5
+R23: [F:SCENARIO_MODEL!A23=CLEAN (Zero disruption)] | [F:SCENARIO_MODEL!Q23=563423.125] |  |  | BH-N | Bank Holiday Night | rate x 1.5
+R24: [F:SCENARIO_MODEL!A24=TYPICAL WEEK] | [F:SCENARIO_MODEL!Q24=670733.125] |  |  |  |  | 
+R25: [F:SCENARIO_MODEL!A25=BAD WEEK] | [F:SCENARIO_MODEL!Q25=733330.625] |  |  |  |  | 
+R26: [F:SCENARIO_MODEL!A26=CRISIS WEEK] | [F:SCENARIO_MODEL!Q26=742273.125] |  |  |  |  | 
+R27: [F:SCENARIO_MODEL!A27=WORST CASE (Winter/Flu)] | [F:SCENARIO_MODEL!Q27=751215.625] |  |  |  |  | 
+R28: [F:SCENARIO_MODEL!A28=PANDEMIC / NOROVIRUS] | [F:SCENARIO_MODEL!Q28=858525.625] |  |  |  |  | 
+R30: AGENCY KILL ANNUAL SAVING | [F:SCENARIO_MODEL!B34=105521.5] |  |  |  |  | 
+R33: SHIFT CODE REFERENCE |  |  |  |  |  | 
+R34: E | Early (6hr) |  |  |  |  | 
+R35: L | Late (6hr) |  |  |  |  | 
+R36: EL | Full Day (12.25hr) |  |  |  |  | 
+R37: N | Night (12.25hr) |  |  |  |  | 
+R38: OFF | Day Off |  |  |  |  | 
+R39: AL | Annual Leave |  |  |  |  | 
+R40: SICK | Sick Leave |  |  |  |  | 
+R41: ADM | Admin |  |  |  |  | 
+R42: TRN | Training |  |  |  |  | 
+R43: AVL | Float Available |  |  |  |  | 
+R44: OC-E/L/EL/N | On-Call (OT prem) |  |  |  |  | 
+R45: AG-E/L/N | Agency Cover |  |  |  |  | 
+R46: BH-D/BH-N | Bank Holiday |  |  |  |  | 

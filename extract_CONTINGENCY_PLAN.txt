@@ -1,0 +1,52 @@
+R1: CONTINGENCY & FORTIFICATION PLAN |  |  |  |  |  |  |  | 
+R3: ESCALATION PROTOCOL |  |  |  |  |  |  |  | 
+R4: Level | Trigger & Actions | Max Duration |  |  |  |  |  | 
+R5: ⬜ LVL 0 | All covered. Float standby. | Indefinite |  |  |  |  |  | 
+R6: 🟢 LVL 1 | Float deployed (1-3 gaps). OT alerted. | 7 days |  |  |  |  |  | 
+R7: 🟡 LVL 2 | OT activated. Bank staff called. | 7 days WTR |  |  |  |  |  | 
+R8: 🟠 LVL 3 | Agency booked. Handover pack ready. | 14 days |  |  |  |  |  | 
+R9: 🔴 LVL 4 | Agency unavailable. Manager on floor. Emergency call-in 1.5x. | 48hrs max |  |  |  |  |  | 
+R10: ⚫ LVL 5 | Close admissions. Notify CQC. Mutual aid. | Immediate |  |  |  |  |  | 
+R13: NIGHT VULNERABILITY COUNTERMEASURES |  |  |  |  |  |  |  | 
+R14: 1. Night-First Float | Float deploys night BEFORE day. Night=0 buffer; Day=4-5 buffer. |  |  |  |  |  |  | 
+R15: 2. Standing Agency Night | Pre-book 1 agency night/wk Nov-Mar. Cancel 24hrs. £343/wk. |  |  |  |  |  |  | 
+R16: 3. 4th Night Staff | Recruit 1 extra per night team. +£55K/yr. Eliminates #1 vulnerability. |  |  |  |  |  |  | 
+R17: 4. Night Bank Staff | 2 bank workers night-available. Zero-hours. Base+£3. 2hr response. |  |  |  |  |  |  | 
+R18: 5. Mutual Aid Pact | Agreement with 2-3 neighbouring homes to loan night staff at agreed rate. |  |  |  |  |  |  | 
+R21: WEEKLY OT CAP (WTR) |  |  |  |  |  |  |  | 
+R22: Daily model: OT=4/day. Weekly truth: same 4 people, max 8 shifts/wk. |  |  |  |  |  |  |  | 
+R24: Scenario | Gaps/d | Gaps/wk | Float/wk | OT/wk | Agency/wk | Ag £/wk |  | 
+R25: CLEAN | 0 | [F:B25*7=0] | [F:MIN(C25,15)=0] | [F:MIN(MAX(C25-D25,0),CONFIG!$B$59)=0] | [F:MAX(C25-D25-E25,0)=0] | [F:(F25*0.7*12.25*CONFIG!$B$29+F25*0.3*12.25*CONFIG!$B$30)=0] |  | 
+R26: TYPICAL | 2 | [F:B26*7=14] | [F:MIN(C26,15)=14] | [F:MIN(MAX(C26-D26,0),CONFIG!$B$59)=0] | [F:MAX(C26-D26-E26,0)=0] | [F:(F26*0.7*12.25*CONFIG!$B$29+F26*0.3*12.25*CONFIG!$B$30)=0] |  | 
+R27: BAD | 4 | [F:B27*7=28] | [F:MIN(C27,15)=15] | [F:MIN(MAX(C27-D27,0),CONFIG!$B$59)=8] | [F:MAX(C27-D27-E27,0)=5] | [F:(F27*0.7*12.25*CONFIG!$B$29+F27*0.3*12.25*CONFIG!$B$30)=1457.75] |  | 
+R28: CRISIS | 5 | [F:B28*7=35] | [F:MIN(C28,15)=15] | [F:MIN(MAX(C28-D28,0),CONFIG!$B$59)=8] | [F:MAX(C28-D28-E28,0)=12] | [F:(F28*0.7*12.25*CONFIG!$B$29+F28*0.3*12.25*CONFIG!$B$30)=3498.6] |  | 
+R29: WORST | 6 | [F:B29*7=42] | [F:MIN(C29,15)=15] | [F:MIN(MAX(C29-D29,0),CONFIG!$B$59)=8] | [F:MAX(C29-D29-E29,0)=19] | [F:(F29*0.7*12.25*CONFIG!$B$29+F29*0.3*12.25*CONFIG!$B$30)=5539.45] |  | 
+R30: PANDEMIC | 8 | [F:B30*7=56] | [F:MIN(C30,15)=15] | [F:MIN(MAX(C30-D30,0),CONFIG!$B$59)=8] | [F:MAX(C30-D30-E30,0)=33] | [F:(F30*0.7*12.25*CONFIG!$B$29+F30*0.3*12.25*CONFIG!$B$30)=9621.15] |  | 
+R32: BAD WEEK: daily model shows 0 agency. Weekly shows 5 needed. |  |  |  |  |  |  |  | 
+R35: NOROVIRUS WAVE (14 days) |  |  |  |  |  |  |  | 
+R37: Day | Sick | Float | OT | Agency | Shortfall | Level | Cost | Actions
+R38: 1 | 2 | [F:MIN(B38,3)=2] | [F:MIN(MAX(B38-C38,0),4)=0] | [F:MAX(B38-C38-D38,0)=0] | [F:MAX(E38-ROUND(E38*CONFIG!$B$60,0),0)=0] | [F:IF(F38>0,"🔴 LVL4-5",IF(E38>0,"🟠 LVL3",IF(D38>0,"🟡 LVL2",IF(C38>0,"🟢 LVL1","⬜ LVL0"))))=🟢 LVL1] | [F:1539+D38*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E38,ROUND(E38*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E38,ROUND(E38*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F38*CONFIG!$B$57*12.25=1539] | Index cases
+R39: 2 | 4 | [F:MIN(B39,3)=3] | [F:MIN(MAX(B39-C39,0),4)=1] | [F:MAX(B39-C39-D39,0)=0] | [F:MAX(E39-ROUND(E39*CONFIG!$B$60,0),0)=0] | [F:IF(F39>0,"🔴 LVL4-5",IF(E39>0,"🟠 LVL3",IF(D39>0,"🟡 LVL2",IF(C39>0,"🟢 LVL1","⬜ LVL0"))))=🟡 LVL2] | [F:1539+D39*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E39,ROUND(E39*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E39,ROUND(E39*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F39*CONFIG!$B$57*12.25=1688.5725] | Outbreak declared
+R40: 3 | 7 | [F:MIN(B40,3)=3] | [F:MIN(MAX(B40-C40,0),4)=4] | [F:MAX(B40-C40-D40,0)=0] | [F:MAX(E40-ROUND(E40*CONFIG!$B$60,0),0)=0] | [F:IF(F40>0,"🔴 LVL4-5",IF(E40>0,"🟠 LVL3",IF(D40>0,"🟡 LVL2",IF(C40>0,"🟢 LVL1","⬜ LVL0"))))=🟡 LVL2] | [F:1539+D40*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E40,ROUND(E40*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E40,ROUND(E40*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F40*CONFIG!$B$57*12.25=2137.29] | IPC active
+R41: 4 | 9 | [F:MIN(B41,3)=3] | [F:MIN(MAX(B41-C41,0),4)=4] | [F:MAX(B41-C41-D41,0)=2] | [F:MAX(E41-ROUND(E41*CONFIG!$B$60,0),0)=0] | [F:IF(F41>0,"🔴 LVL4-5",IF(E41>0,"🟠 LVL3",IF(D41>0,"🟡 LVL2",IF(C41>0,"🟢 LVL1","⬜ LVL0"))))=🟠 LVL3] | [F:1539+D41*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E41,ROUND(E41*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E41,ROUND(E41*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F41*CONFIG!$B$57*12.25=2720.39] | PEAK
+R42: 5 | 10 | [F:MIN(B42,3)=3] | [F:MIN(MAX(B42-C42,0),4)=4] | [F:MAX(B42-C42-D42,0)=3] | [F:MAX(E42-ROUND(E42*CONFIG!$B$60,0),0)=0] | [F:IF(F42>0,"🔴 LVL4-5",IF(E42>0,"🟠 LVL3",IF(D42>0,"🟡 LVL2",IF(C42>0,"🟢 LVL1","⬜ LVL0"))))=🟠 LVL3] | [F:1539+D42*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E42,ROUND(E42*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E42,ROUND(E42*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F42*CONFIG!$B$57*12.25=3011.94] | PEAK+1 Manager floor
+R43: 6 | 8 | [F:MIN(B43,3)=3] | [F:MIN(MAX(B43-C43,0),4)=4] | [F:MAX(B43-C43-D43,0)=1] | [F:MAX(E43-ROUND(E43*CONFIG!$B$60,0),0)=0] | [F:IF(F43>0,"🔴 LVL4-5",IF(E43>0,"🟠 LVL3",IF(D43>0,"🟡 LVL2",IF(C43>0,"🟢 LVL1","⬜ LVL0"))))=🟠 LVL3] | [F:1539+D43*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E43,ROUND(E43*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E43,ROUND(E43*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F43*CONFIG!$B$57*12.25=2428.84] | First recoveries
+R44: 7 | 7 | [F:MIN(B44,3)=3] | [F:MIN(MAX(B44-C44,0),4)=4] | [F:MAX(B44-C44-D44,0)=0] | [F:MAX(E44-ROUND(E44*CONFIG!$B$60,0),0)=0] | [F:IF(F44>0,"🔴 LVL4-5",IF(E44>0,"🟠 LVL3",IF(D44>0,"🟡 LVL2",IF(C44>0,"🟢 LVL1","⬜ LVL0"))))=🟡 LVL2] | [F:1539+D44*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E44,ROUND(E44*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E44,ROUND(E44*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F44*CONFIG!$B$57*12.25=2137.29] | Declining
+R45: 8 | 5 | [F:MIN(B45,3)=3] | [F:MIN(MAX(B45-C45,0),4)=2] | [F:MAX(B45-C45-D45,0)=0] | [F:MAX(E45-ROUND(E45*CONFIG!$B$60,0),0)=0] | [F:IF(F45>0,"🔴 LVL4-5",IF(E45>0,"🟠 LVL3",IF(D45>0,"🟡 LVL2",IF(C45>0,"🟢 LVL1","⬜ LVL0"))))=🟡 LVL2] | [F:1539+D45*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E45,ROUND(E45*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E45,ROUND(E45*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F45*CONFIG!$B$57*12.25=1838.145] | Recovery
+R46: 9 | 4 | [F:MIN(B46,3)=3] | [F:MIN(MAX(B46-C46,0),4)=1] | [F:MAX(B46-C46-D46,0)=0] | [F:MAX(E46-ROUND(E46*CONFIG!$B$60,0),0)=0] | [F:IF(F46>0,"🔴 LVL4-5",IF(E46>0,"🟠 LVL3",IF(D46>0,"🟡 LVL2",IF(C46>0,"🟢 LVL1","⬜ LVL0"))))=🟡 LVL2] | [F:1539+D46*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E46,ROUND(E46*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E46,ROUND(E46*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F46*CONFIG!$B$57*12.25=1688.5725] | Near-normal
+R47: 10 | 3 | [F:MIN(B47,3)=3] | [F:MIN(MAX(B47-C47,0),4)=0] | [F:MAX(B47-C47-D47,0)=0] | [F:MAX(E47-ROUND(E47*CONFIG!$B$60,0),0)=0] | [F:IF(F47>0,"🔴 LVL4-5",IF(E47>0,"🟠 LVL3",IF(D47>0,"🟡 LVL2",IF(C47>0,"🟢 LVL1","⬜ LVL0"))))=🟢 LVL1] | [F:1539+D47*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E47,ROUND(E47*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E47,ROUND(E47*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F47*CONFIG!$B$57*12.25=1539] | Monitoring
+R48: 11 | 2 | [F:MIN(B48,3)=2] | [F:MIN(MAX(B48-C48,0),4)=0] | [F:MAX(B48-C48-D48,0)=0] | [F:MAX(E48-ROUND(E48*CONFIG!$B$60,0),0)=0] | [F:IF(F48>0,"🔴 LVL4-5",IF(E48>0,"🟠 LVL3",IF(D48>0,"🟡 LVL2",IF(C48>0,"🟢 LVL1","⬜ LVL0"))))=🟢 LVL1] | [F:1539+D48*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E48,ROUND(E48*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E48,ROUND(E48*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F48*CONFIG!$B$57*12.25=1539] | Almost clear
+R49: 12 | 1 | [F:MIN(B49,3)=1] | [F:MIN(MAX(B49-C49,0),4)=0] | [F:MAX(B49-C49-D49,0)=0] | [F:MAX(E49-ROUND(E49*CONFIG!$B$60,0),0)=0] | [F:IF(F49>0,"🔴 LVL4-5",IF(E49>0,"🟠 LVL3",IF(D49>0,"🟡 LVL2",IF(C49>0,"🟢 LVL1","⬜ LVL0"))))=🟢 LVL1] | [F:1539+D49*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E49,ROUND(E49*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E49,ROUND(E49*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F49*CONFIG!$B$57*12.25=1539] | Clearing
+R50: 13 | 0 | [F:MIN(B50,3)=0] | [F:MIN(MAX(B50-C50,0),4)=0] | [F:MAX(B50-C50-D50,0)=0] | [F:MAX(E50-ROUND(E50*CONFIG!$B$60,0),0)=0] | [F:IF(F50>0,"🔴 LVL4-5",IF(E50>0,"🟠 LVL3",IF(D50>0,"🟡 LVL2",IF(C50>0,"🟢 LVL1","⬜ LVL0"))))=⬜ LVL0] | [F:1539+D50*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E50,ROUND(E50*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E50,ROUND(E50*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F50*CONFIG!$B$57*12.25=1539] | Clear
+R51: 14 | 0 | [F:MIN(B51,3)=0] | [F:MIN(MAX(B51-C51,0),4)=0] | [F:MAX(B51-C51-D51,0)=0] | [F:MAX(E51-ROUND(E51*CONFIG!$B$60,0),0)=0] | [F:IF(F51>0,"🔴 LVL4-5",IF(E51>0,"🟠 LVL3",IF(D51>0,"🟡 LVL2",IF(C51>0,"🟢 LVL1","⬜ LVL0"))))=⬜ LVL0] | [F:1539+D51*12.25*(CONFIG!$B$28-1)*CONFIG!$B$61+MIN(E51,ROUND(E51*CONFIG!$B$60,0))*0.7*12.25*CONFIG!$B$29+MIN(E51,ROUND(E51*CONFIG!$B$60,0))*0.3*12.25*CONFIG!$B$30+F51*CONFIG!$B$57*12.25=1539] | Normal
+R52: OUTBREAK TOTAL |  |  |  |  |  |  | [F:SUM(H38:H51)=26885.04] | 
+R53: Normal 14 days |  |  |  |  |  |  | [F:1539*14=21546] | 
+R54: OUTBREAK PREMIUM |  |  |  |  |  |  | [F:H52-H53=5339.04] | 
+R57: WINTER BUDGET (Dec-Feb) |  |  |  |  |  |  |  | 
+R58: Standing agency nights 17wk | [F:17*12.25*28=5831] |  |  |  |  |  |  | 
+R59: Bank staff recruit ×4 | 2000 |  |  |  |  |  |  | 
+R60: Flu vaccines ×25 | 500 |  |  |  |  |  |  | 
+R61: IPC stock | 750 |  |  |  |  |  |  | 
+R62: Winter OT incentive 12wk | [F:8*12*12.25*3=3528] |  |  |  |  |  |  | 
+R63: Emergency reserve | [F:H54=5339.04] |  |  |  |  |  |  | 
+R64: TOTAL WINTER BUDGET | [F:SUM(B58:B63)=17948.04] |  |  |  |  |  |  | 

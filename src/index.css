@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  /* Sidebar becomes overlay drawer on mobile */
+  .sidebar-mobile-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar-mobile {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 14rem;
+    transition: transform 200ms ease-in-out;
+  }
+  .sidebar-mobile.sidebar-closed {
+    transform: translateX(-100%);
+  }
+
+  /* Mobile top bar */
+  .mobile-topbar {
+    display: flex !important;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  /* Reduce page padding on mobile */
+  .p-6 { padding: 1rem !important; }
+  .p-5 { padding: 0.75rem !important; }
+  .p-4 { padding: 0.75rem !important; }
+
+  /* Smaller headings on mobile */
+  .text-2xl { font-size: 1.25rem !important; }
+  .text-xl { font-size: 1.1rem !important; }
+  .text-3xl { font-size: 1.5rem !important; }
+
+  /* Stack header action buttons */
+  .mobile-wrap { flex-wrap: wrap; }
+
+  /* Compact summary cards */
+  .text-lg { font-size: 1rem !important; }
+
+  /* Make modals full-width on mobile */
+  .max-w-sm { max-width: calc(100vw - 2rem) !important; }
+  .max-w-lg { max-width: calc(100vw - 2rem) !important; }
+}
+
+@media print {
+  /* Hide sidebar, nav, buttons, filters */
+  aside, .print\:hidden, button, select, input {
+    display: none !important;
+  }
+  /* But allow table content to show inline inputs as text */
+  table select, table input {
+    display: none !important;
+  }
+
+  /* Full width, no scroll */
+  main {
+    overflow: visible !important;
+    width: 100% !important;
+  }
+  .flex.h-screen {
+    display: block !important;
+    height: auto !important;
+  }
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Show print-only elements */
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Compact spacing */
+  body {
+    font-size: 10px !important;
+    background: white !important;
+  }
+  .p-6, .p-4 {
+    padding: 0.5rem !important;
+  }
+  .mb-6, .mb-4 {
+    margin-bottom: 0.25rem !important;
+  }
+  .shadow, .shadow-xl, .shadow-2xl {
+    box-shadow: none !important;
+  }
+  .rounded-lg, .rounded-xl, .rounded {
+    border-radius: 0 !important;
+  }
+
+  /* Page breaks */
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+
+  /* Sticky columns shouldn't be sticky in print */
+  .sticky {
+    position: static !important;
+  }
+
+  /* Print header */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #333;
+  }
+
+  /* Force colors in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide mobile topbar in print */
+  .mobile-topbar {
+    display: none !important;
+  }
+}

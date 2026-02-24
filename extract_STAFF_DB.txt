@@ -1,0 +1,37 @@
+R1: STAFF DATABASE - Single Source of Truth |  |  |  |  |  |  |  |  |  | 
+R2: Add/remove staff here. ROSTER updates automatically. |  |  |  |  |  |  |  |  |  | 
+R4: ID | Name | Role | Team | Pref | Skill | Rate | Active | Start Date | Notes | WTR Opt-Out
+R5: S001 | Alice Johnson | Senior Carer | Day A | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R6: S002 | Bob Smith | Carer | Day A | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R7: S003 | Carol Davis | Senior Carer | Day A | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R8: S004 | David Wilson | Carer | Day A | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R9: S005 | Emma Brown | Team Lead | Day A | EL | 1.5 | 14 | Y | 2025-01-06 |  | Y
+R10: S006 | Fiona Hart | Carer | Day A | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R11: S007 | George King | Senior Carer | Day A | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R12: S008 | Hannah Lee | Senior Carer | Day B | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R13: S009 | Ian Clark | Carer | Day B | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R14: S010 | Julia Martin | Senior Carer | Day B | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R15: S011 | Kevin White | Carer | Day B | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R16: S012 | Laura Adams | Team Lead | Day B | EL | 1.5 | 14 | Y | 2025-01-06 |  | Y
+R17: S013 | Mike Taylor | Carer | Day B | EL | 0.5 | 11 | Y | 2025-01-06 |  | Y
+R18: S014 | Nina Patel | Senior Carer | Day B | EL | 1 | 12.5 | Y | 2025-01-06 |  | Y
+R19: S015 | Oliver Ross | Night Senior | Night A | N | 1 | 13 | Y | 2025-01-06 |  | Y
+R20: S016 | Paula Young | Night Carer | Night A | N | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R21: S017 | Quentin Fox | Night Carer | Night A | N | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R22: S018 | Rachel Green | Night Senior | Night B | N | 1 | 13 | Y | 2025-01-06 |  | Y
+R23: S019 | Steve Black | Night Carer | Night B | N | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R24: S020 | Tina Hall | Night Carer | Night B | N | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R25: S021 | Uma Shah | Float Senior | Float | ANY | 1 | 13 | Y | 2025-01-06 |  | Y
+R26: S022 | Victor Chen | Float Carer | Float | ANY | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R27: S023 | Wendy Jones | Float Carer | Float | ANY | 0.5 | 11.5 | Y | 2025-01-06 |  | Y
+R28: S024 | Xena Price | Carer (PT) | Day A | E | 0.5 | 10.5 | Y | 45663 | Early only - school run | Y
+R29: S025 | Yasmin Reed | Senior (PT) | Day B | L | 1 | 12 | Y | 45663 | Late only - prefers afternoons | Y
+R30: TEAM SUMMARY |  |  |  |  |  |  |  |  |  | 
+R31: Day A | [F:COUNTIFS(D5:D100,"Day A",H5:H100,"Y")=8] |  |  |  |  |  |  |  |  | 
+R32: Day B | [F:COUNTIFS(D5:D100,"Day B",H5:H100,"Y")=8] |  |  |  |  |  |  |  |  | 
+R33: Night A | [F:COUNTIFS(D5:D100,"Night A",H5:H100,"Y")=3] |  |  |  |  |  |  |  |  | 
+R34: Night B | [F:COUNTIFS(D5:D100,"Night B",H5:H100,"Y")=3] |  |  |  |  |  |  |  |  | 
+R35: Float | [F:COUNTIFS(D5:D100,"Float",H5:H100,"Y")=3] |  |  |  |  |  |  |  |  | 
+R36: TOTAL ACTIVE | [F:COUNTIF(H5:H100,"Y")=25] |  |  |  |  |  |  |  |  | 
+R37: Part-Time (E/L) | [F:COUNTIFS(E5:E100,"E",H5:H100,"Y")+COUNTIFS(E5:E100,"L",H5:H100,"Y")=2] |  |  |  |  |  |  |  |  | 
+R38: TOTAL ACTIVE | [F:COUNTIF(H5:H100,"Y")=25] |  |  |  |  |  |  |  |  | 

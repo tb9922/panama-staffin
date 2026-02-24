@@ -1,0 +1,54 @@
+R1: CARE HOME STAFFING SYSTEM v3.0 |  |  | 
+R2: SELF-ORGANIZING EDITION |  |  | 
+R4: SETTING | VALUE | UNIT | NOTES
+R5: Roster Start Date | 2025-01-06 |  | Must be a Monday
+R6: Cycle Length | 14 | days | Panama rotation period
+R8: SHIFT TIMES & HOURS |  |  | 
+R9: Early Shift (E) | 6 | hours | 08:00-14:00
+R10: Late Shift (L) | 6 | hours | 14:00-20:00
+R11: Full Day (EL) | 12.25 | hours | 07:45-20:00 (incl 15min handover)
+R12: Night Shift (N) | 12.25 | hours | 19:45-08:00 (incl 15min handover)
+R14: HANDOVER & BREAKS |  |  | 
+R15: Evening Handover | 15 | mins | 19:45-20:00 (Day→Night overlap)
+R16: Morning Handover | 15 | mins | 07:45-08:00 (Night→Day overlap)
+R17: Break Deduction | 0 | hours | Breaks are PAID (care home requirement)
+R19: MINIMUM STAFFING |  |  | 
+R20: Early Min (Heads) | 3 | people | Minimum on Early
+R21: Early Min (Skill) | 2 | points | Senior=1.0, Junior=0.5
+R22: Late Min (Heads) | 3 | people | Minimum on Late
+R23: Late Min (Skill) | 2 | points | Senior=1.0, Junior=0.5
+R24: Night Min (Heads) | 3 | people | Minimum on Night
+R25: Night Min (Skill) | 1.5 | points | At least 1 Senior
+R27: OVERTIME & AGENCY |  |  | 
+R28: OT Premium | 2 | £/hour | Extra for OC/OT shifts
+R29: Agency Rate (Day) | 22 | £/hour | External day cover
+R30: Agency Rate (Night) | 28 | £/hour | External night cover (12hr)
+R32: SAFETY LIMITS |  |  | 
+R33: Max Consecutive Days | 5 | days | Fatigue limit
+R34: Max AL Same Day | 2 | people | Coverage protection
+R35: Float Retainer | 50 | £/week | Standby payment
+R37: ANNUAL LEAVE |  |  | 
+R38: AL Entitlement | 28 | days/year | Standard UK
+R40: WEEKLY HOURS TARGETS |  |  | 
+R41: FT Target (EL workers) | 42.875 | hours/week | 3.5 shifts × 12.25hrs
+R42: FT Target (E or L only) | 36 | hours/week | 6 shifts avg
+R43: Night FT Target | 42.875 | hours/week | 3.5 shifts × 12.25hrs
+R45: BANK HOLIDAY |  |  | 
+R46: BH Premium | 1.5 | multiplier | Applied to base rate on bank holidays
+R48: SICKNESS ASSUMPTIONS |  |  | 
+R49: Avg Sickness Rate | 0.06 | % | 6% sector average (5-8% typical)
+R50: Avg AL per day | 1 | people | Typical daily AL overlap
+R51: AGENCY NIGHT SPLIT |  |  | 
+R52: Night Gap % (of total) | 0.3 | 30% of gaps are night shifts | 
+R54: FORTIFICATION PARAMETERS |  |  | 
+R55: Night Float Priority | Y |  | 
+R56: Emergency Call-In Premium | 1.5 |  | 
+R57: Manager Floor Rate | 18 |  | 
+R58: Winter Sick Uplift | 1.8 |  | 
+R59: Weekly OT Cap (shifts) | 8 |  | 
+R60: Agency Availability % | 1 |  | 
+R61: NLW Rate Apr 2025 | 12.21 |  | 
+R62: Senior Differential | 1.5 |  | 
+R63: Team Lead Differential | 2.5 |  | 
+R64: Night Premium | 0.5 |  | 
+R65: Bank Staff Pool Size | 4 |  | 
