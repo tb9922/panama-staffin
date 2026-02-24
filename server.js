@@ -174,6 +174,18 @@ app.get('/api/export', (req, res) => {
   }
 });
 
+// Bank holiday proxy — fetches from GOV.UK API (avoids CORS)
+app.get('/api/bank-holidays', async (req, res) => {
+  try {
+    const response = await fetch('https://www.gov.uk/bank-holidays.json');
+    const data = await response.json();
+    const englandWales = data['england-and-wales']?.events || [];
+    res.json(englandWales.map(e => ({ date: e.date, name: e.title })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch bank holidays from GOV.UK' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
   console.log(`Homes directory: ${DATA_DIR}`);

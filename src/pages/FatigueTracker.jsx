@@ -50,8 +50,8 @@ export default function FatigueTracker({ data }) {
     }).sort((a, b) => b.fatigue.consecutive - a.fatigue.consecutive);
   }, [activeStaff, cycleDates, data, today]);
 
-  const atRisk = fatigueData.filter(s => s.fatigue.atRisk);
   const exceeded = fatigueData.filter(s => s.fatigue.exceeded);
+  const atRisk = fatigueData.filter(s => s.fatigue.atRisk && !s.fatigue.exceeded);
 
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);

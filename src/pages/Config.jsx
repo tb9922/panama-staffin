@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { syncBankHolidays } from '../lib/bankHolidays.js';
 
 export default function Config({ data, updateData }) {
   const [config, setConfig] = useState(JSON.parse(JSON.stringify(data.config)));
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
 
   // Warn on navigation if unsaved
   useEffect(() => {
@@ -216,9 +218,41 @@ export default function Config({ data, updateData }) {
         </div>
       </section>
 
+      {/* Budget Targets */}
+      <section className="bg-white rounded-lg shadow p-5 mb-5">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Budget Targets</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <Field label="Monthly Staff Budget" path="monthly_staff_budget" unit="£/month" />
+          <Field label="Monthly Agency Cap" path="monthly_agency_cap" unit="£/month" />
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Used by Budget vs Actual page. Per-month overrides can be set there.</p>
+      </section>
+
       {/* Bank Holidays List */}
       <section className="bg-white rounded-lg shadow p-5">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Bank Holidays</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Bank Holidays</h2>
+          <button onClick={async () => {
+            setSyncStatus({ loading: true });
+            try {
+              const result = await syncBankHolidays(config.bank_holidays);
+              handleChange('bank_holidays', result.holidays);
+              setSyncStatus({ success: true, msg: `Synced via ${result.source} — ${result.added} new holidays added (${result.holidays.length} total)` });
+              setTimeout(() => setSyncStatus(null), 5000);
+            } catch (err) {
+              setSyncStatus({ error: true, msg: 'Sync failed: ' + err.message });
+              setTimeout(() => setSyncStatus(null), 5000);
+            }
+          }} disabled={syncStatus?.loading}
+            className="bg-purple-600 text-white px-4 py-1.5 rounded text-sm hover:bg-purple-700 disabled:opacity-50">
+            {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
+          </button>
+        </div>
+        {syncStatus && !syncStatus.loading && (
+          <div className={`text-sm px-3 py-2 rounded mb-3 ${syncStatus.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+            {syncStatus.msg}
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
           {config.bank_holidays?.map((bh, i) => (
             <div key={i} className="flex items-center justify-between bg-pink-50 rounded px-3 py-2 text-sm border border-pink-200">

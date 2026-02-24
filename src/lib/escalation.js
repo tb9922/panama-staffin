@@ -81,9 +81,10 @@ export function getDayCoverageStatus(staffForDay, config) {
   const lateCov = calculateCoverage(staffForDay, 'late', config);
   const nightCov = calculateCoverage(staffForDay, 'night', config);
 
-  const earlyEsc = getEscalationLevel(earlyCov, staffForDay);
-  const lateEsc = getEscalationLevel(lateCov, staffForDay);
-  const nightEsc = getEscalationLevel(nightCov, staffForDay);
+  // Filter staff by period so night agency doesn't inflate early/late escalation
+  const earlyEsc = getEscalationLevel(earlyCov, staffForDay.filter(s => isEarlyShift(s.shift)));
+  const lateEsc = getEscalationLevel(lateCov, staffForDay.filter(s => isLateShift(s.shift)));
+  const nightEsc = getEscalationLevel(nightCov, staffForDay.filter(s => isNightShift(s.shift)));
 
   const worstLevel = Math.max(earlyEsc.level, lateEsc.level, nightEsc.level);
   const colorMap = { 0: 'green', 1: 'green', 2: 'amber', 3: 'yellow', 4: 'red', 5: 'red' };

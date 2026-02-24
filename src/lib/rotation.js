@@ -70,9 +70,10 @@ export function addDays(date, days) {
 export function getCycleDay(date, cycleStartDate) {
   const d = new Date(date);
   const start = new Date(cycleStartDate);
-  d.setHours(0, 0, 0, 0);
-  start.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((d - start) / (1000 * 60 * 60 * 24));
+  // Use UTC to avoid DST off-by-one (BST spring-forward shifts midnight local → 23:00 UTC)
+  const dUTC = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const diffDays = Math.round((dUTC - startUTC) / (1000 * 60 * 60 * 24));
   return ((diffDays % 14) + 14) % 14;
 }
 
@@ -168,9 +169,10 @@ export function getShiftHours(shift, config) {
 export function getCycleDates(cycleStartDate, date, days = 28) {
   const start = parseDate(cycleStartDate);
   const current = new Date(date);
-  current.setHours(0, 0, 0, 0);
-  start.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((current - start) / (1000 * 60 * 60 * 24));
+  // Use UTC to avoid DST off-by-one
+  const currentUTC = Date.UTC(current.getFullYear(), current.getMonth(), current.getDate());
+  const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const diffDays = Math.round((currentUTC - startUTC) / (1000 * 60 * 60 * 24));
   const cycleNumber = Math.floor(diffDays / days);
   const cycleStart = addDays(start, cycleNumber * days);
   const dates = [];
