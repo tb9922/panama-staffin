@@ -53,13 +53,20 @@
 }
 
 @media print {
-  /* Hide sidebar, nav, buttons, filters */
-  aside, .print\:hidden, button, select, input {
+  /* Hide sidebar, nav, filters */
+  aside, .print\:hidden, select, input {
     display: none !important;
   }
-  /* But allow table content to show inline inputs as text */
-  table select, table input {
+  /* Hide buttons EXCEPT inside tables (roster shift cells) */
+  button:not(td button) {
     display: none !important;
+  }
+  /* Roster shift cells: show as plain text in print */
+  td button {
+    cursor: default !important;
+    border: none !important;
+    box-shadow: none !important;
+    ring: none !important;
   }
 
   /* Full width, no scroll */
