@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
+import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import { downloadXLSX } from '../lib/excel.js';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -130,7 +132,7 @@ export default function SickTrends({ data }) {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Sick Trend Analytics</h1>
@@ -142,28 +144,43 @@ export default function SickTrends({ data }) {
           <h1 className="text-2xl font-bold text-gray-900">Sick Trend Analytics</h1>
           <p className="text-sm text-gray-500">Last {MONTHS_BACK} months — {activeStaff.length} staff monitored</p>
         </div>
-        <button onClick={() => window.print()}
-          className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-1.5 rounded text-sm">Print</button>
+        <div className="flex gap-2">
+          <button onClick={() => {
+            const summaryHeaders = ['Staff', 'Team', 'Role', ...months.map(m => m.fullLabel), 'Total', 'Trend'];
+            const summaryRows = sickData.map(s => [
+              s.name, s.team, s.role, ...s.monthCounts, s.total, s.trend,
+            ]);
+            const logHeaders = ['Date', 'Day', 'Staff', 'Team', 'Role', 'Reason'];
+            const logRows = sickLog.map(e => [
+              e.date, e.dayOfWeek, e.staffName, e.team, e.role, e.reason || '',
+            ]);
+            downloadXLSX(`sick_trends_${data.config.home_name}`, [
+              { name: 'Monthly Summary', headers: summaryHeaders, rows: summaryRows },
+              { name: 'Sick Log', headers: logHeaders, rows: logRows },
+            ]);
+          }} className={BTN.secondary}>Export Excel</button>
+          <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+        </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="rounded-lg p-3 bg-red-50 border border-red-200">
+        <div className="rounded-xl p-3 bg-red-50 border border-red-200">
           <div className="text-xs font-medium text-red-600">Total Sick Days</div>
           <div className="text-2xl font-bold text-red-700 mt-0.5">{grandTotal}</div>
           <div className="text-[10px] text-red-500">last {MONTHS_BACK} months</div>
         </div>
-        <div className="rounded-lg p-3 bg-amber-50 border border-amber-200">
+        <div className="rounded-xl p-3 bg-amber-50 border border-amber-200">
           <div className="text-xs font-medium text-amber-600">Avg / Month</div>
           <div className="text-2xl font-bold text-amber-700 mt-0.5">{avgPerMonth.toFixed(1)}</div>
           <div className="text-[10px] text-amber-500">sick days</div>
         </div>
-        <div className="rounded-lg p-3 bg-blue-50 border border-blue-200">
+        <div className="rounded-xl p-3 bg-blue-50 border border-blue-200">
           <div className="text-xs font-medium text-blue-600">Staff Affected</div>
           <div className="text-2xl font-bold text-blue-700 mt-0.5">{staffWithSick.length}/{activeStaff.length}</div>
           <div className="text-[10px] text-blue-500">had sick days</div>
         </div>
-        <div className={`rounded-lg p-3 ${topOffenders.length > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+        <div className={`rounded-xl p-3 ${topOffenders.length > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
           <div className={`text-xs font-medium ${topOffenders.length > 0 ? 'text-red-600' : 'text-green-600'}`}>High Absence</div>
           <div className={`text-2xl font-bold mt-0.5 ${topOffenders.length > 0 ? 'text-red-700' : 'text-green-700'}`}>{topOffenders.length}</div>
           <div className={`text-[10px] ${topOffenders.length > 0 ? 'text-red-500' : 'text-green-500'}`}>3+ sick days</div>
@@ -172,9 +189,9 @@ export default function SickTrends({ data }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Monthly Chart */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow p-5">
+        <div className={`lg:col-span-2 ${CARD.padded}`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Monthly Sick Days</h2>
-          <div className="overflow-x-auto">
+          <div className={TABLE.wrapper}>
             <svg viewBox={`0 0 ${chartW} ${chartH + 40}`} className="w-full min-w-[400px]">
               {/* Grid lines */}
               {[0, 0.25, 0.5, 0.75, 1].map(pct => {
@@ -210,7 +227,7 @@ export default function SickTrends({ data }) {
         </div>
 
         {/* Top Offenders */}
-        <div className="bg-white rounded-lg shadow p-5">
+        <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Highest Absence</h2>
           {staffWithSick.length === 0 ? (
             <div className="text-sm text-green-600 font-medium py-4">No sick days recorded</div>
@@ -228,7 +245,7 @@ export default function SickTrends({ data }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${ti.bg} ${ti.color}`}>{ti.symbol}</span>
+                      <span className={`${BADGE.gray} ${ti.bg} ${ti.color}`}>{ti.symbol}</span>
                       <span className={`font-bold text-sm ${s.total >= 3 ? 'text-red-600' : 'text-gray-700'}`}>{s.total}d</span>
                     </div>
                   </div>
@@ -240,83 +257,85 @@ export default function SickTrends({ data }) {
       </div>
 
       {/* Detailed Table — shows exact sick dates in each cell */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto mt-6">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-            <tr>
-              <th className="py-2 px-3 text-left">Staff</th>
-              <th className="py-2 px-3 text-left">Team</th>
-              <th className="py-2 px-3 text-left">Role</th>
-              {months.map(m => (
-                <th key={m.label} className="py-2 px-2 text-center">{m.label}</th>
-              ))}
-              <th className="py-2 px-3 text-center font-bold">Total</th>
-              <th className="py-2 px-3 text-center">Trend</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sickData.map(s => {
-              const ti = trendIcon(s.trend);
-              return (
-                <tr key={s.id} className={`border-b hover:bg-gray-50 ${s.total >= 3 ? 'bg-red-50' : ''}`}>
-                  <td className="py-1.5 px-3 font-medium">{s.name}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{s.team}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{s.role}</td>
-                  {s.monthDetails.map((md, mi) => (
-                    <td key={mi} className="py-1.5 px-2 text-center align-top">
-                      {md.count > 0 ? (
-                        <div>
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium mb-1 ${
-                            md.count >= 3 ? 'bg-red-200 text-red-800' : md.count >= 2 ? 'bg-amber-200 text-amber-800' : 'bg-yellow-100 text-yellow-700'
-                          }`}>{md.count}</span>
-                          <div className="space-y-0.5">
-                            {md.dates.map(d => (
-                              <div key={d.date} className="text-[10px] text-gray-500" title={d.reason || 'Sick'}>
-                                {d.dayOfWeek} {d.day}{d.reason ? ` — ${d.reason}` : ''}
-                              </div>
-                            ))}
+      <div className={`${CARD.flush} mt-6`}>
+        <div className={TABLE.wrapper}>
+          <table className={TABLE.table}>
+            <thead className={TABLE.thead}>
+              <tr>
+                <th className={TABLE.th}>Staff</th>
+                <th className={TABLE.th}>Team</th>
+                <th className={TABLE.th}>Role</th>
+                {months.map(m => (
+                  <th key={m.label} className={`${TABLE.th} text-center`}>{m.label}</th>
+                ))}
+                <th className={`${TABLE.th} text-center font-bold`}>Total</th>
+                <th className={`${TABLE.th} text-center`}>Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sickData.map(s => {
+                const ti = trendIcon(s.trend);
+                return (
+                  <tr key={s.id} className={`${TABLE.tr} ${s.total >= 3 ? 'bg-red-50' : ''}`}>
+                    <td className={`${TABLE.td} font-medium`}>{s.name}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{s.team}</td>
+                    <td className={`${TABLE.td} text-xs text-gray-500`}>{s.role}</td>
+                    {s.monthDetails.map((md, mi) => (
+                      <td key={mi} className={`${TABLE.td} text-center align-top`}>
+                        {md.count > 0 ? (
+                          <div>
+                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-xs font-medium mb-1 ${
+                              md.count >= 3 ? 'bg-red-200 text-red-800' : md.count >= 2 ? 'bg-amber-200 text-amber-800' : 'bg-yellow-100 text-yellow-700'
+                            }`}>{md.count}</span>
+                            <div className="space-y-0.5">
+                              {md.dates.map(d => (
+                                <div key={d.date} className="text-[10px] text-gray-500" title={d.reason || 'Sick'}>
+                                  {d.dayOfWeek} {d.day}{d.reason ? ` — ${d.reason}` : ''}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <span className="text-gray-300">-</span>
-                      )}
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    ))}
+                    <td className={`${TABLE.td} text-center`}>
+                      <span className={`font-bold ${s.total >= 3 ? 'text-red-600' : s.total > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        {s.total}
+                      </span>
                     </td>
-                  ))}
-                  <td className="py-1.5 px-3 text-center">
-                    <span className={`font-bold ${s.total >= 3 ? 'text-red-600' : s.total > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                      {s.total}
-                    </span>
-                  </td>
-                  <td className="py-1.5 px-3 text-center">
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${ti.bg} ${ti.color}`}>{s.trend}</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-100 font-bold border-t-2">
-              <td className="py-2 px-3" colSpan={3}>Total</td>
-              {monthTotals.map((total, mi) => (
-                <td key={mi} className="py-2 px-2 text-center text-red-600">{total}</td>
-              ))}
-              <td className="py-2 px-3 text-center text-red-600">{grandTotal}</td>
-              <td className="py-2 px-3"></td>
-            </tr>
-          </tfoot>
-        </table>
+                    <td className={`${TABLE.td} text-center`}>
+                      <span className={`${BADGE.gray} ${ti.bg} ${ti.color}`}>{s.trend}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 font-bold border-t-2">
+                <td className={TABLE.td} colSpan={3}>Total</td>
+                {monthTotals.map((total, mi) => (
+                  <td key={mi} className={`${TABLE.td} text-center text-red-600`}>{total}</td>
+                ))}
+                <td className={`${TABLE.td} text-center text-red-600`}>{grandTotal}</td>
+                <td className={TABLE.td}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {/* Detailed Sick Log — exact dates */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto mt-6">
+      <div className={`${CARD.flush} mt-6`}>
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-sm font-semibold text-gray-500 uppercase">Sick Day Log — Exact Dates</h2>
           <div className="flex gap-2">
-            <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className="border rounded px-2 py-1 text-xs">
+            <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className={`${INPUT.sm} w-auto`}>
               <option value="All">All Staff</option>
               {staffWithSick.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="border rounded px-2 py-1 text-xs">
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className={`${INPUT.sm} w-auto`}>
               <option value="All">All Months</option>
               {uniqueMonths.map(m => {
                 const [y, mo] = m.split('-');
@@ -327,35 +346,35 @@ export default function SickTrends({ data }) {
           </div>
         </div>
         {filteredLog.length === 0 ? (
-          <div className="text-sm text-gray-400 p-4 text-center">No sick days recorded{filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}</div>
+          <div className={TABLE.empty}>No sick days recorded{filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+          <table className={TABLE.table}>
+            <thead className={TABLE.thead}>
               <tr>
-                <th className="py-2 px-3 text-left">Date</th>
-                <th className="py-2 px-3 text-left">Day</th>
-                <th className="py-2 px-3 text-left">Staff</th>
-                <th className="py-2 px-3 text-left">Team</th>
-                <th className="py-2 px-3 text-left">Role</th>
-                <th className="py-2 px-3 text-left">Reason</th>
+                <th className={TABLE.th}>Date</th>
+                <th className={TABLE.th}>Day</th>
+                <th className={TABLE.th}>Staff</th>
+                <th className={TABLE.th}>Team</th>
+                <th className={TABLE.th}>Role</th>
+                <th className={TABLE.th}>Reason</th>
               </tr>
             </thead>
             <tbody>
               {filteredLog.map((entry, i) => (
-                <tr key={`${entry.date}-${entry.staffId}`} className="border-b hover:bg-gray-50">
-                  <td className="py-1.5 px-3 font-mono text-xs">{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.dayOfWeek}</td>
-                  <td className="py-1.5 px-3 font-medium">{entry.staffName}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.team}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.role}</td>
-                  <td className="py-1.5 px-3 text-xs text-gray-500">{entry.reason || '—'}</td>
+                <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
+                  <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>
+                  <td className={`${TABLE.td} font-medium`}>{entry.staffName}</td>
+                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.team}</td>
+                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.role}</td>
+                  <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.reason || '—'}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="bg-gray-100 border-t-2">
-                <td className="py-2 px-3 font-bold text-xs" colSpan={2}>Total: {filteredLog.length} sick day{filteredLog.length !== 1 ? 's' : ''}</td>
-                <td className="py-2 px-3 text-xs text-gray-500" colSpan={4}>
+                <td className={`${TABLE.td} font-bold text-xs`} colSpan={2}>Total: {filteredLog.length} sick day{filteredLog.length !== 1 ? 's' : ''}</td>
+                <td className={`${TABLE.td} text-xs text-gray-500`} colSpan={4}>
                   {new Set(filteredLog.map(e => e.staffId)).size} staff member{new Set(filteredLog.map(e => e.staffId)).size !== 1 ? 's' : ''}
                 </td>
               </tr>
@@ -366,7 +385,7 @@ export default function SickTrends({ data }) {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 mt-4 text-[10px] text-gray-500">
-        <span><span className="inline-block w-3 h-3 rounded bg-red-50 border border-red-200 mr-1 align-middle" /> 3+ sick days (high absence)</span>
+        <span><span className="inline-block w-3 h-3 rounded-full bg-red-50 border border-red-200 mr-1 align-middle" /> 3+ sick days (high absence)</span>
         <span>Trend: ^ worsening | v improving | - stable (compares first 3 months vs last 3 months)</span>
       </div>
     </div>

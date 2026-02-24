@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import { formatDate, addDays, isCareRole, getCycleDates, getScheduledShift, getCycleDay, parseDate, countALOnDate } from '../lib/rotation.js';
+import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate } from '../lib/rotation.js';
+import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
+import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -9,6 +11,10 @@ function getMonthDates(year, month) {
     d.setDate(d.getDate() + 1);
   }
   return dates;
+}
+
+function fmtDate(d) {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 export default function AnnualLeave({ data, updateData }) {
@@ -21,30 +27,19 @@ export default function AnnualLeave({ data, updateData }) {
   const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
   const filtered = filterTeam === 'All' ? activeStaff : activeStaff.filter(s => s.team === filterTeam);
 
-  // Calculate AL used per staff (count AL shifts in overrides)
-  const alUsed = useMemo(() => {
-    const counts = {};
-    activeStaff.forEach(s => { counts[s.id] = 0; });
-    Object.entries(data.overrides).forEach(([dateKey, dayOverrides]) => {
-      Object.entries(dayOverrides).forEach(([staffId, override]) => {
-        if (override.shift === 'AL' && counts[staffId] !== undefined) {
-          counts[staffId]++;
-        }
-      });
-    });
-    // Also count from annual_leave bookings
-    if (data.annual_leave) {
-      Object.entries(data.annual_leave).forEach(([staffId, bookings]) => {
-        if (!Array.isArray(bookings)) return;
-        // Don't double-count — overrides already captured
-      });
-    }
-    return counts;
-  }, [data.overrides, data.annual_leave, activeStaff]);
+  const today = new Date();
 
-  const entitlement = data.config.al_entitlement_days || 28;
+  // Accrual calculations for all active staff
+  const accruals = useMemo(() => {
+    return getAccrualSummary(activeStaff, data.config, data.overrides, today);
+  }, [data.staff, data.config, data.overrides]);
 
-  // Book AL — only on scheduled working days, enforces entitlement cap
+  // Leave year for display
+  const leaveYear = useMemo(() => {
+    return getLeaveYear(today, data.config.leave_year_start);
+  }, [data.config.leave_year_start]);
+
+  // Book AL — only on scheduled working days, enforces accrued entitlement
   function bookAL() {
     if (!bookingStaff || !bookingStart || !bookingEnd) return;
     const start = parseDate(bookingStart);
@@ -54,10 +49,12 @@ export default function AnnualLeave({ data, updateData }) {
     const staff = data.staff.find(s => s.id === bookingStaff);
     if (!staff) return;
 
-    const used = alUsed[bookingStaff] || 0;
-    const remaining = entitlement - used;
-    if (remaining <= 0) {
-      alert(`${staff.name} has used all ${entitlement} AL days. No more leave can be booked.`);
+    const accrual = accruals.get(bookingStaff);
+    if (!accrual) return;
+
+    const bookabledays = Math.floor(accrual.remaining);
+    if (bookabledays <= 0) {
+      alert(`${staff.name} has no leave left (${accrual.accrued.toFixed(1)} days earned, ${accrual.used} used). No more leave can be booked.`);
       return;
     }
 
@@ -68,19 +65,18 @@ export default function AnnualLeave({ data, updateData }) {
     let d = new Date(start);
     while (d <= end) {
       const dateKey = formatDate(d);
-      // Check if staff is scheduled to work this day
       const cycleDay = getCycleDay(d, data.config.cycle_start_date);
       const scheduled = getScheduledShift(staff, cycleDay);
       if (scheduled === 'OFF' || scheduled === 'AVL') {
         skippedOff++;
         d = addDays(d, 1);
-        continue; // Don't use AL on days they're not working
+        continue;
       }
       const alOnDay = countALOnDate(d, newOverrides);
       if (alOnDay >= data.config.max_al_same_day) {
         issues.push(`${dateKey}: max AL reached (${data.config.max_al_same_day})`);
-      } else if (booked >= remaining) {
-        issues.push(`${dateKey}: entitlement exhausted (${entitlement} days)`);
+      } else if (booked >= bookabledays) {
+        issues.push(`${dateKey}: earned leave exhausted (${accrual.accrued.toFixed(1)} earned, ${accrual.used + booked} would be used)`);
       } else {
         if (!newOverrides[dateKey]) newOverrides[dateKey] = {};
         newOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al' };
@@ -91,7 +87,7 @@ export default function AnnualLeave({ data, updateData }) {
 
     const msgs = [];
     if (skippedOff > 0) msgs.push(`${skippedOff} scheduled OFF days skipped (AL not used)`);
-    if (issues.length > 0) msgs.push('Max AL days:\n' + issues.join('\n'));
+    if (issues.length > 0) msgs.push('Skipped days:\n' + issues.join('\n'));
     if (msgs.length > 0) alert(`${booked} AL days booked.\n\n${msgs.join('\n\n')}`);
 
     updateData({ ...data, overrides: newOverrides });
@@ -110,12 +106,15 @@ export default function AnnualLeave({ data, updateData }) {
     updateData({ ...data, overrides: newOverrides });
   }
 
+  // Selected staff accrual for booking panel info box
+  const selectedAccrual = bookingStaff ? accruals.get(bookingStaff) : null;
+
   // Upcoming AL bookings
   const upcomingAL = useMemo(() => {
-    const today = formatDate(new Date());
+    const todayStr = formatDate(new Date());
     const bookings = [];
     Object.entries(data.overrides).forEach(([dateKey, dayOverrides]) => {
-      if (dateKey < today) return;
+      if (dateKey < todayStr) return;
       Object.entries(dayOverrides).forEach(([staffId, override]) => {
         if (override.shift === 'AL') {
           const staff = data.staff.find(s => s.id === staffId);
@@ -128,91 +127,129 @@ export default function AnnualLeave({ data, updateData }) {
   }, [data.overrides, data.staff]);
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Annual Leave</h1>
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="flex items-center justify-between mb-6 print:hidden">
+      <div className="flex items-center justify-between mb-2 print:hidden">
         <h1 className="text-2xl font-bold text-gray-900">Annual Leave</h1>
-        <button onClick={() => window.print()}
-          className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-1.5 rounded text-sm">Print</button>
+        <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
+      </div>
+
+      {/* Leave year banner */}
+      <div className="mb-6 text-xs text-gray-500 print:hidden">
+        Leave Year: <span className="font-medium text-gray-700">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</span>
+        <span className="mx-2 text-gray-300">|</span>
+        Accrual: monthly (1/12th per month)
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Book AL */}
-        <div className="bg-white rounded-lg shadow p-5">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Book Leave</h2>
+        <div className={CARD.padded}>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Book Leave</h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Staff</label>
-              <select value={bookingStaff} onChange={e => setBookingStaff(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+              <label className={INPUT.label}>Staff</label>
+              <select value={bookingStaff} onChange={e => setBookingStaff(e.target.value)} className={INPUT.select}>
                 <option value="">Select...</option>
-                {activeStaff.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.team}) — {entitlement - (alUsed[s.id] || 0)} days left</option>
-                ))}
+                {activeStaff.map(s => {
+                  const acc = accruals.get(s.id);
+                  const avail = acc ? acc.remaining : 0;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.team}) — {avail.toFixed(1)} days left
+                    </option>
+                  );
+                })}
               </select>
             </div>
+
+            {/* Accrual info box */}
+            {selectedAccrual && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 space-y-0.5">
+                <div className="flex justify-between"><span>Entitled</span><span className="font-medium">{selectedAccrual.baseEntitlement}d{selectedAccrual.carryover > 0 ? ` (+${selectedAccrual.carryover}d c/o)` : ''}</span></div>
+                <div className="flex justify-between"><span>Earned to date</span><span className="font-medium">{selectedAccrual.accrued.toFixed(1)}d</span></div>
+                <div className="flex justify-between"><span>Used</span><span className="font-medium">{selectedAccrual.used}d</span></div>
+                <div className="flex justify-between border-t border-amber-200 pt-0.5 mt-0.5">
+                  <span className="font-semibold">Left</span>
+                  <span className={`font-bold ${selectedAccrual.remaining < 0 ? 'text-red-600' : selectedAccrual.remaining <= 2 ? 'text-amber-600' : 'text-emerald-700'}`}>
+                    {selectedAccrual.remaining.toFixed(1)}d
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">From</label>
-                <input type="date" value={bookingStart} onChange={e => setBookingStart(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" />
+                <label className={INPUT.label}>From</label>
+                <input type="date" value={bookingStart} onChange={e => setBookingStart(e.target.value)} className={INPUT.base} />
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">To</label>
-                <input type="date" value={bookingEnd} onChange={e => setBookingEnd(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" />
+                <label className={INPUT.label}>To</label>
+                <input type="date" value={bookingEnd} onChange={e => setBookingEnd(e.target.value)} className={INPUT.base} />
               </div>
             </div>
             <div className="text-xs text-gray-500">Max {data.config.max_al_same_day} staff on AL per day</div>
             <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd}
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50">
+              className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
               Book Annual Leave
             </button>
           </div>
         </div>
 
         {/* AL Balances */}
-        <div className="bg-white rounded-lg shadow p-5 lg:col-span-2">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase">AL Balances</h2>
-            <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="border rounded px-2 py-1 text-xs">
+        <div className={`lg:col-span-2 ${CARD.flush}`}>
+          <div className="flex items-center justify-between p-4 pb-0 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">AL Balances</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>
+            </div>
+            <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
               <option value="All">All Teams</option>
               {TEAMS.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
                 <tr>
-                  <th className="py-1.5 px-2 text-left">Name</th>
-                  <th className="py-1.5 px-2 text-left">Team</th>
-                  <th className="py-1.5 px-2 text-center">Entitlement</th>
-                  <th className="py-1.5 px-2 text-center">Used</th>
-                  <th className="py-1.5 px-2 text-center">Remaining</th>
-                  <th className="py-1.5 px-2 text-left">Status</th>
+                  <th className={TABLE.th}>Name</th>
+                  <th className={TABLE.th}>Team</th>
+                  <th className={`${TABLE.th} text-center`}>Entitled</th>
+                  <th className={`${TABLE.th} text-center`}>Earned</th>
+                  <th className={`${TABLE.th} text-center`}>Used</th>
+                  <th className={`${TABLE.th} text-center`}>Left</th>
+                  <th className={TABLE.th}>Progress</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.sort((a, b) => a.name.localeCompare(b.name)).map(s => {
-                  const used = alUsed[s.id] || 0;
-                  const remaining = entitlement - used;
-                  const pct = entitlement > 0 ? (used / entitlement) * 100 : 0;
+                  const acc = accruals.get(s.id) || { baseEntitlement: 0, entitlement: 0, accrued: 0, used: 0, remaining: 0, yearRemaining: 0, isProRata: false, carryover: 0 };
+                  const pct = acc.baseEntitlement > 0 ? (acc.used / acc.baseEntitlement) * 100 : 0;
                   return (
-                    <tr key={s.id} className="border-b hover:bg-gray-50">
-                      <td className="py-1.5 px-2 font-medium">{s.name}</td>
-                      <td className="py-1.5 px-2 text-xs text-gray-500">{s.team}</td>
-                      <td className="py-1.5 px-2 text-center">{entitlement}</td>
-                      <td className="py-1.5 px-2 text-center">{used}</td>
-                      <td className="py-1.5 px-2 text-center">
-                        <span className={`font-medium ${remaining <= 3 ? 'text-red-600' : remaining <= 7 ? 'text-amber-600' : 'text-green-600'}`}>
-                          {remaining}
+                    <tr key={s.id} className={TABLE.tr}>
+                      <td className={`${TABLE.td} font-medium`}>
+                        {s.name}
+                        {acc.isProRata && <span className={`ml-1 ${BADGE.blue}`}>Pro-rata</span>}
+                      </td>
+                      <td className={`${TABLE.td} text-xs text-gray-500`}>{s.team}</td>
+                      <td className={`${TABLE.td} text-center text-xs`}>
+                        {acc.baseEntitlement}d
+                        {acc.carryover > 0 && <span className={`ml-1 ${BADGE.amber}`}>+{acc.carryover}c/o</span>}
+                      </td>
+                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.accrued.toFixed(1)}</td>
+                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.used}</td>
+                      <td className={`${TABLE.td} text-center`}>
+                        <span className={`font-medium text-sm ${acc.remaining < 0 ? 'text-red-600' : acc.remaining <= 2 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {acc.remaining.toFixed(1)}
                         </span>
                       </td>
-                      <td className="py-1.5 px-2">
-                        <div className="w-full bg-gray-100 rounded h-2">
-                          <div className={`h-full rounded ${pct > 80 ? 'bg-red-400' : pct > 50 ? 'bg-amber-400' : 'bg-green-400'}`}
+                      <td className={TABLE.td}>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div className={`h-full rounded-full transition-all duration-300 ${pct > 80 ? 'bg-red-400' : pct > 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
                             style={{ width: `${Math.min(pct, 100)}%` }} />
                         </div>
                       </td>
@@ -225,8 +262,8 @@ export default function AnnualLeave({ data, updateData }) {
         </div>
 
         {/* AL Calendar Heatmap */}
-        <div className="bg-white rounded-lg shadow p-5 lg:col-span-3">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">AL Calendar — Next 2 Months</h2>
+        <div className={`lg:col-span-3 ${CARD.padded}`}>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">AL Calendar — Next 2 Months</h2>
           {(() => {
             const now = new Date();
             const months = [
@@ -235,9 +272,8 @@ export default function AnnualLeave({ data, updateData }) {
             ];
             return months.map(m => (
               <div key={m.label} className="mb-4">
-                <h3 className="text-xs font-semibold text-gray-600 mb-1">{m.label}</h3>
-                <div className="flex gap-0.5 flex-wrap">
-                  {/* Pad to start on correct weekday */}
+                <h3 className="text-xs font-semibold text-gray-600 mb-1.5">{m.label}</h3>
+                <div className="flex gap-1 flex-wrap">
                   {Array.from({ length: (m.dates[0].getDay() + 6) % 7 }).map((_, i) => (
                     <div key={`pad-${i}`} className="w-8 h-8" />
                   ))}
@@ -246,8 +282,8 @@ export default function AnnualLeave({ data, updateData }) {
                     const max = data.config.max_al_same_day;
                     const isToday = formatDate(d) === formatDate(new Date());
                     return (
-                      <div key={formatDate(d)} className={`w-8 h-8 rounded text-[10px] flex flex-col items-center justify-center ${
-                        isToday ? 'ring-2 ring-blue-500' : ''
+                      <div key={formatDate(d)} className={`w-8 h-8 rounded-lg text-[10px] flex flex-col items-center justify-center transition-colors ${
+                        isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''
                       } ${
                         alCount >= max ? 'bg-red-200 text-red-800' :
                         alCount >= max - 1 ? 'bg-amber-200 text-amber-800' :
@@ -263,28 +299,28 @@ export default function AnnualLeave({ data, updateData }) {
               </div>
             ));
           })()}
-          <div className="flex gap-3 text-[10px] text-gray-500 mt-1">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-50 border" /> None</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100" /> Some AL</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200" /> Near max</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200" /> Max reached</span>
+          <div className="flex gap-4 text-[10px] text-gray-500 mt-2">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-50 border" /> None</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-100" /> Some AL</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-200" /> Near max</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-200" /> Max reached</span>
           </div>
         </div>
 
         {/* Upcoming Bookings */}
-        <div className="bg-white rounded-lg shadow p-5 lg:col-span-3">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Upcoming AL Bookings</h2>
+        <div className={`lg:col-span-3 ${CARD.padded}`}>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Upcoming AL Bookings</h2>
           {upcomingAL.length === 0 ? (
             <div className="text-sm text-gray-400">No upcoming AL bookings</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               {upcomingAL.slice(0, 20).map((b, i) => (
-                <div key={i} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-sm">
+                <div key={i} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-sm">
                   <div>
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                   </div>
-                  <button onClick={() => cancelAL(b.staffId, b.date)} className="text-red-400 hover:text-red-600 text-xs">Cancel</button>
+                  <button onClick={() => cancelAL(b.staffId, b.date)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Cancel</button>
                 </div>
               ))}
             </div>

@@ -28,6 +28,9 @@ src/
   lib/
     rotation.js        Core scheduling engine — Panama pattern, shift classification, cycle math
     escalation.js      Coverage calc, 6-level escalation, cost calc, fatigue check, swap validation
+    accrual.js         Holiday accrual engine — leave year, pro-rata, carryover, per-staff entitlement
+    training.js        Training compliance — 16 default types, status calc, matrix builder, alerts
+    design.js          Design tokens — BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, ESC_COLORS, HEATMAP
     api.js             Fetch wrappers for all API endpoints
     bankHolidays.js    GOV.UK bank holiday sync
     pdfReports.js      PDF report generation
@@ -37,10 +40,11 @@ src/
     RotationGrid.jsx   28-day roster grid with print support
     StaffRegister.jsx  Staff CRUD — add/edit/deactivate, set team/role/rate/skill
     CostTracker.jsx    Daily cost breakdown (base/OT/agency/BH) with period totals
-    AnnualLeave.jsx    AL booking with entitlement tracking, calendar heatmap
+    AnnualLeave.jsx    AL booking with accrual tracking, calendar heatmap, leave year banner
     ScenarioModel.jsx  What-if modelling: sick/AL gaps → float → OT → agency cascade
     FatigueTracker.jsx Consecutive days + WTR 48hr checks per staff
     SickTrends.jsx     Monthly sick counts with exact dates, staff names, reasons
+    TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management
     BudgetTracker.jsx  Monthly budget vs actual with variance tracking
     Reports.jsx        PDF export for roster, costs, coverage
     Config.jsx         Settings — shifts, rates, minimums, bank holidays, home details
@@ -65,12 +69,21 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
     },
     agency_rate_day, agency_rate_night, ot_premium, bh_premium_multiplier,
     max_consecutive_days, max_al_same_day, al_entitlement_days,
+    leave_year_start,          // "MM-DD" — default "04-01" (UK tax year). Options: 01-01, 04-01, 09-01
+    al_carryover_max,          // Max carryover days from previous year, default 8
+    training_types: [{         // 16 defaults auto-populated; managers can add/toggle
+      id, name, category,      // "statutory" | "mandatory"
+      refresher_months, roles,  // null = all staff, or ["Senior Carer", ...]
+      legislation, active,
+    }],
     bank_holidays: [{ date: "YYYY-MM-DD", name: "..." }],
     bank_staff_pool_size, night_gap_pct,
   },
   staff: [{
     id, name, role, team, pref, skill, hourly_rate,
     active, wtr_opt_out, start_date, contract_hours,
+    al_entitlement,            // Per-staff override of config.al_entitlement_days (null = use global)
+    al_carryover,              // Days carried over from previous leave year (default 0, set manually)
   }],
   overrides: {
     "YYYY-MM-DD": {
@@ -79,6 +92,18 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
   },
   annual_leave: { ... },  // Legacy — overrides is the source of truth for AL
   budget: { ... },        // Monthly budget entries
+  training: {             // Per-staff training completion records
+    "S001": {
+      "fire-safety": {
+        completed: "2025-06-15",    // Date training was completed
+        expiry: "2026-06-15",       // Auto-calculated: completed + refresher_months
+        trainer: "Jane Smith",
+        method: "classroom",        // classroom | e-learning | practical | online
+        certificate_ref: "FS-042",
+        notes: "",
+      },
+    },
+  },
 }
 ```
 
@@ -162,7 +187,7 @@ All schedule changes go through overrides. The `getActualShift()` function check
 | GET | /api/export?home=X | Download home data as JSON |
 | GET | /api/bank-holidays | Proxy to GOV.UK API |
 
-Server-side `validateOverrides()` checks max AL per day and entitlement per staff on every save.
+Server-side `validateOverrides()` checks max AL per day, entitlement per staff, NLW compliance, and training compliance on every save.
 
 ## Key Functions Reference
 
@@ -183,6 +208,24 @@ Server-side `validateOverrides()` checks max AL per day and entitlement per staf
 - `calculateScenario(sickPerDay, alPerDay, config)` — what-if gap modelling
 - `validateSwap(fromStaff, toStaff, date, overrides, config)` — swap safety check
 
+### accrual.js
+- `getLeaveYear(date, leaveYearStart)` — returns { start, end, startStr, endStr } for the leave year containing the given date
+- `countALInLeaveYear(staffId, overrides, leaveYear)` — count AL overrides within a leave year
+- `calculateAccrual(staff, config, overrides, asOfDate)` — full accrual calc: pro-rata from start_date, monthly 1/12th accrual, carryover, returns { baseEntitlement, entitlement, accrued, used, remaining, yearRemaining, isProRata, leaveYear }
+- `getAccrualSummary(activeStaff, config, overrides, asOfDate)` — returns Map<staffId, accrualResult> for all active staff
+
+### training.js
+- `DEFAULT_TRAINING_TYPES` — 16-item array of UK statutory/mandatory training types
+- `getTrainingTypes(config)` — returns config.training_types or defaults
+- `ensureTrainingDefaults(data)` — populates config.training_types if missing (returns new data or null)
+- `getTrainingStatus(staff, type, staffRecords, asOfDate)` — returns { status, record, daysUntilExpiry }
+- `buildComplianceMatrix(activeStaff, types, trainingData, asOfDate)` — Map<staffId, Map<typeId, statusResult>>
+- `getComplianceStats(matrix)` — { totalRequired, compliant, expiringSoon, urgent, expired, notStarted, compliancePct }
+- `getTrainingAlerts(activeStaff, types, trainingData, asOfDate)` — alert objects for Dashboard
+
+### excel.js
+- `downloadXLSX(sheets, filename)` — shared Excel export utility; sheets = [{ name, headers, rows }]
+
 ## State Flow
 
 1. `App.jsx` loads data from API on mount, holds it in state
@@ -202,10 +245,32 @@ Server-side `validateOverrides()` checks max AL per day and entitlement per staf
 
 ## UK Compliance Notes
 
-- **NLW minimum**: £12.21/hr (2025-26). All staff rates must meet this.
+- **NLW minimum**: £12.21/hr (2025-26). Enforced via `config.nlw_rate`:
+  - Dashboard alerts flag any care staff below NLW (red error)
+  - StaffRegister shows "Below NLW" badge on rate column, warns on edit and add
+  - Config shows violation count below the NLW Rate field
+  - Server-side `validateOverrides()` returns NLW warnings on every save
 - **WTR**: 48hr average weekly limit (unless opted out)
 - **CQC Regulation 18**: Safe staffing levels must be maintained
 - **Bank holidays**: Auto-fetched from GOV.UK, auto-upgrade shifts to BH-D/BH-N
+
+## Holiday Accrual
+
+Accrual is calculated in `src/lib/accrual.js`. Key concepts:
+- Leave year is anchored to `config.leave_year_start` ("MM-DD", default "04-01")
+- Staff accrue 1/12th of entitlement per complete month from their effective start date
+- New starters get pro-rata: their entitlement is `base × (months-left-in-year / 12)`
+- Carryover (`staff.al_carryover`) is added to accrued total and available immediately
+- Per-staff override: `staff.al_entitlement` overrides the global `config.al_entitlement_days`
+- Automatic year-end rollover is NOT implemented — managers set `al_carryover` manually each April
+
+`calculateAccrual(staff, config, overrides, asOfDate)` returns `{ baseEntitlement, entitlement, accrued, used, remaining, yearRemaining, isProRata, leaveYear }`
+
+UI terminology (consistent across AnnualLeave, Dashboard, booking alerts):
+- **Entitled** = `baseEntitlement` (full-year entitlement, e.g. 28 days)
+- **Earned** = `accrued` (1/12th per month from effective start, pro-rata for mid-year starters)
+- **Used** = `used` (AL overrides counted in the leave year)
+- **Left** = `remaining` (earned - used; can be negative if over-booked)
 
 ## Known Gaps / Future Work
 
@@ -213,17 +278,40 @@ Server-side `validateOverrides()` checks max AL per day and entitlement per staf
 - No email/SMS/push notifications
 - No payroll integration (Sage, Xero, etc.)
 - No time & attendance / GPS clock-in
-- No DBS/training expiry tracking
+- No DBS expiry tracking
 - Shift swap feature discussed but not built (approach: swap staff `team` field)
 - Audit log only viewable in-app, not exportable
-- No XLSX export (xlsx package installed but unused)
+- AL carryover is set manually — no automatic year-end rollover
+
+## Design System
+
+All UI uses shared tokens from `src/lib/design.js`. Import and use these — never write ad-hoc button/card/table classes from scratch.
+
+| Token | Usage |
+|-------|-------|
+| `BTN.primary/secondary/danger/ghost/success` | All buttons |
+| `BTN.xs/sm` | Size modifiers (append to BTN variant) |
+| `CARD.base/padded/elevated/flush` | Card wrappers |
+| `TABLE.table/thead/th/tr/td/tdMono` | All tables |
+| `INPUT.base/sm/select/label` | All form inputs |
+| `MODAL.overlay/panel/panelLg/panelSm/title/footer` | All modals |
+| `BADGE.blue/green/amber/red/gray/purple/orange/pink` | Status pills |
+| `PAGE.container/title/section/header` | Page layout |
+| `ESC_COLORS.green/amber/yellow/red` | Escalation level coloring (`.card/.text/.badge/.bar`) |
+| `HEATMAP.green/amber/yellow/red/empty` | Heatmap cell colors |
+
+Global styles in `src/index.css`: Inter font, CSS custom properties (`--color-primary`, `--radius`), modal animation (`animate-modal-in`), smooth transitions on interactive elements.
+
+SHIFT_COLORS (in rotation.js) include `border border-{color}-200` — apply with `className` on badge spans.
 
 ## Working with This Codebase
 
 - Use `/clear` between distinct tasks to keep context small
+- **Model strategy**: use Opus 4.6 for plan mode + review (`/model claude-opus-4-6`), switch back to Sonnet for implementation (`/model claude-sonnet-4-6`)
 - Use plan mode for changes touching 2+ files
 - Use subagents (Explore) for investigation rather than reading many files manually
 - All pages follow same pattern: receive `{data, updateData}` props, render Tailwind-styled JSX
+- All UI components use design tokens from `src/lib/design.js` — never write ad-hoc Tailwind classes for buttons/cards/tables/modals
 - Override changes always: deep-clone overrides → mutate clone → call updateData with new data object
 - Date handling: always use `formatDate()` for keys, `parseDate()` for parsing, `addDays()` for arithmetic
 - Cycle math uses UTC to avoid BST/GMT off-by-one errors

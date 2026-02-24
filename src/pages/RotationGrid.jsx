@@ -5,6 +5,7 @@ import {
   calculateStaffPeriodHours, SHIFT_COLORS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -297,7 +298,7 @@ export default function RotationGrid({ data, updateData }) {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4 max-w-full mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Roster: {monthLabel}</h1>
@@ -310,34 +311,34 @@ export default function RotationGrid({ data, updateData }) {
           {/* Month Navigation */}
           <div className="flex items-center gap-1">
             <button onClick={() => setMonthOffset(monthOffset - 1)}
-              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-xs">&larr;</button>
+              className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&larr;</button>
             {monthOffset !== 0 && (
               <button onClick={() => setMonthOffset(0)}
-                className="px-2 py-1 text-blue-600 text-xs hover:underline">Current</button>
+                className={`${BTN.ghost} ${BTN.xs} text-blue-600 transition-colors duration-150`}>Current</button>
             )}
             <button onClick={() => setMonthOffset(monthOffset + 1)}
-              className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-xs">&rarr;</button>
+              className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&rarr;</button>
           </div>
           <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
           <span className="text-xs text-gray-400">({monthDates.length} days)</span>
         </div>
         <div className="flex items-center gap-2">
           <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1 text-xs">
+            className={`${INPUT.select} w-auto ${BTN.xs}`}>
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <button onClick={() => setBulkModal({ type: 'revert-all' })}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-2 py-1 rounded text-xs">Revert All</button>
+            className={`${BTN.secondary} ${BTN.xs}`}>Revert All</button>
           <button onClick={exportCSV}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-xs">Export CSV</button>
+            className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
           <button onClick={() => window.print()}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-xs">Print</button>
+            className={`${BTN.secondary} ${BTN.xs}`}>Print</button>
           <span className="text-xs text-gray-500">{activeStaff.length} staff</span>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <div className={`${CARD.flush} overflow-x-auto`}>
         <table className="text-[11px] border-collapse">
           <thead>
             <tr className="bg-gray-800 text-white">
@@ -429,14 +430,14 @@ export default function RotationGrid({ data, updateData }) {
 
       {/* Bulk Revert Modal */}
       {bulkModal?.type === 'revert-all' && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setBulkModal(null); }}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-3">Revert All Overrides</h2>
+        <div className={MODAL.overlay} onClick={(e) => { if (e.target === e.currentTarget) setBulkModal(null); }}>
+          <div className={MODAL.panelSm}>
+            <h2 className={MODAL.title}>Revert All Overrides</h2>
             <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
             <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month. You can undo with Ctrl+Z.</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setBulkModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={revertAllOverrides} className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700">Revert All</button>
+            <div className={MODAL.footer}>
+              <button onClick={() => setBulkModal(null)} className={BTN.secondary}>Cancel</button>
+              <button onClick={revertAllOverrides} className={BTN.danger}>Revert All</button>
             </div>
           </div>
         </div>
@@ -444,8 +445,8 @@ export default function RotationGrid({ data, updateData }) {
 
       {/* Shift Editor Modal */}
       {editing && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        <div className={MODAL.overlay} onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-modal-in">
             {/* Header */}
             <div className="bg-gray-800 text-white px-5 py-3">
               <div className="flex items-center justify-between">
@@ -467,11 +468,11 @@ export default function RotationGrid({ data, updateData }) {
             <div className="p-5">
               {/* Shift Selector Dropdown */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Change shift to:</label>
+                <label className={INPUT.label}>Change shift to:</label>
                 <select
                   value={editing.proposedShift}
                   onChange={e => setEditing({ ...editing, proposedShift: e.target.value })}
-                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                  className={`${INPUT.select} font-medium`}>
                   <optgroup label="Standard">
                     {SHIFT_OPTIONS.filter(o => o.group === 'Standard').map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
@@ -600,13 +601,13 @@ export default function RotationGrid({ data, updateData }) {
             </div>
 
             {/* Footer */}
-            <div className="border-t px-5 py-3 flex items-center justify-between bg-gray-50">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+            <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-gray-50/80">
+              <button onClick={() => setEditing(null)} className={BTN.ghost}>
                 Cancel
               </button>
               <div className="flex gap-2">
                 <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
-                  className="px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded">
+                  className={`${BTN.ghost} ${BTN.xs} text-red-600`}>
                   Sick 7 Days
                 </button>
                 {editing.currentShift !== getScheduledShift(data.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date)) && (
@@ -614,20 +615,20 @@ export default function RotationGrid({ data, updateData }) {
                     const staff = data.staff.find(s => s.id === editing.staffId);
                     const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date));
                     setEditing({ ...editing, proposedShift: scheduled });
-                  }} className="px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                  }} className={`${BTN.ghost} ${BTN.xs} text-blue-600`}>
                     Revert to Scheduled
                   </button>
                 )}
                 <button
                   onClick={applyChange}
                   disabled={!editing.proposedShift || editing.proposedShift === editing.currentShift}
-                  className={`px-5 py-2 rounded text-sm font-medium text-white disabled:opacity-30 ${
+                  className={`${
                     impact?.errors.length > 0
-                      ? 'bg-red-600 hover:bg-red-700'
+                      ? BTN.danger
                       : impact?.warnings.length > 0
-                      ? 'bg-amber-600 hover:bg-amber-700'
-                      : 'bg-green-600 hover:bg-green-700'
-                  }`}>
+                      ? 'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2'
+                      : BTN.success
+                  } disabled:opacity-30`}>
                   {impact?.errors.length > 0 ? 'Apply Anyway' :
                    impact?.warnings.length > 0 ? 'Apply (with warnings)' :
                    'Approve & Apply'}

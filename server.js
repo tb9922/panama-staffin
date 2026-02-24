@@ -139,7 +139,6 @@ function validateOverrides(data) {
   if (!data.overrides || !data.config || !data.staff) return warnings;
 
   const maxAL = data.config.max_al_same_day || 2;
-  const entitlement = data.config.al_entitlement_days || 28;
 
   // Check max AL per day
   for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
@@ -149,9 +148,27 @@ function validateOverrides(data) {
     }
   }
 
-  // Check AL entitlement per staff
+  // Determine current leave year boundaries
+  const leaveYearStart = data.config.leave_year_start || '04-01';
+  const [lyMM, lyDD] = leaveYearStart.split('-').map(Number);
+  const now = new Date();
+  const thisYearBoundary = new Date(Date.UTC(now.getUTCFullYear(), lyMM - 1, lyDD));
+  let lyStart, lyEnd;
+  if (now >= thisYearBoundary) {
+    lyStart = thisYearBoundary;
+    const nextBoundary = new Date(Date.UTC(now.getUTCFullYear() + 1, lyMM - 1, lyDD));
+    lyEnd = new Date(nextBoundary); lyEnd.setUTCDate(lyEnd.getUTCDate() - 1);
+  } else {
+    lyStart = new Date(Date.UTC(now.getUTCFullYear() - 1, lyMM - 1, lyDD));
+    lyEnd = new Date(thisYearBoundary); lyEnd.setUTCDate(lyEnd.getUTCDate() - 1);
+  }
+  const lyStartStr = lyStart.toISOString().slice(0, 10);
+  const lyEndStr = lyEnd.toISOString().slice(0, 10);
+
+  // Check AL entitlement per staff within the current leave year
   const alUsed = {};
   for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
+    if (dateKey < lyStartStr || dateKey > lyEndStr) continue;
     for (const [staffId, override] of Object.entries(dayOverrides)) {
       if (override.shift === 'AL') {
         alUsed[staffId] = (alUsed[staffId] || 0) + 1;
@@ -159,9 +176,47 @@ function validateOverrides(data) {
     }
   }
   for (const [staffId, used] of Object.entries(alUsed)) {
+    const staff = data.staff.find(s => s.id === staffId);
+    const base = staff?.al_entitlement != null ? staff.al_entitlement : (data.config.al_entitlement_days || 28);
+    const entitlement = base + (staff?.al_carryover || 0);
     if (used > entitlement) {
-      const staff = data.staff.find(s => s.id === staffId);
-      warnings.push(`${staff?.name || staffId}: ${used} AL days exceeds entitlement of ${entitlement}`);
+      warnings.push(`${staff?.name || staffId}: ${used} AL days in leave year exceeds entitlement of ${entitlement}`);
+    }
+  }
+
+  // NMW compliance check
+  const nlwRate = data.config.nlw_rate || 12.21;
+  for (const s of data.staff.filter(s => s.active !== false)) {
+    if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
+      warnings.push(`${s.name}: rate £${s.hourly_rate.toFixed(2)} is below NLW £${nlwRate.toFixed(2)}`);
+    }
+  }
+
+  // Training compliance check
+  if (data.config.training_types && data.training) {
+    const activeStaff = data.staff.filter(s => s.active !== false);
+    const activeTypes = data.config.training_types.filter(t => t.active);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let expiredCount = 0;
+    let notStartedCount = 0;
+    for (const s of activeStaff) {
+      const staffRecords = data.training[s.id] || {};
+      for (const t of activeTypes) {
+        // Check if training is required for this staff member
+        if (t.roles && !t.roles.includes(s.role)) continue;
+        const rec = staffRecords[t.id];
+        if (!rec || !rec.completed) {
+          notStartedCount++;
+        } else if (rec.expiry && rec.expiry < todayStr) {
+          expiredCount++;
+        }
+      }
+    }
+    if (expiredCount > 0) {
+      warnings.push(`Training: ${expiredCount} expired training record${expiredCount > 1 ? 's' : ''} across active staff`);
+    }
+    if (notStartedCount > 0) {
+      warnings.push(`Training: ${notStartedCount} required training record${notStartedCount > 1 ? 's' : ''} not started`);
     }
   }
 

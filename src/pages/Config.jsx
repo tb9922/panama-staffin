@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { syncBankHolidays } from '../lib/bankHolidays.js';
+import { isCareRole } from '../lib/rotation.js';
+import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 
 export default function Config({ data, updateData }) {
   const [config, setConfig] = useState(JSON.parse(JSON.stringify(data.config)));
@@ -45,16 +47,16 @@ export default function Config({ data, updateData }) {
 
   const Field = ({ label, path, type = 'number', step, unit }) => (
     <div>
-      <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
+      <label className={INPUT.label}>{label}</label>
       <div className="flex items-center gap-1">
         {type === 'number' ? (
           <input type="number" step={step || 1} value={getVal(path)}
             onChange={e => handleChange(path, parseFloat(e.target.value) || 0)}
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm" />
+            className={INPUT.sm} />
         ) : (
           <input type={type} value={getVal(path)}
             onChange={e => handleChange(path, e.target.value)}
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm" />
+            className={INPUT.sm} />
         )}
         {unit && <span className="text-xs text-gray-400 whitespace-nowrap">{unit}</span>}
       </div>
@@ -62,31 +64,31 @@ export default function Config({ data, updateData }) {
   );
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-6 max-w-7xl mx-auto">
       {dirty && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between text-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
-          <button onClick={handleSave} className="bg-amber-600 text-white px-3 py-1 rounded text-xs hover:bg-amber-700">Save Now</button>
+          <button onClick={handleSave} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>Save Now</button>
         </div>
       )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <button onClick={handleSave}
-          className={`px-6 py-2 rounded font-medium text-white ${saved ? 'bg-green-600' : dirty ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+          className={`${BTN.primary} ${saved ? '!bg-green-600' : dirty ? '!bg-amber-600 hover:!bg-amber-700' : ''}`}>
           {saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
         </button>
       </div>
 
       {/* Home Details */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Home Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Field label="Home Name" path="home_name" type="text" />
           <Field label="Registered Beds" path="registered_beds" />
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Care Type</label>
+            <label className={INPUT.label}>Care Type</label>
             <select value={config.care_type} onChange={e => handleChange('care_type', e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm">
+              className={INPUT.select}>
               {['Residential', 'Nursing', 'Dementia', 'Mixed'].map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
@@ -95,55 +97,59 @@ export default function Config({ data, updateData }) {
       </section>
 
       {/* Shift Definitions */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Shift Times & Hours</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-gray-600 text-xs">
-              <th className="py-2 pr-3">Code</th>
-              <th className="py-2 pr-3">Name</th>
-              <th className="py-2 pr-3">Start</th>
-              <th className="py-2 pr-3">End</th>
-              <th className="py-2 pr-3">Hours</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(config.shifts).map(([code, shift]) => (
-              <tr key={code} className="border-b">
-                <td className="py-1.5 pr-3 font-mono font-bold">{code}</td>
-                <td className="py-1.5 pr-3">
-                  <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
-                    className="border rounded px-2 py-1 text-sm w-24" />
-                </td>
-                <td className="py-1.5 pr-3">
-                  <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
-                    className="border rounded px-2 py-1 text-sm" />
-                </td>
-                <td className="py-1.5 pr-3">
-                  <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
-                    className="border rounded px-2 py-1 text-sm" />
-                </td>
-                <td className="py-1.5 pr-3">
-                  <input type="number" step="0.25" value={shift.hours}
-                    onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
-                    className="border rounded px-2 py-1 text-sm w-20" />
-                </td>
+      <section className={`${CARD.flush} mb-5`}>
+        <div className="p-5 pb-0">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Shift Times & Hours</h2>
+        </div>
+        <div className={TABLE.wrapper}>
+          <table className={TABLE.table}>
+            <thead className={TABLE.thead}>
+              <tr>
+                <th className={TABLE.th}>Code</th>
+                <th className={TABLE.th}>Name</th>
+                <th className={TABLE.th}>Start</th>
+                <th className={TABLE.th}>End</th>
+                <th className={TABLE.th}>Hours</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="grid grid-cols-2 gap-4 mt-4">
+            </thead>
+            <tbody>
+              {Object.entries(config.shifts).map(([code, shift]) => (
+                <tr key={code} className={TABLE.tr}>
+                  <td className={TABLE.tdMono}><span className="font-bold">{code}</span></td>
+                  <td className={TABLE.td}>
+                    <input type="text" value={shift.name} onChange={e => handleChange(`shifts.${code}.name`, e.target.value)}
+                      className={INPUT.sm} />
+                  </td>
+                  <td className={TABLE.td}>
+                    <input type="time" value={shift.start} onChange={e => handleChange(`shifts.${code}.start`, e.target.value)}
+                      className={INPUT.sm} />
+                  </td>
+                  <td className={TABLE.td}>
+                    <input type="time" value={shift.end} onChange={e => handleChange(`shifts.${code}.end`, e.target.value)}
+                      className={INPUT.sm} />
+                  </td>
+                  <td className={TABLE.td}>
+                    <input type="number" step="0.25" value={shift.hours}
+                      onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
+                      className={`${INPUT.sm} w-20`} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid grid-cols-2 gap-4 p-5 pt-4">
           <Field label="Handover" path="handover_mins" unit="mins" />
           <Field label="Break Deduction" path="break_deduction" step={0.5} unit="hrs" />
         </div>
       </section>
 
       {/* Minimum Staffing */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Minimum Staffing Levels</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {['early', 'late', 'night'].map(period => (
-            <div key={period} className="border rounded-lg p-4">
+            <div key={period} className="border border-gray-200 rounded-xl p-4">
               <h3 className="font-semibold text-gray-700 mb-3 capitalize">{period} Shift</h3>
               <div className="space-y-2">
                 <Field label="Min Heads" path={`minimum_staffing.${period}.heads`} />
@@ -155,38 +161,59 @@ export default function Config({ data, updateData }) {
       </section>
 
       {/* Overtime & Agency */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Overtime & Agency</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Field label="OT Premium" path="ot_premium" step={0.5} unit="£/hr" />
-          <Field label="Agency Day Rate" path="agency_rate_day" unit="£/hr" />
-          <Field label="Agency Night Rate" path="agency_rate_night" unit="£/hr" />
+          <Field label="OT Premium" path="ot_premium" step={0.5} unit="/hr" />
+          <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />
+          <Field label="Agency Night Rate" path="agency_rate_night" unit="/hr" />
           <Field label="Agency Target (e.g. 0.05 = 5%)" path="agency_target_pct" step={0.01} />
         </div>
       </section>
 
       {/* Safety Limits */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Safety Limits</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Max Consecutive Days" path="max_consecutive_days" />
           <Field label="Max AL Same Day" path="max_al_same_day" />
-          <Field label="Float Retainer" path="float_retainer_weekly" unit="£/wk" />
+          <Field label="Float Retainer" path="float_retainer_weekly" unit="/wk" />
           <Field label="Weekly OT Cap" path="weekly_ot_cap" unit="shifts" />
         </div>
       </section>
 
       {/* Annual Leave */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Annual Leave</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="AL Entitlement" path="al_entitlement_days" unit="days/yr" />
           <Field label="Avg AL Per Day" path="avg_al_per_day" unit="people" />
+          <Field label="Max Carryover" path="al_carryover_max" unit="days" />
+          <div>
+            <label className={INPUT.label}>Leave Year Start</label>
+            <select value={config.leave_year_start || '04-01'}
+              onChange={e => handleChange('leave_year_start', e.target.value)}
+              className={INPUT.select}>
+              <option value="01-01">January (Calendar year)</option>
+              <option value="04-01">April (UK tax year)</option>
+              <option value="09-01">September (Academic year)</option>
+            </select>
+            {(() => {
+              const ly = config.leave_year_start || '04-01';
+              const [mm, dd] = ly.split('-').map(Number);
+              const now = new Date();
+              const thisYr = new Date(Date.UTC(now.getFullYear(), mm - 1, dd));
+              const start = now >= thisYr ? thisYr : new Date(Date.UTC(now.getFullYear() - 1, mm - 1, dd));
+              const end = new Date(start); end.setUTCFullYear(end.getUTCFullYear() + 1); end.setUTCDate(end.getUTCDate() - 1);
+              const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+              return <p className="text-xs text-gray-400 mt-1">Current: {fmt(start)} – {fmt(end)}</p>;
+            })()}
+          </div>
         </div>
       </section>
 
       {/* Weekly Hours Targets */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Weekly Hours Targets</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Field label="FT Target (EL)" path="ft_target_el" step={0.5} unit="hrs/wk" />
@@ -196,22 +223,31 @@ export default function Config({ data, updateData }) {
       </section>
 
       {/* Bank Holiday & Sickness */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Bank Holiday & Sickness</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="BH Premium Multiplier" path="bh_premium_multiplier" step={0.1} unit="x" />
           <Field label="Sickness Rate" path="sickness_rate" step={0.01} />
           <Field label="Night Gap %" path="night_gap_pct" step={0.05} />
-          <Field label="NLW Rate" path="nlw_rate" step={0.01} unit="£/hr" />
+          <div>
+            <Field label="NLW Rate" path="nlw_rate" step={0.01} unit="/hr" />
+            {(() => {
+              const nlw = config.nlw_rate || 12.21;
+              const below = data.staff.filter(s => s.active !== false && isCareRole(s.role) && s.hourly_rate < nlw);
+              return below.length > 0 ? (
+                <p className="text-xs text-red-600 mt-1">{below.length} staff below this rate</p>
+              ) : null;
+            })()}
+          </div>
         </div>
       </section>
 
       {/* Fortification */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Fortification Parameters</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Emergency Call-In Premium" path="emergency_callin_premium" step={0.1} unit="x" />
-          <Field label="Manager Floor Rate" path="manager_floor_rate" unit="£/hr" />
+          <Field label="Manager Floor Rate" path="manager_floor_rate" unit="/hr" />
           <Field label="Winter Sick Uplift" path="winter_sick_uplift" step={0.1} unit="x" />
           <Field label="Agency Availability %" path="agency_availability_pct" step={0.1} />
           <Field label="Bank Staff Pool" path="bank_staff_pool_size" />
@@ -219,17 +255,17 @@ export default function Config({ data, updateData }) {
       </section>
 
       {/* Budget Targets */}
-      <section className="bg-white rounded-lg shadow p-5 mb-5">
+      <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Budget Targets</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <Field label="Monthly Staff Budget" path="monthly_staff_budget" unit="£/month" />
-          <Field label="Monthly Agency Cap" path="monthly_agency_cap" unit="£/month" />
+          <Field label="Monthly Staff Budget" path="monthly_staff_budget" unit="/month" />
+          <Field label="Monthly Agency Cap" path="monthly_agency_cap" unit="/month" />
         </div>
         <p className="text-xs text-gray-400 mt-2">Used by Budget vs Actual page. Per-month overrides can be set there.</p>
       </section>
 
       {/* Bank Holidays List */}
-      <section className="bg-white rounded-lg shadow p-5">
+      <section className={CARD.padded}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Bank Holidays</h2>
           <button onClick={async () => {
@@ -244,18 +280,18 @@ export default function Config({ data, updateData }) {
               setTimeout(() => setSyncStatus(null), 5000);
             }
           }} disabled={syncStatus?.loading}
-            className="bg-purple-600 text-white px-4 py-1.5 rounded text-sm hover:bg-purple-700 disabled:opacity-50">
+            className={`${BTN.primary} ${BTN.sm} !bg-purple-600 hover:!bg-purple-700 active:!bg-purple-800`}>
             {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
           </button>
         </div>
         {syncStatus && !syncStatus.loading && (
-          <div className={`text-sm px-3 py-2 rounded mb-3 ${syncStatus.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          <div className={`text-sm px-3 py-2 rounded-xl mb-3 ${syncStatus.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
             {syncStatus.msg}
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
           {config.bank_holidays?.map((bh, i) => (
-            <div key={i} className="flex items-center justify-between bg-pink-50 rounded px-3 py-2 text-sm border border-pink-200">
+            <div key={i} className={`flex items-center justify-between ${BADGE.pink} !rounded-xl !px-3 !py-2 !text-sm`}>
               <div>
                 <div className="font-medium text-xs">{bh.name}</div>
                 <div className="text-[10px] text-gray-500">{bh.date}</div>
@@ -264,13 +300,13 @@ export default function Config({ data, updateData }) {
                 const newBH = [...config.bank_holidays];
                 newBH.splice(i, 1);
                 handleChange('bank_holidays', newBH);
-              }} className="text-red-400 hover:text-red-600 text-xs ml-2">X</button>
+              }} className="text-red-400 hover:text-red-600 text-xs ml-2 transition-colors duration-150">X</button>
             </div>
           ))}
         </div>
         <div className="flex gap-3">
-          <input id="bh-date" type="date" className="border rounded px-3 py-1.5 text-sm" />
-          <input id="bh-name" type="text" placeholder="Holiday name" className="border rounded px-3 py-1.5 text-sm flex-1" />
+          <input id="bh-date" type="date" className={INPUT.sm} />
+          <input id="bh-name" type="text" placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
           <button onClick={() => {
             const dateEl = document.getElementById('bh-date');
             const nameEl = document.getElementById('bh-name');
@@ -279,7 +315,7 @@ export default function Config({ data, updateData }) {
               dateEl.value = '';
               nameEl.value = '';
             }
-          }} className="bg-pink-600 text-white px-4 py-1.5 rounded text-sm hover:bg-pink-700">Add</button>
+          }} className={`${BTN.primary} ${BTN.sm} !bg-pink-600 hover:!bg-pink-700 active:!bg-pink-800`}>Add</button>
         </div>
       </section>
     </div>

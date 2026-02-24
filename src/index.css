@@ -1,8 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* Mobile responsive */
+/* ── Base theme ───────────────────────────────────────────────────────────── */
+:root {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --radius: 0.75rem;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+/* Smooth transitions on interactive elements */
+button, a, input, select, textarea {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+/* Better focus ring */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Modal entrance animation */
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-modal-in {
+  animation: modal-in 200ms ease-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ── Mobile responsive ────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Sidebar becomes overlay drawer on mobile */
   .sidebar-mobile-overlay {
     position: fixed;
     inset: 0;
@@ -23,7 +75,6 @@
     transform: translateX(-100%);
   }
 
-  /* Mobile top bar */
   .mobile-topbar {
     display: flex !important;
     position: sticky;
@@ -49,19 +100,18 @@
 
   /* Make modals full-width on mobile */
   .max-w-sm { max-width: calc(100vw - 2rem) !important; }
+  .max-w-md { max-width: calc(100vw - 2rem) !important; }
   .max-w-lg { max-width: calc(100vw - 2rem) !important; }
 }
 
+/* ── Print styles ─────────────────────────────────────────────────────────── */
 @media print {
-  /* Hide sidebar, nav, filters */
   aside, .print\:hidden, select, input {
     display: none !important;
   }
-  /* Hide buttons EXCEPT inside tables (roster shift cells) */
   button:not(td button) {
     display: none !important;
   }
-  /* Roster shift cells: show as plain text in print */
   td button {
     cursor: default !important;
     border: none !important;
@@ -69,7 +119,6 @@
     ring: none !important;
   }
 
-  /* Full width, no scroll */
   main {
     overflow: visible !important;
     width: 100% !important;
@@ -82,12 +131,10 @@
     overflow: visible !important;
   }
 
-  /* Show print-only elements */
   .print\:block {
     display: block !important;
   }
 
-  /* Compact spacing */
   body {
     font-size: 10px !important;
     background: white !important;
@@ -98,24 +145,21 @@
   .mb-6, .mb-4 {
     margin-bottom: 0.25rem !important;
   }
-  .shadow, .shadow-xl, .shadow-2xl {
+  .shadow, .shadow-sm, .shadow-md, .shadow-xl, .shadow-2xl {
     box-shadow: none !important;
   }
-  .rounded-lg, .rounded-xl, .rounded {
+  .rounded-lg, .rounded-xl, .rounded-2xl, .rounded {
     border-radius: 0 !important;
   }
 
-  /* Page breaks */
   table { page-break-inside: auto; }
   tr { page-break-inside: avoid; }
   thead { display: table-header-group; }
 
-  /* Sticky columns shouldn't be sticky in print */
   .sticky {
     position: static !important;
   }
 
-  /* Print header */
   .print-header {
     display: block !important;
     text-align: center;
@@ -124,13 +168,11 @@
     border-bottom: 2px solid #333;
   }
 
-  /* Force colors in print */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Hide mobile topbar in print */
   .mobile-topbar {
     display: none !important;
   }

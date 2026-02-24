@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import { downloadXLSX } from '../lib/excel.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -129,7 +131,7 @@ export default function BudgetTracker({ data, updateData }) {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Budget vs Actual</h1>
@@ -146,34 +148,49 @@ export default function BudgetTracker({ data, updateData }) {
             setEditingBudget('default');
             setBudgetInput(String(defaultBudget || ''));
             setAgencyCapInput(String(defaultAgencyCap || ''));
-          }} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+          }} className={BTN.primary}>
             Set Budget
           </button>
+          <button onClick={() => {
+            const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
+            const rows = monthData.map(m => [
+              m.fullLabel,
+              m.budget > 0 ? Math.round(m.budget) : '',
+              Math.round(m.actual),
+              m.budget > 0 ? Math.round(m.variance) : '',
+              m.budget > 0 ? parseFloat(m.variancePct.toFixed(1)) : '',
+              Math.round(m.base),
+              Math.round(m.ot),
+              Math.round(m.agency),
+              Math.round(m.bh),
+            ]);
+            downloadXLSX(`budget_${data.config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
+          }} className={BTN.secondary}>Export Excel</button>
           <button onClick={() => window.print()}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-1.5 rounded text-sm">Print</button>
+            className={BTN.secondary}>Print</button>
         </div>
       </div>
 
       {/* Budget Setting Modal */}
       {editingBudget === 'default' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-            <h3 className="font-bold text-gray-900 mb-4">Set Monthly Budget</h3>
+        <div className={`${MODAL.overlay} print:hidden`}>
+          <div className={MODAL.panelSm}>
+            <h3 className={MODAL.title}>Set Monthly Budget</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Total Staff Budget (£/month)</label>
+                <label className={INPUT.label}>Total Staff Budget (£/month)</label>
                 <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm" placeholder="e.g. 50000" />
+                  className={INPUT.base} placeholder="e.g. 50000" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Agency Cap (£/month)</label>
+                <label className={INPUT.label}>Agency Cap (£/month)</label>
                 <input type="number" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm" placeholder="e.g. 5000" />
+                  className={INPUT.base} placeholder="e.g. 5000" />
               </div>
             </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={saveDefaultBudget} className="flex-1 bg-blue-600 text-white py-2 rounded text-sm hover:bg-blue-700">Save</button>
-              <button onClick={() => setEditingBudget(null)} className="flex-1 border py-2 rounded text-sm hover:bg-gray-50">Cancel</button>
+            <div className={MODAL.footer}>
+              <button onClick={() => setEditingBudget(null)} className={BTN.secondary}>Cancel</button>
+              <button onClick={saveDefaultBudget} className={BTN.primary}>Save</button>
             </div>
           </div>
         </div>
@@ -183,12 +200,12 @@ export default function BudgetTracker({ data, updateData }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {defaultBudget > 0 ? (
           <>
-            <div className="rounded-lg p-3 bg-blue-50 border border-blue-200">
+            <div className="rounded-xl p-3 bg-blue-50 border border-blue-200">
               <div className="text-xs font-medium text-blue-600">Monthly Budget</div>
               <div className="text-2xl font-bold text-blue-700 mt-0.5">£{Math.round(defaultBudget).toLocaleString()}</div>
               <div className="text-[10px] text-blue-500">per month target</div>
             </div>
-            <div className={`rounded-lg p-3 ${ytd.variance > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+            <div className={`rounded-xl p-3 ${ytd.variance > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
               <div className={`text-xs font-medium ${ytd.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>YTD Variance</div>
               <div className={`text-2xl font-bold mt-0.5 ${ytd.variance > 0 ? 'text-red-700' : 'text-green-700'}`}>
                 £{Math.round(Math.abs(ytd.variance)).toLocaleString()}
@@ -197,14 +214,14 @@ export default function BudgetTracker({ data, updateData }) {
                 {ytd.variance > 0 ? 'over budget' : 'under budget'} ({ytd.months} months)
               </div>
             </div>
-            <div className="rounded-lg p-3 bg-purple-50 border border-purple-200">
+            <div className="rounded-xl p-3 bg-purple-50 border border-purple-200">
               <div className="text-xs font-medium text-purple-600">Annual Forecast</div>
               <div className="text-2xl font-bold text-purple-700 mt-0.5">£{forecast ? Math.round(forecast.projected).toLocaleString() : '-'}</div>
               <div className="text-[10px] text-purple-500">
                 {forecast ? `based on trailing 3-month avg` : 'no data yet'}
               </div>
             </div>
-            <div className={`rounded-lg p-3 ${defaultAgencyCap > 0 && ytd.agency > defaultAgencyCap * ytd.months ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+            <div className={`rounded-xl p-3 ${defaultAgencyCap > 0 && ytd.agency > defaultAgencyCap * ytd.months ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
               <div className="text-xs font-medium text-amber-600">Agency YTD</div>
               <div className="text-2xl font-bold text-amber-700 mt-0.5">£{Math.round(ytd.agency).toLocaleString()}</div>
               <div className="text-[10px] text-amber-500">
@@ -213,7 +230,7 @@ export default function BudgetTracker({ data, updateData }) {
             </div>
           </>
         ) : (
-          <div className="col-span-full bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+          <div className="col-span-full bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
             <div className="text-amber-700 font-medium">No budget set</div>
             <p className="text-amber-600 text-sm mt-1">Click "Set Budget" above to set monthly targets and start tracking variance</p>
           </div>
@@ -221,9 +238,9 @@ export default function BudgetTracker({ data, updateData }) {
       </div>
 
       {/* Chart */}
-      <div className="bg-white rounded-lg shadow p-5 mb-6">
+      <div className={`${CARD.padded} mb-6`}>
         <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Monthly Comparison</h2>
-        <div className="overflow-x-auto">
+        <div className={TABLE.wrapper}>
           <svg viewBox={`0 0 ${chartW} ${chartH + 50}`} className="w-full min-w-[500px]">
             {/* Grid lines */}
             {[0, 0.25, 0.5, 0.75, 1].map(pct => {
@@ -280,104 +297,106 @@ export default function BudgetTracker({ data, updateData }) {
           </svg>
         </div>
         <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-gray-500">
-          <span><span className="inline-block w-3 h-3 rounded bg-blue-300 mr-1 align-middle" /> Under/on budget</span>
-          <span><span className="inline-block w-3 h-3 rounded bg-red-300 mr-1 align-middle" /> Over budget</span>
-          <span><span className="inline-block w-3 h-3 rounded bg-red-500 mr-1 align-middle opacity-60" /> Agency portion</span>
+          <span><span className="inline-block w-3 h-3 rounded-full bg-blue-300 mr-1 align-middle" /> Under/on budget</span>
+          <span><span className="inline-block w-3 h-3 rounded-full bg-red-300 mr-1 align-middle" /> Over budget</span>
+          <span><span className="inline-block w-3 h-3 rounded-full bg-red-500 mr-1 align-middle opacity-60" /> Agency portion</span>
           {defaultBudget > 0 && <span className="text-red-500">- - - Budget line</span>}
         </div>
       </div>
 
       {/* Monthly Detail Table */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
-            <tr>
-              <th className="py-2 px-3 text-left">Month</th>
-              <th className="py-2 px-2 text-right">Budget £</th>
-              <th className="py-2 px-2 text-right">Actual £</th>
-              <th className="py-2 px-2 text-right">Variance £</th>
-              <th className="py-2 px-2 text-right">Var %</th>
-              <th className="py-2 px-2 text-right">Base £</th>
-              <th className="py-2 px-2 text-right">OT £</th>
-              <th className="py-2 px-2 text-right">Agency £</th>
-              <th className="py-2 px-2 text-right">BH £</th>
-              <th className="py-2 px-2 text-center">Status</th>
-              <th className="py-2 px-2 text-center print:hidden">Budget</th>
-            </tr>
-          </thead>
-          <tbody>
-            {monthData.map(m => (
-              <tr key={m.key} className={`border-b ${m.isCurrent ? 'bg-blue-50' : m.isFuture ? 'opacity-60' : 'hover:bg-gray-50'}`}>
-                <td className="py-1.5 px-3 font-medium">
-                  {m.fullLabel}
-                  {m.isCurrent && <span className="ml-1 text-[10px] text-blue-600">(current)</span>}
-                </td>
-                <td className="py-1.5 px-2 text-right font-mono text-gray-500">
-                  {m.budget > 0 ? `£${Math.round(m.budget).toLocaleString()}` : '-'}
-                </td>
-                <td className="py-1.5 px-2 text-right font-mono font-bold">£{Math.round(m.actual).toLocaleString()}</td>
-                <td className={`py-1.5 px-2 text-right font-mono ${m.variance > 0 ? 'text-red-600' : m.budget > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                  {m.budget > 0 ? `${m.variance > 0 ? '+' : ''}£${Math.round(m.variance).toLocaleString()}` : '-'}
-                </td>
-                <td className={`py-1.5 px-2 text-right font-mono text-xs ${m.variancePct > 5 ? 'text-red-600 font-bold' : m.variancePct < -5 ? 'text-green-600' : 'text-gray-500'}`}>
-                  {m.budget > 0 ? `${m.variancePct > 0 ? '+' : ''}${m.variancePct.toFixed(1)}%` : '-'}
-                </td>
-                <td className="py-1.5 px-2 text-right font-mono text-gray-500">£{Math.round(m.base).toLocaleString()}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-orange-600">{m.ot > 0 ? `£${Math.round(m.ot).toLocaleString()}` : '-'}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-red-600">{m.agency > 0 ? `£${Math.round(m.agency).toLocaleString()}` : '-'}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-pink-600">{m.bh > 0 ? `£${Math.round(m.bh).toLocaleString()}` : '-'}</td>
-                <td className="py-1.5 px-2 text-center">
-                  {m.budget > 0 ? (
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                      m.variancePct > 10 ? 'bg-red-200 text-red-800' :
-                      m.variancePct > 0 ? 'bg-amber-200 text-amber-800' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {m.variancePct > 10 ? 'OVER' : m.variancePct > 0 ? 'WARN' : 'OK'}
-                    </span>
-                  ) : <span className="text-gray-300">-</span>}
-                </td>
-                <td className="py-1.5 px-2 text-center print:hidden">
-                  <button onClick={() => {
-                    setEditingBudget(m.key);
-                    setBudgetInput(String(m.budget || defaultBudget || ''));
-                  }} className="text-blue-500 hover:text-blue-700 text-[10px] underline">edit</button>
-                </td>
+      <div className={CARD.flush}>
+        <div className={TABLE.wrapper}>
+          <table className={TABLE.table}>
+            <thead className={TABLE.thead}>
+              <tr>
+                <th className={TABLE.th}>Month</th>
+                <th className={`${TABLE.th} text-right`}>Budget £</th>
+                <th className={`${TABLE.th} text-right`}>Actual £</th>
+                <th className={`${TABLE.th} text-right`}>Variance £</th>
+                <th className={`${TABLE.th} text-right`}>Var %</th>
+                <th className={`${TABLE.th} text-right`}>Base £</th>
+                <th className={`${TABLE.th} text-right`}>OT £</th>
+                <th className={`${TABLE.th} text-right`}>Agency £</th>
+                <th className={`${TABLE.th} text-right`}>BH £</th>
+                <th className={`${TABLE.th} text-center`}>Status</th>
+                <th className={`${TABLE.th} text-center print:hidden`}>Budget</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-100 font-bold border-t-2">
-              <td className="py-2 px-3">Total (12 months)</td>
-              <td className="py-2 px-2 text-right font-mono">£{Math.round(monthData.reduce((s, m) => s + m.budget, 0)).toLocaleString()}</td>
-              <td className="py-2 px-2 text-right font-mono">£{Math.round(monthData.reduce((s, m) => s + m.actual, 0)).toLocaleString()}</td>
-              <td className={`py-2 px-2 text-right font-mono ${monthData.reduce((s, m) => s + m.variance, 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                £{Math.round(Math.abs(monthData.reduce((s, m) => s + m.variance, 0))).toLocaleString()}
-              </td>
-              <td className="py-2 px-2" colSpan={5}></td>
-              <td className="py-2 px-2 print:hidden"></td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {monthData.map(m => (
+                <tr key={m.key} className={`${TABLE.tr} ${m.isCurrent ? 'bg-blue-50' : m.isFuture ? 'opacity-60' : ''}`}>
+                  <td className={`${TABLE.td} font-medium`}>
+                    {m.fullLabel}
+                    {m.isCurrent && <span className="ml-1 text-[10px] text-blue-600">(current)</span>}
+                  </td>
+                  <td className={`${TABLE.tdMono} text-right text-gray-500`}>
+                    {m.budget > 0 ? `£${Math.round(m.budget).toLocaleString()}` : '-'}
+                  </td>
+                  <td className={`${TABLE.tdMono} text-right font-bold`}>£{Math.round(m.actual).toLocaleString()}</td>
+                  <td className={`${TABLE.tdMono} text-right ${m.variance > 0 ? 'text-red-600' : m.budget > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                    {m.budget > 0 ? `${m.variance > 0 ? '+' : ''}£${Math.round(m.variance).toLocaleString()}` : '-'}
+                  </td>
+                  <td className={`${TABLE.tdMono} text-right text-xs ${m.variancePct > 5 ? 'text-red-600 font-bold' : m.variancePct < -5 ? 'text-green-600' : 'text-gray-500'}`}>
+                    {m.budget > 0 ? `${m.variancePct > 0 ? '+' : ''}${m.variancePct.toFixed(1)}%` : '-'}
+                  </td>
+                  <td className={`${TABLE.tdMono} text-right text-gray-500`}>£{Math.round(m.base).toLocaleString()}</td>
+                  <td className={`${TABLE.tdMono} text-right text-orange-600`}>{m.ot > 0 ? `£${Math.round(m.ot).toLocaleString()}` : '-'}</td>
+                  <td className={`${TABLE.tdMono} text-right text-red-600`}>{m.agency > 0 ? `£${Math.round(m.agency).toLocaleString()}` : '-'}</td>
+                  <td className={`${TABLE.tdMono} text-right text-pink-600`}>{m.bh > 0 ? `£${Math.round(m.bh).toLocaleString()}` : '-'}</td>
+                  <td className={`${TABLE.td} text-center`}>
+                    {m.budget > 0 ? (
+                      <span className={
+                        m.variancePct > 10 ? BADGE.red :
+                        m.variancePct > 0 ? BADGE.amber :
+                        BADGE.green
+                      }>
+                        {m.variancePct > 10 ? 'OVER' : m.variancePct > 0 ? 'WARN' : 'OK'}
+                      </span>
+                    ) : <span className="text-gray-300">-</span>}
+                  </td>
+                  <td className={`${TABLE.td} text-center print:hidden`}>
+                    <button onClick={() => {
+                      setEditingBudget(m.key);
+                      setBudgetInput(String(m.budget || defaultBudget || ''));
+                    }} className="text-blue-500 hover:text-blue-700 text-[10px] underline transition-colors duration-150">edit</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 font-bold border-t-2">
+                <td className={TABLE.td}>Total (12 months)</td>
+                <td className={`${TABLE.tdMono} text-right`}>£{Math.round(monthData.reduce((s, m) => s + m.budget, 0)).toLocaleString()}</td>
+                <td className={`${TABLE.tdMono} text-right`}>£{Math.round(monthData.reduce((s, m) => s + m.actual, 0)).toLocaleString()}</td>
+                <td className={`${TABLE.tdMono} text-right ${monthData.reduce((s, m) => s + m.variance, 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  £{Math.round(Math.abs(monthData.reduce((s, m) => s + m.variance, 0))).toLocaleString()}
+                </td>
+                <td className={TABLE.td} colSpan={5}></td>
+                <td className={`${TABLE.td} print:hidden`}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {/* Per-month budget edit modal */}
       {editingBudget && editingBudget !== 'default' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-            <h3 className="font-bold text-gray-900 mb-3">Budget for {editingBudget}</h3>
+        <div className={`${MODAL.overlay} print:hidden`}>
+          <div className={MODAL.panelSm}>
+            <h3 className={MODAL.title}>Budget for {editingBudget}</h3>
             <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm mb-3" placeholder="Monthly budget £" />
-            <div className="flex gap-2">
-              <button onClick={() => saveBudgetOverride(editingBudget)} className="flex-1 bg-blue-600 text-white py-2 rounded text-sm hover:bg-blue-700">Save</button>
+              className={`${INPUT.base} mb-3`} placeholder="Monthly budget £" />
+            <div className={MODAL.footer}>
+              <button onClick={() => setEditingBudget(null)} className={BTN.ghost}>X</button>
               <button onClick={() => {
                 // Reset to default
                 const newOverrides = { ...budgetOverrides };
                 delete newOverrides[editingBudget];
                 updateData({ ...data, config: { ...data.config, budget_overrides: newOverrides } });
                 setEditingBudget(null);
-              }} className="flex-1 border py-2 rounded text-sm hover:bg-gray-50">Use Default</button>
-              <button onClick={() => setEditingBudget(null)} className="px-3 border py-2 rounded text-sm hover:bg-gray-50">X</button>
+              }} className={BTN.secondary}>Use Default</button>
+              <button onClick={() => saveBudgetOverride(editingBudget)} className={BTN.primary}>Save</button>
             </div>
           </div>
         </div>

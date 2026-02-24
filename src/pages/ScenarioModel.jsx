@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { getCycleDates, getStaffForDay, formatDate } from '../lib/rotation.js';
 import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
+import { CARD, TABLE, INPUT, BTN } from '../lib/design.js';
 
 const PRESET_SCENARIOS = [
   { name: 'CLEAN (Zero disruption)', sick: 0, al: 0 },
@@ -74,7 +75,7 @@ export default function ScenarioModel({ data }) {
   }, [data]);
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Staffing Cost Scenarios</h1>
@@ -84,30 +85,30 @@ export default function ScenarioModel({ data }) {
       <div className="flex items-center justify-between mb-2 print:hidden">
         <h1 className="text-2xl font-bold text-gray-900">Staffing Cost Scenarios</h1>
         <button onClick={() => window.print()}
-          className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-1.5 rounded text-sm">Print</button>
+          className={BTN.secondary}>Print</button>
       </div>
       <p className="text-sm text-gray-500 mb-6">Adaptive model linked to roster, config, and daily costs</p>
 
       {/* Custom Scenario Builder */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 print:hidden">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 print:hidden">
         <h2 className="text-sm font-semibold text-blue-800 mb-3">Custom What-If Scenario</h2>
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs text-blue-600 mb-1">Name</label>
+            <label className={INPUT.label + ' !text-blue-600'}>Name</label>
             <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
-              className="border rounded px-2 py-1.5 text-sm w-40" />
+              className={INPUT.sm + ' !w-40'} />
           </div>
           <div>
-            <label className="block text-xs text-blue-600 mb-1">Sick per day</label>
+            <label className={INPUT.label + ' !text-blue-600'}>Sick per day</label>
             <input type="number" min="0" max="15" step="1" value={customSick}
               onChange={e => setCustomSick(parseInt(e.target.value) || 0)}
-              className="border rounded px-2 py-1.5 text-sm w-20" />
+              className={INPUT.sm + ' !w-20'} />
           </div>
           <div>
-            <label className="block text-xs text-blue-600 mb-1">AL per day</label>
+            <label className={INPUT.label + ' !text-blue-600'}>AL per day</label>
             <input type="number" min="0" max="10" step="1" value={customAL}
               onChange={e => setCustomAL(parseInt(e.target.value) || 0)}
-              className="border rounded px-2 py-1.5 text-sm w-20" />
+              className={INPUT.sm + ' !w-20'} />
           </div>
           <div className="text-xs text-blue-600">
             Results appear in the last row of the table below
@@ -116,63 +117,65 @@ export default function ScenarioModel({ data }) {
       </div>
 
       {/* Main Scenario Table */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto mb-6">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-800 text-white text-xs">
-            <tr>
-              <th className="py-2 px-3 text-left">Scenario</th>
-              <th className="py-2 px-2 text-center">Sick/d</th>
-              <th className="py-2 px-2 text-center">AL/d</th>
-              <th className="py-2 px-2 text-center">Gaps</th>
-              <th className="py-2 px-2 text-center">Float</th>
-              <th className="py-2 px-2 text-center">OT</th>
-              <th className="py-2 px-2 text-center">AG Day</th>
-              <th className="py-2 px-2 text-center">AG Night</th>
-              <th className="py-2 px-2 text-right">Base £</th>
-              <th className="py-2 px-2 text-right">Extra £</th>
-              <th className="py-2 px-2 text-right font-bold">Total 28d £</th>
-              <th className="py-2 px-2 text-right">Monthly £</th>
-              <th className="py-2 px-2 text-right">Annual £</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scenarioResults.map((s, i) => (
-              <tr key={i} className={`border-b ${
-                s.isCustom ? 'bg-blue-50 border-blue-200' :
-                i === 0 ? 'bg-green-50' : i >= 4 ? 'bg-red-50' : 'hover:bg-gray-50'
-              }`}>
-                <td className="py-2 px-3 font-medium text-xs">
-                  {s.isCustom ? <span className="text-blue-700">{s.name}</span> : s.name}
-                </td>
-                <td className="py-2 px-2 text-center">{s.sick}</td>
-                <td className="py-2 px-2 text-center">{s.al}</td>
-                <td className="py-2 px-2 text-center font-medium">{s.totalGaps}</td>
-                <td className="py-2 px-2 text-center text-green-600">{s.floatFills}</td>
-                <td className="py-2 px-2 text-center text-orange-600">{s.otFills}</td>
-                <td className="py-2 px-2 text-center text-red-600">{s.agDayFills}</td>
-                <td className="py-2 px-2 text-center text-red-600">{s.agNightFills}</td>
-                <td className="py-2 px-2 text-right text-gray-500">£{Math.round(s.baseCost).toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-amber-600">£{Math.round(s.totalExtraCost).toLocaleString()}</td>
-                <td className="py-2 px-2 text-right font-bold">£{Math.round(s.total28).toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-600">£{Math.round(s.monthly).toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-600">£{Math.round(s.annual).toLocaleString()}</td>
+      <div className={CARD.flush + ' mb-6'}>
+        <div className={TABLE.wrapper}>
+          <table className={TABLE.table}>
+            <thead className="bg-gray-800 text-white text-xs">
+              <tr>
+                <th className={TABLE.th}>Scenario</th>
+                <th className={TABLE.th + ' text-center'}>Sick/d</th>
+                <th className={TABLE.th + ' text-center'}>AL/d</th>
+                <th className={TABLE.th + ' text-center'}>Gaps</th>
+                <th className={TABLE.th + ' text-center'}>Float</th>
+                <th className={TABLE.th + ' text-center'}>OT</th>
+                <th className={TABLE.th + ' text-center'}>AG Day</th>
+                <th className={TABLE.th + ' text-center'}>AG Night</th>
+                <th className={TABLE.th + ' text-right'}>Base £</th>
+                <th className={TABLE.th + ' text-right'}>Extra £</th>
+                <th className={TABLE.th + ' text-right font-bold'}>Total 28d £</th>
+                <th className={TABLE.th + ' text-right'}>Monthly £</th>
+                <th className={TABLE.th + ' text-right'}>Annual £</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {scenarioResults.map((s, i) => (
+                <tr key={i} className={`${TABLE.tr} ${
+                  s.isCustom ? 'bg-blue-50 border-blue-200' :
+                  i === 0 ? 'bg-green-50' : i >= 4 ? 'bg-red-50' : ''
+                }`}>
+                  <td className={TABLE.td + ' font-medium text-xs'}>
+                    {s.isCustom ? <span className="text-blue-700">{s.name}</span> : s.name}
+                  </td>
+                  <td className={TABLE.td + ' text-center'}>{s.sick}</td>
+                  <td className={TABLE.td + ' text-center'}>{s.al}</td>
+                  <td className={TABLE.td + ' text-center font-medium'}>{s.totalGaps}</td>
+                  <td className={TABLE.td + ' text-center text-green-600'}>{s.floatFills}</td>
+                  <td className={TABLE.td + ' text-center text-orange-600'}>{s.otFills}</td>
+                  <td className={TABLE.td + ' text-center text-red-600'}>{s.agDayFills}</td>
+                  <td className={TABLE.td + ' text-center text-red-600'}>{s.agNightFills}</td>
+                  <td className={TABLE.td + ' text-right text-gray-500'}>£{Math.round(s.baseCost).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-amber-600'}>£{Math.round(s.totalExtraCost).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right font-bold'}>£{Math.round(s.total28).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-gray-600'}>£{Math.round(s.monthly).toLocaleString()}</td>
+                  <td className={TABLE.td + ' text-right text-gray-600'}>£{Math.round(s.annual).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Agency Kill Impact */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow p-5">
+        <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Agency Kill Impact</h2>
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{'WITHOUT Agency Kill (all gaps \u2192 agency):'}</span>
+              <span className="text-gray-600">{'WITHOUT Agency Kill (all gaps → agency):'}</span>
               <span className="font-medium">£{Math.round(withoutKill28).toLocaleString()} / 28d</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{'WITH Agency Kill (float \u2192 OT \u2192 agency last):'}</span>
+              <span className="text-gray-600">{'WITH Agency Kill (float → OT → agency last):'}</span>
               <span className="font-medium text-green-600">£{Math.round(withKill28).toLocaleString()} / 28d</span>
             </div>
             <div className="border-t pt-3 flex justify-between text-sm font-bold">
@@ -191,28 +194,28 @@ export default function ScenarioModel({ data }) {
         </div>
 
         {/* Winter Scenarios */}
-        <div className="bg-white rounded-lg shadow p-5">
+        <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Winter Scenarios (Weekly OT Cap)</h2>
-          <table className="w-full text-sm">
-            <thead className="text-xs text-gray-600 border-b">
+          <table className={TABLE.table}>
+            <thead className={TABLE.thead}>
               <tr>
-                <th className="py-1 text-left">Scenario</th>
-                <th className="py-1 text-center">Gaps/d</th>
-                <th className="py-1 text-center">Float</th>
-                <th className="py-1 text-center">OT</th>
-                <th className="py-1 text-center">Agency</th>
-                <th className="py-1 text-right">AG £/wk</th>
+                <th className={TABLE.th}>Scenario</th>
+                <th className={TABLE.th + ' text-center'}>Gaps/d</th>
+                <th className={TABLE.th + ' text-center'}>Float</th>
+                <th className={TABLE.th + ' text-center'}>OT</th>
+                <th className={TABLE.th + ' text-center'}>Agency</th>
+                <th className={TABLE.th + ' text-right'}>AG £/wk</th>
               </tr>
             </thead>
             <tbody>
               {winterResults.map((w, i) => (
-                <tr key={i} className="border-b">
-                  <td className="py-1.5 text-xs font-medium">{w.name}</td>
-                  <td className="py-1.5 text-center">{w.gaps}</td>
-                  <td className="py-1.5 text-center text-green-600">{w.floatWk}</td>
-                  <td className="py-1.5 text-center text-orange-600">{w.otWk}</td>
-                  <td className="py-1.5 text-center text-red-600">{w.agWk}</td>
-                  <td className="py-1.5 text-right font-mono">{w.agCostWk > 0 ? `£${w.agCostWk.toFixed(0)}` : '-'}</td>
+                <tr key={i} className={TABLE.tr}>
+                  <td className={TABLE.td + ' text-xs font-medium'}>{w.name}</td>
+                  <td className={TABLE.td + ' text-center'}>{w.gaps}</td>
+                  <td className={TABLE.td + ' text-center text-green-600'}>{w.floatWk}</td>
+                  <td className={TABLE.td + ' text-center text-orange-600'}>{w.otWk}</td>
+                  <td className={TABLE.td + ' text-center text-red-600'}>{w.agWk}</td>
+                  <td className={TABLE.tdMono + ' text-right'}>{w.agCostWk > 0 ? `£${w.agCostWk.toFixed(0)}` : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -221,7 +224,7 @@ export default function ScenarioModel({ data }) {
       </div>
 
       {/* Assumptions */}
-      <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-500">
+      <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500">
         <strong>Assumptions:</strong> Float pool = {data.staff.filter(s => s.team === 'Float' && s.active !== false).length} |
         OT pool = {data.config.bank_staff_pool_size} |
         Night gap % = {(data.config.night_gap_pct * 100).toFixed(0)}% |

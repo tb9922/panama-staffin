@@ -8,6 +8,7 @@ import {
 import {
   getDayCoverageStatus, calculateDayCost, checkFatigueRisk, validateSwap,
 } from '../lib/escalation.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
 
 export default function DailyStatus({ data, updateData }) {
   const { date: dateParam } = useParams();
@@ -63,27 +64,28 @@ export default function DailyStatus({ data, updateData }) {
 
   const escColor = (esc) => {
     if (!esc) return '';
-    const map = { green: 'bg-green-100 text-green-800', amber: 'bg-amber-100 text-amber-800', yellow: 'bg-yellow-100 text-yellow-800', red: 'bg-red-100 text-red-800' };
-    return map[esc.color] || 'bg-gray-100 text-gray-600';
+    const colorKey = esc.color;
+    if (ESC_COLORS[colorKey]) return ESC_COLORS[colorKey].badge;
+    return 'bg-gray-100 text-gray-600';
   };
 
   const alCount = countALOnDate(currentDate, data.overrides);
   const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const StaffRow = ({ s }) => (
-    <tr className="border-b hover:bg-gray-50">
-      <td className="py-1.5 px-2 font-mono text-xs text-gray-400">{s.id}</td>
-      <td className="py-1.5 px-2 text-sm font-medium">{s.name}</td>
-      <td className="py-1.5 px-2 text-xs">{s.role}</td>
-      <td className="py-1.5 px-2 text-xs">{s.team}</td>
-      <td className="py-1.5 px-2">
+    <tr className={TABLE.tr}>
+      <td className={`${TABLE.tdMono} text-xs text-gray-400`}>{s.id}</td>
+      <td className={`${TABLE.td} font-medium`}>{s.name}</td>
+      <td className={`${TABLE.td} text-xs`}>{s.role}</td>
+      <td className={`${TABLE.td} text-xs`}>{s.team}</td>
+      <td className={TABLE.td}>
         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
       </td>
-      <td className="py-1.5 px-2 text-xs text-gray-500">{s.skill}</td>
-      <td className="py-1.5 px-2 text-xs text-gray-500">{s.reason || ''}</td>
-      <td className="py-1.5 px-2">
+      <td className={`${TABLE.td} text-xs text-gray-500`}>{s.skill}</td>
+      <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
+      <td className={TABLE.td}>
         {s.isOverride && (
-          <button onClick={() => removeOverride(s.id)} className="text-red-400 hover:text-red-600 text-xs">Revert</button>
+          <button onClick={() => removeOverride(s.id)} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50`}>Revert</button>
         )}
       </td>
     </tr>
@@ -93,9 +95,9 @@ export default function DailyStatus({ data, updateData }) {
     <div className="mb-3">
       <h3 className={`text-xs font-semibold uppercase px-2 py-1 rounded-t ${bgColor}`}>{title} ({staff.length})</h3>
       {staff.length === 0 ? (
-        <div className="text-xs text-gray-400 px-2 py-2 border-b">None</div>
+        <div className={TABLE.empty}>None</div>
       ) : (
-        <table className="w-full text-sm">
+        <table className={TABLE.table}>
           <tbody>
             {staff.map(s => <StaffRow key={s.id} s={s} />)}
           </tbody>
@@ -105,7 +107,7 @@ export default function DailyStatus({ data, updateData }) {
   );
 
   return (
-    <div className="p-6">
+    <div className={PAGE.container}>
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{data.config.home_name} — Daily Status</h1>
@@ -115,19 +117,19 @@ export default function DailyStatus({ data, updateData }) {
       {/* Date Navigation */}
       <div className="flex items-center justify-between mb-4 print:hidden">
         <div className="flex items-center gap-3">
-          <button onClick={() => goDay(-1)} className="px-3 py-1.5 bg-gray-200 rounded hover:bg-gray-300 text-sm">&larr;</button>
-          <h1 className="text-xl font-bold text-gray-900">{dayName}</h1>
-          <button onClick={() => goDay(1)} className="px-3 py-1.5 bg-gray-200 rounded hover:bg-gray-300 text-sm">&rarr;</button>
+          <button onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
+          <h1 className={PAGE.title}>{dayName}</h1>
+          <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => window.print()} className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-1.5 rounded text-sm">Print</button>
-          <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className="text-sm text-blue-600 hover:underline">Today</button>
+          <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
+          <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coverage Panel */}
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Coverage</h2>
           {['early', 'late', 'night'].map(period => {
             const cov = coverage[period];
@@ -136,7 +138,7 @@ export default function DailyStatus({ data, updateData }) {
               <div key={period} className="mb-3 last:mb-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium capitalize">{period}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${escColor(cov.escalation)}`}>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${escColor(cov.escalation)}`}>
                     {cov.escalation.status}
                   </span>
                 </div>
@@ -175,21 +177,21 @@ export default function DailyStatus({ data, updateData }) {
                 updateData({ ...data, day_notes: newNotes });
               }}
               placeholder="Add notes for handover, incidents, or reminders..."
-              className="w-full border rounded px-2 py-1.5 text-xs h-20 resize-y"
+              className={`${INPUT.base} h-20 resize-y`}
             />
           </div>
         </div>
 
         {/* Staff Lists */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow p-4">
+        <div className={`lg:col-span-2 ${CARD.padded}`}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
-            <div className="flex gap-1.5">
-              <button onClick={() => setModal('sick')} className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs hover:bg-red-200">+Sick</button>
-              <button onClick={() => setModal('al')} className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs hover:bg-yellow-200">+AL</button>
-              <button onClick={() => setModal('ot')} className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs hover:bg-orange-200">+OT</button>
-              <button onClick={() => setModal('agency')} className="bg-red-200 text-red-900 px-2 py-1 rounded text-xs hover:bg-red-300">+Agency</button>
-              <button onClick={() => setModal('swap')} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-200">Swap</button>
+            <div className="flex gap-1.5 print:hidden">
+              <button onClick={() => setModal('sick')} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Sick</button>
+              <button onClick={() => setModal('al')} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100`}>+AL</button>
+              <button onClick={() => setModal('ot')} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100`}>+OT</button>
+              <button onClick={() => setModal('agency')} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Agency</button>
+              <button onClick={() => setModal('swap')} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>Swap</button>
             </div>
           </div>
 
@@ -207,11 +209,11 @@ export default function DailyStatus({ data, updateData }) {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                 {availableCover.map(s => (
-                  <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1 text-xs">
+                  <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-2 py-1 text-xs">
                     <span className="font-medium">{s.name} <span className="text-gray-400">({s.role})</span></span>
-                    <span className={`px-1 py-0.5 rounded text-[10px] ${
-                      s.fatigue.exceeded ? 'bg-red-100 text-red-700' :
-                      s.fatigue.atRisk ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                      s.fatigue.exceeded ? ESC_COLORS.red.badge :
+                      s.fatigue.atRisk ? ESC_COLORS.amber.badge : ESC_COLORS.green.badge
                     }`}>{s.fatigue.consecutive}d</span>
                   </div>
                 ))}
@@ -223,17 +225,17 @@ export default function DailyStatus({ data, updateData }) {
 
       {/* Modal */}
       {modal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-3">
+        <div className={MODAL.overlay}>
+          <div className={MODAL.panelSm}>
+            <h2 className={MODAL.title}>
               {modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : 'Book Agency'}
             </h2>
 
             {modal === 'swap' ? (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Staff A (gives their shift)</label>
-                  <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                  <label className={INPUT.label}>Staff A (gives their shift)</label>
+                  <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} className={INPUT.select}>
                     <option value="">Select...</option>
                     {staffForDay.filter(s => isWorkingShift(s.shift) && isCareRole(s.role)).map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>
@@ -241,8 +243,8 @@ export default function DailyStatus({ data, updateData }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Staff B (takes their shift)</label>
-                  <select value={swapTo} onChange={e => setSwapTo(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                  <label className={INPUT.label}>Staff B (takes their shift)</label>
+                  <select value={swapTo} onChange={e => setSwapTo(e.target.value)} className={INPUT.select}>
                     <option value="">Select...</option>
                     {staffForDay.filter(s => isCareRole(s.role) && s.id !== swapFrom).map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>
@@ -258,20 +260,20 @@ export default function DailyStatus({ data, updateData }) {
                   const allIssues = [...valAB.issues, ...valBA.issues];
                   return (
                     <div className="space-y-1">
-                      <div className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1">
+                      <div className="text-xs text-gray-500 bg-gray-50 rounded-xl px-2 py-1">
                         {a.name} ({a.shift}) &harr; {b.name} ({b.shift})
                       </div>
                       {allIssues.map((issue, i) => (
-                        <div key={i} className={`text-xs px-2 py-1 rounded ${issue.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                        <div key={i} className={`text-xs px-2 py-1 rounded-xl ${issue.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
                           {issue.msg}
                         </div>
                       ))}
-                      {allIssues.length === 0 && <div className="text-xs text-green-600 bg-green-50 rounded px-2 py-1">Safe to swap</div>}
+                      {allIssues.length === 0 && <div className="text-xs text-green-600 bg-green-50 rounded-xl px-2 py-1">Safe to swap</div>}
                     </div>
                   );
                 })()}
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => { setModal(null); setSwapFrom(''); setSwapTo(''); }} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+                <div className={MODAL.footer}>
+                  <button onClick={() => { setModal(null); setSwapFrom(''); setSwapTo(''); }} className={BTN.ghost}>Cancel</button>
                   <button disabled={!swapFrom || !swapTo || swapFrom === swapTo} onClick={() => {
                     const a = staffForDay.find(s => s.id === swapFrom);
                     const b = staffForDay.find(s => s.id === swapTo);
@@ -282,19 +284,19 @@ export default function DailyStatus({ data, updateData }) {
                     newOverrides[dateStr][swapTo] = { shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' };
                     updateData({ ...data, overrides: newOverrides });
                     setModal(null); setSwapFrom(''); setSwapTo('');
-                  }} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Swap</button>
+                  }} className={`${BTN.primary} disabled:opacity-50`}>Swap</button>
                 </div>
               </div>
             ) : modal === 'agency' ? (
               <div className="space-y-3">
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
                   <option value="">Shift type...</option>
                   <option value="AG-E">Agency Early</option>
                   <option value="AG-L">Agency Late</option>
                   <option value="AG-N">Agency Night</option>
                 </select>
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+                <div className={MODAL.footer}>
+                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff} onClick={() => {
                     const agId = 'AG' + Date.now().toString(36).toUpperCase();
                     const newOverrides = JSON.parse(JSON.stringify(data.overrides));
@@ -302,18 +304,18 @@ export default function DailyStatus({ data, updateData }) {
                     newOverrides[dateStr][agId] = { shift: selectedStaff, reason: 'Agency', source: 'agency' };
                     updateData({ ...data, overrides: newOverrides });
                     setModal(null); setSelectedStaff('');
-                  }} className="bg-red-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Book</button>
+                  }} className={`${BTN.danger} disabled:opacity-50`}>Book</button>
                 </div>
               </div>
             ) : (
               <div className="space-y-3">
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
                   <option value="">Select staff...</option>
                   {(modal === 'ot' ? availableStaff : staffForDay.filter(s => isWorkingShift(s.shift)))
                     .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>)}
                 </select>
                 {modal === 'ot' && selectedStaff && (
-                  <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                  <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
                     <option value="OC-E">OC-E (Early)</option>
                     <option value="OC-L">OC-L (Late)</option>
                     <option value="OC-EL">OC-EL (Full Day)</option>
@@ -321,17 +323,17 @@ export default function DailyStatus({ data, updateData }) {
                   </select>
                 )}
                 {modal === 'al' && alCount >= data.config.max_al_same_day && (
-                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">Max AL ({data.config.max_al_same_day}) reached</div>
+                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({data.config.max_al_same_day}) reached</div>
                 )}
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+                <div className={MODAL.footer}>
+                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || (modal === 'al' && alCount >= data.config.max_al_same_day)} onClick={() => {
                     if (modal === 'sick') applyOverride(selectedStaff, 'SICK', 'Sick', 'manual');
                     else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');
                     else {
                       applyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
                     }
-                  }} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">Confirm</button>
+                  }} className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
                 </div>
               </div>
             )}

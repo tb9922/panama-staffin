@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF } from '../lib/pdfReports.js';
 import { formatDate, parseDate } from '../lib/rotation.js';
+import { CARD, INPUT, BTN } from '../lib/design.js';
 
 function getMonday(date) {
   const d = new Date(date);
@@ -51,9 +52,9 @@ export default function Reports({ data }) {
       color: 'blue',
       dateInput: (
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Week starting (Monday)</label>
+          <label className={INPUT.label}>Week starting (Monday)</label>
           <input type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
-            className="border rounded px-2 py-1.5 text-sm w-full" />
+            className={INPUT.sm} />
         </div>
       ),
     },
@@ -65,9 +66,9 @@ export default function Reports({ data }) {
       color: 'green',
       dateInput: (
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Month</label>
+          <label className={INPUT.label}>Month</label>
           <input type="month" value={costMonth} onChange={e => setCostMonth(e.target.value)}
-            className="border rounded px-2 py-1.5 text-sm w-full" />
+            className={INPUT.sm} />
         </div>
       ),
     },
@@ -79,9 +80,9 @@ export default function Reports({ data }) {
       color: 'amber',
       dateInput: (
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Week starting (Monday)</label>
+          <label className={INPUT.label}>Week starting (Monday)</label>
           <input type="date" value={weekDate} onChange={e => setWeekDate(e.target.value)}
-            className="border rounded px-2 py-1.5 text-sm w-full" />
+            className={INPUT.sm} />
         </div>
       ),
     },
@@ -96,14 +97,14 @@ export default function Reports({ data }) {
   ];
 
   const colorClasses = {
-    blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', btn: 'bg-blue-600 hover:bg-blue-700' },
-    green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'text-green-600', btn: 'bg-green-600 hover:bg-green-700' },
-    amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', btn: 'bg-amber-600 hover:bg-amber-700' },
-    purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', btn: 'bg-purple-600 hover:bg-purple-700' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', btn: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800' },
+    green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'text-green-600', btn: 'bg-green-600 hover:bg-green-700 active:bg-green-800' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', btn: 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800' },
+    purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', btn: 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800' },
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">PDF Reports</h1>
         <p className="text-sm text-gray-500">Generate downloadable PDF reports for CQC inspections, management, and compliance</p>
@@ -114,9 +115,9 @@ export default function Reports({ data }) {
           const c = colorClasses[report.color];
           const isGenerating = generating === report.id;
           return (
-            <div key={report.id} className={`${c.bg} border ${c.border} rounded-lg p-5`}>
+            <div key={report.id} className={`${c.bg} border ${c.border} rounded-xl p-5`}>
               <div className="flex items-start gap-3 mb-3">
-                <div className={`p-2 rounded-lg bg-white ${c.icon}`}>
+                <div className={`p-2 rounded-xl bg-white ${c.icon} transition-colors`}>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={report.icon} />
                   </svg>
@@ -132,7 +133,7 @@ export default function Reports({ data }) {
               )}
 
               <button onClick={() => generate(report.id)} disabled={isGenerating}
-                className={`w-full text-white py-2 rounded text-sm font-medium ${c.btn} disabled:opacity-50`}>
+                className={`w-full text-white py-2 rounded-lg text-sm font-medium shadow-sm transition-colors duration-150 ${c.btn} disabled:opacity-50`}>
                 {isGenerating ? 'Generating...' : 'Download PDF'}
               </button>
             </div>
@@ -141,9 +142,9 @@ export default function Reports({ data }) {
       </div>
 
       {/* Quick info */}
-      <div className="mt-6 bg-gray-50 rounded-lg p-4 text-xs text-gray-500">
-        <p className="font-medium text-gray-700 mb-1">Report Notes</p>
-        <ul className="space-y-0.5 list-disc pl-4">
+      <div className={`${CARD.padded} mt-6 !bg-gray-50`}>
+        <p className="font-medium text-gray-700 text-xs mb-1">Report Notes</p>
+        <ul className="space-y-0.5 list-disc pl-4 text-xs text-gray-500">
           <li>Roster reports include shift colour coding matching the app</li>
           <li>Cost reports include budget comparison if monthly budget is set (Budget vs Actual page)</li>
           <li>Coverage reports show minimum staffing requirements and escalation levels</li>
