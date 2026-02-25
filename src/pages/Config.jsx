@@ -204,6 +204,9 @@ export default function Config({ data, updateData }) {
             placeholder="Leave blank to disable locking"
             className={`${INPUT.sm} w-40`}
           />
+          {config.edit_lock_pin && String(config.edit_lock_pin).length < 4 && (
+            <p className="text-xs text-red-500 mt-1">PIN must be at least 4 digits</p>
+          )}
           <p className="text-xs text-gray-400 mt-1">
             Managers must enter this PIN to edit any date before today. Session-only — refreshing the page re-locks.
           </p>

@@ -180,8 +180,11 @@ export default function DailyStatus({ data, updateData }) {
       isCareRole(s.role) && !isWorkingShift(s.shift) && s.shift !== 'SICK' && s.shift !== 'AL'
     );
     const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
-    const targetShift = shortPeriods.includes('early') ? 'E' : shortPeriods.includes('late') ? 'L' : 'N';
-    const targetOcShift = shortPeriods.includes('early') ? 'OC-E' : shortPeriods.includes('late') ? 'OC-L' : 'OC-N';
+    // Per-period shift codes — buttons shown once per short period so manager
+    // explicitly picks which gap each person fills (fixes single-target bug)
+    const periodShift = { early: 'E', late: 'L', night: 'N' };
+    const periodOcShift = { early: 'OC-E', late: 'OC-L', night: 'OC-N' };
+    const label = p => p.charAt(0).toUpperCase() + p.slice(1);
     return (
       <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 print:hidden">
         <div className="flex items-center justify-between mb-3">
@@ -190,7 +193,7 @@ export default function DailyStatus({ data, updateData }) {
         </div>
         <p className="text-xs text-amber-700 mb-3">
           {shortPeriods.length > 0
-            ? `Short: ${shortPeriods.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')} — below minimum staffing`
+            ? `Short: ${shortPeriods.map(label).join(', ')} — below minimum staffing`
             : 'Coverage affected — review options below'}
         </p>
         <div className="mb-3">
@@ -203,9 +206,11 @@ export default function DailyStatus({ data, updateData }) {
                   return (
                     <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                       <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.role})</span></span>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d consec.</span>
-                        <button onClick={() => applyOverride(s.id, targetShift, 'Float deployed — gap cover', 'manual')} className={`${BTN.success} ${BTN.xs}`}>Deploy</button>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
+                        {shortPeriods.map(p => (
+                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual')} className={`${BTN.success} ${BTN.xs}`}>{label(p)}</button>
+                        ))}
                       </div>
                     </div>
                   );
@@ -223,9 +228,11 @@ export default function DailyStatus({ data, updateData }) {
                   return (
                     <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                       <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.shift})</span></span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
-                        <button onClick={() => applyOverride(s.id, targetOcShift, 'Called in — OT', 'ot')} className={`${BTN.primary} ${BTN.xs}`}>Call In</button>
+                        {shortPeriods.map(p => (
+                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot')} className={`${BTN.primary} ${BTN.xs}`}>{label(p)}</button>
+                        ))}
                       </div>
                     </div>
                   );
@@ -547,7 +554,7 @@ export default function DailyStatus({ data, updateData }) {
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setAgencyShiftType(''); }} className={BTN.ghost}>Cancel</button>
                   <button disabled={!agencyShiftType} onClick={() => {
-                    const agId = 'AG' + Date.now().toString(36).toUpperCase();
+                    const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
                     const newOverrides = JSON.parse(JSON.stringify(data.overrides));
                     if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
                     newOverrides[dateStr][agId] = { shift: agencyShiftType, reason: 'Agency', source: 'agency' };
