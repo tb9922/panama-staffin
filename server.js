@@ -57,7 +57,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: ALLOWED_ORIGIN }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: config.requestBodyLimit }));
 
 // ── Request ID + structured request logging ───────────────────────────────────
 
@@ -612,7 +612,9 @@ app.post('/api/data', requireAuth, requireAdmin, async (req, res) => {
     if (!body || typeof body !== 'object' || !Array.isArray(body.staff) || typeof body.config !== 'object') {
       return res.status(400).json({ error: 'Invalid data shape — expected { config, staff, overrides }' });
     }
-    const homeId = req.query.home || body.config?.home_name?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
+    const homeParam = homeIdSchema.safeParse(req.query.home);
+    if (!homeParam.success) return res.status(400).json({ error: 'Invalid home parameter' });
+    const homeId = homeParam.data || body.config?.home_name?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
     const backedUp = backupData(homeId);
     // Abort if an existing file couldn't be backed up — prevents data loss
     if (backedUp === false) {

@@ -4,6 +4,7 @@ import {
   isRiddorOverdue,
   isDutyOfCandourOverdue,
   getCqcNotificationDeadline,
+  getIncidentAlerts,
 } from '../incidents.js';
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -246,5 +247,94 @@ describe('isDutyOfCandourOverdue', () => {
       candour_notification_date: null,
     };
     expect(isDutyOfCandourOverdue(inc)).toBe(false);
+  });
+});
+
+// ── getIncidentAlerts ─────────────────────────────────────────────────────────
+
+describe('getIncidentAlerts', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('returns empty array for empty incidents list', () => {
+    expect(getIncidentAlerts([])).toEqual([]);
+    expect(getIncidentAlerts(null)).toEqual([]);
+  });
+
+  it('raises CQC overdue alert even when investigation is closed', () => {
+    // Regression: closed investigations must not suppress regulatory alerts
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-02T10:00:00Z')); // 25h after incident
+    const inc = {
+      date: '2025-06-01',
+      time: '09:00',
+      investigation_status: 'closed',
+      cqc_notifiable: true,
+      cqc_notified: false,
+      cqc_notification_deadline: 'immediate',
+    };
+    const alerts = getIncidentAlerts([inc]);
+    expect(alerts.some(a => a.msg.includes('CQC notification OVERDUE'))).toBe(true);
+  });
+
+  it('raises RIDDOR overdue alert even when investigation is closed', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-03T12:00:00Z')); // 2 days after
+    const inc = {
+      date: '2025-06-01',
+      investigation_status: 'closed',
+      riddor_reportable: true,
+      riddor_reported: false,
+      riddor_category: 'death',
+    };
+    const alerts = getIncidentAlerts([inc]);
+    expect(alerts.some(a => a.msg.includes('RIDDOR report OVERDUE'))).toBe(true);
+  });
+
+  it('does NOT raise stale-investigation alert for closed investigations', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-07-01T12:00:00Z')); // 30 days later
+    const inc = {
+      date: '2025-06-01',
+      investigation_status: 'closed',
+      cqc_notifiable: false,
+      riddor_reportable: false,
+      duty_of_candour_applies: false,
+      corrective_actions: [],
+    };
+    const alerts = getIncidentAlerts([inc]);
+    expect(alerts.some(a => a.msg.includes('Investigation open'))).toBe(false);
+  });
+
+  it('raises stale-investigation alert for open investigations older than 14 days', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-20T12:00:00Z')); // 19 days later
+    const inc = {
+      date: '2025-06-01',
+      severity: 'serious',
+      investigation_status: 'open',
+      cqc_notifiable: false,
+      riddor_reportable: false,
+      duty_of_candour_applies: false,
+      corrective_actions: [],
+    };
+    const alerts = getIncidentAlerts([inc]);
+    expect(alerts.some(a => a.msg.includes('Investigation open'))).toBe(true);
+  });
+
+  it('raises overdue corrective action alert regardless of investigation status', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-07-01T12:00:00Z'));
+    const inc = {
+      date: '2025-06-01',
+      investigation_status: 'closed',
+      cqc_notifiable: false,
+      riddor_reportable: false,
+      duty_of_candour_applies: false,
+      corrective_actions: [
+        { description: 'Update policy', due_date: '2025-06-15', status: 'pending' },
+      ],
+    };
+    const alerts = getIncidentAlerts([inc]);
+    expect(alerts.some(a => a.msg.includes('Corrective action overdue'))).toBe(true);
   });
 });

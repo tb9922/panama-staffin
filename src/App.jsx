@@ -244,6 +244,10 @@ export default function App() {
   const redoStack = useRef([]);
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
+  // Mirror of data state — allows useCallback([]) to read latest data without
+  // capturing it as a closure dependency, and keeps stack mutations out of
+  // the setData updater (React StrictMode double-invokes updaters in dev).
+  const dataRef = useRef(null);
 
   const isViewer = user?.role === 'viewer';
 
@@ -251,6 +255,9 @@ export default function App() {
     if (e.status === 401) { logout(); setUser(null); setData(null); return; }
     setError(e.message);
   }
+
+  // Keep dataRef in sync so useCallback functions always see current data
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   // Load homes list then load first home's data
   useEffect(() => {
@@ -283,18 +290,17 @@ export default function App() {
   }
 
   const updateData = useCallback(async (newData) => {
-    let prevData = null;
-    setData(prev => {
-      prevData = prev;
-      if (prev) {
-        undoStack.current.push(JSON.stringify(prev));
-        if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
-        setUndoCount(undoStack.current.length);
-      }
-      redoStack.current = [];
-      setRedoCount(0);
-      return newData;
-    });
+    // Capture current state via ref — no side effects inside the setData updater,
+    // which React StrictMode would double-invoke in development.
+    const prevData = dataRef.current;
+    if (prevData) {
+      undoStack.current.push(JSON.stringify(prevData));
+      if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+      setUndoCount(undoStack.current.length);
+    }
+    redoStack.current = [];
+    setRedoCount(0);
+    setData(newData);
     try {
       await saveData(newData);
     } catch (e) {
@@ -312,13 +318,10 @@ export default function App() {
     if (undoStack.current.length === 0) return;
     const prevState = JSON.parse(undoStack.current.pop());
     setUndoCount(undoStack.current.length);
-    let currentState = null;
-    setData(current => {
-      currentState = current;
-      redoStack.current.push(JSON.stringify(current));
-      setRedoCount(redoStack.current.length);
-      return prevState;
-    });
+    const currentState = dataRef.current;
+    redoStack.current.push(JSON.stringify(currentState));
+    setRedoCount(redoStack.current.length);
+    setData(prevState);
     try {
       await saveData(prevState);
     } catch (e) {
@@ -338,13 +341,10 @@ export default function App() {
     if (redoStack.current.length === 0) return;
     const nextState = JSON.parse(redoStack.current.pop());
     setRedoCount(redoStack.current.length);
-    let currentState = null;
-    setData(current => {
-      currentState = current;
-      undoStack.current.push(JSON.stringify(current));
-      setUndoCount(undoStack.current.length);
-      return nextState;
-    });
+    const currentState = dataRef.current;
+    undoStack.current.push(JSON.stringify(currentState));
+    setUndoCount(undoStack.current.length);
+    setData(nextState);
     try {
       await saveData(nextState);
     } catch (e) {

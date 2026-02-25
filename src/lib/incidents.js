@@ -191,7 +191,8 @@ export function getIncidentAlerts(incidents) {
   const now = new Date();
 
   for (const inc of (incidents || [])) {
-    if (inc.investigation_status === 'closed') continue;
+    // CQC/RIDDOR/DoC alerts fire regardless of investigation status — a closed
+    // investigation does not excuse a missed regulatory notification.
 
     // Overdue CQC notifications
     if (isCqcNotificationOverdue(inc)) {
@@ -204,8 +205,13 @@ export function getIncidentAlerts(incidents) {
       alerts.push({ type: 'error', msg: `Incident ${inc.date}: RIDDOR report OVERDUE` });
     }
 
-    // Stale open investigations (>14 days)
-    if (inc.date) {
+    // Overdue Duty of Candour
+    if (isDutyOfCandourOverdue(inc)) {
+      alerts.push({ type: 'error', msg: `Incident ${inc.date}: Duty of Candour notification OVERDUE` });
+    }
+
+    // Stale open investigations (>14 days) — only relevant if not closed
+    if (inc.investigation_status !== 'closed' && inc.date) {
       const incDate = parseDate(inc.date);
       const daysSince = Math.floor((now - incDate) / (1000 * 60 * 60 * 24));
       if (daysSince > 14) {
@@ -213,12 +219,7 @@ export function getIncidentAlerts(incidents) {
       }
     }
 
-    // Overdue Duty of Candour
-    if (isDutyOfCandourOverdue(inc)) {
-      alerts.push({ type: 'error', msg: `Incident ${inc.date}: Duty of Candour notification OVERDUE` });
-    }
-
-    // Overdue corrective actions
+    // Overdue corrective actions — fire regardless of investigation status
     const todayStr = formatDate(now);
     for (const action of (inc.corrective_actions || [])) {
       if (action.status !== 'completed' && action.due_date && action.due_date < todayStr) {
@@ -306,8 +307,8 @@ export function isDutyOfCandourOverdue(incident) {
   if (!incident.duty_of_candour_applies || !incident.date) return false;
   if (incident.candour_notification_date) return false;
   const incDate = parseDate(incident.date);
-  const deadlineDays = 10; // 10 working days ≈ 14 calendar days
-  const deadline = addDays(incDate, 14);
+  const deadlineDays = 14; // 10 working days ≈ 14 calendar days
+  const deadline = addDays(incDate, deadlineDays);
   return new Date() > deadline;
 }
 
