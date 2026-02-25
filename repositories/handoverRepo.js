@@ -14,6 +14,8 @@ function shapeRow(row) {
     author: row.author,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    acknowledged_by: row.acknowledged_by || null,
+    acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : (row.acknowledged_at || null),
   };
 }
 
@@ -83,6 +85,23 @@ export async function updateEntry(id, homeId, updates) {
      WHERE id = $1 AND home_id = $2
      RETURNING *`,
     [id, homeId, updates.content, updates.priority]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+/**
+ * Mark an entry as acknowledged by a user.
+ * @param {string} id       UUID
+ * @param {number} homeId   ownership check
+ * @param {string} username from req.user.username (set server-side)
+ */
+export async function acknowledgeEntry(id, homeId, username) {
+  const { rows } = await pool.query(
+    `UPDATE handover_entries
+     SET acknowledged_by = $3, acknowledged_at = NOW()
+     WHERE id = $1 AND home_id = $2
+     RETURNING *`,
+    [id, homeId, username]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
 }

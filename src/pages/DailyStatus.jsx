@@ -56,6 +56,7 @@ export default function DailyStatus({ data, updateData, user }) {
   }, [availableStaff, data, currentDate]);
 
   const today = formatDate(new Date());
+  const isAdmin = user?.role === 'admin';
   const isPastDate = dateStr < today;
   const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!data.config.edit_lock_pin;
 
@@ -520,17 +521,50 @@ export default function DailyStatus({ data, updateData, user }) {
                 })()}
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setSwapFrom(''); setSwapTo(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!swapFrom || !swapTo || swapFrom === swapTo} onClick={() => {
+                  {(() => {
                     const a = staffForDay.find(s => s.id === swapFrom);
                     const b = staffForDay.find(s => s.id === swapTo);
-                    if (!a || !b) return;
-                    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-                    if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-                    newOverrides[dateStr][swapFrom] = { shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' };
-                    newOverrides[dateStr][swapTo] = { shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' };
-                    updateData({ ...data, overrides: newOverrides });
-                    setModal(null); setSwapFrom(''); setSwapTo('');
-                  }} className={`${BTN.primary} disabled:opacity-50`}>Swap</button>
+                    const canSwap = !!(swapFrom && swapTo && swapFrom !== swapTo);
+                    const isFloat = a?.team === 'Float' || b?.team === 'Float';
+                    return (
+                      <>
+                        {isAdmin && (
+                          <button
+                            disabled={!canSwap || isFloat}
+                            title={isFloat ? 'Float staff have no fixed rotation to swap permanently' : `${a?.name}: ${a?.team} → ${b?.team} | ${b?.name}: ${b?.team} → ${a?.team}`}
+                            onClick={() => {
+                              if (!a || !b) return;
+                              const newStaff = data.staff.map(s => {
+                                if (s.id === a.id) return { ...s, team: b.team };
+                                if (s.id === b.id) return { ...s, team: a.team };
+                                return s;
+                              });
+                              updateData({ ...data, staff: newStaff });
+                              setModal(null); setSwapFrom(''); setSwapTo('');
+                            }}
+                            className={`${BTN.secondary} disabled:opacity-50 text-xs`}
+                          >
+                            {canSwap && !isFloat ? `Permanent (${a.team} ↔ ${b.team})` : 'Permanent'}
+                          </button>
+                        )}
+                        <button
+                          disabled={!canSwap}
+                          onClick={() => {
+                            if (!a || !b) return;
+                            const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+                            if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
+                            newOverrides[dateStr][swapFrom] = { shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' };
+                            newOverrides[dateStr][swapTo] = { shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' };
+                            updateData({ ...data, overrides: newOverrides });
+                            setModal(null); setSwapFrom(''); setSwapTo('');
+                          }}
+                          className={`${BTN.primary} disabled:opacity-50`}
+                        >
+                          Today Only
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ) : modal === 'agency' ? (

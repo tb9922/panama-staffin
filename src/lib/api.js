@@ -75,8 +75,8 @@ export function logout() {
   sessionStorage.removeItem('token');
 }
 
-export async function loadAuditLog() {
-  return apiFetch(`${API_BASE}/audit`, { headers: authHeaders() });
+export async function loadAuditLog(limit = 100) {
+  return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
 }
 
 export async function getHandoverEntries(homeSlug, date) {
@@ -98,5 +98,11 @@ export async function updateHandoverEntry(homeSlug, id, updates) {
 export async function deleteHandoverEntry(homeSlug, id) {
   return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${encodeURIComponent(homeSlug)}`, {
     method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function acknowledgeHandoverEntry(homeSlug, id) {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}/acknowledge?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
   });
 }

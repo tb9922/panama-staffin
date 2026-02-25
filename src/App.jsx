@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { loadData, saveData, loadHomes, setCurrentHome, login, getLoggedInUser, logout, loadAuditLog } from './lib/api.js';
+import { downloadXLSX } from './lib/excel.js';
 import { getStaffForDay, formatDate } from './lib/rotation.js';
 import { getDayCoverageStatus } from './lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from './lib/design.js';
@@ -105,10 +106,37 @@ const MAX_UNDO = 20;
 // Audit Log page component
 function AuditLog() {
   const [log, setLog] = useState([]);
+  const [exporting, setExporting] = useState(false);
   useEffect(() => { loadAuditLog().then(setLog); }, []);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const all = await loadAuditLog(10000);
+      await downloadXLSX('audit-log', [{
+        name: 'Audit',
+        headers: ['Time', 'Action', 'Home', 'User', 'Details'],
+        rows: all.map(e => [
+          new Date(e.ts).toLocaleString('en-GB'),
+          e.action,
+          e.home_slug || e.home || '',
+          e.user_name || e.user || '',
+          e.details || '',
+        ]),
+      }]);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Audit Log</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
+        <button onClick={handleExport} disabled={exporting} className={`${BTN.secondary} ${BTN.sm} disabled:opacity-50`}>
+          {exporting ? 'Exporting…' : 'Export Excel'}
+        </button>
+      </div>
       <p className="text-sm text-gray-500 mb-5">Last 100 actions — who changed what and when</p>
       <div className={CARD.flush}>
         <table className={TABLE.table}>
@@ -130,8 +158,8 @@ function AuditLog() {
                 <td className={TABLE.td}>
                   <span className={entry.action === 'login' ? BADGE.blue : BADGE.green}>{entry.action}</span>
                 </td>
-                <td className={`${TABLE.td} text-xs`}>{entry.home}</td>
-                <td className={`${TABLE.td} text-xs font-medium`}>{entry.user}</td>
+                <td className={`${TABLE.td} text-xs`}>{entry.home_slug || entry.home || ''}</td>
+                <td className={`${TABLE.td} text-xs font-medium`}>{entry.user_name || entry.user || ''}</td>
                 <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.details}</td>
               </tr>
             ))}

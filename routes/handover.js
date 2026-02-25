@@ -95,6 +95,23 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   }
 });
 
+// POST /api/handover/:id/acknowledge?home=X  — mark as read by incoming shift (auth only — viewer can ack)
+router.post('/:id/acknowledge', requireAuth, async (req, res, next) => {
+  try {
+    const idParam = uuidSchema.safeParse(req.params.id);
+    if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
+
+    const homeId = await resolveHomeId(req, res);
+    if (homeId === null) return;
+
+    const entry = await handoverRepo.acknowledgeEntry(idParam.data, homeId, req.user.username);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    res.json(entry);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/handover/:id?home=X
 router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {

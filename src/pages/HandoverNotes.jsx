@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
-import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry } from '../lib/api.js';
+import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry } from '../lib/api.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 
@@ -106,12 +106,21 @@ export default function HandoverNotes({ data, user }) {
     }
   }
 
+  async function handleAcknowledge(id) {
+    try {
+      const updated = await acknowledgeHandoverEntry(slug, id);
+      setEntries(prev => prev.map(e => e.id === id ? updated : e));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   function handleExport() {
     const sheets = SHIFTS.map(s => {
       const shiftEntries = entries.filter(e => e.shift === s.id);
       return {
         name: s.label,
-        headers: ['Date', 'Category', 'Priority', 'Content', 'Author', 'Time'],
+        headers: ['Date', 'Category', 'Priority', 'Content', 'Author', 'Time', 'Acknowledged By', 'Acknowledged At'],
         rows: shiftEntries.map(e => [
           dateStr,
           e.category,
@@ -119,6 +128,8 @@ export default function HandoverNotes({ data, user }) {
           e.content,
           e.author,
           e.created_at ? new Date(e.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+          e.acknowledged_by || '',
+          e.acknowledged_at ? new Date(e.acknowledged_at).toLocaleString('en-GB') : '',
         ]),
       };
     });
@@ -212,6 +223,15 @@ export default function HandoverNotes({ data, user }) {
                                   </div>
                                   <p className="text-sm text-gray-800 leading-snug whitespace-pre-wrap">{entry.content}</p>
                                   <p className="text-xs text-gray-400 mt-1">{entry.author} · {timeStr}</p>
+                                  {entry.acknowledged_by ? (
+                                    <p className="text-xs text-emerald-600 mt-1">
+                                      ✓ Acknowledged by {entry.acknowledged_by} · {new Date(entry.acknowledged_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  ) : (
+                                    <button onClick={() => handleAcknowledge(entry.id)} className="mt-1 text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2">
+                                      Acknowledge
+                                    </button>
+                                  )}
                                 </div>
                                 {isAdmin && (
                                   <div className="flex gap-1 shrink-0">
