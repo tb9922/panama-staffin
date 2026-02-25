@@ -66,7 +66,7 @@ src/
     rotation.js        Core scheduling engine — Panama pattern, shift classification, cycle math
     escalation.js      Coverage calc, 6-level escalation, cost calc, fatigue check, swap validation
     accrual.js         Holiday accrual engine — leave year, pro-rata, carryover, per-staff entitlement
-    training.js        Training compliance — 16 default types, status calc, matrix builder, alerts
+    training.js        Training compliance — 25 default types, status calc, matrix builder, alerts
     cqc.js             CQC compliance scoring — 34 quality statements (5 CQC questions), 18 weighted metrics, evidence aggregation
     incidents.js       Incident & safety reporting — types, severity, CQC/RIDDOR tracking, alerts, metrics
     complaints.js      Complaints & feedback — categories, statuses, surveys, satisfaction scoring, CQC metrics
@@ -130,7 +130,7 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
     max_consecutive_days, max_al_same_day, al_entitlement_days,
     leave_year_start,          // "MM-DD" — default "04-01" (UK tax year). Options: 01-01, 04-01, 09-01
     al_carryover_max,          // Max carryover days from previous year, default 8
-    training_types: [{         // 16 defaults auto-populated; managers can add/toggle
+    training_types: [{         // 25 defaults auto-populated; managers can add/toggle
       id, name, category,      // "statutory" | "mandatory"
       refresher_months, roles,  // null = all staff, or ["Senior Carer", ...]
       legislation, active,
@@ -426,8 +426,8 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - `getAccrualSummary(activeStaff, config, overrides, asOfDate)` — returns Map<staffId, accrualResult> for all active staff
 
 ### training.js
-- `DEFAULT_TRAINING_TYPES` — 16-item array of UK statutory/mandatory training types
-- `DEFAULT_TRAINING_LEVELS` — tiered levels for safeguarding-adults (L1/L2/L3) and mca-dols (basic/advanced)
+- `DEFAULT_TRAINING_TYPES` — 25-item array of UK statutory/mandatory training types
+- `DEFAULT_TRAINING_LEVELS` — tiered levels for safeguarding-adults (L1/L2/L3), mca-dols (basic/advanced), oliver-mcgowan (tier1/tier2), dementia-awareness (tier1/tier2/tier3)
 - `getTrainingTypes(config)` — returns config.training_types or defaults
 - `ensureTrainingDefaults(data)` — populates training_types, supervisions, appraisals, fire_drills, levels if missing
 - `getRequiredLevel(trainingType, staffRole)` — finds required level for a staff role (highest matching)
