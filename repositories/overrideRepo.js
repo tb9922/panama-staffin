@@ -7,7 +7,7 @@ import { pool } from '../db.js';
  */
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT date, staff_id, shift, reason, source FROM shift_overrides WHERE home_id = $1',
+    'SELECT date, staff_id, shift, reason, source, sleep_in FROM shift_overrides WHERE home_id = $1',
     [homeId]
   );
   const result = {};
@@ -19,6 +19,7 @@ export async function findByHome(homeId) {
     const entry = { shift: row.shift };
     if (row.reason) entry.reason = row.reason;
     if (row.source) entry.source = row.source;
+    if (row.sleep_in) entry.sleep_in = row.sleep_in;
     result[dateStr][row.staff_id] = entry;
   }
   return result;
@@ -41,7 +42,7 @@ export async function replace(homeId, overridesObj, client) {
   const rows = [];
   for (const [date, dayOverrides] of Object.entries(overridesObj)) {
     for (const [staffId, override] of Object.entries(dayOverrides)) {
-      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null]);
+      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null, override.sleep_in || false]);
     }
   }
 
@@ -52,12 +53,12 @@ export async function replace(homeId, overridesObj, client) {
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     const values = chunk.map((_, idx) => {
-      const base = idx * 6;
-      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6})`;
+      const base = idx * 7;
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7})`;
     }).join(', ');
     const params = chunk.flat();
     await conn.query(
-      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source)
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in)
        VALUES ${values}`,
       params
     );

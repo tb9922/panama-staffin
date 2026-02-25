@@ -118,8 +118,10 @@ export function calculateDayCost(staffForDay, config) {
   let agencyDay = 0;
   let agencyNight = 0;
   let bhPremium = 0;
+  let sleepIn = 0;
 
   staffForDay.forEach(s => {
+    if (s.sleep_in) sleepIn += config.sleep_in_rate || 0;
     const shift = s.shift;
     if (!isWorkingShift(shift)) return;
     const hours = getShiftHours(shift, config);
@@ -149,7 +151,7 @@ export function calculateDayCost(staffForDay, config) {
     }
   });
 
-  const total = base + otPremium + agencyDay + agencyNight + bhPremium;
+  const total = base + otPremium + agencyDay + agencyNight + bhPremium + sleepIn;
 
   return {
     base: Math.round(base * 100) / 100,
@@ -157,6 +159,7 @@ export function calculateDayCost(staffForDay, config) {
     agencyDay: Math.round(agencyDay * 100) / 100,
     agencyNight: Math.round(agencyNight * 100) / 100,
     bhPremium: Math.round(bhPremium * 100) / 100,
+    sleepIn: Math.round(sleepIn * 100) / 100,
     total: Math.round(total * 100) / 100,
     agency: Math.round((agencyDay + agencyNight) * 100) / 100,
     // Back-compat

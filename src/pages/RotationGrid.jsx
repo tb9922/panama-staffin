@@ -407,8 +407,9 @@ export default function RotationGrid({ data, updateData }) {
                           className={`inline-block w-full px-0.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
                           } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'}`}
-                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}\nClick to change`}>
+                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}${data.overrides[dateKey]?.[s.id]?.sleep_in ? ' +SI' : ''}\nClick to change`}>
                           {shift === 'OFF' ? '-' : shift}
+                          {data.overrides[dateKey]?.[s.id]?.sleep_in && <span className="text-[7px]"> SI</span>}
                         </button>
                       </td>
                     );

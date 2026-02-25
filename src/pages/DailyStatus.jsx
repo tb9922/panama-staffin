@@ -46,10 +46,30 @@ export default function DailyStatus({ data, updateData }) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }
 
-  function applyOverride(staffId, shift, reason, source) {
+  function applyOverride(staffId, shift, reason, source, sleepIn = false) {
     const newOverrides = JSON.parse(JSON.stringify(data.overrides));
     if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-    newOverrides[dateStr][staffId] = { shift, reason, source: source || 'manual' };
+    newOverrides[dateStr][staffId] = { shift, reason, source: source || 'manual', sleep_in: sleepIn };
+    updateData({ ...data, overrides: newOverrides });
+    setModal(null);
+    setSelectedStaff('');
+  }
+
+  function toggleSleepIn(staffId) {
+    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
+    const existing = newOverrides[dateStr][staffId];
+    if (existing) {
+      newOverrides[dateStr][staffId] = { ...existing, sleep_in: !existing.sleep_in };
+    } else {
+      const s = staffForDay.find(m => m.id === staffId);
+      newOverrides[dateStr][staffId] = {
+        shift: s?.scheduledShift || 'OFF',
+        reason: 'Sleep in',
+        source: 'manual',
+        sleep_in: true,
+      };
+    }
     updateData({ ...data, overrides: newOverrides });
     setModal(null);
     setSelectedStaff('');
@@ -102,6 +122,7 @@ export default function DailyStatus({ data, updateData }) {
       <td className={`${TABLE.td} text-xs`}>{s.team}</td>
       <td className={TABLE.td}>
         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+        {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
       </td>
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.skill}</td>
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
@@ -181,6 +202,7 @@ export default function DailyStatus({ data, updateData }) {
               {cost.agencyDay > 0 && <div className="flex justify-between text-red-600"><span>AG Day:</span><span>£{cost.agencyDay.toFixed(2)}</span></div>}
               {cost.agencyNight > 0 && <div className="flex justify-between text-red-600"><span>AG Night:</span><span>£{cost.agencyNight.toFixed(2)}</span></div>}
               {cost.bhPremium > 0 && <div className="flex justify-between text-pink-600"><span>BH Prem:</span><span>£{cost.bhPremium.toFixed(2)}</span></div>}
+              {cost.sleepIn > 0 && <div className="flex justify-between text-purple-600"><span>Sleep-in:</span><span>£{cost.sleepIn.toFixed(2)}</span></div>}
               <div className="flex justify-between font-bold border-t pt-1"><span>Total:</span><span>£{cost.total.toFixed(2)}</span></div>
             </div>
           </div>
@@ -214,6 +236,8 @@ export default function DailyStatus({ data, updateData }) {
               <button onClick={() => setModal('al')} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100`}>+AL</button>
               <button onClick={() => setModal('ot')} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100`}>+OT</button>
               <button onClick={() => setModal('agency')} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Agency</button>
+              <button onClick={() => setModal('training')} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>+Training</button>
+              <button onClick={() => setModal('sleepIn')} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100`}>+Sleep In</button>
               <button onClick={() => setModal('swap')} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>Swap</button>
             </div>
           </div>
@@ -251,7 +275,7 @@ export default function DailyStatus({ data, updateData }) {
         <div className={MODAL.overlay}>
           <div className={MODAL.panelSm}>
             <h2 className={MODAL.title}>
-              {modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : 'Book Agency'}
+              {modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'}
             </h2>
 
             {modal === 'swap' ? (
@@ -328,6 +352,33 @@ export default function DailyStatus({ data, updateData }) {
                     updateData({ ...data, overrides: newOverrides });
                     setModal(null); setSelectedStaff('');
                   }} className={`${BTN.danger} disabled:opacity-50`}>Book</button>
+                </div>
+              </div>
+            ) : modal === 'training' ? (
+              <div className="space-y-3">
+                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
+                  <option value="">Select staff...</option>
+                  {staffForDay.filter(s => isCareRole(s.role))
+                    .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>)}
+                </select>
+                <div className={MODAL.footer}>
+                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
+                  <button disabled={!selectedStaff} onClick={() => applyOverride(selectedStaff, 'TRN', 'Training', 'manual')}
+                    className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
+                </div>
+              </div>
+            ) : modal === 'sleepIn' ? (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500">Sleep-in is a flat-rate addition to the current shift (Mencap ruling). Staff remain on their rostered shift.</p>
+                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
+                  <option value="">Select staff...</option>
+                  {staffForDay.filter(s => isCareRole(s.role))
+                    .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift}){s.sleep_in ? ' — remove SI' : ' — add SI'}</option>)}
+                </select>
+                <div className={MODAL.footer}>
+                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
+                  <button disabled={!selectedStaff} onClick={() => toggleSleepIn(selectedStaff)}
+                    className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
                 </div>
               </div>
             ) : (

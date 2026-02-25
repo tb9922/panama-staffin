@@ -212,6 +212,7 @@ export function getStaffForDay(staff, date, overrides, config) {
       scheduledShift: scheduled,
       reason: actual.reason || null,
       source: actual.source || 'scheduled',
+      sleep_in: actual.sleep_in || false,
       isOverride: shift !== scheduled,
     });
   }

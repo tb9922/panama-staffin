@@ -1,0 +1,5 @@
+-- UP
+ALTER TABLE shift_overrides ADD COLUMN IF NOT EXISTS sleep_in BOOLEAN NOT NULL DEFAULT false;
+
+-- DOWN
+ALTER TABLE shift_overrides DROP COLUMN IF EXISTS sleep_in;

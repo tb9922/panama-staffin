@@ -168,6 +168,7 @@ export default function Config({ data, updateData }) {
           <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />
           <Field label="Agency Night Rate" path="agency_rate_night" unit="/hr" />
           <Field label="Agency Target (e.g. 0.05 = 5%)" path="agency_target_pct" step={0.01} />
+          <Field label="Sleep-In Rate (£ flat per night)" path="sleep_in_rate" step={0.01} unit="/night" />
         </div>
       </section>
 

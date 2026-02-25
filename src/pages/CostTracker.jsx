@@ -53,9 +53,10 @@ export default function CostTracker({ data }) {
     agencyDay: acc.agencyDay + d.cost.agencyDay,
     agencyNight: acc.agencyNight + d.cost.agencyNight,
     bhPremium: acc.bhPremium + d.cost.bhPremium,
+    sleepIn: acc.sleepIn + (d.cost.sleepIn || 0),
     total: acc.total + d.cost.total,
     agency: acc.agency + d.cost.agency,
-  }), { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, total: 0, agency: 0 }), [dayData]);
+  }), { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, sleepIn: 0, total: 0, agency: 0 }), [dayData]);
 
   const days = monthDates.length;
   const monthlyProj = totals.total / days * 30.44;
@@ -212,6 +213,7 @@ export default function CostTracker({ data }) {
             ['Agency Day', totals.agencyDay, 'bg-red-400'],
             ['Agency Night', totals.agencyNight, 'bg-red-600'],
             ['BH Premium', totals.bhPremium, 'bg-pink-400'],
+            ...(totals.sleepIn > 0 ? [['Sleep-in', totals.sleepIn, 'bg-purple-400']] : []),
           ].map(([label, value, color]) => {
             const pct = totals.total > 0 ? (value / totals.total) * 100 : 0;
             return (
