@@ -5,6 +5,8 @@ function shapeRow(row) {
   if (shaped.audit_date instanceof Date) shaped.audit_date = shaped.audit_date.toISOString().slice(0, 10);
   if (shaped.reported_at instanceof Date) shaped.reported_at = shaped.reported_at.toISOString();
   if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
+  if (shaped.overall_score != null) shaped.overall_score = parseFloat(shaped.overall_score);
+  if (shaped.compliance_pct != null) shaped.compliance_pct = parseFloat(shaped.compliance_pct);
   delete shaped.home_id;
   delete shaped.created_at;
   delete shaped.deleted_at;

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS staff (
   role            VARCHAR(100)   NOT NULL,
   team            VARCHAR(50)    NOT NULL,
   pref            VARCHAR(10),
-  skill           INTEGER        NOT NULL DEFAULT 1,
+  skill           NUMERIC(4,2)   NOT NULL DEFAULT 1,
   hourly_rate     NUMERIC(8,2)   NOT NULL,
   active          BOOLEAN        NOT NULL DEFAULT true,
   wtr_opt_out     BOOLEAN        NOT NULL DEFAULT false,

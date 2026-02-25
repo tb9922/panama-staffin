@@ -7,7 +7,7 @@ function shapeRow(row) {
     role: row.role,
     team: row.team,
     pref: row.pref,
-    skill: row.skill,
+    skill: parseFloat(row.skill),
     hourly_rate: parseFloat(row.hourly_rate),
     active: row.active,
     wtr_opt_out: row.wtr_opt_out,

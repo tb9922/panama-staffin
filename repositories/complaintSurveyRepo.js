@@ -4,6 +4,7 @@ function shapeRow(row) {
   const shaped = { ...row };
   if (shaped.date instanceof Date) shaped.date = shaped.date.toISOString().slice(0, 10);
   if (shaped.reported_at instanceof Date) shaped.reported_at = shaped.reported_at.toISOString();
+  if (shaped.overall_satisfaction != null) shaped.overall_satisfaction = parseFloat(shaped.overall_satisfaction);
   delete shaped.home_id;
   delete shaped.created_at;
   return shaped;
