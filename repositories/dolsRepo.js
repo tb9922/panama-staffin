@@ -1,0 +1,121 @@
+import { pool } from '../db.js';
+
+function shapeDolsRow(row) {
+  const shaped = { ...row };
+  for (const col of [
+    'application_date', 'authorisation_date', 'expiry_date',
+    'reviewed_date', 'next_review_date', 'updated_at',
+  ]) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  if (typeof shaped.restrictions === 'string') shaped.restrictions = JSON.parse(shaped.restrictions);
+  delete shaped.home_id;
+  delete shaped.created_at;
+  delete shaped.deleted_at;
+  return shaped;
+}
+
+function shapeMcaRow(row) {
+  const shaped = { ...row };
+  for (const col of ['assessment_date', 'next_review_date', 'updated_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  delete shaped.home_id;
+  delete shaped.created_at;
+  delete shaped.deleted_at;
+  return shaped;
+}
+
+export async function findByHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM dols WHERE home_id = $1 AND deleted_at IS NULL ORDER BY application_date DESC NULLS LAST',
+    [homeId]
+  );
+  return rows.map(shapeDolsRow);
+}
+
+export async function syncDols(homeId, arr, client) {
+  const conn = client || pool;
+  if (!arr) return;
+  const incomingIds = arr.map(d => d.id);
+
+  for (const d of arr) {
+    await conn.query(
+      `INSERT INTO dols (
+         id, home_id, resident_name, dob, room_number,
+         application_type, application_date, authorised,
+         authorisation_date, expiry_date, authorisation_number, authorising_authority,
+         restrictions, reviewed_date, review_status, next_review_date,
+         notes, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         resident_name=$3,dob=$4,room_number=$5,
+         application_type=$6,application_date=$7,authorised=$8,
+         authorisation_date=$9,expiry_date=$10,authorisation_number=$11,
+         authorising_authority=$12,restrictions=$13,reviewed_date=$14,
+         review_status=$15,next_review_date=$16,notes=$17,updated_at=$18,deleted_at=NULL`,
+      [
+        d.id, homeId, d.resident_name || null, d.dob || null, d.room_number || null,
+        d.application_type || null, d.application_date || null,
+        d.authorised ?? false,
+        d.authorisation_date || null, d.expiry_date || null,
+        d.authorisation_number || null, d.authorising_authority || null,
+        JSON.stringify(d.restrictions || []),
+        d.reviewed_date || null, d.review_status || null, d.next_review_date || null,
+        d.notes || null, d.updated_at || null,
+      ]
+    );
+  }
+
+  if (incomingIds.length > 0) {
+    await conn.query(
+      `UPDATE dols SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+      [homeId, incomingIds]
+    );
+  } else {
+    await conn.query(`UPDATE dols SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
+  }
+}
+
+export async function findMcaByHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM mca_assessments WHERE home_id = $1 AND deleted_at IS NULL ORDER BY assessment_date DESC NULLS LAST',
+    [homeId]
+  );
+  return rows.map(shapeMcaRow);
+}
+
+export async function syncMca(homeId, arr, client) {
+  const conn = client || pool;
+  if (!arr) return;
+  const incomingIds = arr.map(m => m.id);
+
+  for (const m of arr) {
+    await conn.query(
+      `INSERT INTO mca_assessments (
+         id, home_id, resident_name, assessment_date, assessor,
+         decision_area, lacks_capacity, best_interest_decision,
+         next_review_date, notes, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         resident_name=$3,assessment_date=$4,assessor=$5,
+         decision_area=$6,lacks_capacity=$7,best_interest_decision=$8,
+         next_review_date=$9,notes=$10,updated_at=$11,deleted_at=NULL`,
+      [
+        m.id, homeId, m.resident_name || null, m.assessment_date || null,
+        m.assessor || null, m.decision_area || null,
+        m.lacks_capacity ?? false, m.best_interest_decision || null,
+        m.next_review_date || null, m.notes || null, m.updated_at || null,
+      ]
+    );
+  }
+
+  if (incomingIds.length > 0) {
+    await conn.query(
+      `UPDATE mca_assessments SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+      [homeId, incomingIds]
+    );
+  } else {
+    await conn.query(`UPDATE mca_assessments SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
+  }
+}

@@ -1,0 +1,56 @@
+import { pool } from '../db.js';
+
+function shapeRow(row) {
+  const shaped = { ...row };
+  for (const col of ['last_completed', 'next_due', 'certificate_expiry', 'updated_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  delete shaped.home_id;
+  delete shaped.created_at;
+  delete shaped.deleted_at;
+  return shaped;
+}
+
+export async function findByHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM maintenance WHERE home_id = $1 AND deleted_at IS NULL ORDER BY category',
+    [homeId]
+  );
+  return rows.map(shapeRow);
+}
+
+export async function sync(homeId, arr, client) {
+  const conn = client || pool;
+  if (!arr) return;
+  const incomingIds = arr.map(m => m.id);
+
+  for (const m of arr) {
+    await conn.query(
+      `INSERT INTO maintenance (
+         id, home_id, category, description, frequency, last_completed, next_due,
+         completed_by, contractor, items_checked, items_passed, items_failed,
+         certificate_ref, certificate_expiry, notes, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         category=$3,description=$4,frequency=$5,last_completed=$6,next_due=$7,
+         completed_by=$8,contractor=$9,items_checked=$10,items_passed=$11,items_failed=$12,
+         certificate_ref=$13,certificate_expiry=$14,notes=$15,updated_at=$16,deleted_at=NULL`,
+      [
+        m.id, homeId, m.category || null, m.description || null, m.frequency || null,
+        m.last_completed || null, m.next_due || null, m.completed_by || null,
+        m.contractor || null, m.items_checked || null, m.items_passed || null,
+        m.items_failed || null, m.certificate_ref || null, m.certificate_expiry || null,
+        m.notes || null, m.updated_at || null,
+      ]
+    );
+  }
+
+  if (incomingIds.length > 0) {
+    await conn.query(
+      `UPDATE maintenance SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+      [homeId, incomingIds]
+    );
+  } else {
+    await conn.query(`UPDATE maintenance SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
+  }
+}

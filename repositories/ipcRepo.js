@@ -1,0 +1,55 @@
+import { pool } from '../db.js';
+
+function shapeRow(row) {
+  const shaped = { ...row };
+  if (shaped.audit_date instanceof Date) shaped.audit_date = shaped.audit_date.toISOString().slice(0, 10);
+  if (shaped.reported_at instanceof Date) shaped.reported_at = shaped.reported_at.toISOString();
+  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
+  delete shaped.home_id;
+  delete shaped.created_at;
+  delete shaped.deleted_at;
+  return shaped;
+}
+
+export async function findByHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM ipc_audits WHERE home_id = $1 AND deleted_at IS NULL ORDER BY audit_date DESC NULLS LAST',
+    [homeId]
+  );
+  return rows.map(shapeRow);
+}
+
+export async function sync(homeId, arr, client) {
+  const conn = client || pool;
+  if (!arr) return;
+  const incomingIds = arr.map(a => a.id);
+
+  for (const a of arr) {
+    await conn.query(
+      `INSERT INTO ipc_audits (
+         id, home_id, audit_date, audit_type, auditor, overall_score, compliance_pct,
+         risk_areas, corrective_actions, outbreak, notes, reported_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         audit_date=$3,audit_type=$4,auditor=$5,overall_score=$6,compliance_pct=$7,
+         risk_areas=$8,corrective_actions=$9,outbreak=$10,notes=$11,
+         reported_at=$12,updated_at=$13,deleted_at=NULL`,
+      [
+        a.id, homeId, a.audit_date || null, a.audit_type || null, a.auditor || null,
+        a.overall_score || null, a.compliance_pct || null,
+        JSON.stringify(a.risk_areas || []), JSON.stringify(a.corrective_actions || []),
+        JSON.stringify(a.outbreak || {}), a.notes || null,
+        a.reported_at || null, a.updated_at || null,
+      ]
+    );
+  }
+
+  if (incomingIds.length > 0) {
+    await conn.query(
+      `UPDATE ipc_audits SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+      [homeId, incomingIds]
+    );
+  } else {
+    await conn.query(`UPDATE ipc_audits SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
+  }
+}

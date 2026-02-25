@@ -1,0 +1,60 @@
+import { pool } from '../db.js';
+
+function shapeRow(row) {
+  const shaped = { ...row };
+  for (const col of ['last_reviewed', 'next_review_due', 'updated_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  if (typeof shaped.changes === 'string') shaped.changes = JSON.parse(shaped.changes);
+  delete shaped.home_id;
+  delete shaped.created_at;
+  delete shaped.deleted_at;
+  return shaped;
+}
+
+export async function findByHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM policy_reviews WHERE home_id = $1 AND deleted_at IS NULL ORDER BY next_review_due ASC NULLS LAST',
+    [homeId]
+  );
+  return rows.map(shapeRow);
+}
+
+export async function sync(homeId, arr, client) {
+  const conn = client || pool;
+  if (!arr) return;
+  const incomingIds = arr.map(p => p.id);
+
+  for (const p of arr) {
+    await conn.query(
+      `INSERT INTO policy_reviews (
+         id, home_id, policy_name, policy_ref, category, version,
+         last_reviewed, next_review_due, review_frequency_months,
+         status, reviewed_by, approved_by, changes, notes, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         policy_name=$3,policy_ref=$4,category=$5,version=$6,
+         last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
+         status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
+         updated_at=$15,deleted_at=NULL`,
+      [
+        p.id, homeId, p.policy_name || null, p.policy_ref || null,
+        p.category || null, p.version || null,
+        p.last_reviewed || null, p.next_review_due || null,
+        p.review_frequency_months || null, p.status || null,
+        p.reviewed_by || null, p.approved_by || null,
+        JSON.stringify(p.changes || []), p.notes || null,
+        p.updated_at || null,
+      ]
+    );
+  }
+
+  if (incomingIds.length > 0) {
+    await conn.query(
+      `UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+      [homeId, incomingIds]
+    );
+  } else {
+    await conn.query(`UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
+  }
+}

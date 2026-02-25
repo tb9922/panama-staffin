@@ -34,7 +34,7 @@ try {
 
 // Required variables — missing any of these is a fatal startup error.
 // Use console.error here; the logger hasn't been initialised yet.
-const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH'];
+const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH', 'DB_PASSWORD'];
 const missing = REQUIRED_VARS.filter(k => !process.env[k]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
@@ -69,4 +69,16 @@ export const config = {
   backupRetentionCount: 20,
   auditLogMaxEntries: 500,
   requestBodyLimit: '10mb',
+
+  // ── Database ─────────────────────────────────────────────────────────────────
+  db: {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    name: process.env.DB_NAME || 'panama_dev',
+    user: process.env.DB_USER || 'panama',
+    password: process.env.DB_PASSWORD,
+    poolMax: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    idleTimeoutMs: 30000,
+    connectionTimeoutMs: 2000,
+  },
 };

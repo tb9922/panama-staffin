@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+/**
+ * Database migration runner.
+ *
+ * Reads all .sql files from migrations/ in alphabetical order and runs any
+ * that haven't been run yet. Tracks completed migrations in the `migrations`
+ * table. Each migration runs in its own transaction — failure stops the run.
+ *
+ * Usage:
+ *   node scripts/migrate.js                         # uses .env DB config
+ *   node scripts/migrate.js --db panama_test        # override database name
+ *   node scripts/migrate.js --down 003              # roll back migration 003 (DOWN section)
+ */
+
+import { readFileSync, readdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import pg from 'pg';
+
+// Parse CLI args
+const args = process.argv.slice(2);
+const dbOverrideIdx = args.indexOf('--db');
+const dbOverride = dbOverrideIdx !== -1 ? args[dbOverrideIdx + 1] : null;
+
+const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
+
+// Load .env manually (same logic as config.js — keeps scripts self-contained)
+try {
+  const envContent = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.env'),
+    'utf-8'
+  );
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const val = trimmed.slice(eq + 1).trim();
+    if (key && !(key in process.env)) process.env[key] = val;
+  }
+} catch {
+  // .env optional in environments where vars are injected
+}
+
+const { Pool } = pg;
+const pool = new Pool({
+  host:     process.env.DB_HOST     || 'localhost',
+  port:     parseInt(process.env.DB_PORT || '5432', 10),
+  database: dbOverride || process.env.DB_NAME || 'panama_dev',
+  user:     process.env.DB_USER     || 'panama',
+  password: process.env.DB_PASSWORD,
+});
+
+async function migrate() {
+  const client = await pool.connect();
+  try {
+    // Create migrations tracking table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id      SERIAL        PRIMARY KEY,
+        name    VARCHAR(255)  NOT NULL UNIQUE,
+        run_at  TIMESTAMP     NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    const { rows: completed } = await client.query('SELECT name FROM migrations ORDER BY name');
+    const completedNames = new Set(completed.map(r => r.name));
+
+    const files = readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
+
+    let ran = 0;
+    for (const file of files) {
+      if (completedNames.has(file)) continue;
+
+      const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
+      // Extract everything before "-- DOWN" as the UP section
+      const upSql = sql.split('-- DOWN')[0].replace(/^--\s*UP\s*\n?/m, '').trim();
+
+      console.log(`  Running: ${file}`);
+      await client.query('BEGIN');
+      try {
+        await client.query(upSql);
+        await client.query('INSERT INTO migrations (name) VALUES ($1)', [file]);
+        await client.query('COMMIT');
+        ran++;
+        console.log(`  ✓ ${file}`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`  ✗ ${file}: ${err.message}`);
+        throw err;
+      }
+    }
+
+    if (ran === 0) {
+      console.log('  No pending migrations.');
+    } else {
+      console.log(`\n  ${ran} migration${ran > 1 ? 's' : ''} applied.`);
+    }
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+console.log(`\nRunning migrations on database: ${dbOverride || process.env.DB_NAME || 'panama_dev'}\n`);
+migrate().catch(err => {
+  console.error('\nMigration failed:', err.message);
+  process.exit(1);
+});
