@@ -193,6 +193,21 @@ export default function Config({ data, updateData }) {
             Warn when rostering staff with expired critical training (fire safety, moving &amp; handling, safeguarding)
           </label>
         </div>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className={INPUT.label}>Past-Date Edit PIN (4–6 digits)</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            value={config.edit_lock_pin || ''}
+            onChange={e => handleChange('edit_lock_pin', e.target.value.replace(/\D/g, ''))}
+            placeholder="Leave blank to disable locking"
+            className={`${INPUT.sm} w-40`}
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Managers must enter this PIN to edit any date before today. Session-only — refreshing the page re-locks.
+          </p>
+        </div>
       </section>
 
       {/* Annual Leave */}

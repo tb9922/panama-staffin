@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  formatDate, parseDate, addDays, getStaffForDay,
+  formatDate, parseDate, addDays, getStaffForDay, getShiftHours,
   isWorkingShift, isEarlyShift, isLateShift, isNightShift, isCareRole,
   SHIFT_COLORS, countALOnDate,
 } from '../lib/rotation.js';
@@ -21,8 +21,21 @@ export default function DailyStatus({ data, updateData }) {
   const [modal, setModal] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
   const [otShiftType, setOtShiftType] = useState('OC-EL');
+  const [agencyShiftType, setAgencyShiftType] = useState('');
   const [swapFrom, setSwapFrom] = useState('');
   const [swapTo, setSwapTo] = useState('');
+  const [showGapPanel, setShowGapPanel] = useState(false);
+  const [gapPanelDate, setGapPanelDate] = useState(null);
+  const [unlockedDates, setUnlockedDates] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(`unlocked_${data.config.home_name}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const [showLockPrompt, setShowLockPrompt] = useState(false);
+  const [lockPin, setLockPin] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const staffForDay = useMemo(() => getStaffForDay(data.staff, currentDate, data.overrides, data.config), [data, dateStr]);
   const coverage = useMemo(() => getDayCoverageStatus(staffForDay, data.config), [staffForDay, data.config]);
@@ -41,6 +54,18 @@ export default function DailyStatus({ data, updateData }) {
       return { ...s, fatigue };
     });
   }, [availableStaff, data, currentDate]);
+
+  const today = formatDate(new Date());
+  const isPastDate = dateStr < today;
+  const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!data.config.edit_lock_pin;
+
+  // Reset lock prompt state when navigating to a different date
+  useEffect(() => {
+    setShowLockPrompt(false);
+    setLockPin('');
+    setLockError('');
+    setPendingAction(null);
+  }, [dateStr]);
 
   function goDay(offset) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
@@ -84,6 +109,49 @@ export default function DailyStatus({ data, updateData }) {
     updateData({ ...data, overrides: newOverrides });
   }
 
+  // Applies a SICK override and shows the cascade gap panel if coverage drops
+  function applySickOverride(staffId) {
+    const projectedOverrides = JSON.parse(JSON.stringify(data.overrides));
+    if (!projectedOverrides[dateStr]) projectedOverrides[dateStr] = {};
+    projectedOverrides[dateStr][staffId] = { shift: 'SICK', reason: 'Sick', source: 'manual', sleep_in: false };
+    const projectedStaff = getStaffForDay(data.staff, currentDate, projectedOverrides, data.config);
+    const projectedCoverage = getDayCoverageStatus(projectedStaff, data.config);
+    updateData({ ...data, overrides: projectedOverrides });
+    setModal(null);
+    setSelectedStaff('');
+    if (projectedCoverage.overallLevel >= 1) {
+      setShowGapPanel(true);
+      setGapPanelDate(dateStr);
+    }
+  }
+
+  function unlockDate() {
+    const newUnlocked = new Set(unlockedDates);
+    newUnlocked.add(dateStr);
+    setUnlockedDates(newUnlocked);
+    try {
+      sessionStorage.setItem(`unlocked_${data.config.home_name}`, JSON.stringify([...newUnlocked]));
+    } catch { /* quota exceeded — in-memory unlock still works */ }
+    setShowLockPrompt(false);
+    setLockPin('');
+    setLockError('');
+    if (pendingAction) { pendingAction.fn(); setPendingAction(null); }
+  }
+
+  function attemptUnlock() {
+    const pin = String(data.config.edit_lock_pin || '');
+    if (!pin) { unlockDate(); return; }
+    if (String(lockPin) === pin) { unlockDate(); }
+    else { setLockError('Incorrect PIN'); setLockPin(''); }
+  }
+
+  // Wraps any write action with a past-date lock check
+  function withLockCheck(action) {
+    if (!isLocked) { action(); return; }
+    setPendingAction({ fn: action });
+    setShowLockPrompt(true);
+  }
+
   const escColor = (esc) => {
     if (!esc) return '';
     const colorKey = esc.color;
@@ -103,6 +171,74 @@ export default function DailyStatus({ data, updateData }) {
       reasons.push(...getTrainingBlockingReasons(s.id, s.role, data.training, data.config, dateStr));
     }
     return reasons;
+  };
+
+  // Cascade coverage panel — shown after a sick override creates a gap
+  const CoverageGapPanel = () => {
+    const floaters = staffForDay.filter(s => s.shift === 'AVL' && isCareRole(s.role));
+    const otCandidates = staffForDay.filter(s =>
+      isCareRole(s.role) && !isWorkingShift(s.shift) && s.shift !== 'SICK' && s.shift !== 'AL'
+    );
+    const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
+    const targetShift = shortPeriods.includes('early') ? 'E' : shortPeriods.includes('late') ? 'L' : 'N';
+    const targetOcShift = shortPeriods.includes('early') ? 'OC-E' : shortPeriods.includes('late') ? 'OC-L' : 'OC-N';
+    return (
+      <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 print:hidden">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-amber-800">Coverage Gap — action needed</h3>
+          <button onClick={() => setShowGapPanel(false)} className={`${BTN.ghost} ${BTN.xs} text-gray-400`}>Dismiss</button>
+        </div>
+        <p className="text-xs text-amber-700 mb-3">
+          {shortPeriods.length > 0
+            ? `Short: ${shortPeriods.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')} — below minimum staffing`
+            : 'Coverage affected — review options below'}
+        </p>
+        <div className="mb-3">
+          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">1 — Deploy Float</div>
+          {floaters.length === 0
+            ? <div className="text-xs text-gray-400">No floaters available today</div>
+            : <div className="space-y-1">
+                {floaters.map(s => {
+                  const fatigue = checkFatigueRisk(s, currentDate, data.overrides, data.config);
+                  return (
+                    <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
+                      <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.role})</span></span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d consec.</span>
+                        <button onClick={() => applyOverride(s.id, targetShift, 'Float deployed — gap cover', 'manual')} className={`${BTN.success} ${BTN.xs}`}>Deploy</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+          }
+        </div>
+        <div className="mb-3">
+          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">2 — Call In (OT)</div>
+          {otCandidates.length === 0
+            ? <div className="text-xs text-gray-400">No off-duty staff available</div>
+            : <div className="space-y-1">
+                {otCandidates.slice(0, 5).map(s => {
+                  const fatigue = checkFatigueRisk(s, currentDate, data.overrides, data.config);
+                  return (
+                    <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
+                      <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.shift})</span></span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
+                        <button onClick={() => applyOverride(s.id, targetOcShift, 'Called in — OT', 'ot')} className={`${BTN.primary} ${BTN.xs}`}>Call In</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+          }
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">3 — Book Agency</div>
+          <button onClick={() => { setShowGapPanel(false); setModal('agency'); }} className={`${BTN.danger} ${BTN.xs}`}>Open Agency Booking</button>
+        </div>
+      </div>
+    );
   };
 
   const StaffRow = ({ s }) => {
@@ -128,7 +264,7 @@ export default function DailyStatus({ data, updateData }) {
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
       <td className={TABLE.td}>
         {s.isOverride && (
-          <button onClick={() => removeOverride(s.id)} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50`}>Revert</button>
+          <button onClick={() => withLockCheck(() => removeOverride(s.id))} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50`}>Revert</button>
         )}
       </td>
     </tr>
@@ -162,7 +298,16 @@ export default function DailyStatus({ data, updateData }) {
       <div className="flex items-center justify-between mb-4 print:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
-          <h1 className={PAGE.title}>{dayName}</h1>
+          <h1 className={PAGE.title}>
+            {dayName}
+            {isLocked && (
+              <span className="ml-2 text-amber-500 align-middle" title="Past date — locked for editing">
+                <svg className="inline w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </span>
+            )}
+          </h1>
           <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
         </div>
         <div className="flex items-center gap-3">
@@ -170,6 +315,30 @@ export default function DailyStatus({ data, updateData }) {
           <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
         </div>
       </div>
+
+      {/* Past-date lock prompt */}
+      {showLockPrompt && (
+        <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 print:hidden flex-wrap">
+          <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span className="text-sm text-amber-800">Past date — enter admin PIN to edit</span>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            value={lockPin}
+            onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+            onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
+            placeholder="PIN"
+            className={`${INPUT.sm} w-20`}
+            autoFocus
+          />
+          <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
+          <button onClick={() => { setShowLockPrompt(false); setLockPin(''); setLockError(''); setPendingAction(null); }} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
+          {lockError && <span className="text-xs text-red-600">{lockError}</span>}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coverage Panel */}
@@ -216,13 +385,15 @@ export default function DailyStatus({ data, updateData }) {
             <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Handover Notes</h3>
             <textarea
               value={data.day_notes?.[dateStr] || ''}
+              readOnly={isLocked}
               onChange={e => {
+                if (isLocked) return;
                 const newNotes = { ...(data.day_notes || {}), [dateStr]: e.target.value };
                 if (!e.target.value) delete newNotes[dateStr];
                 updateData({ ...data, day_notes: newNotes });
               }}
-              placeholder="Add notes for handover, incidents, or reminders..."
-              className={`${INPUT.base} h-20 resize-y`}
+              placeholder={isLocked ? 'Unlock to edit notes' : 'Add notes for handover, incidents, or reminders...'}
+              className={`${INPUT.base} h-20 resize-y ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
           </div>
         </div>
@@ -232,13 +403,13 @@ export default function DailyStatus({ data, updateData }) {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
             <div className="flex gap-1.5 print:hidden">
-              <button onClick={() => setModal('sick')} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Sick</button>
-              <button onClick={() => setModal('al')} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100`}>+AL</button>
-              <button onClick={() => setModal('ot')} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100`}>+OT</button>
-              <button onClick={() => setModal('agency')} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Agency</button>
-              <button onClick={() => setModal('training')} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>+Training</button>
-              <button onClick={() => setModal('sleepIn')} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100`}>+Sleep In</button>
-              <button onClick={() => setModal('swap')} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>Swap</button>
+              <button onClick={() => withLockCheck(() => setModal('sick'))} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Sick</button>
+              <button onClick={() => withLockCheck(() => setModal('al'))} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100`}>+AL</button>
+              <button onClick={() => withLockCheck(() => setModal('ot'))} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100`}>+OT</button>
+              <button onClick={() => withLockCheck(() => setModal('agency'))} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Agency</button>
+              <button onClick={() => withLockCheck(() => setModal('training'))} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>+Training</button>
+              <button onClick={() => withLockCheck(() => setModal('sleepIn'))} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100`}>+Sleep In</button>
+              <button onClick={() => withLockCheck(() => setModal('swap'))} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>Swap</button>
             </div>
           </div>
 
@@ -267,6 +438,9 @@ export default function DailyStatus({ data, updateData }) {
               </div>
             )}
           </div>
+
+          {/* Coverage gap cascade panel — appears after marking sick */}
+          {showGapPanel && gapPanelDate === dateStr && <CoverageGapPanel />}
         </div>
       </div>
 
@@ -336,21 +510,49 @@ export default function DailyStatus({ data, updateData }) {
               </div>
             ) : modal === 'agency' ? (
               <div className="space-y-3">
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-                  <option value="">Shift type...</option>
-                  <option value="AG-E">Agency Early</option>
-                  <option value="AG-L">Agency Late</option>
-                  <option value="AG-N">Agency Night</option>
+                <select value={agencyShiftType} onChange={e => setAgencyShiftType(e.target.value)} className={INPUT.select}>
+                  <option value="">Select shift type...</option>
+                  <option value="AG-E">Agency Early (AG-E)</option>
+                  <option value="AG-L">Agency Late (AG-L)</option>
+                  <option value="AG-EL">Agency Full Day (AG-EL)</option>
+                  <option value="AG-N">Agency Night (AG-N)</option>
                 </select>
+                {agencyShiftType && (() => {
+                  const agPeriods = agencyShiftType === 'AG-E' ? 'Early'
+                    : agencyShiftType === 'AG-L' ? 'Late'
+                    : agencyShiftType === 'AG-EL' ? 'Early + Late (full day)'
+                    : 'Night';
+                  const agHours = getShiftHours(agencyShiftType, data.config);
+                  const isNight = agencyShiftType === 'AG-N';
+                  const agRate = isNight ? (data.config.agency_rate_night || 0) : (data.config.agency_rate_day || 0);
+                  const agCost = (agHours * agRate).toFixed(2);
+                  const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
+                  const absentToday = staffForDay.filter(s => s.shift === 'SICK' || s.shift === 'AL');
+                  return (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 space-y-1.5 text-xs">
+                      <div className="font-semibold text-blue-700">Booking — {dateStr}</div>
+                      <div className="text-gray-600"><span className="font-medium">Covers:</span> {agPeriods}</div>
+                      {shortPeriods.length > 0 && (
+                        <div className="text-amber-700"><span className="font-medium">Gap:</span> {shortPeriods.join(', ')} below minimum</div>
+                      )}
+                      <div className="text-gray-600">
+                        <span className="font-medium">Rate:</span> £{agRate.toFixed(2)}/hr ({isNight ? 'night' : 'day'}) &middot; {agHours}h &middot; est. <strong>£{agCost}</strong>
+                      </div>
+                      {absentToday.length > 0 && (
+                        <div className="text-gray-500"><span className="font-medium">Absent today:</span> {absentToday.map(s => `${s.name} (${s.shift})`).join(', ')}</div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff} onClick={() => {
+                  <button onClick={() => { setModal(null); setAgencyShiftType(''); }} className={BTN.ghost}>Cancel</button>
+                  <button disabled={!agencyShiftType} onClick={() => {
                     const agId = 'AG' + Date.now().toString(36).toUpperCase();
                     const newOverrides = JSON.parse(JSON.stringify(data.overrides));
                     if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-                    newOverrides[dateStr][agId] = { shift: selectedStaff, reason: 'Agency', source: 'agency' };
+                    newOverrides[dateStr][agId] = { shift: agencyShiftType, reason: 'Agency', source: 'agency' };
                     updateData({ ...data, overrides: newOverrides });
-                    setModal(null); setSelectedStaff('');
+                    setModal(null); setAgencyShiftType('');
                   }} className={`${BTN.danger} disabled:opacity-50`}>Book</button>
                 </div>
               </div>
@@ -402,7 +604,7 @@ export default function DailyStatus({ data, updateData }) {
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || (modal === 'al' && alCount >= data.config.max_al_same_day)} onClick={() => {
-                    if (modal === 'sick') applyOverride(selectedStaff, 'SICK', 'Sick', 'manual');
+                    if (modal === 'sick') applySickOverride(selectedStaff);
                     else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');
                     else {
                       applyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');

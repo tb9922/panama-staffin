@@ -9,18 +9,18 @@ const PANAMA_PATTERN = {
 export const ALL_SHIFTS = [
   'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
   'OC-E', 'OC-L', 'OC-EL', 'OC-N',
-  'AG-E', 'AG-L', 'AG-N',
+  'AG-E', 'AG-L', 'AG-EL', 'AG-N',
   'BH-D', 'BH-N',
 ];
 
-export const WORKING_SHIFTS = ['E', 'L', 'EL', 'N', 'OC-E', 'OC-L', 'OC-EL', 'OC-N', 'AG-E', 'AG-L', 'AG-N', 'BH-D', 'BH-N', 'ADM', 'TRN'];
-export const EARLY_SHIFTS = ['E', 'EL', 'OC-E', 'OC-EL', 'AG-E', 'BH-D'];
-export const LATE_SHIFTS = ['L', 'EL', 'OC-L', 'OC-EL', 'AG-L', 'BH-D'];
+export const WORKING_SHIFTS = ['E', 'L', 'EL', 'N', 'OC-E', 'OC-L', 'OC-EL', 'OC-N', 'AG-E', 'AG-L', 'AG-EL', 'AG-N', 'BH-D', 'BH-N', 'ADM', 'TRN'];
+export const EARLY_SHIFTS = ['E', 'EL', 'OC-E', 'OC-EL', 'AG-E', 'AG-EL', 'BH-D'];
+export const LATE_SHIFTS = ['L', 'EL', 'OC-L', 'OC-EL', 'AG-L', 'AG-EL', 'BH-D'];
 export const NIGHT_SHIFTS = ['N', 'OC-N', 'AG-N', 'BH-N'];
 export const OT_SHIFTS = ['OC-E', 'OC-L', 'OC-EL', 'OC-N'];
-export const AGENCY_SHIFTS = ['AG-E', 'AG-L', 'AG-N'];
+export const AGENCY_SHIFTS = ['AG-E', 'AG-L', 'AG-EL', 'AG-N'];
 export const BH_SHIFTS = ['BH-D', 'BH-N'];
-export const DAY_SHIFTS = ['E', 'L', 'EL', 'OC-E', 'OC-L', 'OC-EL', 'AG-E', 'AG-L', 'BH-D', 'ADM', 'TRN'];
+export const DAY_SHIFTS = ['E', 'L', 'EL', 'OC-E', 'OC-L', 'OC-EL', 'AG-E', 'AG-L', 'AG-EL', 'BH-D', 'ADM', 'TRN'];
 
 export const CARE_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 
@@ -41,6 +41,7 @@ export const SHIFT_COLORS = {
   'OC-N': 'bg-orange-100 text-orange-700 border border-orange-200',
   'AG-E': 'bg-red-200 text-red-800 border border-red-300',
   'AG-L': 'bg-red-200 text-red-800 border border-red-300',
+  'AG-EL': 'bg-red-200 text-red-800 border border-red-300',
   'AG-N': 'bg-red-200 text-red-800 border border-red-300',
   'BH-D': 'bg-pink-100 text-pink-700 border border-pink-200',
   'BH-N': 'bg-pink-100 text-pink-700 border border-pink-200',
@@ -161,6 +162,7 @@ export function getShiftHours(shift, config) {
     'OC-N': config.shifts.N.hours,
     'AG-E': config.shifts.E.hours,
     'AG-L': config.shifts.L.hours,
+    'AG-EL': config.shifts.EL.hours,
     'AG-N': config.shifts.N.hours,
     'BH-D': config.shifts.EL.hours,
     'BH-N': config.shifts.N.hours,
