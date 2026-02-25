@@ -10,28 +10,14 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import pino from 'pino';
 import { z } from 'zod';
-
-// Load .env manually (no dotenv dependency — keep it simple)
-try {
-  const envFile = fs.readFileSync(new URL('.env', import.meta.url), 'utf-8');
-  for (const line of envFile.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq < 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
-    if (key && !(key in process.env)) process.env[key] = val;
-  }
-} catch {
-  // .env is optional in production where env vars are injected externally
-}
+import { config } from './config.js';
+import { AppError, ValidationError } from './errors.js';
 
 // ── Logger ────────────────────────────────────────────────────────────────────
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  ...(process.env.NODE_ENV !== 'production' && {
+  level: config.logLevel,
+  ...(config.nodeEnv !== 'production' && {
     transport: { target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname' } },
   }),
 });
@@ -45,30 +31,14 @@ const loginSchema = z.object({
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').optional();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  logger.fatal('JWT_SECRET not set — add it to .env or set as environment variable');
-  process.exit(1);
-}
-
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
-const PORT = process.env.PORT || 3001;
-
+// Convenience aliases kept for readability in route handlers below
+const { jwtSecret: JWT_SECRET, allowedOrigin: ALLOWED_ORIGIN, port: PORT } = config;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'homes');
-const LEGACY_FILE = path.join(__dirname, 'staffing_data.json');
-const BACKUP_DIR = path.join(__dirname, 'backups');
-const AUDIT_FILE = path.join(__dirname, 'audit_log.json');
-
-const USERS = [
-  { username: 'admin', hash: process.env.ADMIN_PASSWORD_HASH, role: 'admin' },
-  { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' },
-];
-
-if (USERS.some(u => !u.hash)) {
-  logger.fatal('ADMIN_PASSWORD_HASH and VIEWER_PASSWORD_HASH must be set in .env');
-  process.exit(1);
-}
+const DATA_DIR = config.dataDir;
+const LEGACY_FILE = config.legacyFile;
+const BACKUP_DIR = config.backupDir;
+const AUDIT_FILE = config.auditFile;
+const USERS = config.users;
 
 // Ensure directories exist
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR);
@@ -707,6 +677,34 @@ app.get('/api/bank-holidays', requireAuth, async (req, res) => {
     logger.error({ reqId: req.id, err: err.message }, 'bank holiday fetch failed');
     res.status(500).json({ error: 'Failed to fetch bank holidays from GOV.UK' });
   }
+});
+
+// ── Global error handler ──────────────────────────────────────────────────────
+// Must be registered after all routes. Express identifies it by the 4-arg signature.
+// AppError subclasses map to their own status codes. Anything else is a 500.
+// Stack traces are logged server-side but never sent to the client.
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err instanceof AppError) {
+    if (err.statusCode >= 500) {
+      logger.error({ reqId: req.id, err: err.message, code: err.code }, 'server error');
+    } else {
+      logger.warn({ reqId: req.id, err: err.message, code: err.code, status: err.statusCode }, 'client error');
+    }
+    return res.status(err.statusCode).json({ error: err.message });
+  }
+
+  // Zod validation errors forwarded via next(err) from middleware
+  if (err?.name === 'ZodError') {
+    const message = err.issues?.[0]?.message || 'Invalid request';
+    logger.warn({ reqId: req.id, err: message }, 'validation error');
+    return res.status(400).json({ error: message });
+  }
+
+  // Unexpected errors — log fully, return generic message (never leak internals)
+  logger.error({ reqId: req.id, err: err?.message, stack: err?.stack }, 'unhandled error');
+  res.status(500).json({ error: 'An unexpected error occurred' });
 });
 
 const server = app.listen(PORT, () => {

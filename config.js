@@ -1,0 +1,72 @@
+/**
+ * Centralised server configuration.
+ *
+ * Loads .env on startup, then validates that every required environment
+ * variable is present. The server refuses to start if any are missing —
+ * a misconfigured server is worse than a server that won't start.
+ *
+ * All process.env reads live here. Everywhere else in the server imports
+ * from this module rather than reading process.env directly.
+ */
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load .env manually — no dotenv dependency. Variables already set in the
+// environment (e.g. injected by the host) are never overwritten.
+try {
+  const envContent = fs.readFileSync(path.join(__dirname, '.env'), 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const val = trimmed.slice(eq + 1).trim();
+    if (key && !(key in process.env)) process.env[key] = val;
+  }
+} catch {
+  // .env is optional in production where env vars are injected externally
+}
+
+// Required variables — missing any of these is a fatal startup error.
+// Use console.error here; the logger hasn't been initialised yet.
+const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH'];
+const missing = REQUIRED_VARS.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
+  console.error('See .env.example for required configuration.');
+  process.exit(1);
+}
+
+export const config = {
+  // ── Server ──────────────────────────────────────────────────────────────────
+  port: parseInt(process.env.PORT || '3001', 10),
+  allowedOrigin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
+  nodeEnv: process.env.NODE_ENV || 'development',
+  logLevel: process.env.LOG_LEVEL || 'info',
+
+  // ── Authentication ───────────────────────────────────────────────────────────
+  jwtSecret: process.env.JWT_SECRET,
+  jwtExpiresIn: '12h',
+
+  // Users — the only place that reads password hashes from env
+  users: [
+    { username: 'admin', hash: process.env.ADMIN_PASSWORD_HASH, role: 'admin' },
+    { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' },
+  ],
+
+  // ── Paths ────────────────────────────────────────────────────────────────────
+  dataDir: path.join(__dirname, 'homes'),
+  backupDir: path.join(__dirname, 'backups'),
+  auditFile: path.join(__dirname, 'audit_log.json'),
+  legacyFile: path.join(__dirname, 'staffing_data.json'),
+
+  // ── Data management ──────────────────────────────────────────────────────────
+  backupRetentionCount: 20,
+  auditLogMaxEntries: 500,
+  requestBodyLimit: '10mb',
+};
