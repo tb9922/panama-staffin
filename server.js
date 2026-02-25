@@ -4,9 +4,12 @@ import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import pino from 'pino';
+import { z } from 'zod';
 
 // Load .env manually (no dotenv dependency — keep it simple)
 try {
@@ -24,9 +27,27 @@ try {
   // .env is optional in production where env vars are injected externally
 }
 
+// ── Logger ────────────────────────────────────────────────────────────────────
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  ...(process.env.NODE_ENV !== 'production' && {
+    transport: { target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname' } },
+  }),
+});
+
+// ── Zod schemas ───────────────────────────────────────────────────────────────
+
+const loginSchema = z.object({
+  username: z.string().min(1, 'Username required'),
+  password: z.string().min(1, 'Password required'),
+});
+
+const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').optional();
+
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET not set. Add it to .env or set it as an environment variable.');
+  logger.fatal('JWT_SECRET not set — add it to .env or set as environment variable');
   process.exit(1);
 }
 
@@ -45,7 +66,7 @@ const USERS = [
 ];
 
 if (USERS.some(u => !u.hash)) {
-  console.error('FATAL: ADMIN_PASSWORD_HASH and VIEWER_PASSWORD_HASH must be set in .env');
+  logger.fatal('ADMIN_PASSWORD_HASH and VIEWER_PASSWORD_HASH must be set in .env');
   process.exit(1);
 }
 
@@ -67,6 +88,18 @@ const app = express();
 app.use(helmet());
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json({ limit: '10mb' }));
+
+// ── Request ID + structured request logging ───────────────────────────────────
+
+app.use((req, res, next) => {
+  req.id = randomUUID();
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    logger.info({ reqId: req.id, method: req.method, url: req.url, status: res.statusCode, ms }, 'request');
+  });
+  next();
+});
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
 
@@ -127,7 +160,7 @@ function backupData(homeId) {
       try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch {}
     });
   } catch (err) {
-    console.error('Backup failed:', err.message);
+    logger.error({ err: err.message, homeId }, 'backup failed');
     return false; // explicit false = backup attempted but failed
   }
   return true;
@@ -162,7 +195,7 @@ function logAudit(action, homeId, user, details) {
     if (log.length > 500) log = log.slice(-500);
     fs.writeFileSync(AUDIT_FILE, JSON.stringify(log, null, 2));
   } catch (err) {
-    console.error('Audit log write failed:', err.message);
+    logger.error({ err: err.message }, 'audit log write failed');
   }
 }
 
@@ -555,8 +588,9 @@ function validateOverrides(data) {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.post('/api/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  const parsed = loginSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid request body' });
+  const { username, password } = parsed.data;
   const user = USERS.find(u => u.username === username);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   const valid = await bcrypt.compare(password, user.hash);
@@ -581,7 +615,9 @@ app.get('/api/homes', requireAuth, (req, res) => {
 
 app.get('/api/data', requireAuth, (req, res) => {
   try {
-    const homeId = req.query.home || getHomes()[0]?.replace('.json', '') || 'default';
+    const homeParam = homeIdSchema.safeParse(req.query.home);
+    if (!homeParam.success) return res.status(400).json({ error: 'Invalid home parameter' });
+    const homeId = homeParam.data || getHomes()[0]?.replace('.json', '') || 'default';
     const dataFile = getDataFile(homeId);
     if (!fs.existsSync(dataFile)) {
       if (fs.existsSync(LEGACY_FILE)) return res.json(JSON.parse(fs.readFileSync(LEGACY_FILE, 'utf-8')));
@@ -595,7 +631,7 @@ app.get('/api/data', requireAuth, (req, res) => {
     }
     res.json(payload);
   } catch (err) {
-    console.error('GET /api/data failed:', err.message);
+    logger.error({ reqId: req.id, err: err.message }, 'GET /api/data failed');
     res.status(500).json({ error: 'Failed to read data file' });
   }
 });
@@ -620,7 +656,7 @@ app.post('/api/data', requireAuth, requireAdmin, async (req, res) => {
     logAudit('save', homeId, req.user?.username || req.query.user || 'unknown', auditDetail);
     res.json({ ok: true, warnings, backedUp });
   } catch (err) {
-    console.error('POST /api/data failed:', err.message);
+    logger.error({ reqId: req.id, err: err.message }, 'POST /api/data failed');
     res.status(500).json({ error: 'Failed to write data file' });
   }
 });
@@ -639,14 +675,16 @@ app.get('/api/audit', requireAuth, requireAdmin, (req, res) => {
 
 app.get('/api/export', requireAuth, requireAdmin, (req, res) => {
   try {
-    const homeId = req.query.home || getHomes()[0]?.replace('.json', '') || 'default';
+    const homeParam = homeIdSchema.safeParse(req.query.home);
+    if (!homeParam.success) return res.status(400).json({ error: 'Invalid home parameter' });
+    const homeId = homeParam.data || getHomes()[0]?.replace('.json', '') || 'default';
     const dataFile = getDataFile(homeId);
     const data = JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
     res.setHeader('Content-Disposition', `attachment; filename=${homeId}_data.json`);
     res.setHeader('Content-Type', 'application/json');
     res.json(data);
   } catch (err) {
-    console.error('GET /api/export failed:', err.message);
+    logger.error({ reqId: req.id, err: err.message }, 'GET /api/export failed');
     res.status(500).json({ error: 'Failed to export data' });
   }
 });
@@ -666,23 +704,20 @@ app.get('/api/bank-holidays', requireAuth, async (req, res) => {
     const data = await response.json();
     res.json((data['england-and-wales']?.events || []).map(e => ({ date: e.date, name: e.title })));
   } catch (err) {
-    console.error('Bank holiday fetch failed:', err.message);
+    logger.error({ reqId: req.id, err: err.message }, 'bank holiday fetch failed');
     res.status(500).json({ error: 'Failed to fetch bank holidays from GOV.UK' });
   }
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
-  console.log(`CORS allowed origin: ${ALLOWED_ORIGIN}`);
-  console.log(`Homes directory: ${DATA_DIR}`);
-  console.log(`Homes found: ${getHomes().join(', ') || '(none)'}`);
+  logger.info({ port: PORT, origin: ALLOWED_ORIGIN, homes: getHomes().length }, 'server started');
 });
 
 // Graceful shutdown — allow in-flight writes to complete
 function shutdown(signal) {
-  console.log(`${signal} received — shutting down gracefully`);
+  logger.info({ signal }, 'shutdown signal received');
   server.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
   // Force exit after 5 seconds if connections don't drain
