@@ -5,6 +5,7 @@ import {
   isOTShift, isAgencyShift, isBHShift, getShiftHours,
   getActualShift, addDays, formatDate, AGENCY_SHIFTS,
 } from './rotation.js';
+import { BLOCKING_TRAINING_TYPES } from './training.js';
 
 // Coverage counting matching Excel DAILY_STATUS formulas
 export function countEarlyCoverage(staffForDay) {
@@ -244,7 +245,7 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
 }
 
 // Swap validator matching Excel DAILY_STATUS swap checker
-export function validateSwap(fromStaff, toStaff, date, overrides, config) {
+export function validateSwap(fromStaff, toStaff, date, overrides, config, training) {
   const issues = [];
 
   // Self-swap guard
@@ -258,12 +259,54 @@ export function validateSwap(fromStaff, toStaff, date, overrides, config) {
     issues.push({ type: 'warning', msg: `Skill downgrade: ${fromStaff.skill} → ${toStaff.skill}` });
   }
 
-  // Fatigue check for toStaff
+  // Fatigue check for toStaff (the one receiving fromStaff's shift)
   const fatigue = checkFatigueRisk(toStaff, date, overrides, config);
   if (fatigue.exceeded) {
     issues.push({ type: 'error', msg: `${toStaff.name}: ${fatigue.consecutive} consecutive days (max ${config.max_consecutive_days})` });
   } else if (fatigue.atRisk) {
     issues.push({ type: 'warning', msg: `${toStaff.name}: ${fatigue.consecutive} consecutive days — at limit` });
+  }
+
+  // WTR 1998 Reg 10: 11h rest gap — toStaff will work fromStaff.shift on this date.
+  // getActualShift returns { shift: '...' } — extract the string.
+  const newShift = fromStaff.shift;
+  const prevShift = getActualShift(toStaff, addDays(date, -1), overrides, config.cycle_start_date)?.shift;
+  const nextShift = getActualShift(toStaff, addDays(date, 1), overrides, config.cycle_start_date)?.shift;
+  const restingShifts = new Set(['OFF', 'AL', 'SICK']);
+  if (isNightShift(prevShift) && !isNightShift(newShift)) {
+    issues.push({ type: 'warning', msg: `${toStaff.name}: worked nights yesterday — verify 11h rest before this shift (WTR 1998 Reg 10)` });
+  }
+  if (isNightShift(newShift) && !restingShifts.has(nextShift) && !isNightShift(nextShift)) {
+    issues.push({ type: 'warning', msg: `${toStaff.name}: ${nextShift} shift tomorrow after this night — verify 11h rest (WTR 1998 Reg 10)` });
+  }
+
+  // Night worker conversion: toStaff moving from day to night (WTR Reg 7 health assessment).
+  // toStaff.shift is from staffForDay which has already resolved overrides — string is correct.
+  if (isNightShift(newShift) && !isNightShift(toStaff.shift)) {
+    issues.push({ type: 'warning', msg: `${toStaff.name}: converting to night shift — health assessment obligation applies (WTR 1998 Reg 7)` });
+  }
+
+  // Training currency: blocking types must be current before rostering.
+  // Compare expiry date strings directly to avoid BST midnight edge cases.
+  if (training) {
+    const staffTraining = training[toStaff.id] || {};
+    const today = formatDate(new Date());
+    const expiredTypes = [];
+    const missingTypes = [];
+    for (const typeId of BLOCKING_TRAINING_TYPES) {
+      const record = staffTraining[typeId];
+      if (!record?.expiry) {
+        missingTypes.push(typeId.replace(/-/g, ' '));
+      } else if (record.expiry < today) {
+        expiredTypes.push(typeId.replace(/-/g, ' '));
+      }
+    }
+    if (expiredTypes.length > 0) {
+      issues.push({ type: 'error', msg: `${toStaff.name}: expired mandatory training — ${expiredTypes.join(', ')}` });
+    }
+    if (missingTypes.length > 0) {
+      issues.push({ type: 'warning', msg: `${toStaff.name}: no training record — ${missingTypes.join(', ')}` });
+    }
   }
 
   return {

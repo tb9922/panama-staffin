@@ -10,6 +10,7 @@ export const ONBOARDING_SECTIONS = [
   { id: 'health_declaration', name: 'Health Declaration', category: 'pre-employment', mandatory: true, legislation: 'CQC Reg 19' },
   { id: 'qualifications', name: 'Qualifications', category: 'pre-employment', mandatory: true, legislation: 'CQC Reg 19' },
   { id: 'contract', name: 'Contract of Employment', category: 'pre-employment', mandatory: true, legislation: 'Employment Rights Act 1996 s.1' },
+  { id: 'employment_history', name: 'Employment History', category: 'pre-employment', mandatory: true, legislation: 'Schedule 3 Para 7 — SI 2014/2936' },
   { id: 'day1_induction', name: 'Day 1 Induction', category: 'induction', mandatory: true, legislation: 'CQC Reg 18' },
   { id: 'policy_acknowledgement', name: 'Policy Acknowledgement', category: 'induction', mandatory: true, legislation: 'CQC Reg 18' },
 ];
@@ -29,7 +30,8 @@ export const STATUS_DISPLAY = {
 export const DBS_DISCLOSURE_LEVELS = ['enhanced', 'standard', 'basic'];
 export const DBS_STATUSES = ['clear', 'content', 'pending'];
 export const ADULT_FIRST_STATUSES = ['clear', 'wait', 'not_used'];
-export const CONTRACT_TYPES = ['permanent', 'fixed', 'bank', 'zero-hours'];
+export const CONTRACT_TYPES = ['permanent', 'fixed', 'bank', 'zero-hours', 'volunteer'];
+export const DBS_RISK_DECISIONS = ['approved_to_work', 'pending_review', 'not_approved'];
 export const ID_TYPES = ['passport', 'driving_licence', 'biometric_residence_permit', 'national_id'];
 export const ADDRESS_PROOF_TYPES = ['utility_bill', 'bank_statement', 'council_tax', 'tenancy_agreement'];
 export const DOC_TYPES = ['passport', 'biometric_residence_permit', 'share_code', 'national_insurance'];
@@ -162,6 +164,17 @@ export function getOnboardingAlerts(activeStaff, onboardingData) {
       const daysSinceStart = getDaysUntilExpiry(s.start_date);
       if (daysSinceStart !== null && daysSinceStart <= -14) {
         alerts.push({ type: 'warning', msg: `${s.name}: Onboarding incomplete (${progress.completed}/${progress.total}) — started ${Math.abs(daysSinceStart)} days ago` });
+      }
+    }
+
+    // NMC registration expiry (Reg 19(4))
+    const quals = onboardingData?.[s.id]?.qualifications;
+    if (quals?.nmc_pin && quals?.nmc_expiry) {
+      const nmcDays = getDaysUntilExpiry(quals.nmc_expiry);
+      if (nmcDays !== null && nmcDays < 0) {
+        alerts.push({ type: 'error', msg: `${s.name}: NMC registration EXPIRED (Reg 19(4))` });
+      } else if (nmcDays !== null && nmcDays <= 90) {
+        alerts.push({ type: 'warning', msg: `${s.name}: NMC registration expires in ${nmcDays} days` });
       }
     }
   }

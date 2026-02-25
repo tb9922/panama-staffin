@@ -12,6 +12,7 @@ import dataRouter from './routes/data.js';
 import exportRouter from './routes/export.js';
 import auditRouter from './routes/audit.js';
 import bankHolidaysRouter from './routes/bankHolidays.js';
+import handoverRouter from './routes/handover.js';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/data', dataRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/bank-holidays', bankHolidaysRouter);
+app.use('/api/handover', handoverRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

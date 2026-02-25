@@ -12,7 +12,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 
-export default function DailyStatus({ data, updateData }) {
+export default function DailyStatus({ data, updateData, user }) {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
   const currentDate = dateParam ? parseDate(dateParam) : new Date();
@@ -483,9 +483,22 @@ export default function DailyStatus({ data, updateData }) {
                   const a = staffForDay.find(s => s.id === swapFrom);
                   const b = staffForDay.find(s => s.id === swapTo);
                   if (!a || !b) return null;
-                  const valAB = validateSwap(a, b, currentDate, data.overrides, data.config);
-                  const valBA = validateSwap(b, a, currentDate, data.overrides, data.config);
+                  const valAB = validateSwap(a, b, currentDate, data.overrides, data.config, data.training);
+                  const valBA = validateSwap(b, a, currentDate, data.overrides, data.config, data.training);
                   const allIssues = [...valAB.issues, ...valBA.issues];
+                  const configShifts = data.config.shifts || {};
+                  // OC-*/AG-* are OT/agency variants of base shifts — use base shift hours.
+                  // BH-D is a full day (EL), BH-N is a night.
+                  const hrs = s => {
+                    if (!s) return 0;
+                    if (s.startsWith('OC-') || s.startsWith('AG-')) return configShifts[s.slice(3)]?.hours || 0;
+                    if (s === 'BH-D') return configShifts.EL?.hours || configShifts.E?.hours || 0;
+                    if (s === 'BH-N') return configShifts.N?.hours || 0;
+                    return configShifts[s]?.hours || 0;
+                  };
+                  const costBefore = hrs(a.shift) * (a.hourly_rate || 0) + hrs(b.shift) * (b.hourly_rate || 0);
+                  const costAfter  = hrs(b.shift) * (a.hourly_rate || 0) + hrs(a.shift) * (b.hourly_rate || 0);
+                  const costDelta  = costAfter - costBefore;
                   return (
                     <div className="space-y-1">
                       <div className="text-xs text-gray-500 bg-gray-50 rounded-xl px-2 py-1">
@@ -497,6 +510,11 @@ export default function DailyStatus({ data, updateData }) {
                         </div>
                       ))}
                       {allIssues.length === 0 && <div className="text-xs text-green-600 bg-green-50 rounded-xl px-2 py-1">Safe to swap</div>}
+                      {a.shift !== b.shift && (
+                        <div className={`text-xs px-2 py-1 rounded-xl ${costDelta > 0.01 ? 'bg-red-50 text-red-700' : costDelta < -0.01 ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+                          Cost impact: {Math.abs(costDelta) < 0.01 ? 'No change' : `${costDelta > 0 ? '+' : ''}£${costDelta.toFixed(2)} today`}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

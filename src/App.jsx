@@ -28,6 +28,7 @@ import DolsTracker from './pages/DolsTracker.jsx';
 import CareCertificateTracker from './pages/CareCertificateTracker.jsx';
 import Reports from './pages/Reports.jsx';
 import Config from './pages/Config.jsx';
+import HandoverNotes from './pages/HandoverNotes.jsx';
 
 // Top-level items (always visible)
 const NAV_TOP = [
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
     icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
     items: [
       { path: '/day', label: 'Daily Status', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+      { path: '/handover', label: 'Handover Book', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
       { path: '/rotation', label: 'Roster', icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' },
       { path: '/scenarios', label: 'Scenarios', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m6 0h6m-6 0V9a2 2 0 012-2h2a2 2 0 012 2v10m6 0v-4a2 2 0 00-2-2h-2a2 2 0 00-2 2v4' },
     ],
@@ -583,8 +585,9 @@ export default function App() {
         <CoverageAlertBanner data={data} />
         <Routes>
           <Route path="/" element={<Dashboard data={data} updateData={safeUpdateData} />} />
-          <Route path="/day" element={<DailyStatus data={data} updateData={safeUpdateData} />} />
-          <Route path="/day/:date" element={<DailyStatus data={data} updateData={safeUpdateData} />} />
+          <Route path="/day" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
+          <Route path="/day/:date" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
+          <Route path="/handover" element={<HandoverNotes data={data} user={user} />} />
           <Route path="/rotation" element={<RotationGrid data={data} updateData={safeUpdateData} />} />
           <Route path="/staff" element={<StaffRegister data={data} updateData={safeUpdateData} />} />
           <Route path="/costs" element={<CostTracker data={data} updateData={safeUpdateData} />} />

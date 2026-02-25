@@ -33,6 +33,9 @@ const ADMIN_ROUTES = new Set([
   'POST /api/data',
   'GET /api/audit',
   'GET /api/export',
+  'POST /api/handover',
+  'PUT /api/handover/:id',
+  'DELETE /api/handover/:id',
 ]);
 
 // ── Step 1: parse server.js for app.use() mounts and import mappings ──────────

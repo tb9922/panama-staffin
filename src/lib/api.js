@@ -78,3 +78,25 @@ export function logout() {
 export async function loadAuditLog() {
   return apiFetch(`${API_BASE}/audit`, { headers: authHeaders() });
 }
+
+export async function getHandoverEntries(homeSlug, date) {
+  return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}&date=${date}`, { headers: authHeaders() });
+}
+
+export async function createHandoverEntry(homeSlug, entry) {
+  return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(entry),
+  });
+}
+
+export async function updateHandoverEntry(homeSlug, id, updates) {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteHandoverEntry(homeSlug, id) {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}

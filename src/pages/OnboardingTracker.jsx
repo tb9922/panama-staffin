@@ -6,7 +6,7 @@ import {
   getStaffOnboardingProgress,
   DBS_DISCLOSURE_LEVELS, DBS_STATUSES, ADULT_FIRST_STATUSES,
   CONTRACT_TYPES, ID_TYPES, ADDRESS_PROOF_TYPES, DOC_TYPES,
-  DAY1_ITEMS, POLICY_ITEMS,
+  DAY1_ITEMS, POLICY_ITEMS, DBS_RISK_DECISIONS,
 } from '../lib/onboarding.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
@@ -208,6 +208,89 @@ export default function OnboardingTracker({ data, updateData }) {
               <label className={INPUT.label}>Verified By</label>
               <input type="text" value={modalForm.verified_by || ''} onChange={e => setField('verified_by', e.target.value)} className={INPUT.base} placeholder="Manager name" />
             </div>
+
+            {/* Risk assessment — required when DBS has content (CQC de facto requirement) */}
+            {modalForm.full_dbs_status === 'content' && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-3">
+                <p className="text-xs font-semibold text-amber-800">DBS has content — risk assessment required (CQC FAQ)</p>
+                <div>
+                  <label className={INPUT.label}>Nature of Disclosure</label>
+                  <textarea value={modalForm.risk_disclosure_nature || ''} onChange={e => setField('risk_disclosure_nature', e.target.value)} className={`${INPUT.base} h-16 resize-none`} placeholder="Summarise the disclosed information" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={INPUT.label}>Risk Assessment Decision</label>
+                    <select value={modalForm.risk_decision || ''} onChange={e => setField('risk_decision', e.target.value)} className={INPUT.select}>
+                      <option value="">Select...</option>
+                      {DBS_RISK_DECISIONS.map(d => <option key={d} value={d}>{d.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={INPUT.label}>Assessment Date</label>
+                    <input type="date" value={modalForm.risk_assessment_date || ''} onChange={e => setField('risk_assessment_date', e.target.value)} className={INPUT.base} />
+                  </div>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Rationale</label>
+                  <textarea value={modalForm.risk_rationale || ''} onChange={e => setField('risk_rationale', e.target.value)} className={`${INPUT.base} h-16 resize-none`} placeholder="Reasons why the decision was made" />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Risk Assessment Completed By</label>
+                  <input type="text" value={modalForm.risk_assessed_by || ''} onChange={e => setField('risk_assessed_by', e.target.value)} className={INPUT.base} placeholder="Manager name" />
+                </div>
+              </div>
+            )}
+
+            {/* Overseas criminal record check (Skills for Care — staff living abroad 6+ months in last 5 years) */}
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-600">Overseas Criminal Record Check</p>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={modalForm.overseas_check_applicable || false} onChange={e => setField('overseas_check_applicable', e.target.checked)} id="overseas_applicable" />
+                <label htmlFor="overseas_applicable" className="text-sm text-gray-700">Staff lived abroad 6+ months in last 5 years</label>
+              </div>
+              {modalForm.overseas_check_applicable && (
+                <div className="space-y-2 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={INPUT.label}>Country</label>
+                      <input type="text" value={modalForm.overseas_check_country || ''} onChange={e => setField('overseas_check_country', e.target.value)} className={INPUT.base} />
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <input type="checkbox" checked={modalForm.overseas_check_obtained || false} onChange={e => setField('overseas_check_obtained', e.target.checked)} id="overseas_obtained" />
+                      <label htmlFor="overseas_obtained" className="text-sm text-gray-700">Check obtained</label>
+                    </div>
+                  </div>
+                  {modalForm.overseas_check_obtained
+                    ? <div>
+                        <label className={INPUT.label}>Check Date</label>
+                        <input type="date" value={modalForm.overseas_check_date || ''} onChange={e => setField('overseas_check_date', e.target.value)} className={INPUT.base} />
+                      </div>
+                    : <div>
+                        <label className={INPUT.label}>Reason Not Obtained</label>
+                        <input type="text" value={modalForm.overseas_check_reason || ''} onChange={e => setField('overseas_check_reason', e.target.value)} className={INPUT.base} placeholder="Document efforts made and reason" />
+                      </div>
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Criminal record self-declaration (Skills for Care best practice) */}
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-600">Criminal Record Self-Declaration</p>
+              <p className="text-[10px] text-gray-400">Pre-DBS self-declaration at shortlisting — care roles are exempt from Rehabilitation of Offenders Act 1974</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={modalForm.self_declaration_obtained || false} onChange={e => setField('self_declaration_obtained', e.target.checked)} id="self_dec" />
+                  <label htmlFor="self_dec" className="text-sm text-gray-700">Self-declaration obtained</label>
+                </div>
+                {modalForm.self_declaration_obtained && (
+                  <div>
+                    <label className={INPUT.label}>Declaration Date</label>
+                    <input type="date" value={modalForm.self_declaration_date || ''} onChange={e => setField('self_declaration_date', e.target.value)} className={INPUT.base} />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         );
 
@@ -250,35 +333,42 @@ export default function OnboardingTracker({ data, updateData }) {
           </div>
         );
 
-      case 'references':
+      case 'references': {
+        const refEntries = modalForm.entries || [];
+        const hasHscRef = refEntries.some(r => r.is_health_social_care);
         return (
           <div className="space-y-3">
-            <p className="text-xs text-gray-500">CQC Reg 19 Schedule 3 — minimum 2 references covering last 3 years</p>
-            {(modalForm.entries || []).map((ref, i) => (
+            <p className="text-xs text-gray-500">Schedule 3 para 4 — minimum 2 references; at least one must be from most recent health / social care employer</p>
+            {!hasHscRef && refEntries.length > 0 && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-700">
+                No reference marked as health / social care employer — CQC most common enforcement finding
+              </div>
+            )}
+            {refEntries.map((ref, i) => (
               <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-600">Reference {i + 1}</span>
                   <button onClick={() => {
-                    const entries = [...(modalForm.entries || [])];
-                    entries.splice(i, 1);
-                    setField('entries', entries);
+                    const arr = [...refEntries];
+                    arr.splice(i, 1);
+                    setField('entries', arr);
                   }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Referee Name</label>
                     <input type="text" value={ref.referee_name || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], referee_name: e.target.value };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], referee_name: e.target.value };
+                      setField('entries', arr);
                     }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Organisation</label>
                     <input type="text" value={ref.organisation || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], organisation: e.target.value };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], organisation: e.target.value };
+                      setField('entries', arr);
                     }} className={INPUT.base} />
                   </div>
                 </div>
@@ -286,53 +376,80 @@ export default function OnboardingTracker({ data, updateData }) {
                   <div>
                     <label className={INPUT.label}>Role / Relationship</label>
                     <input type="text" value={ref.relationship || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], relationship: e.target.value };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], relationship: e.target.value };
+                      setField('entries', arr);
                     }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Dates Covered</label>
                     <input type="text" value={ref.dates_covered || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], dates_covered: e.target.value };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], dates_covered: e.target.value };
+                      setField('entries', arr);
                     }} className={INPUT.base} placeholder="e.g. 2022-2024" />
                   </div>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Reason for Leaving (Schedule 3 para 5)</label>
+                  <input type="text" value={ref.reason_for_leaving || ''} onChange={e => {
+                    const arr = [...refEntries];
+                    arr[i] = { ...arr[i], reason_for_leaving: e.target.value };
+                    setField('entries', arr);
+                  }} className={INPUT.base} placeholder="Required where staff previously worked with vulnerable adults / children" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Received Date</label>
                     <input type="date" value={ref.received_date || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], received_date: e.target.value };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], received_date: e.target.value };
+                      setField('entries', arr);
                     }} className={INPUT.base} />
                   </div>
                   <div className="flex items-center gap-2 pt-5">
                     <input type="checkbox" checked={ref.satisfactory || false} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], satisfactory: e.target.checked };
-                      setField('entries', entries);
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], satisfactory: e.target.checked };
+                      setField('entries', arr);
                     }} id={`ref-sat-${i}`} />
                     <label htmlFor={`ref-sat-${i}`} className="text-sm text-gray-700">Satisfactory</label>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={ref.is_health_social_care || false} onChange={e => {
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], is_health_social_care: e.target.checked };
+                      setField('entries', arr);
+                    }} id={`ref-hsc-${i}`} />
+                    <label htmlFor={`ref-hsc-${i}`} className="text-sm text-gray-700">Health / Social Care employer</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={ref.is_most_recent_hsc || false} onChange={e => {
+                      const arr = [...refEntries];
+                      arr[i] = { ...arr[i], is_most_recent_hsc: e.target.checked };
+                      setField('entries', arr);
+                    }} id={`ref-recent-${i}`} />
+                    <label htmlFor={`ref-recent-${i}`} className="text-sm text-gray-700">Most recent H&SC employer</label>
                   </div>
                 </div>
                 <div>
                   <label className={INPUT.label}>Verified By</label>
                   <input type="text" value={ref.verified_by || ''} onChange={e => {
-                    const entries = [...(modalForm.entries || [])];
-                    entries[i] = { ...entries[i], verified_by: e.target.value };
-                    setField('entries', entries);
+                    const arr = [...refEntries];
+                    arr[i] = { ...arr[i], verified_by: e.target.value };
+                    setField('entries', arr);
                   }} className={INPUT.base} />
                 </div>
               </div>
             ))}
-            <button onClick={() => setField('entries', [...(modalForm.entries || []), {}])} className={`${BTN.secondary} ${BTN.sm}`}>
+            <button onClick={() => setField('entries', [...refEntries, {}])} className={`${BTN.secondary} ${BTN.sm}`}>
               + Add Reference
             </button>
           </div>
         );
+      }
 
       case 'identity_check':
         return (
@@ -549,6 +666,135 @@ export default function OnboardingTracker({ data, updateData }) {
             </div>
           </div>
         );
+
+      case 'employment_history': {
+        const isVolunteer = onboardingData?.[modalStaffId]?.contract?.contract_type === 'volunteer';
+        const empEntries = modalForm.entries || [];
+        const gapExplanations = modalForm.gap_explanations || {};
+
+        // Detect gaps >28 days between sorted dated entries
+        const sortedEntries = [...empEntries]
+          .filter(e => e.start_date && e.end_date)
+          .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+        const detectedGaps = [];
+        for (let i = 0; i < sortedEntries.length - 1; i++) {
+          const endMs = new Date(sortedEntries[i].end_date).getTime();
+          const nextMs = new Date(sortedEntries[i + 1].start_date).getTime();
+          const diffDays = Math.ceil((nextMs - endMs) / 86400000);
+          if (diffDays > 28) {
+            detectedGaps.push({ from: sortedEntries[i].end_date, to: sortedEntries[i + 1].start_date, days: diffDays });
+          }
+        }
+        const unexplainedGaps = detectedGaps.filter(g => !gapExplanations[`${g.from}:${g.to}`]?.trim());
+
+        return (
+          <div className="space-y-3">
+            {isVolunteer
+              ? <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-700">
+                  Employment history not required for volunteers — SI 2023/1404 (in force 15 Jan 2024). All other Schedule 3 checks still apply.
+                </div>
+              : <p className="text-xs text-gray-500">Full career history from first employment with written explanation of all gaps &gt;28 days — Schedule 3 para 7. Most common CQC Reg 19 enforcement breach.</p>
+            }
+            {empEntries.map((entry, i) => (
+              <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-600">Employment {i + 1}</span>
+                  <button onClick={() => {
+                    const arr = [...empEntries];
+                    arr.splice(i, 1);
+                    setField('entries', arr);
+                  }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={INPUT.label}>Employer Name</label>
+                    <input type="text" value={entry.employer_name || ''} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], employer_name: e.target.value };
+                      setField('entries', arr);
+                    }} className={INPUT.base} />
+                  </div>
+                  <div>
+                    <label className={INPUT.label}>Job Title / Role</label>
+                    <input type="text" value={entry.role || ''} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], role: e.target.value };
+                      setField('entries', arr);
+                    }} className={INPUT.base} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={INPUT.label}>Start Date</label>
+                    <input type="date" value={entry.start_date || ''} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], start_date: e.target.value };
+                      setField('entries', arr);
+                    }} className={INPUT.base} />
+                  </div>
+                  <div>
+                    <label className={INPUT.label}>End Date (blank if current)</label>
+                    <input type="date" value={entry.end_date || ''} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], end_date: e.target.value };
+                      setField('entries', arr);
+                    }} className={INPUT.base} />
+                  </div>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Reason for Leaving</label>
+                  <input type="text" value={entry.reason_for_leaving || ''} onChange={e => {
+                    const arr = [...empEntries];
+                    arr[i] = { ...arr[i], reason_for_leaving: e.target.value };
+                    setField('entries', arr);
+                  }} className={INPUT.base} placeholder="e.g. End of contract, relocated, career change" />
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={entry.is_health_social_care || false} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], is_health_social_care: e.target.checked };
+                      setField('entries', arr);
+                    }} id={`emp-hsc-${i}`} />
+                    <label htmlFor={`emp-hsc-${i}`} className="text-sm text-gray-700">Health / Social Care</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={entry.reference_obtained || false} onChange={e => {
+                      const arr = [...empEntries];
+                      arr[i] = { ...arr[i], reference_obtained: e.target.checked };
+                      setField('entries', arr);
+                    }} id={`emp-ref-${i}`} />
+                    <label htmlFor={`emp-ref-${i}`} className="text-sm text-gray-700">Reference obtained</label>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button onClick={() => setField('entries', [...empEntries, {}])} className={`${BTN.secondary} ${BTN.sm}`}>
+              + Add Employment
+            </button>
+
+            {detectedGaps.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-amber-700">Gaps detected — written explanation required (Schedule 3 para 7)</p>
+                {detectedGaps.map(gap => {
+                  const key = `${gap.from}:${gap.to}`;
+                  return (
+                    <div key={key} className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                      <div className="text-xs text-amber-700 mb-1">{gap.from} to {gap.to} ({gap.days} days)</div>
+                      <input type="text" value={gapExplanations[key] || ''} onChange={e => {
+                        setField('gap_explanations', { ...gapExplanations, [key]: e.target.value });
+                      }} className={INPUT.base} placeholder="Written explanation of this gap" />
+                    </div>
+                  );
+                })}
+                {unexplainedGaps.length > 0 && (
+                  <p className="text-xs text-red-600">{unexplainedGaps.length} gap{unexplainedGaps.length > 1 ? 's' : ''} without explanation — add before marking complete</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
 
       case 'day1_induction':
         return (
