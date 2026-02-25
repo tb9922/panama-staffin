@@ -263,6 +263,166 @@ function validateOverrides(data) {
     if (onboardingIncomplete > 0) {
       warnings.push(`Onboarding: ${onboardingIncomplete} active care staff with incomplete onboarding`);
     }
+
+    // Blocking: check if staff with incomplete onboarding/training are scheduled
+    const workingShifts = ['E', 'L', 'EL', 'N', 'OC-E', 'OC-L', 'OC-EL', 'OC-N', 'BH-D', 'BH-N'];
+    const blockingTrainingTypes = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
+    const todayStr2 = new Date().toISOString().slice(0, 10);
+
+    if (data.config.enforce_onboarding_blocking && data.overrides) {
+      let blockedCount = 0;
+      for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
+        for (const [staffId, override] of Object.entries(dayOverrides)) {
+          if (!workingShifts.includes(override.shift)) continue;
+          const staff = activeCarers.find(s => s.id === staffId);
+          if (!staff) continue;
+          const staffOnb = onboarding[staffId] || {};
+          const dbs = staffOnb.dbs_check;
+          const rtw = staffOnb.right_to_work;
+          const refs = staffOnb.references;
+          const id = staffOnb.identity_check;
+          if ((!dbs || dbs.status !== 'completed') || (!rtw || rtw.status !== 'completed') ||
+              (!refs || refs.status !== 'completed') || (!id || id.status !== 'completed')) {
+            blockedCount++;
+          }
+        }
+      }
+      if (blockedCount > 0) warnings.push(`Roster blocking: ${blockedCount} shift(s) assigned to staff with incomplete onboarding`);
+    }
+
+    if (data.config.enforce_training_blocking && data.overrides && data.training) {
+      let blockedTraining = 0;
+      for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
+        for (const [staffId, override] of Object.entries(dayOverrides)) {
+          if (!workingShifts.includes(override.shift)) continue;
+          const staff = activeCarers.find(s => s.id === staffId);
+          if (!staff) continue;
+          const staffRec = data.training[staffId] || {};
+          const types = data.config.training_types || [];
+          for (const typeId of blockingTrainingTypes) {
+            const t = types.find(tt => tt.id === typeId);
+            if (!t || !t.active) continue;
+            if (t.roles && !t.roles.includes(staff.role)) continue;
+            const rec = staffRec[typeId];
+            if (!rec || !rec.completed || (rec.expiry && rec.expiry < todayStr2)) {
+              blockedTraining++;
+              break;
+            }
+          }
+        }
+      }
+      if (blockedTraining > 0) warnings.push(`Roster blocking: ${blockedTraining} shift(s) assigned to staff with expired critical training`);
+    }
+  }
+
+  // Supervision compliance check
+  if (data.staff && data.supervisions) {
+    const activeStaff = data.staff.filter(s => s.active !== false);
+    const now = new Date();
+    let overdueSupervisions = 0;
+    let noSupervisionRecord = 0;
+    for (const s of activeStaff) {
+      const staffSups = data.supervisions[s.id] || [];
+      if (staffSups.length === 0) { noSupervisionRecord++; continue; }
+      const sorted = [...staffSups].sort((a, b) => b.date.localeCompare(a.date));
+      const latest = sorted[0];
+      const probMonths = data.config.supervision_probation_months || 6;
+      const startDate = s.start_date ? new Date(s.start_date + 'T00:00:00Z') : null;
+      let inProbation = false;
+      if (startDate) {
+        const probEnd = new Date(startDate);
+        probEnd.setUTCMonth(probEnd.getUTCMonth() + probMonths);
+        inProbation = now < probEnd;
+      }
+      const freq = inProbation ? (data.config.supervision_frequency_probation || 30) : (data.config.supervision_frequency_standard || 49);
+      const lastDate = new Date(latest.date + 'T00:00:00Z');
+      const nextDue = new Date(lastDate.getTime() + freq * 24 * 60 * 60 * 1000);
+      if (now > nextDue) overdueSupervisions++;
+    }
+    if (overdueSupervisions > 0) warnings.push(`Supervisions: ${overdueSupervisions} staff with overdue supervision`);
+    if (noSupervisionRecord > 0) warnings.push(`Supervisions: ${noSupervisionRecord} staff with no supervision records`);
+  }
+
+  // Appraisal compliance check
+  if (data.staff && data.appraisals) {
+    const activeStaff = data.staff.filter(s => s.active !== false);
+    const now = new Date();
+    let overdueAppraisals = 0;
+    for (const s of activeStaff) {
+      const staffAprs = data.appraisals[s.id] || [];
+      if (staffAprs.length === 0) continue;
+      const sorted = [...staffAprs].sort((a, b) => b.date.localeCompare(a.date));
+      const latest = sorted[0];
+      const nextDue = latest.next_due || (() => { const d = new Date(latest.date + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() + 1); return d.toISOString().slice(0, 10); })();
+      if (now > new Date(nextDue + 'T00:00:00Z')) overdueAppraisals++;
+    }
+    if (overdueAppraisals > 0) warnings.push(`Appraisals: ${overdueAppraisals} staff with overdue annual appraisal`);
+  }
+
+  // Fire drill compliance check
+  if (data.fire_drills && data.fire_drills.length > 0) {
+    const now = new Date();
+    const sorted = [...data.fire_drills].sort((a, b) => b.date.localeCompare(a.date));
+    const latest = sorted[0];
+    const nextDue = new Date(new Date(latest.date + 'T00:00:00Z').getTime() + 91 * 24 * 60 * 60 * 1000);
+    if (now > nextDue) warnings.push('Fire drills: overdue — last drill was ' + latest.date);
+    const yearAgo = new Date(now);
+    yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
+    const drillsThisYear = data.fire_drills.filter(d => new Date(d.date + 'T00:00:00Z') >= yearAgo).length;
+    if (drillsThisYear < 4) warnings.push(`Fire drills: only ${drillsThisYear} in last 12 months (minimum 4 required)`);
+  }
+
+  // Incident compliance checks
+  if (data.incidents && data.incidents.length > 0) {
+    const now = new Date();
+    let overdueCqc = 0;
+    let overdueRiddor = 0;
+    let staleInvestigations = 0;
+
+    for (const inc of data.incidents) {
+      if (inc.cqc_notifiable && !inc.cqc_notified && inc.date) {
+        const incDate = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00');
+        const deadlineHours = inc.cqc_notification_deadline === 'immediate' ? 24 : 72;
+        const deadlineDate = new Date(incDate.getTime() + deadlineHours * 60 * 60 * 1000);
+        if (now > deadlineDate) overdueCqc++;
+      }
+      if (inc.riddor_reportable && !inc.riddor_reported && inc.date) {
+        const incDate = new Date(inc.date);
+        const riddorDeadlineDays = { death: 0, specified_injury: 0, dangerous_occurrence: 0, over_7_day: 15 };
+        const daysAllowed = (riddorDeadlineDays[inc.riddor_category] ?? 0) + 1;
+        const deadlineDate = new Date(incDate.getTime() + daysAllowed * 24 * 60 * 60 * 1000);
+        if (now > deadlineDate) overdueRiddor++;
+      }
+      if (inc.investigation_status !== 'closed' && inc.date) {
+        const daysSince = Math.floor((now - new Date(inc.date)) / (1000 * 60 * 60 * 24));
+        if (daysSince > 14) staleInvestigations++;
+      }
+    }
+
+    // Overdue Duty of Candour
+    let overdueDoc = 0;
+    for (const inc of data.incidents) {
+      if (inc.duty_of_candour_applies && !inc.candour_notification_date && inc.date) {
+        const incDate = new Date(inc.date + 'T00:00:00');
+        const deadline = new Date(incDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+        if (now > deadline) overdueDoc++;
+      }
+    }
+
+    // Overdue corrective actions
+    let overdueActions = 0;
+    const todayStr = now.toISOString().slice(0, 10);
+    for (const inc of data.incidents) {
+      for (const action of (inc.corrective_actions || [])) {
+        if (action.status !== 'completed' && action.due_date && action.due_date < todayStr) overdueActions++;
+      }
+    }
+
+    if (overdueCqc > 0) warnings.push(`Incidents: ${overdueCqc} CQC notification${overdueCqc > 1 ? 's' : ''} overdue`);
+    if (overdueRiddor > 0) warnings.push(`Incidents: ${overdueRiddor} RIDDOR report${overdueRiddor > 1 ? 's' : ''} overdue`);
+    if (staleInvestigations > 0) warnings.push(`Incidents: ${staleInvestigations} open investigation${staleInvestigations > 1 ? 's' : ''} older than 14 days`);
+    if (overdueDoc > 0) warnings.push(`Incidents: ${overdueDoc} Duty of Candour notification${overdueDoc > 1 ? 's' : ''} overdue`);
+    if (overdueActions > 0) warnings.push(`Incidents: ${overdueActions} corrective action${overdueActions > 1 ? 's' : ''} past due date`);
   }
 
   return warnings;

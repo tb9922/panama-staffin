@@ -6,6 +6,8 @@ import {
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
+import { getTrainingBlockingReasons } from '../lib/training.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -375,7 +377,19 @@ export default function RotationGrid({ data, updateData }) {
                 ),
                 <tr key={s.id} className="border-b hover:bg-gray-50">
                   <td className="py-1 px-2 font-medium sticky left-0 bg-white z-10 border-r">
-                    <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})`}>{s.name}</div>
+                    {(() => {
+                      const blockReasons = [];
+                      if (data.config.enforce_onboarding_blocking && isCareRole(s.role))
+                        blockReasons.push(...getOnboardingBlockingReasons(s.id, data.onboarding));
+                      if (data.config.enforce_training_blocking && isCareRole(s.role))
+                        blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, data.training, data.config, formatDate(new Date())));
+                      return (
+                        <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n⚠ ' + blockReasons.join(', ') : ''}`}>
+                          {s.name}
+                          {blockReasons.length > 0 && <span className="text-red-500 ml-0.5 text-[9px]" title={blockReasons.join(', ')}>!</span>}
+                        </div>
+                      );
+                    })()}
                     <div className="text-[9px] text-gray-400">{s.role}</div>
                   </td>
                   <td className="py-1 px-1 text-[10px] text-gray-500">{s.pref}</td>

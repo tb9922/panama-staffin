@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { getCycleDates, getStaffForDay, formatDate, isWorkingShift, isCareRole } from '../lib/rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
-import { getTrainingTypes, getTrainingAlerts, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
+import { getTrainingTypes, getTrainingAlerts, buildComplianceMatrix, getComplianceStats, getSupervisionAlerts, getAppraisalAlerts, getFireDrillAlerts } from '../lib/training.js';
+import { getIncidentAlerts } from '../lib/incidents.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
 export default function Dashboard({ data }) {
@@ -83,6 +84,14 @@ export default function Dashboard({ data }) {
     const activeStaff = data.staff.filter(s => s.active !== false);
     const trainingAlerts = getTrainingAlerts(activeStaff, trainingTypes, data.training || {}, today);
     trainingAlerts.forEach(a => list.push(a));
+
+    // Incident alerts
+    getIncidentAlerts(data.incidents || []).forEach(a => list.push(a));
+
+    // Supervision, appraisal & fire drill alerts
+    getSupervisionAlerts(activeStaff, data.config, data.supervisions || {}, today).forEach(a => list.push(a));
+    getAppraisalAlerts(activeStaff, data.appraisals || {}, today).forEach(a => list.push(a));
+    getFireDrillAlerts(data.fire_drills || [], today).forEach(a => list.push(a));
 
     return list.slice(0, 16);
   }, [cycleData, data]);

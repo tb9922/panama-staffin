@@ -9,6 +9,8 @@ import {
   getDayCoverageStatus, calculateDayCost, checkFatigueRisk, validateSwap,
 } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
+import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
+import { getTrainingBlockingReasons } from '../lib/training.js';
 
 export default function DailyStatus({ data, updateData }) {
   const { date: dateParam } = useParams();
@@ -72,10 +74,30 @@ export default function DailyStatus({ data, updateData }) {
   const alCount = countALOnDate(currentDate, data.overrides);
   const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-  const StaffRow = ({ s }) => (
+  const getBlockingReasons = (s) => {
+    const reasons = [];
+    if (data.config.enforce_onboarding_blocking && isCareRole(s.role)) {
+      reasons.push(...getOnboardingBlockingReasons(s.id, data.onboarding));
+    }
+    if (data.config.enforce_training_blocking && isCareRole(s.role)) {
+      reasons.push(...getTrainingBlockingReasons(s.id, s.role, data.training, data.config, dateStr));
+    }
+    return reasons;
+  };
+
+  const StaffRow = ({ s }) => {
+    const blockReasons = isWorkingShift(s.shift) ? getBlockingReasons(s) : [];
+    return (
     <tr className={TABLE.tr}>
       <td className={`${TABLE.tdMono} text-xs text-gray-400`}>{s.id}</td>
-      <td className={`${TABLE.td} font-medium`}>{s.name}</td>
+      <td className={`${TABLE.td} font-medium`}>
+        {s.name}
+        {blockReasons.length > 0 && (
+          <span title={blockReasons.join(', ')} className="ml-1 inline-flex items-center text-red-500 cursor-help">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+          </span>
+        )}
+      </td>
       <td className={`${TABLE.td} text-xs`}>{s.role}</td>
       <td className={`${TABLE.td} text-xs`}>{s.team}</td>
       <td className={TABLE.td}>
@@ -90,6 +112,7 @@ export default function DailyStatus({ data, updateData }) {
       </td>
     </tr>
   );
+  };
 
   const StaffTable = ({ title, staff, bgColor }) => (
     <div className="mb-3">

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
+import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 
@@ -20,7 +20,7 @@ function downloadCSV(filename, headers, rows) {
 
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
-  hourly_rate: 11.00, active: true, start_date: '', notes: '', wtr_opt_out: false,
+  hourly_rate: 11.00, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
   al_entitlement: null, al_carryover: 0,
 };
 
@@ -68,7 +68,19 @@ export default function StaffRegister({ data, updateData }) {
   }
 
   function updateStaff(id, field, value) {
-    updateData({ ...data, staff: data.staff.map(s => s.id === id ? { ...s, [field]: value } : s) });
+    updateData({ ...data, staff: data.staff.map(s => {
+      if (s.id !== id) return s;
+      const updated = { ...s, [field]: value };
+      // Auto-set leaving_date when deactivating
+      if (field === 'active' && value === false && !s.leaving_date) {
+        updated.leaving_date = formatDate(new Date());
+      }
+      // Clear leaving_date when reactivating
+      if (field === 'active' && value === true) {
+        updated.leaving_date = '';
+      }
+      return updated;
+    }) });
   }
 
   function addStaff() {
@@ -126,22 +138,22 @@ export default function StaffRegister({ data, updateData }) {
         </div>
         <div className="flex gap-2 print:hidden">
           <button onClick={() => {
-            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
+            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
               return [s.id, s.name, s.role, s.team, s.pref, s.skill, s.hourly_rate?.toFixed(2),
-                s.start_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
                 s.notes || '', stats ? stats.totalHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : ''];
             });
             downloadCSV('staff_register.csv', headers, rows);
           }} className={BTN.secondary}>Export CSV</button>
           <button onClick={() => {
-            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
+            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
               return [s.id, s.name, s.role, s.team, s.pref, s.skill,
                 s.hourly_rate != null ? parseFloat(s.hourly_rate.toFixed(2)) : '',
-                s.start_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
                 s.notes || '',
                 stats ? parseFloat(stats.totalHours.toFixed(1)) : '',
                 stats ? parseFloat(stats.totalPay.toFixed(0)) : ''];
@@ -423,14 +435,25 @@ export default function StaffRegister({ data, updateData }) {
                   {/* Active — editable */}
                   <td className={`${TABLE.td} text-center`}>
                     {isEd(s.id) ? (
-                      <select value={s.active === false ? 'N' : 'Y'} onChange={e => updateStaff(s.id, 'active', e.target.value === 'Y')}
-                        className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs">
-                        <option value="Y">Y</option>
-                        <option value="N">N</option>
-                      </select>
+                      <div className="flex flex-col items-center gap-1">
+                        <select value={s.active === false ? 'N' : 'Y'} onChange={e => updateStaff(s.id, 'active', e.target.value === 'Y')}
+                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs">
+                          <option value="Y">Y</option>
+                          <option value="N">N</option>
+                        </select>
+                        {s.active === false && (
+                          <input type="date" value={s.leaving_date || ''} onChange={e => updateStaff(s.id, 'leaving_date', e.target.value)}
+                            title="Leaving date" className="border border-gray-300 rounded-lg px-1 py-0.5 text-[10px] w-28" />
+                        )}
+                      </div>
                     ) : (
-                      <span className={s.active !== false ? BADGE.green : BADGE.gray}
-                        onClick={() => setEditing(s.id)} style={{ cursor: 'pointer' }}>{s.active !== false ? 'Y' : 'N'}</span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className={s.active !== false ? BADGE.green : BADGE.gray}
+                          onClick={() => setEditing(s.id)} style={{ cursor: 'pointer' }}>{s.active !== false ? 'Y' : 'N'}</span>
+                        {s.active === false && s.leaving_date && (
+                          <span className="text-[10px] text-gray-400">{s.leaving_date}</span>
+                        )}
+                      </div>
                     )}
                   </td>
 

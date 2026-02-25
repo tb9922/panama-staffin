@@ -168,3 +168,37 @@ export function getOnboardingAlerts(activeStaff, onboardingData) {
 
   return alerts;
 }
+
+/**
+ * Get blocking reasons for a staff member — if non-empty, they should not be rostered unsupervised.
+ * Checks critical pre-employment items: DBS, RTW, references, identity.
+ */
+export function getOnboardingBlockingReasons(staffId, onboardingData) {
+  const reasons = [];
+  const staffOnb = onboardingData?.[staffId] || {};
+
+  const dbs = staffOnb.dbs_check;
+  if (!dbs || dbs.status !== ONBOARDING_STATUS.COMPLETED) {
+    reasons.push('DBS check not completed');
+  }
+
+  const rtw = staffOnb.right_to_work;
+  if (!rtw || rtw.status !== ONBOARDING_STATUS.COMPLETED) {
+    reasons.push('Right to Work not verified');
+  } else if (rtw.expiry_date) {
+    const days = getDaysUntilExpiry(rtw.expiry_date);
+    if (days !== null && days < 0) reasons.push('Right to Work expired');
+  }
+
+  const refs = staffOnb.references;
+  if (!refs || refs.status !== ONBOARDING_STATUS.COMPLETED) {
+    reasons.push('References not completed');
+  }
+
+  const identity = staffOnb.identity_check;
+  if (!identity || identity.status !== ONBOARDING_STATUS.COMPLETED) {
+    reasons.push('Identity verification not completed');
+  }
+
+  return reasons;
+}

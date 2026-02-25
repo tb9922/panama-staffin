@@ -3,6 +3,19 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours } from './rotation.js';
 import { calculateDayCost, getDayCoverageStatus } from './escalation.js';
+import {
+  QUALITY_STATEMENTS, METRIC_DEFINITIONS, calculateComplianceScore,
+  getDateRange, calculateTrainingBreakdown, getCoverageSummary,
+  calculateSafeguardingTrainingPct, getDbsStatusList, getFatigueSummary,
+  calculateSickRate, calculateOnboardingCompletionPct, getScoreBand,
+  calculateFireDrillCompliancePct, calculateAppraisalCompletionPct,
+  calculateMcaTrainingCompliancePct, calculateEqualityTrainingPct,
+  calculateDataProtectionTrainingPct, calculateStaffTurnover,
+  calculateFatigueBreachesPct, calculateTrainingTrend,
+} from './cqc.js';
+import { getTrainingTypes, getFireDrillStatus, getAppraisalStats } from './training.js';
+import { ONBOARDING_SECTIONS, buildOnboardingMatrix, getOnboardingStats } from './onboarding.js';
+import { calculateActionCompletionRate, getIncidentTrendData } from './incidents.js';
 
 function addHeader(doc, title, subtitle, homeName) {
   doc.setFontSize(16);
@@ -374,4 +387,528 @@ export function generateStaffPDF(data) {
   });
 
   doc.save(`Staff_Register_${formatDate(new Date())}.pdf`);
+}
+
+// CQC Compliance Evidence Pack PDF
+export function generateEvidencePackPDF(data, dateRangeDays = 28) {
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const today = formatDate(new Date());
+  const dateRange = getDateRange(dateRangeDays);
+  const score = calculateComplianceScore(data, dateRange, today);
+  const homeName = data.config.home_name || 'Care Home';
+  const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
+
+  // ── Page 1: Cover & Summary ──────────────────────────────────────────────
+  let y = addHeader(doc, 'CQC Compliance Evidence Pack', periodLabel, homeName);
+
+  // Overall score
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Overall Compliance Score', 14, y);
+  y += 6;
+
+  const bandLabel = score.band.label;
+  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
+
+  doc.setFontSize(28);
+  doc.setTextColor(...scoreColor);
+  doc.text(`${score.overallScore}%`, 14, y + 8);
+  doc.setFontSize(12);
+  doc.text(bandLabel, 44, y + 8);
+  doc.setTextColor(0);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Based on ${score.availableMetrics.length} of ${METRIC_DEFINITIONS.length} weighted metrics (${Math.round(score.availableWeight * 100)}% weight available)`, 14, y + 14);
+  y += 22;
+
+  // Metric summary table
+  const metricRows = METRIC_DEFINITIONS.map(m => {
+    const result = score.metrics[m.id];
+    return [
+      m.label,
+      `${Math.round(m.weight * 100)}%`,
+      m.available ? 'Yes' : 'No',
+      result ? `${result.raw}%` : '-',
+      result ? `${result.score}` : '-',
+    ];
+  });
+
+  doc.autoTable({
+    startY: y,
+    head: [['Metric', 'Weight', 'Available', 'Raw Value', 'Score']],
+    body: metricRows,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+    didParseCell(hookData) {
+      if (hookData.section === 'body' && hookData.column.index === 2) {
+        if (hookData.cell.raw === 'No') {
+          hookData.cell.styles.textColor = [156, 163, 175];
+          hookData.cell.styles.fillColor = [249, 250, 251];
+        }
+      }
+    },
+  });
+
+  // ── Page 2: S1 — Staffing Levels ──────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'S1: Staffing Levels', 'Regulation 18 — Safe Staffing', homeName);
+
+  const fillResult = score.metrics.staffingFillRate?.detail;
+  const agencyResult = score.metrics.agencyDependency?.detail;
+
+  doc.autoTable({
+    startY: y,
+    head: [['Staffing KPI', 'Value']],
+    body: [
+      ['Fill Rate', `${fillResult?.pct || '-'}%`],
+      ['Slots Filled / Required', `${fillResult?.filledSlots || '-'} / ${fillResult?.totalSlots || '-'}`],
+      ['Shortfall Days', `${fillResult?.shortfallDays || 0}`],
+      ['Agency Cost', `£${(agencyResult?.agencyCost || 0).toLocaleString()}`],
+      ['Agency as % of Total', `${agencyResult?.pct || 0}%`],
+      ['Total Staffing Cost', `£${(agencyResult?.totalCost || 0).toLocaleString()}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Coverage detail table (limit to 28 days max in PDF)
+  const covDays = Math.min(dateRangeDays, 28);
+  const covRange = getDateRange(covDays);
+  const coverage = getCoverageSummary(data, covRange);
+
+  y = doc.lastAutoTable.finalY + 6;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Daily Coverage — Last ${covDays} Days`, 14, y);
+  y += 3;
+
+  const escLabels = ['Normal', 'Float', 'OT', 'Agency', 'Short', 'UNSAFE'];
+  doc.autoTable({
+    startY: y,
+    head: [['Date', 'Early', 'Late', 'Night', 'Worst']],
+    body: coverage.map(r => [
+      r.date,
+      `${r.early.actual}/${r.early.required}`,
+      `${r.late.actual}/${r.late.required}`,
+      `${r.night.actual}/${r.night.required}`,
+      escLabels[r.worst] || 'Normal',
+    ]),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    didParseCell(hookData) {
+      if (hookData.section === 'body' && hookData.column.index === 4) {
+        const val = hookData.cell.raw;
+        if (val === 'Short' || val === 'UNSAFE') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; hookData.cell.styles.fontStyle = 'bold'; }
+        else if (val === 'Agency') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+      }
+    },
+  });
+
+  // ── Page 3: S2 — Training ──────────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'S2: Staff Training & Competency', 'Regulation 18 — Staffing', homeName);
+
+  const training = calculateTrainingBreakdown(data, today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Training KPI', 'Value']],
+    body: [
+      ['Overall Compliance', `${training.stats.compliancePct}%`],
+      ['Total Required', `${training.stats.totalRequired}`],
+      ['Compliant', `${training.stats.compliant}`],
+      ['Expiring Soon (30-60d)', `${training.stats.expiringSoon}`],
+      ['Urgent (<30d)', `${training.stats.urgent}`],
+      ['Expired', `${training.stats.expired}`],
+      ['Not Started', `${training.stats.notStarted}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Per-type breakdown
+  y = doc.lastAutoTable.finalY + 6;
+  doc.autoTable({
+    startY: y,
+    head: [['Training Type', 'Legislation', 'Compliant', 'Expired', 'Not Started', 'Total']],
+    body: training.perType.map(t => [t.name, t.legislation, t.compliant, t.expired, t.notStarted, t.total]),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    didParseCell(hookData) {
+      if (hookData.section === 'body') {
+        if (hookData.column.index === 3 && Number(hookData.cell.raw) > 0) {
+          hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; hookData.cell.styles.fontStyle = 'bold';
+        }
+        if (hookData.column.index === 4 && Number(hookData.cell.raw) > 0) {
+          hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14];
+        }
+      }
+    },
+  });
+
+  // Non-compliant staff list (top 20)
+  if (training.nonCompliant.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Non-Compliant Staff', 14, y);
+    y += 3;
+
+    doc.autoTable({
+      startY: y,
+      head: [['Staff', 'Role', 'Training', 'Status', 'Days']],
+      body: training.nonCompliant.slice(0, 20).map(nc => [
+        nc.staffName, nc.staffRole, nc.trainingName,
+        nc.status === 'expired' ? 'EXPIRED' : 'URGENT',
+        nc.daysUntilExpiry < 0 ? `${Math.abs(nc.daysUntilExpiry)}d overdue` : `${nc.daysUntilExpiry}d left`,
+      ]),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 3) {
+          if (hookData.cell.raw === 'EXPIRED') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+          else { hookData.cell.styles.fillColor = [255, 237, 213]; hookData.cell.styles.textColor = [154, 52, 18]; }
+        }
+      },
+    });
+  }
+
+  // ── Page 4: S3 — Safeguarding ──────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'S3: Safeguarding', 'Regulation 13, 19 — Safeguarding & Fit Persons', homeName);
+
+  const sgPct = calculateSafeguardingTrainingPct(data, today);
+  const dbsList = getDbsStatusList(data);
+  const dbsComplete = dbsList.filter(d => d.dbsStatus === 'Clear').length;
+
+  doc.autoTable({
+    startY: y,
+    head: [['Safeguarding KPI', 'Value']],
+    body: [
+      ['Safeguarding Training Compliance', `${sgPct}%`],
+      ['DBS Checks Complete', `${dbsComplete}/${dbsList.length}`],
+      ['DBS Completion Rate', `${dbsList.length > 0 ? Math.round((dbsComplete / dbsList.length) * 100) : 100}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // DBS status table
+  y = doc.lastAutoTable.finalY + 6;
+  doc.autoTable({
+    startY: y,
+    head: [['Staff', 'Role', 'DBS Status', 'DBS Number', 'Barred List', 'RTW Expiry']],
+    body: dbsList.map(d => [d.name, d.role, d.dbsStatus, d.dbsNumber, d.barredListChecked, d.rtwExpiry]),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    didParseCell(hookData) {
+      if (hookData.section === 'body' && hookData.column.index === 2) {
+        if (hookData.cell.raw === 'Missing') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; hookData.cell.styles.fontStyle = 'bold'; }
+        else if (hookData.cell.raw === 'In Progress') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+        else { hookData.cell.styles.fillColor = [220, 252, 231]; hookData.cell.styles.textColor = [22, 101, 52]; }
+      }
+    },
+  });
+
+  // ── Page 5: WL1 — Governance ───────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'WL1: Governance & Audit', 'Regulation 17 — Good Governance', homeName);
+
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  const obMatrix = buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, data.onboarding || {});
+  const obStats = getOnboardingStats(obMatrix);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Governance KPI', 'Value']],
+    body: [
+      ['Onboarding Completion', `${obStats.completionPct}%`],
+      ['Total Checkpoints', `${obStats.total}`],
+      ['Completed', `${obStats.completed}`],
+      ['In Progress', `${obStats.inProgress}`],
+      ['Not Started', `${obStats.notStarted}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Incomplete onboarding items by staff
+  const incompleteStaff = activeStaff.filter(s => {
+    const staffMap = obMatrix.get(s.id);
+    if (!staffMap) return true;
+    for (const [, result] of staffMap) {
+      if (result.status !== 'completed') return true;
+    }
+    return false;
+  });
+
+  if (incompleteStaff.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Staff with Incomplete Onboarding', 14, y);
+    y += 3;
+
+    const obRows = [];
+    for (const s of incompleteStaff) {
+      const staffMap = obMatrix.get(s.id);
+      const missing = [];
+      for (const sec of ONBOARDING_SECTIONS) {
+        const result = staffMap?.get(sec.id);
+        if (!result || result.status !== 'completed') missing.push(sec.name);
+      }
+      obRows.push([s.name, s.role, s.start_date || '-', missing.join(', ')]);
+    }
+
+    doc.autoTable({
+      startY: y,
+      head: [['Staff', 'Role', 'Start Date', 'Missing Sections']],
+      body: obRows,
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+      columnStyles: { 3: { cellWidth: 80 } },
+    });
+  }
+
+  // ── Page 6: S4-S5 — Premises Safety & Incident Learning ──────────────────
+  doc.addPage();
+  y = addHeader(doc, 'S4-S5: Premises Safety & Incident Learning', 'Regulation 12, 15', homeName);
+
+  const fireDrillPct = calculateFireDrillCompliancePct(data, today);
+  const fdStatus = getFireDrillStatus(data.fire_drills || [], today);
+  const fromStr = formatDate(dateRange.from);
+  const toStr = formatDate(dateRange.to);
+  const acr = calculateActionCompletionRate(data.incidents || [], fromStr, toStr);
+  const incidentTrends = getIncidentTrendData(data.incidents || [], fromStr, toStr);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Premises & Incident KPI', 'Value']],
+    body: [
+      ['Fire Drill Compliance', `${fireDrillPct}%`],
+      ['Drills This Year', `${fdStatus.drillsThisYear || 0}`],
+      ['Avg Evacuation Time', `${fdStatus.avgEvacTime || '-'} seconds`],
+      ['Next Drill Due', fdStatus.nextDue ? formatDate(fdStatus.nextDue) : 'OVERDUE'],
+      ['Corrective Actions — Total', `${acr.total}`],
+      ['Corrective Actions — Completed', `${acr.completed}`],
+      ['Corrective Actions — Overdue', `${acr.overdue}`],
+      ['Action Completion Rate', `${acr.completionPct}%`],
+      ['Incidents in Period', `${incidentTrends.monthlyTrend.reduce((s, m) => s + m.count, 0)}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Fire drill history
+  const drills = (data.fire_drills || []).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+  if (drills.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recent Fire Drills', 14, y);
+    y += 3;
+    doc.autoTable({
+      startY: y,
+      head: [['Date', 'Scenario', 'Evac Time (s)', 'Staff Present', 'Conducted By']],
+      body: drills.map(d => [d.date, (d.scenario || '').substring(0, 60), d.evacuation_time_seconds || '-', d.staff_present?.length || 0, d.conducted_by || '-']),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    });
+  }
+
+  // ── Page 7: Effective — E1-E3 ──────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Effective: Training, Competence & Consent', 'Regulation 11, 18', homeName);
+
+  const aprStats = getAppraisalStats(activeStaff, data.appraisals || {}, today);
+  const mcaPct = calculateMcaTrainingCompliancePct(data, today);
+  const trendData = calculateTrainingTrend(data, today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Effective KPI', 'Value']],
+    body: [
+      ['Training Compliance', `${training.stats.compliancePct}%`],
+      ['Training Trend (90-day)', `${trendData.trend >= 0 ? '+' : ''}${trendData.trend}pp (${trendData.pastPct}% → ${trendData.currentPct}%)`],
+      ['Appraisal Completion', `${aprStats.completionPct}%`],
+      ['Appraisals — Up to Date', `${aprStats.upToDate}`],
+      ['Appraisals — Overdue', `${aprStats.overdue}`],
+      ['Appraisals — Not Started', `${aprStats.notStarted}`],
+      ['Supervision Completion', `${score.metrics.supervisionCompletion?.raw || 0}%`],
+      ['Onboarding Completion', `${obStats.completionPct}%`],
+      ['MCA/DoLS Training', `${mcaPct}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [16, 120, 100] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // ── Page 8: Caring — C1-C2 ─────────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Caring: Dignity, Respect & Privacy', 'Regulation 10', homeName);
+
+  const eqPct = calculateEqualityTrainingPct(data, today);
+  const dpPct = calculateDataProtectionTrainingPct(data, today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Caring KPI', 'Value']],
+    body: [
+      ['Equality & Diversity Training', `${eqPct}%`],
+      ['Data Protection Training', `${dpPct}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [190, 24, 93] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Manual evidence for Caring/Responsive
+  const caringEvidence = (data.cqc_evidence || []).filter(e => ['C1', 'C2', 'R1', 'R2'].includes(e.quality_statement));
+  if (caringEvidence.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Manual Evidence — Caring & Responsive', 14, y);
+    y += 3;
+    doc.autoTable({
+      startY: y,
+      head: [['Statement', 'Type', 'Title', 'Description', 'Period']],
+      body: caringEvidence.map(e => {
+        const qs = QUALITY_STATEMENTS.find(q => q.id === e.quality_statement);
+        return [
+          qs?.name || e.quality_statement,
+          e.type,
+          e.title,
+          (e.description || '').substring(0, 80) + (e.description?.length > 80 ? '...' : ''),
+          `${e.date_from || '-'} to ${e.date_to || 'ongoing'}`,
+        ];
+      }),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [190, 24, 93], fontSize: 7 },
+    });
+  } else {
+    y = doc.lastAutoTable.finalY + 8;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(120);
+    doc.text('No manual evidence recorded for Caring or Responsive statements. Add evidence via the CQC Evidence page.', 14, y);
+    doc.setTextColor(0);
+  }
+
+  // ── Page 9: WL1-3 — Governance & Workforce ────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'WL1-3: Governance, Quality & Workforce', 'Regulation 17, 18', homeName);
+
+  const sickResult = calculateSickRate(data, dateRange);
+  const fatigueRisks = getFatigueSummary(data);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Governance & Workforce KPI', 'Value']],
+    body: [
+      ['Onboarding Completion', `${obStats.completionPct}%`],
+      ['Completed Checkpoints', `${obStats.completed}/${obStats.total}`],
+      ['Sickness Rate', `${sickResult.pct}%`],
+      ['Sick Days (period)', `${sickResult.sickDays}`],
+      ['Total Working Days', `${sickResult.totalWorkingDays}`],
+      ['Staff at Fatigue Risk', `${fatigueRisks.length}`],
+      ['Active Care Staff', `${activeStaff.filter(s => isCareRole(s.role)).length}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Fatigue risks
+  if (fatigueRisks.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Staff at Fatigue Risk', 'Role', 'Consecutive Days', 'Status']],
+      body: fatigueRisks.map(f => [f.name, f.role, f.consecutive, f.exceeded ? 'EXCEEDED' : 'At Limit']),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 3) {
+          if (hookData.cell.raw === 'EXCEEDED') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+        }
+      },
+    });
+  }
+
+  // ── Page 10: WL4-5 — Engagement & Improvement ─────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'WL4-5: Staff Engagement & Continuous Improvement', 'Regulation 17, 18', homeName);
+
+  const turnover = calculateStaffTurnover(data, dateRange);
+  const fbPct = calculateFatigueBreachesPct(data, dateRange);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Engagement & Improvement KPI', 'Value']],
+    body: [
+      ['Staff Turnover', `${turnover.pct}% (${turnover.leavers} leavers / ${turnover.avgHeadcount} headcount)`],
+      ['Sickness Rate', `${sickResult.pct}%`],
+      ['Fatigue Breach Rate', `${fbPct}%`],
+      ['Action Completion Rate', `${acr.completionPct}%`],
+      ['Training Trend (90-day)', `${trendData.trend >= 0 ? '+' : ''}${trendData.trend}pp`],
+      ['Training Current', `${trendData.currentPct}%`],
+      ['Training 90 Days Ago', `${trendData.pastPct}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [88, 28, 135] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Manual evidence items (all statements)
+  const manualEvidence = (data.cqc_evidence || []).filter(e => !['C1', 'C2', 'R1', 'R2'].includes(e.quality_statement));
+  if (manualEvidence.length > 0) {
+    y = doc.lastAutoTable.finalY + 8;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Additional Manual Evidence', 14, y);
+    y += 3;
+
+    doc.autoTable({
+      startY: y,
+      head: [['Statement', 'Type', 'Title', 'Description', 'Period']],
+      body: manualEvidence.map(e => {
+        const qs = QUALITY_STATEMENTS.find(q => q.id === e.quality_statement);
+        return [
+          qs?.cqcRef || e.quality_statement,
+          e.type,
+          e.title,
+          (e.description || '').substring(0, 80) + (e.description?.length > 80 ? '...' : ''),
+          `${e.date_from || '-'} to ${e.date_to || 'ongoing'}`,
+        ];
+      }),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    });
+  }
+
+  // ── Footer note on last page ───────────────────────────────────────────────
+  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : y + 10;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(120);
+  doc.text('This evidence pack was auto-generated from the Panama Staffing platform. Data covers all 5 CQC core questions:', 14, finalY);
+  doc.text('Safe, Effective, Caring, Responsive, Well-Led. Verify figures against source records before presenting to CQC.', 14, finalY + 4);
+  doc.setTextColor(0);
+
+  doc.save(`CQC_Evidence_Pack_${homeName.replace(/\s+/g, '_')}_${today}.pdf`);
 }

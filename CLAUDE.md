@@ -24,16 +24,18 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 ```
 server.js              Express API (port 3001)
 src/
-  App.jsx              Shell: sidebar nav, login, undo/redo, multi-home, coverage alert banner
+  App.jsx              Shell: collapsible sidebar nav (5 groups), login, undo/redo, multi-home, coverage alert banner
   lib/
     rotation.js        Core scheduling engine — Panama pattern, shift classification, cycle math
     escalation.js      Coverage calc, 6-level escalation, cost calc, fatigue check, swap validation
     accrual.js         Holiday accrual engine — leave year, pro-rata, carryover, per-staff entitlement
     training.js        Training compliance — 16 default types, status calc, matrix builder, alerts
+    cqc.js             CQC compliance scoring — 17 quality statements (5 CQC questions), 10 weighted metrics, evidence aggregation
+    incidents.js       Incident & safety reporting — types, severity, CQC/RIDDOR tracking, alerts, metrics
     design.js          Design tokens — BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, ESC_COLORS, HEATMAP
     api.js             Fetch wrappers for all API endpoints
     bankHolidays.js    GOV.UK bank holiday sync
-    pdfReports.js      PDF report generation
+    pdfReports.js      PDF report generation — 10-page CQC evidence pack covering all 5 core questions
   pages/
     Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary
     DailyStatus.jsx    Day view — staff list, shift overrides, coverage/escalation per period
@@ -44,7 +46,11 @@ src/
     ScenarioModel.jsx  What-if modelling: sick/AL gaps → float → OT → agency cascade
     FatigueTracker.jsx Consecutive days + WTR 48hr checks per staff
     SickTrends.jsx     Monthly sick counts with exact dates, staff names, reasons
-    TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management
+    onboarding.js      Staff onboarding blocking — DBS, RTW, references, identity checks
+    TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management, CSV import
+    OnboardingTracker.jsx Staff onboarding — 9 CQC Reg 19 sections, expandable staff list, Excel export
+    CQCEvidence.jsx    CQC compliance evidence — 5 core questions, scorecard, quality statements, manual evidence, PDF pack
+    IncidentTracker.jsx Incident & safety reporting — log, CQC/RIDDOR notifications, DoC, witnesses, corrective actions, investigation
     BudgetTracker.jsx  Monthly budget vs actual with variance tracking
     Reports.jsx        PDF export for roster, costs, coverage
     Config.jsx         Settings — shifts, rates, minimums, bank holidays, home details
@@ -75,7 +81,13 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
       id, name, category,      // "statutory" | "mandatory"
       refresher_months, roles,  // null = all staff, or ["Senior Carer", ...]
       legislation, active,
+      levels: [{               // Optional tiered levels (safeguarding-adults, mca-dols)
+        id, name, roles,       // e.g. "L1" / "L2" / "L3" with role mappings
+      }],
     }],
+    supervision_frequency_probation: 30,  // Days between supervisions during probation (default 30)
+    supervision_frequency_standard: 49,   // Days between supervisions post-probation (default 49 = 7 weeks)
+    supervision_probation_months: 6,      // Probation duration in months (default 6)
     bank_holidays: [{ date: "YYYY-MM-DD", name: "..." }],
     bank_staff_pool_size, night_gap_pct,
   },
@@ -84,6 +96,7 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
     active, wtr_opt_out, start_date, contract_hours,
     al_entitlement,            // Per-staff override of config.al_entitlement_days (null = use global)
     al_carryover,              // Days carried over from previous leave year (default 0, set manually)
+    leaving_date,              // Auto-set when deactivated, cleared when reactivated
   }],
   overrides: {
     "YYYY-MM-DD": {
@@ -92,6 +105,13 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
   },
   annual_leave: { ... },  // Legacy — overrides is the source of truth for AL
   budget: { ... },        // Monthly budget entries
+  cqc_evidence: [{        // Manual evidence items tagged to CQC quality statements
+    id, quality_statement, // S1-S5, E1-E3, C1-C2, R1-R2, WL1-WL5
+    type,                  // "quantitative" | "qualitative"
+    title, description,
+    date_from, date_to,    // Evidence validity period (date_to null = ongoing)
+    added_by, added_at,
+  }],
   training: {             // Per-staff training completion records
     "S001": {
       "fire-safety": {
@@ -101,9 +121,64 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
         method: "classroom",        // classroom | e-learning | practical | online
         certificate_ref: "FS-042",
         notes: "",
+        level: "L2",               // Optional — only for types with levels (safeguarding, mca-dols)
       },
     },
   },
+  supervisions: {         // Per-staff 1:1 supervision records
+    "S001": [{
+      id: "sup-1719000000000",
+      date: "2025-06-15",
+      supervisor: "Jane Smith",
+      topics: "...",
+      actions: "...",
+      next_due: "2025-08-01",     // Auto: date + frequency (30d probation / 49d standard)
+      notes: "",
+    }],
+  },
+  appraisals: {           // Per-staff annual appraisal records
+    "S001": [{
+      id: "apr-1719000000000",
+      date: "2025-04-15",
+      appraiser: "John Manager",
+      objectives: "...",
+      training_needs: "...",
+      development_plan: "...",
+      next_due: "2026-04-15",     // Auto: date + 12 months
+      notes: "",
+    }],
+  },
+  fire_drills: [{         // Home-level fire drill records (quarterly requirement)
+    id: "fd-1719000000000",
+    date: "2025-06-15",
+    time: "14:30",
+    scenario: "Kitchen fire — full evacuation",
+    evacuation_time_seconds: 240,
+    staff_present: ["S001", "S003"],
+    residents_evacuated: 28,
+    issues: "...",
+    corrective_actions: "...",
+    conducted_by: "Fire Marshal Jane",
+    notes: "",
+  }],
+  incidents: [{              // Incident & safety reporting records
+    id, date, time, location, type, severity, description,
+    person_affected, person_affected_name, staff_involved: [],
+    immediate_action, medical_attention, hospital_attendance,
+    cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
+    cqc_notified, cqc_notified_date, cqc_reference,
+    riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+    safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
+    witnesses: [{ name, role, statement_summary }],
+    duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
+    police_involved, police_reference, police_contact_date,
+    msp_wishes_recorded, msp_outcome_preferences, msp_person_involved,
+    investigation_status,    // "open" | "under_review" | "closed"
+    investigation_start_date, investigation_lead, investigation_review_date,
+    root_cause, lessons_learned, investigation_closed_date,
+    corrective_actions: [{ description, assigned_to, due_date, completed_date, status }],
+    reported_by, reported_at, updated_at,
+  }],
 }
 ```
 
@@ -216,12 +291,71 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 
 ### training.js
 - `DEFAULT_TRAINING_TYPES` — 16-item array of UK statutory/mandatory training types
+- `DEFAULT_TRAINING_LEVELS` — tiered levels for safeguarding-adults (L1/L2/L3) and mca-dols (basic/advanced)
 - `getTrainingTypes(config)` — returns config.training_types or defaults
-- `ensureTrainingDefaults(data)` — populates config.training_types if missing (returns new data or null)
-- `getTrainingStatus(staff, type, staffRecords, asOfDate)` — returns { status, record, daysUntilExpiry }
+- `ensureTrainingDefaults(data)` — populates training_types, supervisions, appraisals, fire_drills, levels if missing
+- `getRequiredLevel(trainingType, staffRole)` — finds required level for a staff role (highest matching)
+- `compareLevels(trainingType, levelIdA, levelIdB)` — compares two level positions (-1/0/1)
+- `getTrainingStatus(staff, type, staffRecords, asOfDate)` — returns { status, record, daysUntilExpiry, requiredLevel }
 - `buildComplianceMatrix(activeStaff, types, trainingData, asOfDate)` — Map<staffId, Map<typeId, statusResult>>
-- `getComplianceStats(matrix)` — { totalRequired, compliant, expiringSoon, urgent, expired, notStarted, compliancePct }
-- `getTrainingAlerts(activeStaff, types, trainingData, asOfDate)` — alert objects for Dashboard
+- `getComplianceStats(matrix)` — { totalRequired, compliant, expiringSoon, urgent, expired, notStarted, wrongLevel, compliancePct }
+- `getTrainingAlerts(activeStaff, types, trainingData, asOfDate)` — alert objects for Dashboard (includes wrong level alerts)
+- `isInProbation(staff, config, asOfDate)` — true if within supervision_probation_months of start_date
+- `getSupervisionFrequency(staff, config, asOfDate)` — returns days (30 probation / 49 standard)
+- `getSupervisionStatus(staff, config, supervisionsData, asOfDate)` — { status, lastSession, nextDue, daysUntilDue, overdueDays }
+- `getSupervisionStats(activeStaff, config, supervisionsData, asOfDate)` — { total, upToDate, dueSoon, overdue, notStarted, completionPct }
+- `calculateSupervisionCompletionPct(data, asOfDate)` — % for CQC supervisionCompletion metric
+- `getSupervisionAlerts(activeStaff, config, supervisionsData, asOfDate)` — alert objects for Dashboard
+- `getAppraisalStatus(staff, appraisalsData, asOfDate)` — { status, lastAppraisal, nextDue, daysUntilDue, overdueDays }
+- `getAppraisalStats(activeStaff, appraisalsData, asOfDate)` — { total, upToDate, dueSoon, overdue, notStarted, completionPct }
+- `getAppraisalAlerts(activeStaff, appraisalsData, asOfDate)` — alert objects for Dashboard
+- `FIRE_DRILL_FREQUENCY_DAYS` — 91 (quarterly)
+- `getFireDrillStatus(fireDrills, asOfDate)` — { status, lastDrill, nextDue, daysUntilDue, drillsThisYear, avgEvacTime }
+- `getFireDrillAlerts(fireDrills, asOfDate)` — alert objects for Dashboard (overdue + <4/year)
+- `BLOCKING_TRAINING_TYPES` — ['fire-safety', 'moving-handling', 'safeguarding-adults']
+- `getTrainingBlockingReasons(staffId, staffRole, trainingData, config, asOfDate)` — returns string[] for staff with expired/missing blocking types
+
+### cqc.js
+- `QUALITY_STATEMENTS` — 17 quality statements across all 5 CQC core questions: S1-S5 (Safe), E1-E3 (Effective), C1-C2 (Caring), R1-R2 (Responsive), WL1-WL5 (Well-Led)
+- `METRIC_DEFINITIONS` — 10 weighted metrics (9 available + 1 pending careCertCompletion)
+- `calculateComplianceScore(data, dateRange, asOfDate)` — composite weighted score, returns { overallScore, band, metrics }
+- `calculateStaffingFillRate(data, dateRange)` — daily coverage fill rate over date range
+- `calculateAgencyDependencyPct(data, dateRange)` — agency cost as % of total staffing cost
+- `calculateTrainingBreakdown(data, asOfDate)` — per-type compliance with non-compliant staff list
+- `calculateFireDrillCompliancePct(data, asOfDate)` — fire drill quarterly compliance
+- `calculateAppraisalCompletionPct(data, asOfDate)` — annual appraisal completion rate
+- `calculateMcaTrainingCompliancePct(data, asOfDate)` — MCA/DoLS training compliance
+- `calculateEqualityTrainingPct(data, asOfDate)` — equality & diversity training compliance
+- `calculateDataProtectionTrainingPct(data, asOfDate)` — data protection training compliance
+- `calculateFatigueBreachesPct(data, dateRange)` — % of staff with fatigue risk breaches
+- `calculateStaffTurnover(data, dateRange)` — leavers / avg headcount over period
+- `calculateTrainingTrend(data, asOfDate)` — current vs 90-day-ago compliance delta
+- `getEvidenceForStatement(statementId, data, dateRange, asOfDate)` — auto + manual evidence per statement
+- `getCoverageSummary(data, dateRange)` — daily coverage rows for PDF
+- `getDbsStatusList(data)` — DBS/RTW status per care staff for PDF
+- `ensureCqcDefaults(data)` — adds cqc_evidence: [] if missing
+
+### incidents.js
+- `DEFAULT_INCIDENT_TYPES` — 17-item array across 6 categories (clinical, safeguarding, workplace, behavioural, environmental, other)
+- `SEVERITY_LEVELS` — minor, moderate, serious, major, catastrophic (with badge keys)
+- `INVESTIGATION_STATUSES` — open, under_review, closed
+- `CQC_NOTIFICATION_TYPES` — 7 types with deadline (immediate=24h or 72h, includes seclusion/restraint)
+- `RIDDOR_CATEGORIES` — 4 types with deadline days
+- `getIncidentTypes(config)` — returns config.incident_types or defaults
+- `ensureIncidentDefaults(data)` — adds incidents: [] and config.incident_types if missing
+- `isCqcNotificationOverdue(incident)` — check if CQC notification deadline exceeded
+- `isDutyOfCandourOverdue(incident)` — check if DoC notification not sent within 10 working days
+- `isRiddorOverdue(incident)` — check if RIDDOR reporting deadline exceeded
+- `calculateActionCompletionRate(incidents, fromDate, toDate)` — corrective action completion % and overdue count
+- `getIncidentStats(incidents, config, fromDate, toDate)` — totals, by severity/type, open investigations, pending notifications
+- `getIncidentAlerts(incidents)` — alert objects for Dashboard (overdue notifications, DoC, corrective actions, stale investigations)
+- `calculateIncidentResponseTime(incidents, fromDate, toDate)` — CQC metric: % notified within deadline
+- `calculateCqcNotificationsPct(incidents, fromDate, toDate)` — CQC metric: notification compliance %
+- `getSafeguardingIncidentStats(incidents, fromDate, toDate)` — safeguarding incident counts for S3 evidence
+- `getIncidentTrendData(incidents, fromDate, toDate)` — monthly trend data for WL2 evidence
+
+### onboarding.js
+- `getOnboardingBlockingReasons(staffId, onboardingData)` — returns string[] of reasons staff can't work unsupervised
 
 ### excel.js
 - `downloadXLSX(sheets, filename)` — shared Excel export utility; sheets = [{ name, headers, rows }]

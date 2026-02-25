@@ -180,6 +180,18 @@ export default function Config({ data, updateData }) {
           <Field label="Float Retainer" path="float_retainer_weekly" unit="/wk" />
           <Field label="Weekly OT Cap" path="weekly_ot_cap" unit="shifts" />
         </div>
+        <div className="mt-4 space-y-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={!!config.enforce_onboarding_blocking}
+              onChange={e => handleChange('enforce_onboarding_blocking', e.target.checked)} className="accent-blue-600" />
+            Warn when rostering staff with incomplete onboarding (DBS, RTW, references, identity)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={!!config.enforce_training_blocking}
+              onChange={e => handleChange('enforce_training_blocking', e.target.checked)} className="accent-blue-600" />
+            Warn when rostering staff with expired critical training (fire safety, moving &amp; handling, safeguarding)
+          </label>
+        </div>
       </section>
 
       {/* Annual Leave */}

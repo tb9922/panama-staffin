@@ -1,0 +1,693 @@
+// CQC Compliance Evidence — Scoring Engine & Evidence Aggregation
+
+import { formatDate, parseDate, addDays, getStaffForDay, isCareRole, isWorkingShift } from './rotation.js';
+import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from './escalation.js';
+import { getTrainingTypes, buildComplianceMatrix, getComplianceStats, TRAINING_STATUS, calculateSupervisionCompletionPct, getAppraisalStats, getFireDrillStatus } from './training.js';
+import { ONBOARDING_SECTIONS, buildOnboardingMatrix, getOnboardingStats } from './onboarding.js';
+import {
+  calculateIncidentResponseTime, calculateCqcNotificationsPct,
+  getSafeguardingIncidentStats, getIncidentTrendData, calculateActionCompletionRate,
+} from './incidents.js';
+
+// ── Quality Statements ──────────────────────────────────────────────────────
+
+export const QUALITY_STATEMENTS = [
+  // ── Safe ──────────────────────────────────────────────────────────────────
+  {
+    id: 'S1', category: 'safe', name: 'Staffing Levels',
+    cqcRef: 'Regulation 18 — Safe Staffing',
+    description: 'Planned vs actual staffing, agency usage, escalation history',
+    autoMetrics: ['staffingFillRate', 'agencyDependency'],
+    icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0',
+  },
+  {
+    id: 'S2', category: 'safe', name: 'Staff Training & Competency',
+    cqcRef: 'Regulation 18 — Staffing',
+    description: 'Training matrix compliance %, refresher tracking, skills coverage',
+    autoMetrics: ['trainingCompliance', 'supervisionCompletion'],
+    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z',
+  },
+  {
+    id: 'S3', category: 'safe', name: 'Safeguarding',
+    cqcRef: 'Regulation 13 — Safeguarding / Regulation 19 — Fit & Proper Persons',
+    description: 'Safeguarding training compliance, DBS check status, pre-employment vetting',
+    autoMetrics: ['safeguardingTraining', 'dbsCompliance', 'incidentSafeguarding'],
+    icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  },
+  {
+    id: 'S4', category: 'safe', name: 'Premises & Equipment Safety',
+    cqcRef: 'Regulation 15 — Premises & Equipment',
+    description: 'Fire drill compliance, evacuation times, equipment safety checks',
+    autoMetrics: ['fireDrillCompliance'],
+    icon: 'M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z',
+  },
+  {
+    id: 'S5', category: 'safe', name: 'Incident Learning & Prevention',
+    cqcRef: 'Regulation 12 — Safe Care & Treatment',
+    description: 'Incident trends, corrective action completion, learning from events',
+    autoMetrics: ['incidentTrends', 'actionCompletionRate'],
+    icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+  },
+  // ── Effective ─────────────────────────────────────────────────────────────
+  {
+    id: 'E1', category: 'effective', name: 'Staff Training & Development',
+    cqcRef: 'Regulation 18 — Staffing',
+    description: 'Overall training compliance and annual appraisal completion',
+    autoMetrics: ['trainingCompliance', 'appraisalCompletion'],
+    icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
+  },
+  {
+    id: 'E2', category: 'effective', name: 'Competent Staff',
+    cqcRef: 'Regulation 18 — Staffing',
+    description: 'Supervision completion rates and onboarding compliance',
+    autoMetrics: ['supervisionCompletion', 'onboardingCompletion'],
+    icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z',
+  },
+  {
+    id: 'E3', category: 'effective', name: 'Consent & Mental Capacity',
+    cqcRef: 'Regulation 11 — Need for Consent',
+    description: 'MCA/DoLS training compliance across relevant staff',
+    autoMetrics: ['mcaTrainingCompliance'],
+    icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
+  },
+  // ── Caring ────────────────────────────────────────────────────────────────
+  {
+    id: 'C1', category: 'caring', name: 'Dignity & Respect',
+    cqcRef: 'Regulation 10 — Dignity & Respect',
+    description: 'Equality and diversity training completion across all staff',
+    autoMetrics: ['equalityTrainingCompliance'],
+    icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
+  },
+  {
+    id: 'C2', category: 'caring', name: 'Privacy & Data Protection',
+    cqcRef: 'Regulation 10 — Dignity & Respect',
+    description: 'Data protection and GDPR training compliance',
+    autoMetrics: ['dataProtectionTrainingCompliance'],
+    icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+  },
+  // ── Responsive ────────────────────────────────────────────────────────────
+  {
+    id: 'R1', category: 'responsive', name: 'Person-Centred Care',
+    cqcRef: 'Regulation 9 — Person-Centred Care',
+    description: 'Evidence of individualised care planning and personal preference accommodation',
+    autoMetrics: [],
+    icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+  },
+  {
+    id: 'R2', category: 'responsive', name: 'Complaints & Feedback',
+    cqcRef: 'Regulation 16 — Receiving & Acting on Complaints',
+    description: 'Complaints handling, response times, and feedback mechanisms',
+    autoMetrics: [],
+    icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+  },
+  // ── Well-Led ──────────────────────────────────────────────────────────────
+  {
+    id: 'WL1', category: 'well-led', name: 'Governance & Audit',
+    cqcRef: 'Regulation 17 — Good Governance',
+    description: 'Onboarding completion, policy acknowledgement, audit trails',
+    autoMetrics: ['onboardingCompletion'],
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+  },
+  {
+    id: 'WL2', category: 'well-led', name: 'Quality Monitoring',
+    cqcRef: 'Regulation 17 — Good Governance',
+    description: 'KPI dashboards, sickness patterns, trend analysis',
+    autoMetrics: ['sickRate', 'incidentTrends'],
+    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+  },
+  {
+    id: 'WL3', category: 'well-led', name: 'Workforce Management',
+    cqcRef: 'Regulation 18 — Staffing',
+    description: 'Sickness patterns, fatigue monitoring, WTR compliance, holiday management',
+    autoMetrics: ['staffingFillRate', 'sickRate'],
+    icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+  },
+  {
+    id: 'WL4', category: 'well-led', name: 'Staff Engagement & Wellbeing',
+    cqcRef: 'Regulation 18 — Staffing',
+    description: 'Staff sickness rates, fatigue breaches, and turnover analysis',
+    autoMetrics: ['sickRate', 'fatigueBreaches', 'staffTurnover'],
+    icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    id: 'WL5', category: 'well-led', name: 'Continuous Improvement',
+    cqcRef: 'Regulation 17 — Good Governance',
+    description: 'Corrective action completion rates and training trend improvement',
+    autoMetrics: ['actionCompletionRate', 'trainingTrend'],
+    icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
+  },
+];
+
+// ── Metric Definitions ──────────────────────────────────────────────────────
+
+export const METRIC_DEFINITIONS = [
+  { id: 'trainingCompliance',    label: 'Training Compliance %',       weight: 0.18, available: true  },
+  { id: 'staffingFillRate',      label: 'Staffing Fill Rate %',        weight: 0.18, available: true  },
+  { id: 'agencyDependency',      label: 'Agency Dependency %',         weight: 0.12, available: true  },
+  { id: 'incidentResponseTime',  label: 'Incident Response Time',      weight: 0.10, available: true  },
+  { id: 'cqcNotifications',      label: 'CQC Notifications on Time',   weight: 0.10, available: true  },
+  { id: 'supervisionCompletion', label: 'Supervision Completion %',    weight: 0.10, available: true  },
+  { id: 'staffTurnover',         label: 'Staff Turnover Rate %',       weight: 0.07, available: true  },
+  { id: 'appraisalCompletion',   label: 'Appraisal Completion %',      weight: 0.05, available: true  },
+  { id: 'fireDrillCompliance',   label: 'Fire Drill Compliance',       weight: 0.05, available: true  },
+  { id: 'careCertCompletion',    label: 'Care Certificate Completion', weight: 0.05, available: false },
+];
+
+// ── Score Banding ───────────────────────────────────────────────────────────
+
+export const SCORE_BANDS = [
+  { min: 90, label: 'Good',          color: 'green', badgeKey: 'green' },
+  { min: 80, label: 'Adequate',      color: 'amber', badgeKey: 'amber' },
+  { min: 0,  label: 'Action Needed', color: 'red',   badgeKey: 'red'   },
+];
+
+export function getScoreBand(score) {
+  return SCORE_BANDS.find(b => score >= b.min) || SCORE_BANDS[SCORE_BANDS.length - 1];
+}
+
+// ── Date Range Helper ───────────────────────────────────────────────────────
+
+export function getDateRange(days = 28) {
+  const to = new Date();
+  to.setHours(0, 0, 0, 0);
+  const from = addDays(to, -(days - 1));
+  return { from, to, days };
+}
+
+function dateRangeToDates(dateRange) {
+  const dates = [];
+  let d = new Date(dateRange.from);
+  while (d <= dateRange.to) {
+    dates.push(new Date(d));
+    d = addDays(d, 1);
+  }
+  return dates;
+}
+
+// ── Data Defaults ───────────────────────────────────────────────────────────
+
+export function ensureCqcDefaults(data) {
+  if (data.cqc_evidence) return null;
+  return { ...data, cqc_evidence: [] };
+}
+
+// ── Metric Calculations ─────────────────────────────────────────────────────
+
+export function calculateTrainingCompliancePct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const types = getTrainingTypes(data.config).filter(t => t.active);
+  const matrix = buildComplianceMatrix(activeStaff, types, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+  return stats.compliancePct;
+}
+
+export function calculateTrainingBreakdown(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  const types = getTrainingTypes(data.config).filter(t => t.active);
+  const matrix = buildComplianceMatrix(activeStaff, types, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+
+  // Per-type breakdown
+  const perType = types.map(t => {
+    let compliant = 0, expired = 0, notStarted = 0, total = 0;
+    for (const s of activeStaff) {
+      const result = matrix.get(s.id)?.get(t.id);
+      if (!result || result.status === TRAINING_STATUS.NOT_REQUIRED) continue;
+      total++;
+      if (result.status === TRAINING_STATUS.COMPLIANT) compliant++;
+      else if (result.status === TRAINING_STATUS.EXPIRED) expired++;
+      else if (result.status === TRAINING_STATUS.NOT_STARTED) notStarted++;
+    }
+    return { id: t.id, name: t.name, legislation: t.legislation, compliant, expired, notStarted, total };
+  });
+
+  // Non-compliant staff list
+  const nonCompliant = [];
+  for (const s of activeStaff) {
+    const staffMap = matrix.get(s.id);
+    if (!staffMap) continue;
+    for (const t of types) {
+      const result = staffMap.get(t.id);
+      if (!result) continue;
+      if (result.status === TRAINING_STATUS.EXPIRED || result.status === TRAINING_STATUS.URGENT) {
+        nonCompliant.push({
+          staffName: s.name, staffRole: s.role,
+          trainingName: t.name, status: result.status,
+          daysUntilExpiry: result.daysUntilExpiry,
+        });
+      }
+    }
+  }
+
+  return { stats, perType, nonCompliant, matrix };
+}
+
+export function calculateStaffingFillRate(data, dateRange) {
+  const dates = dateRangeToDates(dateRange);
+  let totalRequired = 0, totalFilled = 0, shortfallDays = 0;
+
+  for (const date of dates) {
+    const staffForDay = getStaffForDay(data.staff || [], date, data.overrides || {}, data.config);
+    const status = getDayCoverageStatus(staffForDay, data.config);
+    let dayShort = false;
+
+    for (const period of ['early', 'late', 'night']) {
+      const cov = status[period].coverage;
+      const required = cov.required.heads;
+      const actual = Math.min(cov.headCount, required);
+      totalRequired += required;
+      totalFilled += actual;
+      if (cov.headGap > 0) dayShort = true;
+    }
+    if (dayShort) shortfallDays++;
+  }
+
+  const pct = totalRequired > 0 ? Math.round((totalFilled / totalRequired) * 100) : 100;
+  return { pct, totalSlots: totalRequired, filledSlots: totalFilled, shortfallDays };
+}
+
+export function calculateAgencyDependencyPct(data, dateRange) {
+  const dates = dateRangeToDates(dateRange);
+  let totalCost = 0, agencyCost = 0;
+
+  for (const date of dates) {
+    const staffForDay = getStaffForDay(data.staff || [], date, data.overrides || {}, data.config);
+    const cost = calculateDayCost(staffForDay, data.config);
+    totalCost += cost.total;
+    agencyCost += cost.agency;
+  }
+
+  const pct = totalCost > 0 ? Math.round((agencyCost / totalCost) * 1000) / 10 : 0;
+  return { pct, agencyCost: Math.round(agencyCost), totalCost: Math.round(totalCost) };
+}
+
+export function calculateSafeguardingTrainingPct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const allTypes = getTrainingTypes(data.config).filter(t => t.active);
+  const sgTypes = allTypes.filter(t => t.id === 'safeguarding-adults' || t.id === 'safeguarding-children');
+  if (sgTypes.length === 0) return 100;
+  const matrix = buildComplianceMatrix(activeStaff, sgTypes, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+  return stats.compliancePct;
+}
+
+export function calculateDbsCompliancePct(data) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
+  if (activeStaff.length === 0) return 100;
+  const onboarding = data.onboarding || {};
+  let completed = 0;
+  for (const s of activeStaff) {
+    if (onboarding[s.id]?.dbs_check?.status === 'completed') completed++;
+  }
+  return Math.round((completed / activeStaff.length) * 100);
+}
+
+export function calculateOnboardingCompletionPct(data) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const matrix = buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, data.onboarding || {});
+  const stats = getOnboardingStats(matrix);
+  return stats.completionPct;
+}
+
+export function calculateSickRate(data, dateRange) {
+  const dates = dateRangeToDates(dateRange);
+  const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
+  let sickDays = 0, totalWorkingDays = 0;
+
+  for (const date of dates) {
+    const staffForDay = getStaffForDay(data.staff || [], date, data.overrides || {}, data.config);
+    for (const s of activeStaff) {
+      const entry = staffForDay.find(e => e.id === s.id);
+      if (!entry) continue;
+      // Count this as a scheduled working day if they were supposed to work or are sick
+      if (isWorkingShift(entry.scheduledShift) || entry.shift === 'SICK') {
+        totalWorkingDays++;
+        if (entry.shift === 'SICK') sickDays++;
+      }
+    }
+  }
+
+  const pct = totalWorkingDays > 0 ? Math.round((sickDays / totalWorkingDays) * 1000) / 10 : 0;
+  return { pct, sickDays, totalWorkingDays };
+}
+
+// ── New Metric Calculations ─────────────────────────────────────────────────
+
+export function calculateFireDrillCompliancePct(data, asOfDate) {
+  const status = getFireDrillStatus(data.fire_drills || [], asOfDate);
+  // Score: 100 if up_to_date, 60 if due_soon, 30 if overdue, 0 if no records
+  if (status.status === 'up_to_date') return 100;
+  if (status.status === 'due_soon') return 60;
+  if (status.status === 'overdue') return 30;
+  return 0;
+}
+
+export function calculateAppraisalCompletionPct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const stats = getAppraisalStats(activeStaff, data.appraisals || {}, asOfDate);
+  return stats.completionPct;
+}
+
+export function calculateMcaTrainingCompliancePct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const allTypes = getTrainingTypes(data.config).filter(t => t.active);
+  const mcaTypes = allTypes.filter(t => t.id === 'mca-dols');
+  if (mcaTypes.length === 0) return 100;
+  const matrix = buildComplianceMatrix(activeStaff, mcaTypes, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+  return stats.compliancePct;
+}
+
+export function calculateEqualityTrainingPct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const allTypes = getTrainingTypes(data.config).filter(t => t.active);
+  const eqTypes = allTypes.filter(t => t.id === 'equality-diversity');
+  if (eqTypes.length === 0) return 100;
+  const matrix = buildComplianceMatrix(activeStaff, eqTypes, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+  return stats.compliancePct;
+}
+
+export function calculateDataProtectionTrainingPct(data, asOfDate) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false);
+  if (activeStaff.length === 0) return 100;
+  const allTypes = getTrainingTypes(data.config).filter(t => t.active);
+  const dpTypes = allTypes.filter(t => t.id === 'data-protection');
+  if (dpTypes.length === 0) return 100;
+  const matrix = buildComplianceMatrix(activeStaff, dpTypes, data.training || {}, asOfDate);
+  const stats = getComplianceStats(matrix);
+  return stats.compliancePct;
+}
+
+export function calculateFatigueBreachesPct(data, dateRange) {
+  const dates = dateRangeToDates(dateRange);
+  const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
+  if (activeStaff.length === 0) return 0;
+  let breachCount = 0;
+  // Check fatigue on last date of range
+  const checkDate = dates[dates.length - 1] || new Date();
+  for (const s of activeStaff) {
+    const result = checkFatigueRisk(s, checkDate, data.overrides || {}, data.config);
+    if (result.atRisk) breachCount++;
+  }
+  return Math.round((breachCount / activeStaff.length) * 100);
+}
+
+export function calculateStaffTurnover(data, dateRange) {
+  const staff = data.staff || [];
+  const fromStr = formatDate(dateRange.from);
+  const toStr = formatDate(dateRange.to);
+  const leavers = staff.filter(s => s.leaving_date && s.leaving_date >= fromStr && s.leaving_date <= toStr);
+  const activeAtStart = staff.filter(s => s.active !== false || (s.leaving_date && s.leaving_date >= fromStr));
+  const avgHeadcount = activeAtStart.length || 1;
+  const pct = Math.round((leavers.length / avgHeadcount) * 100);
+  return { pct, leavers: leavers.length, avgHeadcount };
+}
+
+export function calculateTrainingTrend(data, asOfDate) {
+  const currentPct = calculateTrainingCompliancePct(data, asOfDate);
+  // Compare against 90 days ago
+  const d = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
+  const past = addDays(d, -90);
+  const pastPct = calculateTrainingCompliancePct(data, past);
+  const trend = currentPct - pastPct;
+  return { currentPct, pastPct, trend };
+}
+
+// ── Composite Compliance Score ──────────────────────────────────────────────
+
+export function calculateComplianceScore(data, dateRange, asOfDate) {
+  const metrics = {};
+
+  // Training compliance: direct %
+  const trainingPct = calculateTrainingCompliancePct(data, asOfDate);
+  metrics.trainingCompliance = { raw: trainingPct, score: trainingPct };
+
+  // Staffing fill rate: direct %
+  const fill = calculateStaffingFillRate(data, dateRange);
+  metrics.staffingFillRate = { raw: fill.pct, score: fill.pct, detail: fill };
+
+  // Agency dependency: inverse (lower is better)
+  const agency = calculateAgencyDependencyPct(data, dateRange);
+  metrics.agencyDependency = { raw: agency.pct, score: Math.max(0, Math.round(100 - agency.pct * 5)), detail: agency };
+
+  // Incident response time: % notified within deadline
+  const fromStr = formatDate(dateRange.from);
+  const toStr = formatDate(dateRange.to);
+  const irt = calculateIncidentResponseTime(data.incidents || [], fromStr, toStr);
+  metrics.incidentResponseTime = { raw: irt.avgHours, score: irt.score, detail: irt };
+
+  // CQC notifications on time: % notified within deadline
+  const cqcn = calculateCqcNotificationsPct(data.incidents || [], fromStr, toStr);
+  metrics.cqcNotifications = { raw: cqcn.score, score: cqcn.score, detail: cqcn };
+
+  // Supervision completion: direct %
+  const supPct = calculateSupervisionCompletionPct(data, asOfDate);
+  metrics.supervisionCompletion = { raw: supPct, score: supPct };
+
+  // Staff turnover: inverse (lower is better)
+  const turnover = calculateStaffTurnover(data, dateRange);
+  metrics.staffTurnover = { raw: turnover.pct, score: Math.max(0, 100 - turnover.pct * 5), detail: turnover };
+
+  // Appraisal completion: direct %
+  const aprPct = calculateAppraisalCompletionPct(data, asOfDate);
+  metrics.appraisalCompletion = { raw: aprPct, score: aprPct };
+
+  // Fire drill compliance: scored 0-100
+  const firePct = calculateFireDrillCompliancePct(data, asOfDate);
+  metrics.fireDrillCompliance = { raw: firePct, score: firePct };
+
+  // Sum available weights and normalize
+  const availableMetrics = METRIC_DEFINITIONS.filter(m => m.available);
+  const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
+  const totalWeight = availableMetrics.reduce((s, m) => s + m.weight, 0);
+
+  let weightedSum = 0;
+  for (const m of availableMetrics) {
+    const result = metrics[m.id];
+    if (result) {
+      const normalizedWeight = m.weight / totalWeight;
+      weightedSum += result.score * normalizedWeight;
+    }
+  }
+
+  const overallScore = Math.round(weightedSum);
+  const band = getScoreBand(overallScore);
+
+  return { overallScore, band, metrics, availableMetrics, unavailableMetrics, availableWeight: totalWeight };
+}
+
+// ── Evidence Aggregation Per Statement ──────────────────────────────────────
+
+export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) {
+  const statement = QUALITY_STATEMENTS.find(q => q.id === statementId);
+  if (!statement) return null;
+
+  const autoEvidence = [];
+
+  if (statement.autoMetrics.includes('trainingCompliance')) {
+    autoEvidence.push({
+      label: 'Training Compliance', value: calculateTrainingCompliancePct(data, asOfDate),
+      unit: '%', source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('staffingFillRate')) {
+    const fill = calculateStaffingFillRate(data, dateRange);
+    autoEvidence.push({
+      label: 'Staffing Fill Rate', value: fill.pct, unit: '%',
+      detail: `${fill.filledSlots}/${fill.totalSlots} slots filled, ${fill.shortfallDays} shortfall days`,
+      source: 'Daily Coverage',
+    });
+  }
+  if (statement.autoMetrics.includes('agencyDependency')) {
+    const ag = calculateAgencyDependencyPct(data, dateRange);
+    autoEvidence.push({
+      label: 'Agency Cost Ratio', value: ag.pct, unit: '%',
+      detail: `£${ag.agencyCost.toLocaleString()} of £${ag.totalCost.toLocaleString()} total`,
+      source: 'Cost Tracker', lowerIsBetter: true,
+    });
+  }
+  if (statement.autoMetrics.includes('safeguardingTraining')) {
+    autoEvidence.push({
+      label: 'Safeguarding Training Compliance', value: calculateSafeguardingTrainingPct(data, asOfDate),
+      unit: '%', source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('dbsCompliance')) {
+    autoEvidence.push({
+      label: 'DBS Check Completion', value: calculateDbsCompliancePct(data),
+      unit: '%', source: 'Onboarding Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('onboardingCompletion')) {
+    autoEvidence.push({
+      label: 'Staff Onboarding Completion', value: calculateOnboardingCompletionPct(data),
+      unit: '%', source: 'Onboarding Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('incidentSafeguarding')) {
+    const sg = getSafeguardingIncidentStats(data.incidents || [], formatDate(dateRange.from), formatDate(dateRange.to));
+    autoEvidence.push({
+      label: 'Safeguarding Incidents', value: sg.total, unit: ' incidents',
+      detail: `${sg.withReferral} referrals made (${sg.referralPct}%)`,
+      source: 'Incident Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('incidentTrends')) {
+    const trends = getIncidentTrendData(data.incidents || [], formatDate(dateRange.from), formatDate(dateRange.to));
+    const totalInPeriod = trends.monthlyTrend.reduce((s, m) => s + m.count, 0);
+    autoEvidence.push({
+      label: 'Incident Volume', value: totalInPeriod, unit: ' incidents',
+      detail: `${trends.monthlyTrend.length} months tracked`,
+      source: 'Incident Tracker', lowerIsBetter: true,
+    });
+  }
+  if (statement.autoMetrics.includes('supervisionCompletion')) {
+    const supPct = calculateSupervisionCompletionPct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Supervision Completion', value: supPct,
+      unit: '%', source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('sickRate')) {
+    const sick = calculateSickRate(data, dateRange);
+    autoEvidence.push({
+      label: 'Sickness Rate', value: sick.pct, unit: '%',
+      detail: `${sick.sickDays} sick days / ${sick.totalWorkingDays} scheduled`,
+      source: 'Sick Trends', lowerIsBetter: true,
+    });
+  }
+  if (statement.autoMetrics.includes('fireDrillCompliance')) {
+    const fdPct = calculateFireDrillCompliancePct(data, asOfDate);
+    const fdStatus = getFireDrillStatus(data.fire_drills || [], asOfDate);
+    autoEvidence.push({
+      label: 'Fire Drill Compliance', value: fdPct, unit: '%',
+      detail: `${fdStatus.drillsThisYear || 0} drills this year, avg ${fdStatus.avgEvacTime || '-'}s evacuation`,
+      source: 'Fire Drills',
+    });
+  }
+  if (statement.autoMetrics.includes('actionCompletionRate')) {
+    const fromStr = formatDate(dateRange.from);
+    const toStr = formatDate(dateRange.to);
+    const acr = calculateActionCompletionRate(data.incidents || [], fromStr, toStr);
+    autoEvidence.push({
+      label: 'Action Completion Rate', value: acr.completionPct, unit: '%',
+      detail: `${acr.completed}/${acr.total} actions completed, ${acr.overdue} overdue`,
+      source: 'Incident Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('appraisalCompletion')) {
+    const aprPct = calculateAppraisalCompletionPct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Appraisal Completion', value: aprPct, unit: '%',
+      source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('mcaTrainingCompliance')) {
+    const mcaPct = calculateMcaTrainingCompliancePct(data, asOfDate);
+    autoEvidence.push({
+      label: 'MCA/DoLS Training Compliance', value: mcaPct, unit: '%',
+      source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('equalityTrainingCompliance')) {
+    const eqPct = calculateEqualityTrainingPct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Equality & Diversity Training', value: eqPct, unit: '%',
+      source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('dataProtectionTrainingCompliance')) {
+    const dpPct = calculateDataProtectionTrainingPct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Data Protection Training', value: dpPct, unit: '%',
+      source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('fatigueBreaches')) {
+    const fbPct = calculateFatigueBreachesPct(data, dateRange);
+    autoEvidence.push({
+      label: 'Staff at Fatigue Risk', value: fbPct, unit: '%',
+      source: 'Fatigue Tracker', lowerIsBetter: true,
+    });
+  }
+  if (statement.autoMetrics.includes('staffTurnover')) {
+    const to = calculateStaffTurnover(data, dateRange);
+    autoEvidence.push({
+      label: 'Staff Turnover', value: to.pct, unit: '%',
+      detail: `${to.leavers} leavers / ${to.avgHeadcount} headcount`,
+      source: 'Staff Register', lowerIsBetter: true,
+    });
+  }
+  if (statement.autoMetrics.includes('trainingTrend')) {
+    const tt = calculateTrainingTrend(data, asOfDate);
+    autoEvidence.push({
+      label: 'Training Trend (90-day)', value: tt.trend >= 0 ? `+${tt.trend}` : `${tt.trend}`, unit: 'pp',
+      detail: `${tt.pastPct}% → ${tt.currentPct}%`,
+      source: 'Training Matrix',
+    });
+  }
+
+  const manualEvidence = (data.cqc_evidence || []).filter(e => e.quality_statement === statementId);
+
+  return { statement, autoEvidence, manualEvidence };
+}
+
+// ── Coverage Detail for PDF ─────────────────────────────────────────────────
+
+export function getCoverageSummary(data, dateRange) {
+  const dates = dateRangeToDates(dateRange);
+  const rows = [];
+  for (const date of dates) {
+    const staffForDay = getStaffForDay(data.staff || [], date, data.overrides || {}, data.config);
+    const status = getDayCoverageStatus(staffForDay, data.config);
+    rows.push({
+      date: formatDate(date),
+      early: { actual: status.early.coverage.headCount, required: status.early.coverage.required.heads, level: status.early.escalation.level },
+      late: { actual: status.late.coverage.headCount, required: status.late.coverage.required.heads, level: status.late.escalation.level },
+      night: { actual: status.night.coverage.headCount, required: status.night.coverage.required.heads, level: status.night.escalation.level },
+      worst: status.overallLevel,
+    });
+  }
+  return rows;
+}
+
+// ── DBS Status for PDF ──────────────────────────────────────────────────────
+
+export function getDbsStatusList(data) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
+  const onboarding = data.onboarding || {};
+  return activeStaff.map(s => {
+    const dbs = onboarding[s.id]?.dbs_check;
+    const rtw = onboarding[s.id]?.right_to_work;
+    return {
+      name: s.name, role: s.role,
+      dbsStatus: dbs?.status === 'completed' ? 'Clear' : dbs?.status === 'in_progress' ? 'In Progress' : 'Missing',
+      dbsNumber: dbs?.dbs_number ? '***' + dbs.dbs_number.slice(-4) : '-',
+      barredListChecked: dbs?.afl_status === 'clear' ? 'Yes' : 'No',
+      rtwExpiry: rtw?.expiry_date || '-',
+    };
+  });
+}
+
+// ── Fatigue Summary for PDF ─────────────────────────────────────────────────
+
+export function getFatigueSummary(data) {
+  const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const atRisk = [];
+  for (const s of activeStaff) {
+    const result = checkFatigueRisk(s, today, data.overrides || {}, data.config);
+    if (result.atRisk) {
+      atRisk.push({ name: s.name, role: s.role, consecutive: result.consecutive, exceeded: result.exceeded });
+    }
+  }
+  return atRisk;
+}
