@@ -10,31 +10,42 @@ export function getCurrentHome() {
   return currentHome;
 }
 
-export async function loadHomes() {
-  const res = await fetch(`${API_BASE}/homes`);
-  if (!res.ok) throw new Error('Failed to load homes');
+function getToken() {
+  try { return sessionStorage.getItem('token') || ''; } catch { return ''; }
+}
+
+function authHeaders(extra = {}) {
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...extra };
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
   return res.json();
+}
+
+export async function loadHomes() {
+  return apiFetch(`${API_BASE}/homes`, { headers: authHeaders() });
 }
 
 export async function loadData(homeId) {
   const home = homeId || currentHome;
   const url = home ? `${API_BASE}/data?home=${encodeURIComponent(home)}` : `${API_BASE}/data`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to load data');
-  return res.json();
+  return apiFetch(url, { headers: authHeaders() });
 }
 
 export async function saveData(data, homeId) {
   const home = homeId || currentHome;
-  const user = getLoggedInUser()?.username || 'unknown';
-  const url = home ? `${API_BASE}/data?home=${encodeURIComponent(home)}&user=${encodeURIComponent(user)}` : `${API_BASE}/data?user=${encodeURIComponent(user)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to save data');
-  return res.json();
+  const url = home ? `${API_BASE}/data?home=${encodeURIComponent(home)}` : `${API_BASE}/data`;
+  return apiFetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) });
 }
 
 export async function login(username, password) {
@@ -45,7 +56,8 @@ export async function login(username, password) {
   });
   if (!res.ok) throw new Error('Invalid credentials');
   const user = await res.json();
-  sessionStorage.setItem('user', JSON.stringify(user));
+  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role }));
+  sessionStorage.setItem('token', user.token);
   return user;
 }
 
@@ -60,10 +72,9 @@ export function getLoggedInUser() {
 
 export function logout() {
   sessionStorage.removeItem('user');
+  sessionStorage.removeItem('token');
 }
 
 export async function loadAuditLog() {
-  const res = await fetch(`${API_BASE}/audit`);
-  if (!res.ok) return [];
-  return res.json();
+  return apiFetch(`${API_BASE}/audit`, { headers: authHeaders() });
 }

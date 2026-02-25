@@ -2,6 +2,43 @@
 
 Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built for UK residential care homes. Self-hosted, no subscription.
 
+## Engineering Standards — Always Active
+
+**Default thinking mode: experienced-dev.** Every task in this codebase — writing, reviewing, debugging, architecture, deployment — is performed through the lens of a senior developer with 20+ years of production experience. The full skill is at `~/.claude/commands/experienced-dev.md`.
+
+**Before starting any task, read the relevant reference file:**
+
+| Task | Reference |
+|------|-----------|
+| Writing new code | `~/.claude/commands/references/writing-code.md` |
+| Reviewing code | `~/.claude/commands/references/code-review.md` |
+| Architecture / design | `~/.claude/commands/references/architecture.md` |
+| Writing tests | `~/.claude/commands/references/testing.md` |
+| Deployment / DevOps | `~/.claude/commands/references/devops.md` |
+| Debugging | `~/.claude/commands/references/debugging.md` |
+| Database work | `~/.claude/commands/references/database.md` |
+
+**Non-negotiables (from the experienced-dev framework):**
+- Security is not a feature — every endpoint has auth, every input is validated, every secret is in env vars
+- Every line is a liability — solve it with less, not more
+- Think in failure modes — what if null? what if concurrent? what if disk full?
+- Care home domain: DBS/health/DoLS data is UK GDPR special category — breach = ICO + CQC enforcement
+- Availability: 24/7/365 — downtime at shift handover is a clinical safety issue
+- Scale: every query/loop must work at 1 home (40 staff) AND 24 homes (1,000+ staff)
+- No tests = the code is broken, you just haven't found the bug yet
+
+**Known blocking issues (from full codebase review — fix before second-home deployment):**
+1. Non-atomic file writes in server.js — use `writeFileSync` to tmp then `renameSync` (atomic)
+2. Race condition on concurrent saves — add per-home write serialisation/debounce
+3. Viewer role receives entire data object including resident DoLS/MCA/DoB — must filter
+4. `xlsx` prototype pollution CVE — replace with `exceljs`
+5. Audit log contains named staff PII without retention/deletion mechanism
+6. RIDDOR `over_7_day` deadline is off by one (adds deadlineDays+1, should be deadlineDays)
+7. `formatDate` in rotation.js uses local time — cycle math uses UTC — inconsistency causes wrong date at midnight during BST
+8. Dashboard `today` not reactive — stale across midnight at shift handover
+
+**See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
+
 ## Quick Start
 
 ```bash
@@ -24,20 +61,29 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 ```
 server.js              Express API (port 3001)
 src/
-  App.jsx              Shell: collapsible sidebar nav (5 groups), login, undo/redo, multi-home, coverage alert banner
+  App.jsx              Shell: collapsible sidebar nav (7 groups), login, undo/redo, multi-home, coverage alert banner
   lib/
     rotation.js        Core scheduling engine — Panama pattern, shift classification, cycle math
     escalation.js      Coverage calc, 6-level escalation, cost calc, fatigue check, swap validation
     accrual.js         Holiday accrual engine — leave year, pro-rata, carryover, per-staff entitlement
     training.js        Training compliance — 16 default types, status calc, matrix builder, alerts
-    cqc.js             CQC compliance scoring — 17 quality statements (5 CQC questions), 10 weighted metrics, evidence aggregation
+    cqc.js             CQC compliance scoring — 34 quality statements (5 CQC questions), 18 weighted metrics, evidence aggregation
     incidents.js       Incident & safety reporting — types, severity, CQC/RIDDOR tracking, alerts, metrics
+    complaints.js      Complaints & feedback — categories, statuses, surveys, satisfaction scoring, CQC metrics
+    maintenance.js     Maintenance & environment — categories, frequencies, certificate tracking, CQC metrics
+    ipc.js             IPC audit — audit types, outbreak tracking, corrective actions, CQC metrics
+    riskRegister.js    Risk register — 5x5 matrix, risk bands, actions, review tracking, CQC metrics
+    policyReview.js    Policy review — 8 default policies, status tracking, version history, CQC metrics
+    whistleblowing.js  Whistleblowing / speak up — anonymous handling, investigation, protection rate, CQC metrics
+    dols.js            DoLS/LPS & MCA — applications, authorisations, capacity assessments, CQC metrics
+    careCertificate.js Care Certificate — 16 standards (2025 incl. Oliver McGowan), progress tracking, CQC metrics
+    onboarding.js      Staff onboarding blocking — DBS, RTW, references, identity checks
     design.js          Design tokens — BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, ESC_COLORS, HEATMAP
     api.js             Fetch wrappers for all API endpoints
     bankHolidays.js    GOV.UK bank holiday sync
-    pdfReports.js      PDF report generation — 10-page CQC evidence pack covering all 5 core questions
+    pdfReports.js      PDF report generation — 15-page CQC evidence pack covering all 5 core questions + 8 modules
   pages/
-    Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary
+    Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary, 24-item alert feed
     DailyStatus.jsx    Day view — staff list, shift overrides, coverage/escalation per period
     RotationGrid.jsx   28-day roster grid with print support
     StaffRegister.jsx  Staff CRUD — add/edit/deactivate, set team/role/rate/skill
@@ -46,11 +92,18 @@ src/
     ScenarioModel.jsx  What-if modelling: sick/AL gaps → float → OT → agency cascade
     FatigueTracker.jsx Consecutive days + WTR 48hr checks per staff
     SickTrends.jsx     Monthly sick counts with exact dates, staff names, reasons
-    onboarding.js      Staff onboarding blocking — DBS, RTW, references, identity checks
-    TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management, CSV import
+    TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management
     OnboardingTracker.jsx Staff onboarding — 9 CQC Reg 19 sections, expandable staff list, Excel export
-    CQCEvidence.jsx    CQC compliance evidence — 5 core questions, scorecard, quality statements, manual evidence, PDF pack
-    IncidentTracker.jsx Incident & safety reporting — log, CQC/RIDDOR notifications, DoC, witnesses, corrective actions, investigation
+    CareCertificateTracker.jsx Care Certificate — 16 standards, per-staff progress, expandable standards
+    CQCEvidence.jsx    CQC compliance evidence — 5 core questions, 34 statements, scorecard, manual evidence, PDF pack
+    IncidentTracker.jsx Incident & safety reporting — log, CQC/RIDDOR notifications, DoC, corrective actions
+    ComplaintsTracker.jsx Complaints & feedback — complaints table, 3-tab modal, surveys, satisfaction scoring
+    MaintenanceTracker.jsx Maintenance & environment — checks, certificates, auto-calculated next due
+    IpcAuditTracker.jsx IPC audits — audit scoring, risk areas, corrective actions, outbreak management
+    RiskRegister.jsx   Risk register — 5x5 heatmap, risk scoring, actions, review tracking
+    PolicyReviewTracker.jsx Policy review — 8 pre-populated policies, version history, mark as reviewed
+    WhistleblowingTracker.jsx Whistleblowing — anonymous concerns, investigation workflow, protection tracking
+    DolsTracker.jsx    DoLS/LPS & MCA — applications, authorisations, capacity assessments
     BudgetTracker.jsx  Monthly budget vs actual with variance tracking
     Reports.jsx        PDF export for roster, costs, coverage
     Config.jsx         Settings — shifts, rates, minimums, bank holidays, home details
@@ -106,7 +159,7 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
   annual_leave: { ... },  // Legacy — overrides is the source of truth for AL
   budget: { ... },        // Monthly budget entries
   cqc_evidence: [{        // Manual evidence items tagged to CQC quality statements
-    id, quality_statement, // S1-S5, E1-E3, C1-C2, R1-R2, WL1-WL5
+    id, quality_statement, // S1-S8, E1-E6, C1-C5, R1-R5, WL1-WL10
     type,                  // "quantitative" | "qualitative"
     title, description,
     date_from, date_to,    // Evidence validity period (date_to null = ongoing)
@@ -179,6 +232,89 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
     corrective_actions: [{ description, assigned_to, due_date, completed_date, status }],
     reported_by, reported_at, updated_at,
   }],
+  complaints: [{            // Complaints & feedback records (QS23 — Reg 16)
+    id, date, raised_by, raised_by_name, category, title, description,
+    acknowledged_date, response_deadline, status,
+    investigator, investigation_notes,
+    resolution, resolution_date, outcome_shared,
+    root_cause, improvements, lessons_learned,
+    reported_by, reported_at, updated_at,
+  }],
+  complaint_surveys: [{     // Satisfaction surveys
+    id, type, date, title, total_sent, responses,
+    overall_satisfaction,    // 1-5
+    area_scores: {},
+    key_feedback, actions, conducted_by, reported_at,
+  }],
+  maintenance: [{           // Maintenance & environment checks (QS5 — Reg 15)
+    id, category, description, frequency,
+    last_completed, next_due, completed_by, contractor,
+    items_checked, items_passed, items_failed,
+    certificate_ref, certificate_expiry,
+    notes, updated_at,
+  }],
+  ipc_audits: [{            // IPC audit records (QS7 — Reg 12)
+    id, audit_date, audit_type, auditor, overall_score, compliance_pct,
+    risk_areas: [{ area, severity, details }],
+    corrective_actions: [{ description, assigned_to, due_date, completed_date, status }],
+    outbreak: { suspected, type, start_date, affected_staff, affected_residents, measures, end_date, status },
+    notes, reported_at, updated_at,
+  }],
+  risk_register: [{         // Risk register (QS31 — Reg 17)
+    id, title, description, category, owner,
+    likelihood, impact, inherent_risk,
+    controls: [{ description, effectiveness }],
+    residual_likelihood, residual_impact, residual_risk,
+    actions: [{ description, owner, due_date, status, completed_date }],
+    last_reviewed, next_review, status,
+    created_at, updated_at,
+  }],
+  policy_reviews: [{        // Policy review tracker (QS31 — Reg 17)
+    id, policy_name, policy_ref, category, version,
+    last_reviewed, next_review_due, review_frequency_months,
+    status, reviewed_by, approved_by,
+    changes: [{ version, date, summary }],
+    notes, updated_at,
+  }],
+  whistleblowing_concerns: [{  // Whistleblowing / speak up (QS29 — Reg 17)
+    id, date_raised, raised_by_role, anonymous,
+    category, description, severity,
+    status, acknowledgement_date,
+    investigator, investigation_start_date, findings,
+    outcome, outcome_details,
+    reporter_protected, protection_details,
+    follow_up_date, follow_up_completed,
+    resolution_date, lessons_learned,
+    reported_at, updated_at,
+  }],
+  dols: [{                  // DoLS/LPS applications (QS3/QS14 — Reg 11/13) — tracks residents
+    id, resident_name, dob, room_number,
+    application_type,        // "dols" | "lps"
+    application_date, authorised, authorisation_date, expiry_date,
+    authorisation_number, authorising_authority,
+    restrictions: [],
+    reviewed_date, review_status, next_review_date,
+    notes, updated_at,
+  }],
+  mca_assessments: [{       // Mental Capacity Act assessments
+    id, resident_name, assessment_date, assessor,
+    decision_area, lacks_capacity, best_interest_decision,
+    next_review_date, notes, updated_at,
+  }],
+  care_certificate: {       // Care Certificate progress (QS6 — Reg 18) — keyed by staffId
+    "S001": {
+      start_date, expected_completion, supervisor,
+      status, completion_date,
+      standards: {
+        "std-1": {
+          knowledge: { date, assessor, status, score, notes },
+          observations: [{ date, observer, evidence, status }],
+          completion_date, status,
+        },
+        // ... std-2 through std-16
+      },
+    },
+  },
 }
 ```
 
@@ -262,7 +398,7 @@ All schedule changes go through overrides. The `getActualShift()` function check
 | GET | /api/export?home=X | Download home data as JSON |
 | GET | /api/bank-holidays | Proxy to GOV.UK API |
 
-Server-side `validateOverrides()` checks max AL per day, entitlement per staff, NLW compliance, and training compliance on every save.
+Server-side `validateOverrides()` checks max AL per day, entitlement per staff, NLW compliance, training compliance, and all 8 compliance module deadlines (complaints, maintenance, IPC, risks, policies, whistleblowing, DoLS, Care Certificate) on every save.
 
 ## Key Functions Reference
 
@@ -316,8 +452,8 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - `getTrainingBlockingReasons(staffId, staffRole, trainingData, config, asOfDate)` — returns string[] for staff with expired/missing blocking types
 
 ### cqc.js
-- `QUALITY_STATEMENTS` — 17 quality statements across all 5 CQC core questions: S1-S5 (Safe), E1-E3 (Effective), C1-C2 (Caring), R1-R2 (Responsive), WL1-WL5 (Well-Led)
-- `METRIC_DEFINITIONS` — 10 weighted metrics (9 available + 1 pending careCertCompletion)
+- `QUALITY_STATEMENTS` — 34 quality statements across all 5 CQC core questions: S1-S8 (Safe), E1-E6 (Effective), C1-C5 (Caring), R1-R5 (Responsive), WL1-WL10 (Well-Led)
+- `METRIC_DEFINITIONS` — 18 weighted metrics (all available), weights sum to 1.0
 - `calculateComplianceScore(data, dateRange, asOfDate)` — composite weighted score, returns { overallScore, band, metrics }
 - `calculateStaffingFillRate(data, dateRange)` — daily coverage fill rate over date range
 - `calculateAgencyDependencyPct(data, dateRange)` — agency cost as % of total staffing cost
@@ -354,11 +490,81 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - `getSafeguardingIncidentStats(incidents, fromDate, toDate)` — safeguarding incident counts for S3 evidence
 - `getIncidentTrendData(incidents, fromDate, toDate)` — monthly trend data for WL2 evidence
 
+### complaints.js
+- `DEFAULT_COMPLAINT_CATEGORIES` — 8 categories (care quality, medication, staffing, communication, facilities, food, dignity, other)
+- `COMPLAINT_STATUSES` — open, acknowledged, investigating, resolved, closed
+- `ensureComplaintDefaults(data)` — adds complaints[], complaint_surveys[], config.complaint_categories
+- `getComplaintStats(complaints, fromDate, toDate)` — total, open, avgResponseDays, resolutionRate, overdue
+- `getComplaintAlerts(complaints)` — unacknowledged >2 days, overdue response deadlines
+- `getSurveyAlerts(surveys)` — low satisfaction alerts
+- `calculateComplaintResolutionRate(data, fromDate, toDate)` — CQC metric
+- `calculateSatisfactionScore(data, fromDate, toDate)` — CQC metric
+
+### maintenance.js
+- `DEFAULT_MAINTENANCE_CATEGORIES` — 8 items (PAT, legionella, gas, fire risk, water, electrical, HVAC, equipment)
+- `ensureMaintenanceDefaults(data)` — adds maintenance[], config.maintenance_categories
+- `getMaintenanceStatus(check, asOfDate)` — status, daysUntilDue, isOverdue
+- `getMaintenanceStats(maintenance, asOfDate)` — total, compliant, overdue, dueSoon, compliancePct
+- `getMaintenanceAlerts(maintenance, asOfDate)` — overdue checks, expired certificates
+- `calculateMaintenanceCompliancePct(data, asOfDate)` — CQC metric
+
+### ipc.js
+- `DEFAULT_IPC_AUDIT_TYPES` — 6 types (hand hygiene, PPE, cleanliness, isolation, outbreak response, general)
+- `OUTBREAK_STATUSES` — suspected, confirmed, contained, resolved
+- `ensureIpcDefaults(data)` — adds ipc_audits[], config.ipc_audit_types
+- `getIpcStats(audits, asOfDate)` — avgScore, auditsThisQuarter, activeOutbreaks, actionCompletion
+- `getIpcAlerts(audits, asOfDate)` — audit overdue, low scores, active outbreaks, corrective action overdue
+- `calculateIpcAuditCompliance(data, asOfDate)` — CQC metric
+
+### riskRegister.js
+- `RISK_CATEGORIES` — staffing, clinical, operational, financial, compliance
+- `RISK_SCORE_BANDS` — 1-4 low/green, 5-9 medium/amber, 10-15 high/red, 16-25 critical/purple
+- `ensureRiskRegisterDefaults(data)` — adds risk_register[]
+- `getRiskScore(likelihood, impact)` — L x I
+- `getRiskBand(score)` — returns band with badgeKey
+- `getRiskStats(risks, asOfDate)` — total, critical, reviewsOverdue, actionsOverdue
+- `getRiskAlerts(risks, asOfDate)` — overdue reviews, overdue actions, critical risks
+- `calculateRiskManagementScore(data, asOfDate)` — CQC metric
+
+### policyReview.js
+- `DEFAULT_POLICIES` — 8 items (safeguarding, complaints, whistleblowing, data protection, H&S, IPC, MCA/DoLS, equality)
+- `ensurePolicyDefaults(data)` — adds policy_reviews[] pre-populated with 8 defaults
+- `getPolicyStatus(policy, asOfDate)` — status, daysUntilDue, isOverdue
+- `getPolicyStats(policies, asOfDate)` — total, current, due, overdue, compliancePct
+- `getPolicyAlerts(policies, asOfDate)` — overdue policies, due for review
+- `calculatePolicyCompliancePct(data, asOfDate)` — CQC metric
+
+### whistleblowing.js
+- `CONCERN_CATEGORIES` — malpractice, bullying, safety, compliance, other
+- `CONCERN_SEVERITIES` — low, medium, high, urgent
+- `ensureWhistleblowingDefaults(data)` — adds whistleblowing_concerns[]
+- `getWhistleblowingStats(concerns, fromDate, toDate)` — total, open, avgInvestigationDays, protectionRate
+- `getWhistleblowingAlerts(concerns)` — unacknowledged >3 days, long investigations, overdue follow-ups
+- `calculateSpeakUpCulture(data, fromDate, toDate)` — CQC metric (composite: acknowledgement + protection + resolution)
+
+### dols.js
+- `APPLICATION_TYPES` — dols, lps
+- `DOLS_STATUSES` — applied, authorised, expired, review_due
+- `ensureDolsDefaults(data)` — adds dols[], mca_assessments[]
+- `getDolsStatus(dols, asOfDate)` — status, daysUntilExpiry, isExpired
+- `getDolsStats(dols, mcaAssessments, asOfDate)` — activeCount, expiringSoon, reviewsOverdue
+- `getDolsAlerts(dols, mcaAssessments, asOfDate)` — expiring <90 days, overdue reviews
+- `calculateDolsCompliancePct(data, asOfDate)` — CQC metric
+
+### careCertificate.js
+- `CARE_CERTIFICATE_STANDARDS` — 16 standards (2025 update incl. Oliver McGowan Standard 16)
+- `CC_STATUSES` — not_started, in_progress, completed, overdue
+- `ensureCareCertDefaults(data)` — adds care_certificate: {}
+- `getCareCertStatus(staffRecord, asOfDate)` — status, progressPct, weeksElapsed, isOverdue
+- `getCareCertStats(careCertData, activeStaff, asOfDate)` — inProgress, completed, onTrack, overdue
+- `getCareCertAlerts(careCertData, activeStaff, config, asOfDate)` — >12 weeks, not on track at 8 weeks
+- `calculateCareCertCompletionPct(data, asOfDate)` — CQC metric
+
 ### onboarding.js
 - `getOnboardingBlockingReasons(staffId, onboardingData)` — returns string[] of reasons staff can't work unsupervised
 
 ### excel.js
-- `downloadXLSX(sheets, filename)` — shared Excel export utility; sheets = [{ name, headers, rows }]
+- `downloadXLSX(filename, sheets)` — shared Excel export utility; sheets = [{ name, headers, rows }]
 
 ## State Flow
 
@@ -410,25 +616,21 @@ UI terminology (consistent across AnnualLeave, Dashboard, booking alerts):
 
 Phase 2 features (detailed micro-step spec exists — see session memory):
 
-### Compliance & Onboarding
-- Staff onboarding: DBS checks (Enhanced + Adults' Barred List), right to work, references, health declarations, Day 1 induction checklist, policy acknowledgement pack
-- Care Certificate: 16 standards (2025 update incl. Oliver McGowan), knowledge + practical observation tracking, 8/12 week alerts, progress dashboard
-- Training expansion: tiered levels (L1/L2/L3), fire drill tracking, supervision scheduling, annual appraisals, bulk CSV import from e-learning platforms
-- CQC evidence: quality statement tagging, weighted compliance scoring, evidence pack generator for inspections
+### Built (Phase 1)
+- ~~Staff onboarding~~, ~~Care Certificate~~, ~~Training matrix~~ (tiered levels, fire drills, supervisions, appraisals)
+- ~~CQC evidence~~ (34 quality statements, 18 weighted metrics, 15-page PDF pack)
+- ~~Incident & safety reporting~~ (CQC notifications, RIDDOR, safeguarding, DoC, corrective actions)
+- ~~Complaints & feedback~~, ~~Maintenance & environment~~, ~~IPC audits~~
+- ~~Risk register~~, ~~Policy review~~, ~~Whistleblowing / speak up~~, ~~DoLS/LPS & MCA~~
+
+### Remaining
 - GDPR: retention schedules, SAR workflow, breach notification, right to erasure
-
-### Operations
-- Incident & safety reporting: internal log, CQC statutory notifications (Reg 16/18), RIDDOR tracking, safeguarding referral workflow, root cause analysis
-- Communication: structured digital handover notes, in-app messaging (WhatsApp replacement), mandatory read receipts
-- GPS clock-in: geofenced attendance, planned vs actual reconciliation, automated timesheets, break recording
-
-### Integration & Payroll
-- Payroll: NMW deep compliance (sleep-in calc, deduction check, age-based rates), WTR full tracking (11hr rest, weekly rest, night worker limits), Sage/Xero CSV export
+- Communication: structured digital handover notes, in-app messaging, mandatory read receipts
+- GPS clock-in: geofenced attendance, planned vs actual reconciliation, automated timesheets
+- Payroll: NMW deep compliance (sleep-in calc, deduction check), WTR full tracking, Sage/Xero CSV export
 - Clinical API: read-only connectors to Nourish/PCS/Access Group, unified portfolio KPI dashboard
-
-### Platform
-- Per-staff auth + mobile-friendly staff portal (view rota, request AL, see training status)
-- Group/owner dashboard: portfolio-level KPIs, cross-home benchmarking, aggregate compliance
+- Per-staff auth + mobile-friendly staff portal
+- Group/owner dashboard: portfolio-level KPIs, cross-home benchmarking
 - Database migration: PostgreSQL (prerequisite for multi-user, staff portal, scaling)
 - Email/SMS notifications (SendGrid/Twilio)
 

@@ -130,7 +130,9 @@ export function isRiddorOverdue(incident) {
   const cat = RIDDOR_CATEGORIES.find(r => r.id === incident.riddor_category);
   if (!cat) return false;
   const incidentDate = parseDate(incident.date);
-  const deadline = addDays(incidentDate, cat.deadlineDays + 1);
+  // deadlineDays=0 means "immediate" — give until end of next day (day + 1)
+  // deadlineDays=15 means "within 15 calendar days" — deadline is exactly day 15 (no +1)
+  const deadline = addDays(incidentDate, cat.deadlineDays === 0 ? 1 : cat.deadlineDays);
   return new Date() > deadline;
 }
 

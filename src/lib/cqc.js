@@ -8,6 +8,14 @@ import {
   calculateIncidentResponseTime, calculateCqcNotificationsPct,
   getSafeguardingIncidentStats, getIncidentTrendData, calculateActionCompletionRate,
 } from './incidents.js';
+import { calculateComplaintResolutionRate, calculateSatisfactionScore } from './complaints.js';
+import { calculateMaintenanceCompliancePct } from './maintenance.js';
+import { calculateIpcAuditCompliance } from './ipc.js';
+import { calculateRiskManagementScore } from './riskRegister.js';
+import { calculatePolicyCompliancePct } from './policyReview.js';
+import { calculateSpeakUpCulture } from './whistleblowing.js';
+import { calculateDolsCompliancePct } from './dols.js';
+import { calculateCareCertCompletionPct } from './careCertificate.js';
 
 // ── Quality Statements ──────────────────────────────────────────────────────
 
@@ -136,21 +144,151 @@ export const QUALITY_STATEMENTS = [
     autoMetrics: ['actionCompletionRate', 'trainingTrend'],
     icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
   },
+  // ── New Statements (Phase 5 — CQC Single Assessment Framework expansion) ──
+  {
+    id: 'S6', category: 'safe', name: 'Infection Prevention & Control',
+    cqcRef: 'Regulation 12 — Safe Care & Treatment (QS7)',
+    description: 'IPC audit scores, corrective actions, outbreak management',
+    autoMetrics: ['ipcAuditCompliance'],
+    icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
+  },
+  {
+    id: 'S7', category: 'safe', name: 'Medicines Optimisation',
+    cqcRef: 'Regulation 12 — Safe Care & Treatment (QS8)',
+    description: 'Medicines management processes — requires eMAR clinical system',
+    autoMetrics: [],
+    icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
+  },
+  {
+    id: 'S8', category: 'safe', name: 'Safe Systems & Transitions',
+    cqcRef: 'Regulation 12 — Safe Care & Treatment (QS2)',
+    description: 'Safe admission, transfer, and discharge processes',
+    autoMetrics: [],
+    icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
+  },
+  {
+    id: 'E4', category: 'effective', name: 'Assessing Needs',
+    cqcRef: 'Regulation 9 — Person-Centred Care (QS9)',
+    description: 'Comprehensive needs assessment and care planning — requires DSCR',
+    autoMetrics: [],
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+  },
+  {
+    id: 'E5', category: 'effective', name: 'Evidence-Based Care',
+    cqcRef: 'Regulation 12 — Safe Care & Treatment (QS10)',
+    description: 'Evidence-based clinical practices and NICE guideline adherence',
+    autoMetrics: [],
+    icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+  },
+  {
+    id: 'E6', category: 'effective', name: 'Consent & Liberty',
+    cqcRef: 'Regulation 11/13 — Consent / DoLS (QS14)',
+    description: 'DoLS/LPS authorisations, MCA assessments, consent processes',
+    autoMetrics: ['dolsCompliancePct', 'mcaTrainingCompliance'],
+    icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+  },
+  {
+    id: 'C3', category: 'caring', name: 'Kindness & Compassion',
+    cqcRef: 'Regulation 10 — Dignity & Respect (QS15)',
+    description: 'Evidence of compassionate care delivery — observation based',
+    autoMetrics: [],
+    icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
+  },
+  {
+    id: 'C4', category: 'caring', name: 'Treating People as Individuals',
+    cqcRef: 'Regulation 9 — Person-Centred Care (QS16)',
+    description: 'Personalised care approaches — requires DSCR care plans',
+    autoMetrics: [],
+    icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+  },
+  {
+    id: 'C5', category: 'caring', name: 'Workforce Wellbeing',
+    cqcRef: 'Regulation 18 — Staffing (QS19)',
+    description: 'Staff sickness rates, fatigue breaches, and wellbeing monitoring',
+    autoMetrics: ['sickRate', 'fatigueBreaches'],
+    icon: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    id: 'R3', category: 'responsive', name: 'Care Provision & Continuity',
+    cqcRef: 'Regulation 9 — Person-Centred Care (QS21)',
+    description: 'Continuity of care, staff consistency, handover processes',
+    autoMetrics: ['staffingFillRate'],
+    icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+  },
+  {
+    id: 'R4', category: 'responsive', name: 'Providing Information',
+    cqcRef: 'Regulation 10 — Dignity & Respect (QS22)',
+    description: 'Accessible information standard compliance',
+    autoMetrics: [],
+    icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    id: 'R5', category: 'responsive', name: 'Complaints Management',
+    cqcRef: 'Regulation 16 — Complaints (QS23)',
+    description: 'Complaint resolution rates, response times, satisfaction scores',
+    autoMetrics: ['complaintResolutionRate', 'satisfactionScore'],
+    icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+  },
+  {
+    id: 'WL6', category: 'well-led', name: 'Shared Direction & Culture',
+    cqcRef: 'Regulation 17 — Good Governance (QS27)',
+    description: 'Organisational vision, values, and shared culture evidence',
+    autoMetrics: [],
+    icon: 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z',
+  },
+  {
+    id: 'WL7', category: 'well-led', name: 'Capable Leaders',
+    cqcRef: 'Regulation 17 — Good Governance (QS28)',
+    description: 'Leadership competency and management development',
+    autoMetrics: ['appraisalCompletion'],
+    icon: 'M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    id: 'WL8', category: 'well-led', name: 'Freedom to Speak Up',
+    cqcRef: 'Regulation 17 — Good Governance (QS29)',
+    description: 'Whistleblowing concern handling, investigation, and protection rates',
+    autoMetrics: ['speakUpCulture'],
+    icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z',
+  },
+  {
+    id: 'WL9', category: 'well-led', name: 'Workforce EDI',
+    cqcRef: 'Regulation 17 — Good Governance (QS30)',
+    description: 'Equality, diversity, and inclusion training and practices',
+    autoMetrics: ['equalityTrainingCompliance'],
+    icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0',
+  },
+  {
+    id: 'WL10', category: 'well-led', name: 'Environmental Sustainability',
+    cqcRef: 'Regulation 15 — Premises & Equipment (QS34)',
+    description: 'Maintenance compliance, environmental checks, premises safety',
+    autoMetrics: ['maintenanceCompliancePct'],
+    icon: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
 ];
 
 // ── Metric Definitions ──────────────────────────────────────────────────────
 
 export const METRIC_DEFINITIONS = [
-  { id: 'trainingCompliance',    label: 'Training Compliance %',       weight: 0.18, available: true  },
-  { id: 'staffingFillRate',      label: 'Staffing Fill Rate %',        weight: 0.18, available: true  },
-  { id: 'agencyDependency',      label: 'Agency Dependency %',         weight: 0.12, available: true  },
-  { id: 'incidentResponseTime',  label: 'Incident Response Time',      weight: 0.10, available: true  },
-  { id: 'cqcNotifications',      label: 'CQC Notifications on Time',   weight: 0.10, available: true  },
-  { id: 'supervisionCompletion', label: 'Supervision Completion %',    weight: 0.10, available: true  },
-  { id: 'staffTurnover',         label: 'Staff Turnover Rate %',       weight: 0.07, available: true  },
-  { id: 'appraisalCompletion',   label: 'Appraisal Completion %',      weight: 0.05, available: true  },
-  { id: 'fireDrillCompliance',   label: 'Fire Drill Compliance',       weight: 0.05, available: true  },
-  { id: 'careCertCompletion',    label: 'Care Certificate Completion', weight: 0.05, available: false },
+  // Existing metrics (rebalanced weights)
+  { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.12, available: true },
+  { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.12, available: true },
+  { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.08, available: true },
+  { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.07, available: true },
+  { id: 'cqcNotifications',        label: 'CQC Notifications on Time',    weight: 0.07, available: true },
+  { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.07, available: true },
+  { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.05, available: true },
+  { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.05, available: true },
+  { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.04, available: true },
+  { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.04, available: true },
+  // New metrics from 8 modules
+  { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.05, available: true },
+  { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.05, available: true },
+  { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.05, available: true },
+  { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.03, available: true },
+  { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.03, available: true },
+  { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.03, available: true },
+  { id: 'satisfactionScore',       label: 'Satisfaction Score',           weight: 0.03, available: true },
+  { id: 'speakUpCulture',          label: 'Speak Up Culture',             weight: 0.02, available: true },
 ];
 
 // ── Score Banding ───────────────────────────────────────────────────────────
@@ -463,6 +601,42 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const firePct = calculateFireDrillCompliancePct(data, asOfDate);
   metrics.fireDrillCompliance = { raw: firePct, score: firePct };
 
+  // Care Certificate completion: direct %
+  const ccResult = calculateCareCertCompletionPct(data, asOfDate);
+  metrics.careCertCompletion = { raw: ccResult.score, score: ccResult.score, detail: ccResult };
+
+  // Complaint resolution rate: direct %
+  const crr = calculateComplaintResolutionRate(data.complaints || [], fromStr, toStr);
+  metrics.complaintResolutionRate = { raw: crr.score, score: crr.score, detail: crr };
+
+  // Maintenance compliance: direct %
+  const maint = calculateMaintenanceCompliancePct(data, asOfDate);
+  metrics.maintenanceCompliancePct = { raw: maint.score, score: maint.score, detail: maint };
+
+  // IPC audit compliance: direct %
+  const ipc = calculateIpcAuditCompliance(data, asOfDate);
+  metrics.ipcAuditCompliance = { raw: ipc.score, score: ipc.score, detail: ipc };
+
+  // DoLS compliance: direct %
+  const dols = calculateDolsCompliancePct(data, asOfDate);
+  metrics.dolsCompliancePct = { raw: dols.score, score: dols.score, detail: dols };
+
+  // Risk management score: direct %
+  const risk = calculateRiskManagementScore(data, asOfDate);
+  metrics.riskManagementScore = { raw: risk.score, score: risk.score, detail: risk };
+
+  // Policy compliance: direct %
+  const pol = calculatePolicyCompliancePct(data, asOfDate);
+  metrics.policyCompliancePct = { raw: pol.score, score: pol.score, detail: pol };
+
+  // Satisfaction score: direct %
+  const sat = calculateSatisfactionScore(data.complaint_surveys || [], fromStr, toStr);
+  metrics.satisfactionScore = { raw: sat.score ?? 100, score: sat.score ?? 100, detail: sat };
+
+  // Speak up culture: direct %
+  const speakUp = calculateSpeakUpCulture(data, fromStr, toStr);
+  metrics.speakUpCulture = { raw: speakUp.score, score: speakUp.score, detail: speakUp };
+
   // Sum available weights and normalize
   const availableMetrics = METRIC_DEFINITIONS.filter(m => m.available);
   const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
@@ -631,6 +805,60 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
       label: 'Training Trend (90-day)', value: tt.trend >= 0 ? `+${tt.trend}` : `${tt.trend}`, unit: 'pp',
       detail: `${tt.pastPct}% → ${tt.currentPct}%`,
       source: 'Training Matrix',
+    });
+  }
+  if (statement.autoMetrics.includes('ipcAuditCompliance')) {
+    const ipc = calculateIpcAuditCompliance(data, asOfDate);
+    autoEvidence.push({
+      label: 'IPC Audit Compliance', value: ipc.score, unit: '%',
+      detail: `${ipc.totalAudits} audits in last 12 months`,
+      source: 'IPC Audits',
+    });
+  }
+  if (statement.autoMetrics.includes('dolsCompliancePct')) {
+    const dols = calculateDolsCompliancePct(data, asOfDate);
+    autoEvidence.push({
+      label: 'DoLS/LPS Compliance', value: dols.score, unit: '%',
+      detail: `${dols.active} active, ${dols.expired} expired of ${dols.total}`,
+      source: 'DoLS Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('complaintResolutionRate')) {
+    const fromStr2 = formatDate(dateRange.from);
+    const toStr2 = formatDate(dateRange.to);
+    const crr = calculateComplaintResolutionRate(data.complaints || [], fromStr2, toStr2);
+    autoEvidence.push({
+      label: 'Complaint Resolution Rate', value: crr.score, unit: '%',
+      detail: `${crr.resolved}/${crr.total} resolved`,
+      source: 'Complaints Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('satisfactionScore')) {
+    const fromStr2 = formatDate(dateRange.from);
+    const toStr2 = formatDate(dateRange.to);
+    const sat = calculateSatisfactionScore(data.complaint_surveys || [], fromStr2, toStr2);
+    autoEvidence.push({
+      label: 'Satisfaction Score', value: sat.avgScore ?? 'N/A', unit: sat.avgScore ? '/5' : '',
+      detail: `${sat.totalSurveys} surveys`,
+      source: 'Complaints Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('speakUpCulture')) {
+    const fromStr2 = formatDate(dateRange.from);
+    const toStr2 = formatDate(dateRange.to);
+    const su = calculateSpeakUpCulture(data, fromStr2, toStr2);
+    autoEvidence.push({
+      label: 'Speak Up Culture Score', value: su.score, unit: '%',
+      detail: `${su.totalConcerns} concerns, ${su.resolutionRate}% resolved, ${su.protectionRate}% protected`,
+      source: 'Whistleblowing Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('maintenanceCompliancePct')) {
+    const maint = calculateMaintenanceCompliancePct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Maintenance Compliance', value: maint.score, unit: '%',
+      detail: `${maint.compliant} compliant, ${maint.overdue} overdue of ${maint.total}`,
+      source: 'Maintenance Tracker',
     });
   }
 

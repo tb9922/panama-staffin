@@ -1,15 +1,32 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCycleDates, getStaffForDay, formatDate, isWorkingShift, isCareRole } from '../lib/rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, getTrainingAlerts, buildComplianceMatrix, getComplianceStats, getSupervisionAlerts, getAppraisalAlerts, getFireDrillAlerts } from '../lib/training.js';
 import { getIncidentAlerts } from '../lib/incidents.js';
+import { getComplaintAlerts, getSurveyAlerts } from '../lib/complaints.js';
+import { getMaintenanceAlerts } from '../lib/maintenance.js';
+import { getIpcAlerts } from '../lib/ipc.js';
+import { getRiskAlerts } from '../lib/riskRegister.js';
+import { getPolicyAlerts } from '../lib/policyReview.js';
+import { getWhistleblowingAlerts } from '../lib/whistleblowing.js';
+import { getDolsAlerts } from '../lib/dols.js';
+import { getCareCertAlerts } from '../lib/careCertificate.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
 export default function Dashboard({ data }) {
   const navigate = useNavigate();
-  const today = new Date();
+  // Reactive today — updates at midnight so shift-handover coverage is never stale
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    return () => clearTimeout(timer);
+  }, [today]);
 
   const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date]);
 
@@ -88,12 +105,37 @@ export default function Dashboard({ data }) {
     // Incident alerts
     getIncidentAlerts(data.incidents || []).forEach(a => list.push(a));
 
+    // Complaint & survey alerts
+    getComplaintAlerts(data.complaints || [], data.config).forEach(a => list.push(a));
+    getSurveyAlerts(data.complaint_surveys || [], data.config).forEach(a => list.push(a));
+
+    // Maintenance alerts
+    getMaintenanceAlerts(data.maintenance || [], formatDate(today)).forEach(a => list.push(a));
+
+    // IPC alerts — pass config so custom audit types are also checked
+    getIpcAlerts(data.ipc_audits || [], formatDate(today), data.config).forEach(a => list.push(a));
+
+    // Risk register alerts
+    getRiskAlerts(data.risk_register || [], formatDate(today)).forEach(a => list.push(a));
+
+    // Policy review alerts
+    getPolicyAlerts(data.policy_reviews || [], formatDate(today)).forEach(a => list.push(a));
+
+    // Whistleblowing alerts
+    getWhistleblowingAlerts(data.whistleblowing_concerns || []).forEach(a => list.push(a));
+
+    // DoLS/LPS alerts
+    getDolsAlerts(data.dols || [], data.mca_assessments || [], today).forEach(a => list.push(a));
+
+    // Care Certificate alerts
+    getCareCertAlerts(data.care_certificate || {}, activeStaff, data.config, today).forEach(a => list.push(a));
+
     // Supervision, appraisal & fire drill alerts
     getSupervisionAlerts(activeStaff, data.config, data.supervisions || {}, today).forEach(a => list.push(a));
     getAppraisalAlerts(activeStaff, data.appraisals || {}, today).forEach(a => list.push(a));
     getFireDrillAlerts(data.fire_drills || [], today).forEach(a => list.push(a));
 
-    return list.slice(0, 16);
+    return list.slice(0, 24);
   }, [cycleData, data]);
 
   // Coverage gauge helper

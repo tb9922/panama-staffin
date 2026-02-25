@@ -18,6 +18,14 @@ import TrainingMatrix from './pages/TrainingMatrix.jsx';
 import OnboardingTracker from './pages/OnboardingTracker.jsx';
 import CQCEvidence from './pages/CQCEvidence.jsx';
 import IncidentTracker from './pages/IncidentTracker.jsx';
+import ComplaintsTracker from './pages/ComplaintsTracker.jsx';
+import MaintenanceTracker from './pages/MaintenanceTracker.jsx';
+import IpcAuditTracker from './pages/IpcAuditTracker.jsx';
+import RiskRegister from './pages/RiskRegister.jsx';
+import PolicyReviewTracker from './pages/PolicyReviewTracker.jsx';
+import WhistleblowingTracker from './pages/WhistleblowingTracker.jsx';
+import DolsTracker from './pages/DolsTracker.jsx';
+import CareCertificateTracker from './pages/CareCertificateTracker.jsx';
 import Reports from './pages/Reports.jsx';
 import Config from './pages/Config.jsx';
 
@@ -47,6 +55,7 @@ const NAV_SECTIONS = [
       { path: '/leave', label: 'Annual Leave', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 15l2 2 4-4' },
       { path: '/sick-trends', label: 'Sick Trends', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
       { path: '/fatigue', label: 'Fatigue', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z' },
+      { path: '/care-cert', label: 'Care Certificate', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
     ],
   },
   {
@@ -55,6 +64,19 @@ const NAV_SECTIONS = [
     items: [
       { path: '/cqc', label: 'CQC Evidence', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
       { path: '/incidents', label: 'Incidents', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z' },
+      { path: '/complaints', label: 'Complaints', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
+      { path: '/dols', label: 'DoLS / LPS', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
+      { path: '/ipc', label: 'IPC Audits', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
+    ],
+  },
+  {
+    id: 'governance', label: 'Governance',
+    icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h6m-6 4h6m-6 4h3',
+    items: [
+      { path: '/risks', label: 'Risk Register', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z' },
+      { path: '/policies', label: 'Policies', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      { path: '/speak-up', label: 'Speak Up', icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
+      { path: '/maintenance', label: 'Maintenance', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
     ],
   },
   {
@@ -202,9 +224,6 @@ function LoginScreen({ onLogin }) {
           </div>
           <button type="submit" className={`${BTN.primary} w-full`}>Sign In</button>
         </div>
-        <div className="mt-5 text-xs text-gray-400 text-center">
-          Default: admin/admin123 (edit) or viewer/view123 (read-only)
-        </div>
       </form>
     </div>
   );
@@ -228,6 +247,11 @@ export default function App() {
 
   const isViewer = user?.role === 'viewer';
 
+  function handleApiError(e) {
+    if (e.status === 401) { logout(); setUser(null); setData(null); return; }
+    setError(e.message);
+  }
+
   // Load homes list then load first home's data
   useEffect(() => {
     if (!user) { setLoading(false); return; }
@@ -240,7 +264,7 @@ export default function App() {
         return loadData(firstHome);
       })
       .then(setData)
-      .catch(e => setError(e.message))
+      .catch(handleApiError)
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -254,12 +278,14 @@ export default function App() {
     setRedoCount(0);
     loadData(homeId)
       .then(setData)
-      .catch(e => setError(e.message))
+      .catch(handleApiError)
       .finally(() => setLoading(false));
   }
 
   const updateData = useCallback(async (newData) => {
+    let prevData = null;
     setData(prev => {
+      prevData = prev;
       if (prev) {
         undoStack.current.push(JSON.stringify(prev));
         if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
@@ -272,7 +298,13 @@ export default function App() {
     try {
       await saveData(newData);
     } catch (e) {
-      setError('Failed to save: ' + e.message);
+      // Rollback: restore previous state and pop the undo entry we just pushed
+      if (prevData !== null) {
+        setData(prevData);
+        undoStack.current.pop();
+        setUndoCount(undoStack.current.length);
+      }
+      handleApiError(e);
     }
   }, []);
 
@@ -280,7 +312,9 @@ export default function App() {
     if (undoStack.current.length === 0) return;
     const prevState = JSON.parse(undoStack.current.pop());
     setUndoCount(undoStack.current.length);
+    let currentState = null;
     setData(current => {
+      currentState = current;
       redoStack.current.push(JSON.stringify(current));
       setRedoCount(redoStack.current.length);
       return prevState;
@@ -288,7 +322,15 @@ export default function App() {
     try {
       await saveData(prevState);
     } catch (e) {
-      setError('Failed to save undo: ' + e.message);
+      // Rollback: reverse the undo — restore current state, undo the stack changes
+      if (currentState !== null) {
+        setData(currentState);
+        redoStack.current.pop();
+        setRedoCount(redoStack.current.length);
+        undoStack.current.push(JSON.stringify(prevState));
+        setUndoCount(undoStack.current.length);
+      }
+      handleApiError(e);
     }
   }, []);
 
@@ -296,7 +338,9 @@ export default function App() {
     if (redoStack.current.length === 0) return;
     const nextState = JSON.parse(redoStack.current.pop());
     setRedoCount(redoStack.current.length);
+    let currentState = null;
     setData(current => {
+      currentState = current;
       undoStack.current.push(JSON.stringify(current));
       setUndoCount(undoStack.current.length);
       return nextState;
@@ -304,7 +348,15 @@ export default function App() {
     try {
       await saveData(nextState);
     } catch (e) {
-      setError('Failed to save redo: ' + e.message);
+      // Rollback: reverse the redo — restore current state, undo the stack changes
+      if (currentState !== null) {
+        setData(currentState);
+        undoStack.current.pop();
+        setUndoCount(undoStack.current.length);
+        redoStack.current.push(JSON.stringify(nextState));
+        setRedoCount(redoStack.current.length);
+      }
+      handleApiError(e);
     }
   }, []);
 
@@ -544,6 +596,14 @@ export default function App() {
           <Route path="/onboarding" element={<OnboardingTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/cqc" element={<CQCEvidence data={data} updateData={safeUpdateData} />} />
           <Route path="/incidents" element={<IncidentTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/complaints" element={<ComplaintsTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/maintenance" element={<MaintenanceTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/ipc" element={<IpcAuditTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/risks" element={<RiskRegister data={data} updateData={safeUpdateData} />} />
+          <Route path="/policies" element={<PolicyReviewTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/speak-up" element={<WhistleblowingTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/dols" element={<DolsTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/care-cert" element={<CareCertificateTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/reports" element={<Reports data={data} />} />
           <Route path="/audit" element={<AuditLog />} />

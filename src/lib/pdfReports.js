@@ -16,6 +16,13 @@ import {
 import { getTrainingTypes, getFireDrillStatus, getAppraisalStats } from './training.js';
 import { ONBOARDING_SECTIONS, buildOnboardingMatrix, getOnboardingStats } from './onboarding.js';
 import { calculateActionCompletionRate, getIncidentTrendData } from './incidents.js';
+import { getComplaintStats, getSurveyStats } from './complaints.js';
+import { getMaintenanceStats, getMaintenanceStatus, FREQUENCY_OPTIONS } from './maintenance.js';
+import { getIpcStats } from './ipc.js';
+import { getRiskStats, getRiskBand, RISK_CATEGORIES } from './riskRegister.js';
+import { getPolicyStats, getPolicyStatus, POLICY_STATUSES } from './policyReview.js';
+import { getWhistleblowingStats } from './whistleblowing.js';
+import { getDolsStats } from './dols.js';
 
 function addHeader(doc, title, subtitle, homeName) {
   doc.setFontSize(16);
@@ -898,6 +905,247 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28) {
       }),
       styles: { fontSize: 7, cellPadding: 1.5 },
       headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    });
+  }
+
+  // ── Page 11: Complaints & Feedback ────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Complaints & Feedback', 'Regulation 16 — QS23', homeName);
+
+  const complaintStats = getComplaintStats(data.complaints || [], data.config, fromStr, toStr);
+  const surveyStats = getSurveyStats(data.complaint_surveys || [], fromStr, toStr);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Complaints KPI', 'Value']],
+    body: [
+      ['Total Complaints', `${complaintStats.total}`],
+      ['Open / Active', `${complaintStats.open}`],
+      ['Resolved', `${complaintStats.resolved}`],
+      ['Resolution Rate', `${complaintStats.resolutionRate}%`],
+      ['Avg Response Time', complaintStats.avgResponseDays != null ? `${complaintStats.avgResponseDays} days` : 'N/A'],
+      ['Overdue Responses', `${complaintStats.overdue}`],
+      ['Survey Satisfaction', surveyStats.avgSatisfaction != null ? `${surveyStats.avgSatisfaction}/5` : 'No surveys'],
+      ['Survey Response Rate', surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : 'N/A'],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  const recentComplaints = (data.complaints || []).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
+  if (recentComplaints.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Date', 'Category', 'Title', 'Status', 'Response Days']],
+      body: recentComplaints.map(c => {
+        const st = c.resolution_date && c.date ? Math.round((new Date(c.resolution_date) - new Date(c.date)) / (1000 * 60 * 60 * 24)) : '-';
+        return [c.date || '-', c.category || '-', (c.title || '').substring(0, 40), c.status || '-', st];
+      }),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    });
+  }
+
+  // ── Page 12: Maintenance & Environment ──────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Maintenance & Environment', 'Regulation 15 — QS5/QS34', homeName);
+
+  const maintStats = getMaintenanceStats(data.maintenance || [], today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Maintenance KPI', 'Value']],
+    body: [
+      ['Total Checks', `${maintStats.total}`],
+      ['Compliant', `${maintStats.compliant}`],
+      ['Due Soon', `${maintStats.dueSoon}`],
+      ['Overdue', `${maintStats.overdue}`],
+      ['Not Started', `${maintStats.notStarted}`],
+      ['Compliance %', `${maintStats.compliancePct}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  const maintItems = (data.maintenance || []).map(m => ({
+    ...m,
+    _status: getMaintenanceStatus(m, today),
+  })).sort((a, b) => {
+    const order = { overdue: 0, due_soon: 1, not_started: 2, compliant: 3 };
+    return (order[a._status.status] ?? 9) - (order[b._status.status] ?? 9);
+  });
+
+  if (maintItems.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Category', 'Frequency', 'Last Completed', 'Next Due', 'Status', 'Certificate']],
+      body: maintItems.map(m => [
+        m.category_name || m.category,
+        FREQUENCY_OPTIONS.find(f => f.id === m.frequency)?.name || m.frequency,
+        m.last_completed || '-',
+        m._status.nextDue || m.next_due || '-',
+        m._status.status,
+        m.certificate_ref || '-',
+      ]),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 4) {
+          if (hookData.cell.raw === 'overdue') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+          else if (hookData.cell.raw === 'due_soon') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+          else if (hookData.cell.raw === 'compliant') { hookData.cell.styles.fillColor = [220, 252, 231]; hookData.cell.styles.textColor = [22, 101, 52]; }
+        }
+      },
+    });
+  }
+
+  // ── Page 13: IPC Audit Summary ─────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Infection Prevention & Control', 'Regulation 12 — QS7', homeName);
+
+  const ipcStats = getIpcStats(data.ipc_audits || [], today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['IPC KPI', 'Value']],
+    body: [
+      ['Average Audit Score', ipcStats.avgScore != null ? `${ipcStats.avgScore}%` : 'No audits'],
+      ['Audits This Quarter', `${ipcStats.auditsThisQuarter}`],
+      ['Active Outbreaks', `${ipcStats.activeOutbreaks}`],
+      ['Action Completion', `${ipcStats.actionCompletion}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  const recentAudits = (data.ipc_audits || []).sort((a, b) => (b.audit_date || '').localeCompare(a.audit_date || '')).slice(0, 10);
+  if (recentAudits.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Date', 'Type', 'Auditor', 'Score', 'Risk Areas', 'Actions']],
+      body: recentAudits.map(a => [
+        a.audit_date || '-',
+        a.audit_type || '-',
+        a.auditor || '-',
+        a.compliance_pct != null ? `${a.compliance_pct}%` : '-',
+        (a.risk_areas || []).length,
+        (a.corrective_actions || []).length,
+      ]),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+    });
+  }
+
+  // ── Page 14: Risk Register Summary ─────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Risk Register', 'Regulation 17 — QS31', homeName);
+
+  const riskStats = getRiskStats(data.risk_register || [], today);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Risk KPI', 'Value']],
+    body: [
+      ['Total Open Risks', `${riskStats.total}`],
+      ['Critical (Score >= 16)', `${riskStats.critical}`],
+      ['High (Score 10-15)', `${riskStats.high}`],
+      ['Reviews Overdue', `${riskStats.reviewsOverdue}`],
+      ['Actions Overdue', `${riskStats.actionsOverdue}`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  const openRisks = (data.risk_register || []).filter(r => r.status !== 'closed')
+    .sort((a, b) => ((b.likelihood || 1) * (b.impact || 1)) - ((a.likelihood || 1) * (a.impact || 1))).slice(0, 15);
+  if (openRisks.length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Title', 'Category', 'L', 'I', 'Score', 'Band', 'Next Review']],
+      body: openRisks.map(r => {
+        const sc = (r.likelihood || 1) * (r.impact || 1);
+        const band = getRiskBand(sc);
+        return [
+          (r.title || '').substring(0, 40), r.category || '-',
+          r.likelihood || '-', r.impact || '-', sc, band?.name || '-', r.next_review || '-',
+        ];
+      }),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 5) {
+          const val = hookData.cell.raw;
+          if (val === 'Critical') { hookData.cell.styles.fillColor = [233, 213, 255]; hookData.cell.styles.textColor = [88, 28, 135]; }
+          else if (val === 'High') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+          else if (val === 'Medium') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+        }
+      },
+    });
+  }
+
+  // ── Page 15: Governance — Policies, DoLS, Speak Up ─────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Governance: Policies, DoLS & Speak Up', 'Regulation 11, 13, 17', homeName);
+
+  const polStats = getPolicyStats(data.policy_reviews || [], today);
+  const dolStats = getDolsStats(data.dols || [], data.mca_assessments || [], today);
+  const wbStats = getWhistleblowingStats(data.whistleblowing_concerns || [], fromStr, toStr);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Governance KPI', 'Value']],
+    body: [
+      ['Policies — Current', `${polStats.current}`],
+      ['Policies — Due for Review', `${polStats.due}`],
+      ['Policies — Overdue', `${polStats.overdue}`],
+      ['Policy Compliance', `${polStats.compliancePct}%`],
+      ['DoLS/LPS — Active', `${dolStats.activeCount}`],
+      ['DoLS/LPS — Expiring <90d', `${dolStats.expiringSoon}`],
+      ['DoLS/LPS — Expired', `${dolStats.expired}`],
+      ['MCA Assessments', `${dolStats.mcaTotal}`],
+      ['MCA Reviews Overdue', `${dolStats.mcaOverdue}`],
+      ['Speak Up Concerns (period)', `${wbStats.total}`],
+      ['Speak Up — Open', `${wbStats.open}`],
+      ['Avg Investigation Days', wbStats.avgInvestigationDays != null ? `${wbStats.avgInvestigationDays}` : 'N/A'],
+      ['Protection Rate', `${wbStats.protectionRate}%`],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    tableWidth: 130,
+  });
+
+  // Policy detail table
+  if ((data.policy_reviews || []).length > 0) {
+    y = doc.lastAutoTable.finalY + 6;
+    doc.autoTable({
+      startY: y,
+      head: [['Policy', 'Version', 'Last Reviewed', 'Next Due', 'Status']],
+      body: (data.policy_reviews || []).map(p => {
+        const st = getPolicyStatus(p, today);
+        return [p.policy_name || '-', p.version || '-', p.last_reviewed || 'Never', p.next_review_due || '-', st.status];
+      }),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 7 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 4) {
+          if (hookData.cell.raw === 'overdue') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+          else if (hookData.cell.raw === 'due') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+          else if (hookData.cell.raw === 'current') { hookData.cell.styles.fillColor = [220, 252, 231]; hookData.cell.styles.textColor = [22, 101, 52]; }
+        }
+      },
     });
   }
 
