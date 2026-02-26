@@ -7,14 +7,23 @@ import {
 } from './src/lib/rotation.js';
 import { calculateDayCost } from './src/lib/escalation.js';
 
-const API = 'http://localhost:3001/api/data?home=Oakwood_Care_Home';
+const BASE = 'http://localhost:3001';
 let DATA;
 try {
-  const res = await fetch(API);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const loginRes = await fetch(`${BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+  });
+  if (!loginRes.ok) throw new Error('Login failed: HTTP ' + loginRes.status);
+  const { token } = await loginRes.json();
+  const res = await fetch(`${BASE}/api/data?home=Oakwood_Care_Home`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Data fetch failed: HTTP ' + res.status);
   DATA = await res.json();
 } catch (e) {
-  console.error('FATAL: Cannot fetch ' + API + ' - ' + e.message);
+  console.error('FATAL: Cannot reach API at ' + BASE + ' - ' + e.message);
   process.exit(1);
 }
 const { config, staff, overrides } = DATA;
@@ -129,7 +138,7 @@ const firstBH = bhDates[0];
 const firstParts = firstBH.split('-');
 const firstBHDate = new Date(Number(firstParts[0]), Number(firstParts[1]) - 1, Number(firstParts[2]));
 const bhName = getBankHoliday(firstBHDate, config);
-if (bhName && typeof bhName === 'string' && bhName.length > 0) pass('getBankHoliday returns name: ' + bhName);
+if (bhName && typeof bhName === 'object' && bhName.name) pass('getBankHoliday returns name: ' + bhName.name);
 else fail('getBankHoliday returned: ' + JSON.stringify(bhName));
 
 // ============================================================

@@ -13,8 +13,25 @@ import {
   checkFatigueRisk, validateSwap,
 } from './src/lib/escalation.js';
 
-const res = await fetch('http://localhost:3001/api/data?home=Oakwood_Care_Home');
-const DATA = await res.json();
+const BASE = 'http://localhost:3001';
+let DATA;
+try {
+  const loginRes = await fetch(`${BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+  });
+  if (!loginRes.ok) throw new Error('Login failed: HTTP ' + loginRes.status);
+  const { token } = await loginRes.json();
+  const res = await fetch(`${BASE}/api/data?home=Oakwood_Care_Home`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Data fetch failed: HTTP ' + res.status);
+  DATA = await res.json();
+} catch (e) {
+  console.error('FATAL: Cannot reach API at ' + BASE + ' - ' + e.message);
+  process.exit(1);
+}
 const CONFIG = DATA.config;
 const STAFF = DATA.staff;
 const OVERRIDES = DATA.overrides;

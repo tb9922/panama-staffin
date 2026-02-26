@@ -12,13 +12,23 @@ import {
   calculateCoverage, getDayCoverageStatus, checkFatigueRisk,
 } from './src/lib/escalation.js';
 
-const API = 'http://localhost:3001/api/data?home=Oakwood_Care_Home';
+const BASE = 'http://localhost:3001';
 let DATA;
 try {
-  const resp = await fetch(API);
+  const loginRes = await fetch(`${BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+  });
+  if (!loginRes.ok) throw new Error('Login failed: HTTP ' + loginRes.status);
+  const { token } = await loginRes.json();
+  const resp = await fetch(`${BASE}/api/data?home=Oakwood_Care_Home`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) throw new Error('Data fetch failed: HTTP ' + resp.status);
   DATA = await resp.json();
 } catch (e) {
-  console.error('FATAL: Cannot reach API at', API, e.message);
+  console.error('FATAL: Cannot reach API at', BASE, '-', e.message);
   process.exit(1);
 }
 const { config, staff, overrides } = DATA;
