@@ -22,6 +22,15 @@ export async function getRecent(limit = 100) {
   }));
 }
 
+export async function purgeOlderThan(days, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
+    [days]
+  );
+  return rowCount;
+}
+
 export async function getByHome(homeSlug, limit = 100) {
   const { rows } = await pool.query(
     `SELECT id, ts, action, home_slug, user_name, details

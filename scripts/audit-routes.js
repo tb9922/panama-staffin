@@ -32,6 +32,7 @@ const PUBLIC_ROUTES = new Set([
 const ADMIN_ROUTES = new Set([
   'POST /api/data',
   'GET /api/audit',
+  'DELETE /api/audit/purge',
   'GET /api/export',
   'POST /api/handover',
   'PUT /api/handover/:id',

@@ -7,3 +7,7 @@ export async function log(action, homeSlug, username, details) {
 export async function getRecent(limit = 100) {
   return auditRepo.getRecent(limit);
 }
+
+export async function purgeOlderThan(days) {
+  return auditRepo.purgeOlderThan(days);
+}

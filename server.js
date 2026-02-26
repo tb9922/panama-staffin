@@ -14,6 +14,8 @@ import auditRouter from './routes/audit.js';
 import bankHolidaysRouter from './routes/bankHolidays.js';
 import handoverRouter from './routes/handover.js';
 import payrollRouter  from './routes/payroll.js';
+import gdprRouter     from './routes/gdpr.js';
+import { accessLog } from './middleware/accessLog.js';
 
 const app = express();
 
@@ -35,6 +37,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Access logging (fire-and-forget — never blocks responses) ─────────────────
+
+app.use(accessLog);
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.use('/api/login', authRouter);
@@ -45,6 +51,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/bank-holidays', bankHolidaysRouter);
 app.use('/api/handover', handoverRouter);
 app.use('/api/payroll',  payrollRouter);
+app.use('/api/gdpr',     gdprRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

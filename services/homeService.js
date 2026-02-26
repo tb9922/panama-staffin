@@ -85,10 +85,13 @@ export async function assembleData(homeSlug, userRole) {
     cqc_evidence: cqcEvidence,
   };
 
-  // Viewer role: strip resident health data (GDPR special category — DoB, capacity, restrictions)
+  // Viewer role: strip GDPR special category data
   if (userRole === 'admin') {
     payload.dols = dols;
     payload.mca_assessments = mca;
+  } else {
+    // Strip staff PII (NI numbers, dates of birth) from non-admin responses
+    payload.staff = staff.map(s => ({ ...s, date_of_birth: null, ni_number: null }));
   }
 
   return payload;

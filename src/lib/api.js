@@ -279,3 +279,93 @@ export async function markHMRCPaid(homeSlug, id, data) {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
+
+// ── GDPR & Data Protection ──────────────────────────────────────────────────
+
+// Data requests (SAR, erasure, etc.)
+export async function getDataRequests(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/requests?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createDataRequest(homeSlug, data) {
+  return apiFetch(`${API_BASE}/gdpr/requests?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateDataRequest(id, data) {
+  return apiFetch(`${API_BASE}/gdpr/requests/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function gatherRequestData(homeSlug, id) {
+  return apiFetch(`${API_BASE}/gdpr/requests/${id}/gather?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+export async function executeErasure(homeSlug, id) {
+  return apiFetch(`${API_BASE}/gdpr/requests/${id}/execute?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+
+// Data breaches
+export async function getDataBreaches(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/breaches?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createDataBreach(homeSlug, data) {
+  return apiFetch(`${API_BASE}/gdpr/breaches?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateDataBreach(id, data) {
+  return apiFetch(`${API_BASE}/gdpr/breaches/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function assessBreach(id) {
+  return apiFetch(`${API_BASE}/gdpr/breaches/${id}/assess`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+
+// Retention
+export async function getRetentionSchedule() {
+  return apiFetch(`${API_BASE}/gdpr/retention`, { headers: authHeaders() });
+}
+export async function scanRetention(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/retention?scan=true&home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// Consent
+export async function getConsentRecords(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/consent?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createConsentRecord(homeSlug, data) {
+  return apiFetch(`${API_BASE}/gdpr/consent?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateConsentRecord(id, data) {
+  return apiFetch(`${API_BASE}/gdpr/consent/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// DP complaints
+export async function getDPComplaints(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/complaints?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createDPComplaint(homeSlug, data) {
+  return apiFetch(`${API_BASE}/gdpr/complaints?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateDPComplaint(id, data) {
+  return apiFetch(`${API_BASE}/gdpr/complaints/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Access log (global — not per-home)
+export async function getAccessLog(limit = 100) {
+  return apiFetch(`${API_BASE}/gdpr/access-log?limit=${limit}`, { headers: authHeaders() });
+}
