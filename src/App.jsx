@@ -1,45 +1,46 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { loadData, saveData, loadHomes, setCurrentHome, login, getLoggedInUser, logout, loadAuditLog } from './lib/api.js';
 import { downloadXLSX } from './lib/excel.js';
 import { getStaffForDay, formatDate } from './lib/rotation.js';
 import { getDayCoverageStatus } from './lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from './lib/design.js';
-import Dashboard from './pages/Dashboard.jsx';
-import DailyStatus from './pages/DailyStatus.jsx';
-import RotationGrid from './pages/RotationGrid.jsx';
-import StaffRegister from './pages/StaffRegister.jsx';
-import CostTracker from './pages/CostTracker.jsx';
-import AnnualLeave from './pages/AnnualLeave.jsx';
-import ScenarioModel from './pages/ScenarioModel.jsx';
-import FatigueTracker from './pages/FatigueTracker.jsx';
-import SickTrends from './pages/SickTrends.jsx';
-import BudgetTracker from './pages/BudgetTracker.jsx';
-import TrainingMatrix from './pages/TrainingMatrix.jsx';
-import OnboardingTracker from './pages/OnboardingTracker.jsx';
-import CQCEvidence from './pages/CQCEvidence.jsx';
-import IncidentTracker from './pages/IncidentTracker.jsx';
-import ComplaintsTracker from './pages/ComplaintsTracker.jsx';
-import MaintenanceTracker from './pages/MaintenanceTracker.jsx';
-import IpcAuditTracker from './pages/IpcAuditTracker.jsx';
-import RiskRegister from './pages/RiskRegister.jsx';
-import PolicyReviewTracker from './pages/PolicyReviewTracker.jsx';
-import WhistleblowingTracker from './pages/WhistleblowingTracker.jsx';
-import DolsTracker from './pages/DolsTracker.jsx';
-import CareCertificateTracker from './pages/CareCertificateTracker.jsx';
-import Reports from './pages/Reports.jsx';
-import Config from './pages/Config.jsx';
-import HandoverNotes from './pages/HandoverNotes.jsx';
-import PayRatesConfig from './pages/PayRatesConfig.jsx';
-import TimesheetManager from './pages/TimesheetManager.jsx';
-import PayrollDashboard from './pages/PayrollDashboard.jsx';
-import PayrollDetail from './pages/PayrollDetail.jsx';
-import AgencyTracker from './pages/AgencyTracker.jsx';
-import TaxCodeManager from './pages/TaxCodeManager.jsx';
-import PensionManager from './pages/PensionManager.jsx';
-import SickPayTracker from './pages/SickPayTracker.jsx';
-import HMRCDashboard from './pages/HMRCDashboard.jsx';
-import GdprDashboard from './pages/GdprDashboard.jsx';
+
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const DailyStatus = lazy(() => import('./pages/DailyStatus.jsx'));
+const RotationGrid = lazy(() => import('./pages/RotationGrid.jsx'));
+const StaffRegister = lazy(() => import('./pages/StaffRegister.jsx'));
+const CostTracker = lazy(() => import('./pages/CostTracker.jsx'));
+const AnnualLeave = lazy(() => import('./pages/AnnualLeave.jsx'));
+const ScenarioModel = lazy(() => import('./pages/ScenarioModel.jsx'));
+const FatigueTracker = lazy(() => import('./pages/FatigueTracker.jsx'));
+const SickTrends = lazy(() => import('./pages/SickTrends.jsx'));
+const BudgetTracker = lazy(() => import('./pages/BudgetTracker.jsx'));
+const TrainingMatrix = lazy(() => import('./pages/TrainingMatrix.jsx'));
+const OnboardingTracker = lazy(() => import('./pages/OnboardingTracker.jsx'));
+const CQCEvidence = lazy(() => import('./pages/CQCEvidence.jsx'));
+const IncidentTracker = lazy(() => import('./pages/IncidentTracker.jsx'));
+const ComplaintsTracker = lazy(() => import('./pages/ComplaintsTracker.jsx'));
+const MaintenanceTracker = lazy(() => import('./pages/MaintenanceTracker.jsx'));
+const IpcAuditTracker = lazy(() => import('./pages/IpcAuditTracker.jsx'));
+const RiskRegister = lazy(() => import('./pages/RiskRegister.jsx'));
+const PolicyReviewTracker = lazy(() => import('./pages/PolicyReviewTracker.jsx'));
+const WhistleblowingTracker = lazy(() => import('./pages/WhistleblowingTracker.jsx'));
+const DolsTracker = lazy(() => import('./pages/DolsTracker.jsx'));
+const CareCertificateTracker = lazy(() => import('./pages/CareCertificateTracker.jsx'));
+const Reports = lazy(() => import('./pages/Reports.jsx'));
+const Config = lazy(() => import('./pages/Config.jsx'));
+const HandoverNotes = lazy(() => import('./pages/HandoverNotes.jsx'));
+const PayRatesConfig = lazy(() => import('./pages/PayRatesConfig.jsx'));
+const TimesheetManager = lazy(() => import('./pages/TimesheetManager.jsx'));
+const PayrollDashboard = lazy(() => import('./pages/PayrollDashboard.jsx'));
+const PayrollDetail = lazy(() => import('./pages/PayrollDetail.jsx'));
+const AgencyTracker = lazy(() => import('./pages/AgencyTracker.jsx'));
+const TaxCodeManager = lazy(() => import('./pages/TaxCodeManager.jsx'));
+const PensionManager = lazy(() => import('./pages/PensionManager.jsx'));
+const SickPayTracker = lazy(() => import('./pages/SickPayTracker.jsx'));
+const HMRCDashboard = lazy(() => import('./pages/HMRCDashboard.jsx'));
+const GdprDashboard = lazy(() => import('./pages/GdprDashboard.jsx'));
 
 // Top-level items (always visible)
 const NAV_TOP = [
@@ -642,6 +643,7 @@ export default function App() {
           </div>
         )}
         <CoverageAlertBanner data={data} />
+        <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Dashboard data={data} updateData={safeUpdateData} />} />
           <Route path="/day" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
@@ -681,6 +683,7 @@ export default function App() {
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/settings" element={<Config data={data} updateData={safeUpdateData} />} />
         </Routes>
+        </Suspense>
       </main>
     </div>
   );

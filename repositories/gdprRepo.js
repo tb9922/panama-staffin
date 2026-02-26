@@ -114,7 +114,7 @@ function shapeBreach(row) {
     home_id: row.home_id,
     title: row.title,
     description: row.description,
-    discovered_date: d(row.discovered_date),
+    discovered_date: ts(row.discovered_date),
     data_categories: row.data_categories || [],
     individuals_affected: row.individuals_affected,
     severity: row.severity,

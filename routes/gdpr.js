@@ -35,7 +35,7 @@ const requestUpdateSchema = z.object({
 const breachBodySchema = z.object({
   title:                     z.string().min(1).max(300),
   description:               z.string().max(5000).nullable().optional(),
-  discovered_date:           dateSchema,
+  discovered_date:           z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/),
   data_categories:           z.array(z.string()).optional().default([]),
   individuals_affected:      z.number().int().nonnegative().optional().default(0),
   severity:                  z.enum(['low', 'medium', 'high', 'critical']).optional().default('low'),
@@ -141,7 +141,7 @@ router.post('/requests/:id/gather', requireAuth, requireAdmin, async (req, res, 
     if (!home) return;
     const request = await gdprService.findRequestById(idP.data);
     if (!request) return res.status(404).json({ error: 'Request not found' });
-    const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, home.id);
+    const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, home.id, null, request.subject_name);
     await auditService.log('sar_gather', home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
     res.json(data);

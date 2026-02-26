@@ -1,11 +1,10 @@
-import ExcelJS from 'exceljs';
-
 /**
  * Download one or more sheets as an .xlsx file.
  * @param {string} filename - e.g. 'costs_June_2025.xlsx'
  * @param {Array<{name: string, headers: string[], rows: any[][]}>} sheets
  */
 export async function downloadXLSX(filename, sheets) {
+  const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   sheets.forEach(({ name, headers, rows }) => {
     const ws = wb.addWorksheet(name.slice(0, 31)); // Excel sheet name max 31 chars

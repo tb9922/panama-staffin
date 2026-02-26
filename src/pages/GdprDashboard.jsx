@@ -93,6 +93,11 @@ export default function GdprDashboard() {
     if (!form.title || !form.discovered_date) return;
     try {
       const data = { ...form };
+      // Combine date + time into UTC ISO datetime for precise ICO deadline calculation
+      if (data.discovered_time) {
+        data.discovered_date = new Date(`${data.discovered_date}T${data.discovered_time}`).toISOString();
+      }
+      delete data.discovered_time;
       if (data.data_categories && typeof data.data_categories === 'string') {
         data.data_categories = data.data_categories.split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -342,7 +347,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Breaches</h2>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: new Date().toISOString().slice(0, 10) }); setShowModal('breach'); }}>
+          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
             Report Breach
           </button>
         </div>
@@ -357,7 +362,7 @@ export default function GdprDashboard() {
                 {breaches.map(b => (
                   <tr key={b.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{b.title}<br /><span className="text-xs text-gray-400">{b.individuals_affected} affected</span></td>
-                    <td className={TABLE.td}>{b.discovered_date}</td>
+                    <td className={TABLE.td}>{b.discovered_date?.slice(0, 10)}{b.discovered_date?.length > 10 && <><br /><span className="text-xs text-gray-400">{new Date(b.discovered_date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span></>}</td>
                     <td className={TABLE.td}><span className={BADGE[getSeverityBadgeKey(b.severity)]}>{b.severity}</span></td>
                     <td className={TABLE.td}>
                       {b.ico_notifiable ? (
@@ -603,10 +608,14 @@ export default function GdprDashboard() {
               <label className={INPUT.label}>Description</label>
               <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <label className={INPUT.label}>Discovered Date</label>
                 <input type="date" className={INPUT.base} value={form.discovered_date || ''} onChange={e => setForm({ ...form, discovered_date: e.target.value })} />
+              </div>
+              <div>
+                <label className={INPUT.label}>Time</label>
+                <input type="time" className={INPUT.base} value={form.discovered_time || ''} onChange={e => setForm({ ...form, discovered_time: e.target.value })} />
               </div>
               <div>
                 <label className={INPUT.label}>Severity</label>

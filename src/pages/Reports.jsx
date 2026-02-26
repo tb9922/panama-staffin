@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF } from '../lib/pdfReports.js';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
 
@@ -22,8 +21,7 @@ export default function Reports({ data }) {
   async function generate(type) {
     setGenerating(type);
     try {
-      // Small delay so UI shows loading state
-      await new Promise(r => setTimeout(r, 100));
+      const { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF } = await import('../lib/pdfReports.js');
 
       if (type === 'roster') {
         generateRosterPDF(data, parseDate(weekDate));

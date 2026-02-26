@@ -1,6 +1,7 @@
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
+import { ValidationError } from '../errors.js';
 
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
 
@@ -8,7 +9,7 @@ import * as auditRepo from '../repositories/auditRepo.js';
  * Gather all personal data for a subject across all tables.
  * Used for Subject Access Requests. Returns a structured object.
  */
-export async function gatherPersonalData(subjectType, subjectId, homeId, client) {
+export async function gatherPersonalData(subjectType, subjectId, homeId, client, subjectName) {
   const conn = client || pool;
 
   if (subjectType === 'staff') {
@@ -16,6 +17,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client)
       staff, overrides, training, supervisions, appraisals,
       timesheets, payrollLines, taxCodes, sspPeriods,
       pensionEnrolment, pensionContributions, accessLog,
+      incidents, fireDrills, handoverEntries,
     ] = await Promise.all([
       conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -37,6 +39,19 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client)
       conn.query(`SELECT * FROM access_log WHERE user_name = (
         SELECT name FROM staff WHERE home_id = $1 AND id = $2
       ) ORDER BY ts DESC LIMIT 500`, [homeId, subjectId]),
+      // Staff appears in incident staff_involved JSONB array
+      conn.query(
+        `SELECT * FROM incidents WHERE home_id = $1 AND jsonb_exists(staff_involved, $2) AND deleted_at IS NULL`,
+        [homeId, subjectId]),
+      // Staff appears in fire drill staff_present JSONB array
+      conn.query(
+        `SELECT * FROM fire_drills WHERE home_id = $1 AND jsonb_exists(staff_present, $2)`,
+        [homeId, subjectId]),
+      // Handover entries authored by this staff member (matched via staff name)
+      conn.query(
+        `SELECT * FROM handover_entries WHERE home_id = $1 AND author = (
+          SELECT name FROM staff WHERE home_id = $1 AND id = $2
+        )`, [homeId, subjectId]),
     ]);
 
     return {
@@ -56,20 +71,41 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client)
         pension_enrolment: pensionEnrolment.rows,
         pension_contributions: pensionContributions.rows,
         access_log: accessLog.rows,
+        incidents: incidents.rows,
+        fire_drills: fireDrills.rows,
+        handover_entries: handoverEntries.rows,
       },
     };
   }
 
   if (subjectType === 'resident') {
-    const [dols, mca] = await Promise.all([
+    const queries = [
       conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-    ]);
+    ];
+    // Name-based queries only run when subject_name is provided (residents have no stable ID across tables)
+    if (subjectName) {
+      queries.push(
+        conn.query(
+          `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
+          [homeId, subjectName]),
+        conn.query(
+          `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
+          [homeId, subjectName]),
+      );
+    }
+    const results = await Promise.all(queries);
     return {
       subject_type: 'resident',
       subject_id: subjectId,
       gathered_at: new Date().toISOString(),
-      data: { dols: dols.rows, mca_assessments: mca.rows },
+      incomplete: !subjectName ? 'subject_name not provided — incidents and complaints not searched' : undefined,
+      data: {
+        dols: results[0].rows,
+        mca_assessments: results[1].rows,
+        incidents: results[2]?.rows || [],
+        complaints: results[3]?.rows || [],
+      },
     };
   }
 
@@ -294,7 +330,15 @@ export async function updateRequest(id, data) { return gdprRepo.updateRequest(id
 export async function findBreaches(homeId) { return gdprRepo.findBreaches(homeId); }
 export async function findBreachById(id) { return gdprRepo.findBreachById(id); }
 export async function createBreach(homeId, data) { return gdprRepo.createBreach(homeId, data); }
-export async function updateBreach(id, data) { return gdprRepo.updateBreach(id, data); }
+export async function updateBreach(id, data) {
+  if (data.status && ['resolved', 'closed'].includes(data.status)) {
+    const current = await gdprRepo.findBreachById(id);
+    if (current?.ico_notifiable && !current?.ico_notified) {
+      throw new ValidationError('ICO must be notified before resolving a notifiable breach');
+    }
+  }
+  return gdprRepo.updateBreach(id, data);
+}
 
 export async function getRetentionSchedule() { return gdprRepo.getRetentionSchedule(); }
 
