@@ -12,6 +12,8 @@ function shapeRow(row) {
     active: row.active,
     wtr_opt_out: row.wtr_opt_out,
     start_date: row.start_date ? row.start_date.toISOString().slice(0, 10) : null,
+    date_of_birth: row.date_of_birth ? row.date_of_birth.toISOString().slice(0, 10) : null,
+    ni_number: row.ni_number || null,
     contract_hours: row.contract_hours != null ? parseFloat(row.contract_hours) : null,
     al_entitlement: row.al_entitlement,
     al_carryover: row.al_carryover,
@@ -48,8 +50,8 @@ export async function sync(homeId, staffArr, client) {
     await conn.query(
       `INSERT INTO staff
          (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
-          start_date, contract_hours, al_entitlement, al_carryover, leaving_date, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+          start_date, date_of_birth, ni_number, contract_hours, al_entitlement, al_carryover, leaving_date, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
        ON CONFLICT (home_id, id) DO UPDATE SET
          name           = EXCLUDED.name,
          role           = EXCLUDED.role,
@@ -60,6 +62,8 @@ export async function sync(homeId, staffArr, client) {
          active         = EXCLUDED.active,
          wtr_opt_out    = EXCLUDED.wtr_opt_out,
          start_date     = EXCLUDED.start_date,
+         date_of_birth  = EXCLUDED.date_of_birth,
+         ni_number      = EXCLUDED.ni_number,
          contract_hours = EXCLUDED.contract_hours,
          al_entitlement = EXCLUDED.al_entitlement,
          al_carryover   = EXCLUDED.al_carryover,
@@ -69,8 +73,8 @@ export async function sync(homeId, staffArr, client) {
       [
         s.id, homeId, s.name, s.role, s.team, s.pref || null,
         s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out || false,
-        s.start_date || null, s.contract_hours || null,
-        s.al_entitlement || null, s.al_carryover || 0, s.leaving_date || null,
+        s.start_date || null, s.date_of_birth || null, s.ni_number || null,
+        s.contract_hours || null, s.al_entitlement || null, s.al_carryover || 0, s.leaving_date || null,
       ]
     );
   }

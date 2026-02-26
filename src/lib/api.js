@@ -106,3 +106,176 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
     method: 'POST', headers: authHeaders(),
   });
 }
+
+// ── Payroll API ───────────────────────────────────────────────────────────────
+
+const h = (homeSlug) => encodeURIComponent(homeSlug);
+
+// Pay rate rules
+export async function getPayRateRules(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/rates?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createPayRateRule(homeSlug, rule) {
+  return apiFetch(`${API_BASE}/payroll/rates?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(rule),
+  });
+}
+export async function updatePayRateRule(homeSlug, ruleId, rule) {
+  return apiFetch(`${API_BASE}/payroll/rates/${ruleId}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(rule),
+  });
+}
+export async function deletePayRateRule(homeSlug, ruleId) {
+  return apiFetch(`${API_BASE}/payroll/rates/${ruleId}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+export async function getNMWRates() {
+  return apiFetch(`${API_BASE}/payroll/nmw`, { headers: authHeaders() });
+}
+
+// Timesheets
+export async function getTimesheets(homeSlug, date) {
+  return apiFetch(`${API_BASE}/payroll/timesheets?home=${h(homeSlug)}&date=${date}`, { headers: authHeaders() });
+}
+export async function getTimesheetPeriod(homeSlug, start, end, status) {
+  const statusQ = status ? `&status=${status}` : '';
+  return apiFetch(`${API_BASE}/payroll/timesheets/period?home=${h(homeSlug)}&start=${start}&end=${end}${statusQ}`, { headers: authHeaders() });
+}
+export async function upsertTimesheet(homeSlug, entry) {
+  return apiFetch(`${API_BASE}/payroll/timesheets?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(entry),
+  });
+}
+export async function approveTimesheet(homeSlug, id) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/${id}/approve?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+export async function bulkApproveTimesheets(homeSlug, date) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/bulk-approve?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ date }),
+  });
+}
+
+// Payroll runs
+export async function getPayrollRuns(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/runs?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createPayrollRun(homeSlug, run) {
+  return apiFetch(`${API_BASE}/payroll/runs?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(run),
+  });
+}
+export async function getPayrollRun(homeSlug, runId) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function calculatePayrollRun(homeSlug, runId) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}/calculate?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+export async function approvePayrollRun(homeSlug, runId) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}/approve?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+export function getPayrollExportUrl(homeSlug, runId, format) {
+  return `${API_BASE}/payroll/runs/${runId}/export?home=${h(homeSlug)}&format=${format}`;
+}
+export function getPayrollSummaryPdfUrl(homeSlug, runId) {
+  return `${API_BASE}/payroll/runs/${runId}/summary-pdf?home=${h(homeSlug)}`;
+}
+export async function getPayslips(homeSlug, runId) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}/payslips?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// Agency
+export async function getAgencyProviders(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/agency/providers?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createAgencyProvider(homeSlug, provider) {
+  return apiFetch(`${API_BASE}/payroll/agency/providers?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(provider),
+  });
+}
+export async function updateAgencyProvider(homeSlug, id, provider) {
+  return apiFetch(`${API_BASE}/payroll/agency/providers/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(provider),
+  });
+}
+export async function getAgencyShifts(homeSlug, start, end) {
+  return apiFetch(`${API_BASE}/payroll/agency/shifts?home=${h(homeSlug)}&start=${start}&end=${end}`, { headers: authHeaders() });
+}
+export async function createAgencyShift(homeSlug, shift) {
+  return apiFetch(`${API_BASE}/payroll/agency/shifts?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(shift),
+  });
+}
+export async function updateAgencyShift(homeSlug, id, shift) {
+  return apiFetch(`${API_BASE}/payroll/agency/shifts/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(shift),
+  });
+}
+export async function getAgencyMetrics(homeSlug, weeks = 12) {
+  return apiFetch(`${API_BASE}/payroll/agency/metrics?home=${h(homeSlug)}&weeks=${weeks}`, { headers: authHeaders() });
+}
+
+// ── Phase 2: Tax Codes ────────────────────────────────────────────────────────
+
+export async function getTaxCodes(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/tax-codes?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function upsertTaxCode(homeSlug, data) {
+  return apiFetch(`${API_BASE}/payroll/tax-codes?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getYTD(homeSlug, staffId, year) {
+  return apiFetch(`${API_BASE}/payroll/ytd?home=${h(homeSlug)}&staffId=${staffId}&year=${year}`, { headers: authHeaders() });
+}
+
+// ── Phase 2: Pensions ─────────────────────────────────────────────────────────
+
+export async function getPensionEnrolments(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/pensions?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function upsertPensionEnrolment(homeSlug, data) {
+  return apiFetch(`${API_BASE}/payroll/pensions?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getPensionConfig() {
+  return apiFetch(`${API_BASE}/payroll/pension-config`, { headers: authHeaders() });
+}
+
+// ── Phase 2: SSP & Sick Periods ───────────────────────────────────────────────
+
+export async function getSSPConfig() {
+  return apiFetch(`${API_BASE}/payroll/ssp-config`, { headers: authHeaders() });
+}
+export async function getSickPeriods(homeSlug, staffId) {
+  const q = staffId ? `&staffId=${staffId}` : '';
+  return apiFetch(`${API_BASE}/payroll/sick-periods?home=${h(homeSlug)}${q}`, { headers: authHeaders() });
+}
+export async function createSickPeriod(homeSlug, data) {
+  return apiFetch(`${API_BASE}/payroll/sick-periods?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateSickPeriod(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/payroll/sick-periods/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// ── Phase 2: HMRC Tracker ─────────────────────────────────────────────────────
+
+export async function getHMRCLiabilities(homeSlug, year) {
+  return apiFetch(`${API_BASE}/payroll/hmrc?home=${h(homeSlug)}&year=${year}`, { headers: authHeaders() });
+}
+export async function markHMRCPaid(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/payroll/hmrc/${id}/paid?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}

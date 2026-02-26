@@ -30,6 +30,15 @@ import CareCertificateTracker from './pages/CareCertificateTracker.jsx';
 import Reports from './pages/Reports.jsx';
 import Config from './pages/Config.jsx';
 import HandoverNotes from './pages/HandoverNotes.jsx';
+import PayRatesConfig from './pages/PayRatesConfig.jsx';
+import TimesheetManager from './pages/TimesheetManager.jsx';
+import PayrollDashboard from './pages/PayrollDashboard.jsx';
+import PayrollDetail from './pages/PayrollDetail.jsx';
+import AgencyTracker from './pages/AgencyTracker.jsx';
+import TaxCodeManager from './pages/TaxCodeManager.jsx';
+import PensionManager from './pages/PensionManager.jsx';
+import SickPayTracker from './pages/SickPayTracker.jsx';
+import HMRCDashboard from './pages/HMRCDashboard.jsx';
 
 // Top-level items (always visible)
 const NAV_TOP = [
@@ -88,6 +97,20 @@ const NAV_SECTIONS = [
     items: [
       { path: '/costs', label: 'Costs', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
       { path: '/budget', label: 'Budget', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
+    ],
+  },
+  {
+    id: 'payroll', label: 'Payroll',
+    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
+    items: [
+      { path: '/payroll/rates',      label: 'Pay Rates',     icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
+      { path: '/payroll/timesheets', label: 'Timesheets',    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { path: '/payroll',            label: 'Payroll Runs',  icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
+      { path: '/payroll/agency',     label: 'Agency Costs',  icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
+      { path: '/payroll/tax-codes',  label: 'Tax Codes',     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      { path: '/payroll/pensions',   label: 'Pensions',      icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { path: '/payroll/sick-pay',   label: 'Sick Pay',      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+      { path: '/payroll/hmrc',       label: 'HMRC',          icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
     ],
   },
   {
@@ -636,6 +659,15 @@ export default function App() {
           <Route path="/dols" element={<DolsTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/care-cert" element={<CareCertificateTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/payroll/rates"      element={<PayRatesConfig data={data} updateData={safeUpdateData} user={user} />} />
+          <Route path="/payroll/timesheets" element={<TimesheetManager data={data} user={user} />} />
+          <Route path="/payroll/agency"     element={<AgencyTracker data={data} user={user} />} />
+          <Route path="/payroll/tax-codes"  element={<TaxCodeManager data={data} user={user} />} />
+          <Route path="/payroll/pensions"   element={<PensionManager data={data} user={user} />} />
+          <Route path="/payroll/sick-pay"   element={<SickPayTracker data={data} user={user} />} />
+          <Route path="/payroll/hmrc"       element={<HMRCDashboard data={data} user={user} />} />
+          <Route path="/payroll/:runId"     element={<PayrollDetail data={data} user={user} />} />
+          <Route path="/payroll"            element={<PayrollDashboard data={data} user={user} />} />
           <Route path="/reports" element={<Reports data={data} />} />
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/settings" element={<Config data={data} updateData={safeUpdateData} />} />

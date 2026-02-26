@@ -1,6 +1,19 @@
 import { pool } from '../db.js';
 
 /**
+ * Find a home by its integer primary key.
+ * Returns null if not found.
+ * @param {number} id
+ */
+export async function findById(id) {
+  const { rows } = await pool.query(
+    'SELECT * FROM homes WHERE id = $1',
+    [id],
+  );
+  return rows[0] || null;
+}
+
+/**
  * Find a home by its slug (path-safe name, e.g. "Oakwood_Care_Home").
  * Returns null if not found.
  * @param {string} slug
