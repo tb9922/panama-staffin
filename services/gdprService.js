@@ -18,6 +18,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       timesheets, payrollLines, taxCodes, sspPeriods,
       pensionEnrolment, pensionContributions, accessLog,
       incidents, fireDrills, handoverEntries,
+      // HR module tables (GDPR special category — employee relations data)
+      hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
+      hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
+      hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
     ] = await Promise.all([
       conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -52,6 +56,35 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         `SELECT * FROM handover_entries WHERE home_id = $1 AND author = (
           SELECT name FROM staff WHERE home_id = $1 AND id = $2
         )`, [homeId, subjectId]),
+      // HR module — disciplinary, grievance, performance cases
+      conn.query(`SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(
+        `SELECT ga.* FROM hr_grievance_actions ga
+         JOIN hr_grievance_cases gc ON gc.id = ga.grievance_id
+         WHERE gc.home_id = $1 AND gc.staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // HR module — absence management
+      conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // HR module — contracts, family leave, flexible working, EDI
+      conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // HR module — TUPE: employees JSONB array has no guaranteed staff_id field.
+      // We filter on home_id only and return home-level TUPE records. TUPE data is
+      // relatively non-sensitive (employer/transferor details) and contains no health
+      // or special-category data. The SAR response notes this is home-scoped.
+      conn.query(`SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]),
+      // HR module — DBS/RTW renewals
+      conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // HR module — case notes authored by this staff member (matched by name, not staff_id)
+      conn.query(
+        `SELECT cn.* FROM hr_case_notes cn
+         WHERE cn.home_id = $1 AND cn.author = (
+           SELECT name FROM staff WHERE home_id = $1 AND id = $2
+         )`, [homeId, subjectId]),
     ]);
 
     return {
@@ -74,6 +107,20 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         incidents: incidents.rows,
         fire_drills: fireDrills.rows,
         handover_entries: handoverEntries.rows,
+        // HR module — employee relations (GDPR special category)
+        hr_disciplinary_cases: hrDisciplinary.rows,
+        hr_grievance_cases: hrGrievance.rows,
+        hr_grievance_actions: hrGrievanceActions.rows,
+        hr_performance_cases: hrPerformance.rows,
+        hr_rtw_interviews: hrRtwInterviews.rows,
+        hr_oh_referrals: hrOhReferrals.rows,
+        hr_contracts: hrContracts.rows,
+        hr_family_leave: hrFamilyLeave.rows,
+        hr_flexible_working: hrFlexWorking.rows,
+        hr_edi_records: hrEdi.rows,
+        hr_tupe_transfers: hrTupe.rows,
+        hr_rtw_dbs_renewals: hrRenewals.rows,
+        hr_case_notes: hrCaseNotes.rows,
       },
     };
   }
@@ -122,6 +169,13 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
   return withTransaction(async (client) => {
     const anon = `[REDACTED-${staffId.slice(0, 4)}]`;
 
+    // Capture original name BEFORE anonymising — needed for name-keyed tables
+    // (hr_case_notes.author, handover_entries.author, access_log.user_name)
+    const { rows: [staffRow] } = await client.query(
+      `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
+    );
+    const originalName = staffRow?.name;
+
     // Anonymise staff record (keep id, role, team, skill for operational data)
     await client.query(
       `UPDATE staff SET
@@ -166,16 +220,101 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
 
+    // Anonymise HR module data — clear sensitive descriptions, retain case structure for audit trail
+    // Disciplinary: clear allegation, investigation notes, suspension reason, hearing notes,
+    // outcome reason, appeal grounds/reasons (special category employment data).
+    // Retain: dates, statuses, category, outcome type — these form the audit skeleton.
+    await client.query(
+      `UPDATE hr_disciplinary_cases SET
+         allegation_summary = $2, allegation_detail = NULL,
+         investigation_notes = NULL, investigation_findings = NULL,
+         suspension_reason = NULL,
+         hearing_notes = NULL, hearing_employee_response = NULL,
+         outcome_reason = NULL,
+         appeal_grounds = NULL, appeal_outcome_reason = NULL
+       WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
+    // Grievance: clear subject, investigation notes, hearing notes, outcome reason,
+    // appeal grounds/reasons. No mediation_notes column exists.
+    // Retain: dates, category, protected_characteristic (statistical), statuses.
+    await client.query(
+      `UPDATE hr_grievance_cases SET
+         subject_summary = $2, subject_detail = NULL, desired_outcome = NULL,
+         investigation_notes = NULL, investigation_findings = NULL,
+         hearing_notes = NULL, employee_statement_at_hearing = NULL,
+         outcome_reason = NULL,
+         appeal_grounds = NULL, appeal_outcome_reason = NULL
+       WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
+    // Performance: clear concern description, informal notes, hearing notes, outcome reason,
+    // appeal grounds/reasons. No pip_notes or concerns columns — actual columns are
+    // concern_summary, concern_detail, informal_discussion_notes.
+    // Retain: dates, type, performance_area, statuses, pip dates and outcome type.
+    await client.query(
+      `UPDATE hr_performance_cases SET
+         concern_summary = $2, concern_detail = NULL,
+         informal_discussion_notes = NULL,
+         hearing_notes = NULL,
+         outcome_reason = NULL,
+         appeal_grounds = NULL, appeal_outcome_reason = NULL
+       WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
+    // OH referrals: clear reason, questions, report summary, adjustments (health data — special category).
+    // Actual adjustments column is adjustments_implemented (not adjustments).
+    // Also clear adjustments_recommended (free-text medical recommendation).
+    // Retain: dates, consent flag, fit_for_role verdict, disability_likely flag.
+    await client.query(
+      `UPDATE hr_oh_referrals SET
+         reason = $2, questions_for_oh = '[]'::jsonb,
+         report_summary = NULL, adjustments_recommended = NULL,
+         adjustments_implemented = '[]'::jsonb
+       WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
+    // RTW interviews: clear notes, adjustments detail, fit note adjustments (health data).
+    // Param is $2 not $3 — no anon value needed, just NULL.
+    await client.query(
+      `UPDATE hr_rtw_interviews SET
+         notes = NULL, adjustments_detail = NULL, fit_note_adjustments = NULL
+       WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    // EDI records: clear description, condition description, outcome, notes (special category).
+    // adjustments is the correct column name here (JSONB, distinct from OH adjustments_implemented).
+    await client.query(
+      `UPDATE hr_edi_records SET
+         description = $2, condition_description = NULL,
+         adjustments = '[]'::jsonb,
+         outcome = NULL, notes = NULL
+       WHERE home_id = $1 AND staff_id = $3`,
+      [homeId, anon, staffId]
+    );
+    // Case notes: anonymise author and clear content.
+    // Must use originalName (captured before staff UPDATE) — by this point staff.name is already [REDACTED].
+    // Column is `content`, not `note`.
+    if (originalName) {
+      await client.query(
+        `UPDATE hr_case_notes SET author = $1, content = '[REDACTED]'
+         WHERE home_id = $2 AND author = $3`,
+        [anon, homeId, originalName]
+      );
+    }
+
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
     // - ssp_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
     // - shift_overrides: operational scheduling data, no PII beyond staff_id
+    // - hr_contracts, hr_family_leave, hr_flexible_working: retained per Limitation Act (6 years)
+    // - hr_rtw_dbs_renewals: retained for compliance audit trail
 
     // Mark the request as completed
     if (requestId) {
-      await gdprRepo.updateRequest(requestId, {
+      await gdprRepo.updateRequest(requestId, homeId, {
         status: 'completed',
         completed_date: new Date().toISOString().slice(0, 10),
         completed_by: username,
@@ -201,6 +340,10 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
   'retention_schedule',
+  // HR module tables (6-year retention per Limitation Act 1980)
+  'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
+  'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
+  'hr_flexible_working', 'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
 ]);
 
 // Tables without home_id (global tables)
@@ -325,29 +468,29 @@ export function assessBreachRisk(breachData) {
 export async function findRequests(homeId) { return gdprRepo.findRequests(homeId); }
 export async function findRequestById(id) { return gdprRepo.findRequestById(id); }
 export async function createRequest(homeId, data) { return gdprRepo.createRequest(homeId, data); }
-export async function updateRequest(id, data) { return gdprRepo.updateRequest(id, data); }
+export async function updateRequest(id, homeId, data, client) { return gdprRepo.updateRequest(id, homeId, data, client); }
 
 export async function findBreaches(homeId) { return gdprRepo.findBreaches(homeId); }
 export async function findBreachById(id) { return gdprRepo.findBreachById(id); }
 export async function createBreach(homeId, data) { return gdprRepo.createBreach(homeId, data); }
-export async function updateBreach(id, data) {
+export async function updateBreach(id, homeId, data) {
   if (data.status && ['resolved', 'closed'].includes(data.status)) {
     const current = await gdprRepo.findBreachById(id);
     if (current?.ico_notifiable && !current?.ico_notified) {
       throw new ValidationError('ICO must be notified before resolving a notifiable breach');
     }
   }
-  return gdprRepo.updateBreach(id, data);
+  return gdprRepo.updateBreach(id, homeId, data);
 }
 
 export async function getRetentionSchedule() { return gdprRepo.getRetentionSchedule(); }
 
 export async function findConsent(homeId) { return gdprRepo.findConsent(homeId); }
 export async function createConsent(homeId, data) { return gdprRepo.createConsent(homeId, data); }
-export async function updateConsent(id, data) { return gdprRepo.updateConsent(id, data); }
+export async function updateConsent(id, homeId, data) { return gdprRepo.updateConsent(id, homeId, data); }
 
 export async function findDPComplaints(homeId) { return gdprRepo.findDPComplaints(homeId); }
 export async function createDPComplaint(homeId, data) { return gdprRepo.createDPComplaint(homeId, data); }
-export async function updateDPComplaint(id, data) { return gdprRepo.updateDPComplaint(id, data); }
+export async function updateDPComplaint(id, homeId, data) { return gdprRepo.updateDPComplaint(id, homeId, data); }
 
 export async function getAccessLog(opts) { return gdprRepo.getAccessLog(opts); }

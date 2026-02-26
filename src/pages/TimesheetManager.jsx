@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getTimesheets, upsertTimesheet, approveTimesheet, bulkApproveTimesheets,
@@ -19,6 +20,7 @@ function todayStr() {
 }
 
 export default function TimesheetManager({ data, user }) {
+  const navigate = useNavigate();
   const homeSlug = getCurrentHome();
   const isAdmin  = user?.role === 'admin';
 
@@ -273,7 +275,7 @@ export default function TimesheetManager({ data, user }) {
                   return (
                     <tr key={staff.id} className={TABLE.tr}>
                       <td className={TABLE.td}>
-                        <p className="font-medium text-gray-900">{staff.name}</p>
+                        <p className="font-medium text-blue-600 hover:text-blue-800 cursor-pointer" onClick={() => navigate(`/payroll/monthly-timesheet/${staff.id}`)}>{staff.name}</p>
                         <p className="text-xs text-gray-400">{staff.role}</p>
                       </td>
                       <td className={TABLE.td}>

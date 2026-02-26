@@ -13,5 +13,5 @@ export async function login(username, password) {
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, config.jwtSecret);
+  return jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
 }

@@ -138,9 +138,10 @@ export async function getNMWRates() {
 export async function getTimesheets(homeSlug, date) {
   return apiFetch(`${API_BASE}/payroll/timesheets?home=${h(homeSlug)}&date=${date}`, { headers: authHeaders() });
 }
-export async function getTimesheetPeriod(homeSlug, start, end, status) {
+export async function getTimesheetPeriod(homeSlug, start, end, status, staffId) {
   const statusQ = status ? `&status=${status}` : '';
-  return apiFetch(`${API_BASE}/payroll/timesheets/period?home=${h(homeSlug)}&start=${start}&end=${end}${statusQ}`, { headers: authHeaders() });
+  const staffQ = staffId ? `&staff_id=${staffId}` : '';
+  return apiFetch(`${API_BASE}/payroll/timesheets/period?home=${h(homeSlug)}&start=${start}&end=${end}${statusQ}${staffQ}`, { headers: authHeaders() });
 }
 export async function upsertTimesheet(homeSlug, entry) {
   return apiFetch(`${API_BASE}/payroll/timesheets?home=${h(homeSlug)}`, {
@@ -152,9 +153,24 @@ export async function approveTimesheet(homeSlug, id) {
     method: 'POST', headers: authHeaders(),
   });
 }
+export async function disputeTimesheet(homeSlug, id, reason) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/${id}/dispute?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ reason }),
+  });
+}
 export async function bulkApproveTimesheets(homeSlug, date) {
   return apiFetch(`${API_BASE}/payroll/timesheets/bulk-approve?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ date }),
+  });
+}
+export async function batchUpsertTimesheets(homeSlug, entries) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/batch-upsert?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ entries }),
+  });
+}
+export async function approveTimesheetRange(homeSlug, staffId, start, end) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/approve-range?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ staff_id: staffId, start, end }),
   });
 }
 
@@ -368,4 +384,332 @@ export async function updateDPComplaint(id, data) {
 // Access log (global — not per-home)
 export async function getAccessLog(limit = 100) {
   return apiFetch(`${API_BASE}/gdpr/access-log?limit=${limit}`, { headers: authHeaders() });
+}
+
+// ── HR & People ──────────────────────────────────────────────────────────────
+
+// Disciplinary
+export async function getHrDisciplinary(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.status) params.set('status', filters.status);
+  return apiFetch(`${API_BASE}/hr/cases/disciplinary?${params}`, { headers: authHeaders() });
+}
+export async function createHrDisciplinary(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/cases/disciplinary?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getHrDisciplinaryById(homeSlug, id) {
+  return apiFetch(`${API_BASE}/hr/cases/disciplinary/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateHrDisciplinary(id, data) {
+  return apiFetch(`${API_BASE}/hr/cases/disciplinary/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Grievance
+export async function getHrGrievance(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.status) params.set('status', filters.status);
+  return apiFetch(`${API_BASE}/hr/cases/grievance?${params}`, { headers: authHeaders() });
+}
+export async function createHrGrievance(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/cases/grievance?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getHrGrievanceById(homeSlug, id) {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateHrGrievance(id, data) {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getGrievanceActions(id) {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions`, { headers: authHeaders() });
+}
+export async function createGrievanceAction(id, data) {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateGrievanceAction(id, data) {
+  return apiFetch(`${API_BASE}/hr/grievance-actions/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Performance
+export async function getHrPerformance(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.type) params.set('type', filters.type);
+  return apiFetch(`${API_BASE}/hr/cases/performance?${params}`, { headers: authHeaders() });
+}
+export async function createHrPerformance(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/cases/performance?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getHrPerformanceById(homeSlug, id) {
+  return apiFetch(`${API_BASE}/hr/cases/performance/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateHrPerformance(id, data) {
+  return apiFetch(`${API_BASE}/hr/cases/performance/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Absence
+export async function getAbsenceSummary(homeSlug) {
+  return apiFetch(`${API_BASE}/hr/absence/summary?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function getStaffAbsence(homeSlug, staffId) {
+  return apiFetch(`${API_BASE}/hr/absence/staff/${staffId}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// RTW Interviews
+export async function getHrRtwInterviews(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  return apiFetch(`${API_BASE}/hr/rtw-interviews?${params}`, { headers: authHeaders() });
+}
+export async function createHrRtwInterview(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/rtw-interviews?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrRtwInterview(id, data) {
+  return apiFetch(`${API_BASE}/hr/rtw-interviews/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// OH Referrals
+export async function getHrOhReferrals(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  return apiFetch(`${API_BASE}/hr/oh-referrals?${params}`, { headers: authHeaders() });
+}
+export async function createHrOhReferral(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/oh-referrals?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrOhReferral(id, data) {
+  return apiFetch(`${API_BASE}/hr/oh-referrals/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Contracts
+export async function getHrContracts(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.status) params.set('status', filters.status);
+  return apiFetch(`${API_BASE}/hr/contracts?${params}`, { headers: authHeaders() });
+}
+export async function createHrContract(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/contracts?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrContract(id, data) {
+  return apiFetch(`${API_BASE}/hr/contracts/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Family Leave
+export async function getHrFamilyLeave(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.type) params.set('type', filters.type);
+  return apiFetch(`${API_BASE}/hr/family-leave?${params}`, { headers: authHeaders() });
+}
+export async function createHrFamilyLeave(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/family-leave?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrFamilyLeave(id, data) {
+  return apiFetch(`${API_BASE}/hr/family-leave/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Flexible Working
+export async function getHrFlexWorking(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.status) params.set('status', filters.status);
+  return apiFetch(`${API_BASE}/hr/flexible-working?${params}`, { headers: authHeaders() });
+}
+export async function createHrFlexWorking(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/flexible-working?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrFlexWorking(id, data) {
+  return apiFetch(`${API_BASE}/hr/flexible-working/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// EDI
+export async function getHrEdi(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.recordType) params.set('record_type', filters.recordType);
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  return apiFetch(`${API_BASE}/hr/edi?${params}`, { headers: authHeaders() });
+}
+export async function createHrEdi(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/edi?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrEdi(id, data) {
+  return apiFetch(`${API_BASE}/hr/edi/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// TUPE
+export async function getHrTupe(homeSlug) {
+  return apiFetch(`${API_BASE}/hr/tupe?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createHrTupe(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/tupe?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrTupe(id, data) {
+  return apiFetch(`${API_BASE}/hr/tupe/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Renewals
+export async function getHrRenewals(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.checkType) params.set('check_type', filters.checkType);
+  if (filters.status) params.set('status', filters.status);
+  return apiFetch(`${API_BASE}/hr/renewals?${params}`, { headers: authHeaders() });
+}
+export async function createHrRenewal(homeSlug, data) {
+  return apiFetch(`${API_BASE}/hr/renewals?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateHrRenewal(id, data) {
+  return apiFetch(`${API_BASE}/hr/renewals/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Cross-cutting
+export async function getHrWarnings(homeSlug) {
+  return apiFetch(`${API_BASE}/hr/warnings?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function getHrStats(homeSlug) {
+  return apiFetch(`${API_BASE}/hr/stats?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function getHrCaseNotes(caseType, caseId) {
+  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}`, { headers: authHeaders() });
+}
+export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
+  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// ── HR Staff List ───────────────────────────────────────────────────────────
+export async function getHrStaffList(homeSlug) {
+  const home = homeSlug || getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+}
+
+// ── HR File Attachments ─────────────────────────────────────────────────────
+export async function getHrAttachments(caseType, caseId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+}
+
+export async function uploadHrAttachment(caseType, caseId, file, description) {
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const token = sessionStorage.getItem('token') || '';
+  const res = await fetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: formData,
+  });
+  if (res.status === 401) {
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteHrAttachment(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/attachments/${id}?home=${encodeURIComponent(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadHrAttachment(id, originalName) {
+  const home = getCurrentHome();
+  const token = sessionStorage.getItem('token') || '';
+  const res = await fetch(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── HR Investigation Meetings ───────────────────────────────────────────────
+export async function getHrMeetings(caseType, caseId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+}
+
+export async function createHrMeeting(caseType, caseId, data) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateHrMeeting(id, data) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/hr/meetings/${id}?home=${encodeURIComponent(home)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
 }

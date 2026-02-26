@@ -50,18 +50,23 @@ export async function findByStaffDate(homeId, staffId, date, client) {
   return rows.length > 0 ? shapeRow(rows[0]) : null;
 }
 
-/** All entries for a home within a date range, optionally filtered by status. */
-export async function findByHomePeriod(homeId, start, end, status, client) {
+/** All entries for a home within a date range, optionally filtered by status and staffId. */
+export async function findByHomePeriod(homeId, start, end, status, staffId, client) {
   const conn = client || pool;
   const params = [homeId, start, end];
   let statusClause = '';
+  let staffClause = '';
   if (status) {
     params.push(status);
     statusClause = ` AND status = $${params.length}`;
   }
+  if (staffId) {
+    params.push(staffId);
+    staffClause = ` AND staff_id = $${params.length}`;
+  }
   const { rows } = await conn.query(
     `SELECT * FROM timesheet_entries
-     WHERE home_id = $1 AND date >= $2 AND date <= $3${statusClause}
+     WHERE home_id = $1 AND date >= $2 AND date <= $3${statusClause}${staffClause}
      ORDER BY date, staff_id`,
     params,
   );
@@ -168,4 +173,57 @@ export async function totalSnapSavings(homeId, start, end) {
     totalMinutes: parseFloat(rows[0].total_minutes),
     snapCount: parseInt(rows[0].snap_count, 10),
   };
+}
+
+/** Bulk upsert multiple timesheet entries in a single transaction. */
+export async function bulkUpsert(homeId, entries, client) {
+  const conn = client || pool;
+  const results = [];
+  for (const entry of entries) {
+    const { rows } = await conn.query(
+      `INSERT INTO timesheet_entries
+         (home_id, staff_id, date, scheduled_start, scheduled_end,
+          actual_start, actual_end, snapped_start, snapped_end,
+          snap_applied, snap_minutes_saved, break_minutes, payable_hours,
+          status, notes, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+         actual_start       = EXCLUDED.actual_start,
+         actual_end         = EXCLUDED.actual_end,
+         snapped_start      = EXCLUDED.snapped_start,
+         snapped_end        = EXCLUDED.snapped_end,
+         snap_applied       = EXCLUDED.snap_applied,
+         snap_minutes_saved = EXCLUDED.snap_minutes_saved,
+         break_minutes      = EXCLUDED.break_minutes,
+         payable_hours      = EXCLUDED.payable_hours,
+         status             = CASE WHEN timesheet_entries.status = 'locked' THEN timesheet_entries.status
+                                   ELSE EXCLUDED.status END,
+         notes              = EXCLUDED.notes,
+         updated_at         = NOW()
+       RETURNING *`,
+      [
+        homeId, entry.staff_id, entry.date,
+        entry.scheduled_start || null, entry.scheduled_end || null,
+        entry.actual_start || null, entry.actual_end || null,
+        entry.snapped_start || null, entry.snapped_end || null,
+        entry.snap_applied ?? false, entry.snap_minutes_saved ?? 0,
+        entry.break_minutes ?? 0, entry.payable_hours ?? null,
+        entry.status ?? 'pending', entry.notes || null,
+      ],
+    );
+    results.push(shapeRow(rows[0]));
+  }
+  return results;
+}
+
+/** Approve all pending entries for a specific staff member within a date range. */
+export async function approveByStaffRange(homeId, staffId, start, end, approvedBy, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    `UPDATE timesheet_entries
+     SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_at = NOW()
+     WHERE home_id = $2 AND staff_id = $3 AND date >= $4 AND date <= $5 AND status = 'pending'`,
+    [approvedBy, homeId, staffId, start, end],
+  );
+  return rowCount;
 }

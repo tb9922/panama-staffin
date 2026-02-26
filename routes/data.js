@@ -1,10 +1,19 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
 import { validateAll } from '../services/validationService.js';
 
 const router = Router();
+
+const saveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many save requests — try again in 15 minutes' },
+});
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').optional();
 
@@ -22,7 +31,7 @@ router.get('/', requireAuth, async (req, res, next) => {
   }
 });
 
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, saveLimiter, async (req, res, next) => {
   try {
     const body = req.body;
     if (!body || typeof body !== 'object' || !Array.isArray(body.staff) || typeof body.config !== 'object') {

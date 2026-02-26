@@ -119,14 +119,16 @@ router.post('/requests', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/gdpr/requests/:id
+// PUT /api/gdpr/requests/:id?home=X
 router.put('/requests/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = requestUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await gdprService.updateRequest(idP.data, parsed.data);
+    const result = await gdprService.updateRequest(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Request not found' });
     res.json(result);
   } catch (err) { next(err); }
@@ -192,14 +194,16 @@ router.post('/breaches', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/gdpr/breaches/:id
+// PUT /api/gdpr/breaches/:id?home=X
 router.put('/breaches/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
     const parsed = breachUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await gdprService.updateBreach(idP.data, parsed.data);
+    const result = await gdprService.updateBreach(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Breach not found' });
     res.json(result);
   } catch (err) { next(err); }
@@ -218,7 +222,9 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, async (req, res, 
     if (assessment.icoNotifiable && assessment.icoDeadline) {
       updates.ico_notification_deadline = assessment.icoDeadline;
     }
-    await gdprService.updateBreach(idP.data, updates);
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    await gdprService.updateBreach(idP.data, home.id, updates);
     res.json(assessment);
   } catch (err) { next(err); }
 });
@@ -260,9 +266,11 @@ router.post('/consent', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/gdpr/consent/:id
+// PUT /api/gdpr/consent/:id?home=X
 router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid consent ID' });
     const parsed = z.object({
@@ -270,7 +278,7 @@ router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => 
       notes: z.string().max(2000).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await gdprService.updateConsent(idP.data, parsed.data);
+    const result = await gdprService.updateConsent(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Consent record not found' });
     res.json(result);
   } catch (err) { next(err); }
@@ -298,14 +306,16 @@ router.post('/complaints', requireAuth, requireAdmin, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-// PUT /api/gdpr/complaints/:id
+// PUT /api/gdpr/complaints/:id?home=X
 router.put('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid complaint ID' });
     const parsed = dpComplaintUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await gdprService.updateDPComplaint(idP.data, parsed.data);
+    const result = await gdprService.updateDPComplaint(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Complaint not found' });
     res.json(result);
   } catch (err) { next(err); }

@@ -89,7 +89,7 @@ export async function createRequest(homeId, data, client) {
   return shapeRequest(rows[0]);
 }
 
-export async function updateRequest(id, data, client) {
+export async function updateRequest(id, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE data_requests SET
@@ -99,9 +99,9 @@ export async function updateRequest(id, data, client) {
        completed_date = COALESCE($5, completed_date),
        completed_by = COALESCE($6, completed_by),
        updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
+     WHERE id = $1 AND home_id = $7 RETURNING *`,
     [id, data.status || null, data.identity_verified ?? null, data.notes ?? null,
-     data.completed_date || null, data.completed_by || null]
+     data.completed_date || null, data.completed_by || null, homeId]
   );
   return rows[0] ? shapeRequest(rows[0]) : null;
 }
@@ -165,7 +165,7 @@ export async function createBreach(homeId, data, client) {
   return shapeBreach(rows[0]);
 }
 
-export async function updateBreach(id, data, client) {
+export async function updateBreach(id, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE data_breaches SET
@@ -183,13 +183,14 @@ export async function updateBreach(id, data, client) {
        preventive_measures = COALESCE($13, preventive_measures),
        status = COALESCE($14, status),
        updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
+     WHERE id = $1 AND home_id = $15 RETURNING *`,
     [id, data.title ?? null, data.description ?? null, data.severity ?? null,
      data.risk_to_rights ?? null, data.ico_notifiable ?? null,
      data.ico_notification_deadline ?? null,
      data.ico_notified ?? null, data.ico_notified_date ?? null,
      data.ico_reference ?? null, data.containment_actions ?? null,
-     data.root_cause ?? null, data.preventive_measures ?? null, data.status ?? null]
+     data.root_cause ?? null, data.preventive_measures ?? null, data.status ?? null,
+     homeId]
   );
   return rows[0] ? shapeBreach(rows[0]) : null;
 }
@@ -258,15 +259,15 @@ export async function createConsent(homeId, data, client) {
   return shapeConsent(rows[0]);
 }
 
-export async function updateConsent(id, data, client) {
+export async function updateConsent(id, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE consent_records SET
        withdrawn = COALESCE($2, withdrawn),
        notes = COALESCE($3, notes),
        updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
-    [id, data.withdrawn || null, data.notes ?? null]
+     WHERE id = $1 AND home_id = $4 RETURNING *`,
+    [id, data.withdrawn || null, data.notes ?? null, homeId]
   );
   return rows[0] ? shapeConsent(rows[0]) : null;
 }
@@ -313,7 +314,7 @@ export async function createDPComplaint(homeId, data, client) {
   return shapeDPComplaint(rows[0]);
 }
 
-export async function updateDPComplaint(id, data, client) {
+export async function updateDPComplaint(id, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE dp_complaints SET
@@ -324,9 +325,10 @@ export async function updateDPComplaint(id, data, client) {
        resolution = COALESCE($6, resolution),
        resolution_date = COALESCE($7, resolution_date),
        updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
+     WHERE id = $1 AND home_id = $8 RETURNING *`,
     [id, data.status ?? null, data.severity ?? null, data.ico_involved ?? null,
-     data.ico_reference ?? null, data.resolution ?? null, data.resolution_date ?? null]
+     data.ico_reference ?? null, data.resolution ?? null, data.resolution_date ?? null,
+     homeId]
   );
   return rows[0] ? shapeDPComplaint(rows[0]) : null;
 }

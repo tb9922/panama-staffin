@@ -17,6 +17,7 @@
 import { Router }   from 'express';
 import { z }        from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { withTransaction } from '../db.js';
 import * as homeRepo          from '../repositories/homeRepo.js';
 import * as payRateRulesRepo  from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo     from '../repositories/timesheetRepo.js';
@@ -192,7 +193,7 @@ router.get('/timesheets/period', requireAuth, async (req, res, next) => {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
     if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end date parameters required' });
-    const entries = await timesheetRepo.findByHomePeriod(home.id, startP.data, endP.data, req.query.status || null);
+    const entries = await timesheetRepo.findByHomePeriod(home.id, startP.data, endP.data, req.query.status || null, req.query.staff_id || null);
     res.json(entries);
   } catch (err) { next(err); }
 });
@@ -222,6 +223,21 @@ router.post('/timesheets/:id/approve', requireAuth, requireAdmin, async (req, re
   } catch (err) { next(err); }
 });
 
+// POST /api/payroll/timesheets/:id/dispute?home=X — dispute a single entry
+router.post('/timesheets/:id/dispute', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const idP = tsIdSchema.safeParse(req.params.id);
+    if (!idP.success) return res.status(400).json({ error: 'Invalid timesheet ID' });
+    const reasonP = z.string().min(1).max(500).safeParse(req.body.reason);
+    if (!reasonP.success) return res.status(400).json({ error: 'reason required (1-500 characters)' });
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const entry = await timesheetRepo.dispute(idP.data, home.id, reasonP.data);
+    if (!entry) return res.status(404).json({ error: 'Entry not found or already locked' });
+    res.json(entry);
+  } catch (err) { next(err); }
+});
+
 // POST /api/payroll/timesheets/bulk-approve?home=X — approve all pending for a date
 router.post('/timesheets/bulk-approve', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -230,6 +246,40 @@ router.post('/timesheets/bulk-approve', requireAuth, requireAdmin, async (req, r
     const dateP = dateSchema.safeParse(req.body.date);
     if (!dateP.success) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
     const count = await timesheetRepo.bulkApproveByDate(home.id, dateP.data, req.user.username);
+    res.json({ approved: count });
+  } catch (err) { next(err); }
+});
+
+// POST /api/payroll/timesheets/batch-upsert?home=X — bulk create/update entries
+router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const { entries } = req.body;
+    if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ error: 'entries array required' });
+    if (entries.length > 62) return res.status(400).json({ error: 'Maximum 62 entries per batch' });
+    for (const e of entries) {
+      const p = timesheetBodySchema.safeParse(e);
+      if (!p.success) return res.status(400).json({ error: `Invalid entry for ${e.date}: ${p.error.errors[0].message}` });
+    }
+    const results = await withTransaction(async (client) => {
+      return timesheetRepo.bulkUpsert(home.id, entries, client);
+    });
+    res.status(201).json(results);
+  } catch (err) { next(err); }
+});
+
+// POST /api/payroll/timesheets/approve-range?home=X — approve all pending for a staff member in date range
+router.post('/timesheets/approve-range', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const staffIdP = z.string().min(1).max(20).safeParse(req.body.staff_id);
+    const startP = dateSchema.safeParse(req.body.start);
+    const endP = dateSchema.safeParse(req.body.end);
+    if (!staffIdP.success) return res.status(400).json({ error: 'staff_id required' });
+    if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end dates required (YYYY-MM-DD)' });
+    const count = await timesheetRepo.approveByStaffRange(home.id, staffIdP.data, startP.data, endP.data, req.user.username);
     res.json({ approved: count });
   } catch (err) { next(err); }
 });
