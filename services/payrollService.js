@@ -465,7 +465,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
       throw new ValidationError('Payroll run must be approved before exporting');
     }
 
-    const lines    = await payrollRunRepo.findLinesByRun(runId);
+    const lines    = await payrollRunRepo.findLinesByRun(runId, client);
     const allStaff = await staffRepo.findByHome(homeId);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
@@ -553,6 +553,7 @@ export async function assemblePayslipData(runId, homeId, staffId) {
   if (!run) throw new NotFoundError('Payroll run not found');
 
   const home  = await homeRepo.findById(homeId);
+  if (!home) throw new NotFoundError('Home not found');
   const lines = await payrollRunRepo.findLinesByRun(runId);
   const shifts = await payrollRunRepo.findShiftsByRun(runId);
 

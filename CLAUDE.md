@@ -147,6 +147,8 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
   staff: [{
     id, name, role, team, pref, skill, hourly_rate,
     active, wtr_opt_out, start_date, contract_hours,
+    date_of_birth,             // For NMW age-bracket and pension auto-enrolment (null = default 21+)
+    ni_number,                 // UK NI number for payroll export (null = not yet provided)
     al_entitlement,            // Per-staff override of config.al_entitlement_days (null = use global)
     al_carryover,              // Days carried over from previous leave year (default 0, set manually)
     leaving_date,              // Auto-set when deactivated, cleared when reactivated
