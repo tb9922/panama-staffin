@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './index.css'
@@ -14,12 +14,14 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+// createBrowserRouter provides the data router context required by useBlocker.
+// App still uses <Routes>/<Route> internally — no change there.
+const router = createBrowserRouter([{ path: '*', element: <App /> }]);
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </ErrorBoundary>
   </StrictMode>,
 )
