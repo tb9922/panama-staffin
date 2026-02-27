@@ -1294,3 +1294,51 @@ export async function saveConfig(homeSlug, config) {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify({ config }),
   });
 }
+
+// ── Scheduling (Phase 2d) ─────────────────────────────────────────────────────
+
+export async function getSchedulingData(homeSlug) {
+  return apiFetch(`${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in }) {
+  return apiFetch(`${API_BASE}/scheduling/overrides?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ date, staffId, shift, reason, source, sleep_in }),
+  });
+}
+
+export async function deleteOverride(homeSlug, date, staffId) {
+  const params = new URLSearchParams({ home: homeSlug, date, staffId });
+  return apiFetch(`${API_BASE}/scheduling/overrides?${params}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function bulkUpsertOverrides(homeSlug, overrides) {
+  return apiFetch(`${API_BASE}/scheduling/overrides/bulk?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ overrides }),
+  });
+}
+
+export async function revertMonthOverrides(homeSlug, fromDate, toDate) {
+  const params = new URLSearchParams({ home: homeSlug, fromDate, toDate });
+  return apiFetch(`${API_BASE}/scheduling/overrides/month?${params}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function upsertDayNote(homeSlug, date, note) {
+  return apiFetch(`${API_BASE}/scheduling/day-notes?home=${encodeURIComponent(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ date, note }),
+  });
+}

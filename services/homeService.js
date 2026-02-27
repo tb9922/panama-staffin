@@ -48,8 +48,6 @@ export async function saveData(homeSlug, body, username) {
   // await (not return) so the code below runs after the transaction commits
   await withTransaction(async (client) => {
     await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
-    await overrideRepo.replace(home.id, body.overrides || {}, client);
-    await dayNoteRepo.replace(home.id, body.day_notes || {}, client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });
 

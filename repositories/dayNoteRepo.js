@@ -43,3 +43,26 @@ export async function replace(homeId, notesObj, client) {
     );
   }
 }
+
+/**
+ * Upsert a single day note.
+ * @param {number} homeId
+ * @param {string} date  "YYYY-MM-DD"
+ * @param {string} note
+ */
+export async function upsertOne(homeId, date, note) {
+  await pool.query(
+    `INSERT INTO day_notes (home_id, date, note, updated_at) VALUES ($1,$2,$3,NOW())
+     ON CONFLICT (home_id, date) DO UPDATE SET note=EXCLUDED.note, updated_at=NOW()`,
+    [homeId, date, note]
+  );
+}
+
+/**
+ * Delete a single day note.
+ * @param {number} homeId
+ * @param {string} date  "YYYY-MM-DD"
+ */
+export async function deleteOne(homeId, date) {
+  await pool.query(`DELETE FROM day_notes WHERE home_id=$1 AND date=$2`, [homeId, date]);
+}

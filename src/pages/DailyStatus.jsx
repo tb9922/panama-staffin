@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   formatDate, parseDate, addDays, getStaffForDay, getShiftHours,
@@ -11,12 +11,26 @@ import {
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
+import {
+  getCurrentHome, getLoggedInUser,
+  getSchedulingData,
+  upsertOverride,
+  deleteOverride,
+  bulkUpsertOverrides,
+  upsertDayNote,
+  updateStaffMember,
+} from '../lib/api.js';
 
-export default function DailyStatus({ data, updateData, user }) {
+export default function DailyStatus() {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
   const currentDate = dateParam ? parseDate(dateParam) : new Date();
   const dateStr = formatDate(currentDate);
+
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [modal, setModal] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
@@ -26,9 +40,12 @@ export default function DailyStatus({ data, updateData, user }) {
   const [swapTo, setSwapTo] = useState('');
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [gapPanelDate, setGapPanelDate] = useState(null);
+
+  // PIN unlock uses getCurrentHome() as the key to avoid timing dependency on data load
   const [unlockedDates, setUnlockedDates] = useState(() => {
     try {
-      const stored = sessionStorage.getItem(`unlocked_${data.config.home_name}`);
+      const homeSlug = getCurrentHome() || 'default';
+      const stored = sessionStorage.getItem(`unlocked_${homeSlug}`);
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
@@ -37,28 +54,28 @@ export default function DailyStatus({ data, updateData, user }) {
   const [lockError, setLockError] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
 
-  const staffForDay = useMemo(() => getStaffForDay(data.staff, currentDate, data.overrides, data.config), [data, dateStr]);
-  const coverage = useMemo(() => getDayCoverageStatus(staffForDay, data.config), [staffForDay, data.config]);
-  const cost = useMemo(() => calculateDayCost(staffForDay, data.config), [staffForDay, data.config]);
+  const noteTimerRef = useRef(null);
 
-  const earlyStaff = staffForDay.filter(s => isCareRole(s.role) && isEarlyShift(s.shift));
-  const lateStaff = staffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift));
-  const nightStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift));
-  const sickStaff = staffForDay.filter(s => s.shift === 'SICK');
-  const alStaff = staffForDay.filter(s => s.shift === 'AL');
-  const availableStaff = staffForDay.filter(s => (s.shift === 'AVL' || s.shift === 'OFF') && isCareRole(s.role));
+  const currentUser = getLoggedInUser();
+  const isAdmin = currentUser?.role === 'admin';
 
-  const availableCover = useMemo(() => {
-    return availableStaff.map(s => {
-      const fatigue = checkFatigueRisk(s, currentDate, data.overrides, data.config);
-      return { ...s, fatigue };
-    });
-  }, [availableStaff, data, currentDate]);
+  const loadData = useCallback(async () => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    setLoading(true);
+    try {
+      setSchedData(await getSchedulingData(homeSlug));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const today = formatDate(new Date());
-  const isAdmin = user?.role === 'admin';
-  const isPastDate = dateStr < today;
-  const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!data.config.edit_lock_pin;
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => () => clearTimeout(noteTimerRef.current), []);
 
   // Reset lock prompt state when navigating to a different date
   useEffect(() => {
@@ -68,56 +85,127 @@ export default function DailyStatus({ data, updateData, user }) {
     setPendingAction(null);
   }, [dateStr]);
 
+  const staffForDay = useMemo(() => {
+    if (!schedData) return [];
+    return getStaffForDay(schedData.staff, currentDate, schedData.overrides, schedData.config);
+  }, [schedData, dateStr]);
+
+  const coverage = useMemo(() => {
+    if (!schedData) return {};
+    return getDayCoverageStatus(staffForDay, schedData.config);
+  }, [staffForDay, schedData]);
+
+  const cost = useMemo(() => {
+    if (!schedData) return { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, sleepIn: 0, total: 0 };
+    return calculateDayCost(staffForDay, schedData.config);
+  }, [staffForDay, schedData]);
+
+  const earlyStaff = staffForDay.filter(s => isCareRole(s.role) && isEarlyShift(s.shift));
+  const lateStaff = staffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift));
+  const nightStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift));
+  const sickStaff = staffForDay.filter(s => s.shift === 'SICK');
+  const alStaff = staffForDay.filter(s => s.shift === 'AL');
+  const availableStaff = staffForDay.filter(s => (s.shift === 'AVL' || s.shift === 'OFF') && isCareRole(s.role));
+
+  const availableCover = useMemo(() => {
+    if (!schedData) return [];
+    return availableStaff.map(s => {
+      const fatigue = checkFatigueRisk(s, currentDate, schedData.overrides, schedData.config);
+      return { ...s, fatigue };
+    });
+  }, [availableStaff, schedData, currentDate]);
+
+  const today = formatDate(new Date());
+  const isPastDate = dateStr < today;
+  const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!(schedData?.config?.edit_lock_pin);
+
   function goDay(offset) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }
 
-  function applyOverride(staffId, shift, reason, source, sleepIn = false) {
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-    newOverrides[dateStr][staffId] = { shift, reason, source: source || 'manual', sleep_in: sleepIn };
-    updateData({ ...data, overrides: newOverrides });
+  async function applyOverride(staffId, shift, reason, source, sleepIn = false) {
+    setSaving(true);
+    try {
+      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn });
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
     setModal(null);
     setSelectedStaff('');
   }
 
-  function toggleSleepIn(staffId) {
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-    const existing = newOverrides[dateStr][staffId];
-    if (existing) {
-      newOverrides[dateStr][staffId] = { ...existing, sleep_in: !existing.sleep_in };
-    } else {
-      const s = staffForDay.find(m => m.id === staffId);
-      newOverrides[dateStr][staffId] = {
-        shift: s?.scheduledShift || 'OFF',
-        reason: 'Sleep in',
-        source: 'manual',
-        sleep_in: true,
-      };
+  async function toggleSleepIn(staffId) {
+    if (!schedData) return;
+    const existing = schedData.overrides[dateStr]?.[staffId];
+    setSaving(true);
+    try {
+      if (existing) {
+        await upsertOverride(getCurrentHome(), {
+          date: dateStr,
+          staffId,
+          shift: existing.shift,
+          reason: existing.reason,
+          source: existing.source,
+          sleep_in: !existing.sleep_in,
+        });
+      } else {
+        const s = staffForDay.find(m => m.id === staffId);
+        await upsertOverride(getCurrentHome(), {
+          date: dateStr,
+          staffId,
+          shift: s?.scheduledShift || 'OFF',
+          reason: 'Sleep in',
+          source: 'manual',
+          sleep_in: true,
+        });
+      }
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, overrides: newOverrides });
     setModal(null);
     setSelectedStaff('');
   }
 
-  function removeOverride(staffId) {
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    if (newOverrides[dateStr]) {
-      delete newOverrides[dateStr][staffId];
-      if (Object.keys(newOverrides[dateStr]).length === 0) delete newOverrides[dateStr];
+  async function removeOverride(staffId) {
+    setSaving(true);
+    try {
+      await deleteOverride(getCurrentHome(), dateStr, staffId);
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, overrides: newOverrides });
   }
 
   // Applies a SICK override and shows the cascade gap panel if coverage drops
-  function applySickOverride(staffId) {
-    const projectedOverrides = JSON.parse(JSON.stringify(data.overrides));
+  async function applySickOverride(staffId) {
+    if (!schedData) return;
+    // Simulate projected coverage before API call so gap panel shows immediately
+    const projectedOverrides = JSON.parse(JSON.stringify(schedData.overrides));
     if (!projectedOverrides[dateStr]) projectedOverrides[dateStr] = {};
     projectedOverrides[dateStr][staffId] = { shift: 'SICK', reason: 'Sick', source: 'manual', sleep_in: false };
-    const projectedStaff = getStaffForDay(data.staff, currentDate, projectedOverrides, data.config);
-    const projectedCoverage = getDayCoverageStatus(projectedStaff, data.config);
-    updateData({ ...data, overrides: projectedOverrides });
+    const projectedStaff = getStaffForDay(schedData.staff, currentDate, projectedOverrides, schedData.config);
+    const projectedCoverage = getDayCoverageStatus(projectedStaff, schedData.config);
+
+    setSaving(true);
+    try {
+      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift: 'SICK', reason: 'Sick', source: 'manual' });
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+      setModal(null);
+      setSelectedStaff('');
+      return;
+    }
+    setSaving(false);
     setModal(null);
     setSelectedStaff('');
     if (projectedCoverage.overallLevel >= 1) {
@@ -127,11 +215,12 @@ export default function DailyStatus({ data, updateData, user }) {
   }
 
   function unlockDate() {
+    const homeSlug = getCurrentHome() || 'default';
     const newUnlocked = new Set(unlockedDates);
     newUnlocked.add(dateStr);
     setUnlockedDates(newUnlocked);
     try {
-      sessionStorage.setItem(`unlocked_${data.config.home_name}`, JSON.stringify([...newUnlocked]));
+      sessionStorage.setItem(`unlocked_${homeSlug}`, JSON.stringify([...newUnlocked]));
     } catch { /* quota exceeded — in-memory unlock still works */ }
     setShowLockPrompt(false);
     setLockPin('');
@@ -140,7 +229,8 @@ export default function DailyStatus({ data, updateData, user }) {
   }
 
   function attemptUnlock() {
-    const pin = String(data.config.edit_lock_pin || '');
+    if (!schedData) return;
+    const pin = String(schedData.config.edit_lock_pin || '');
     if (!pin) { unlockDate(); return; }
     if (String(lockPin) === pin) { unlockDate(); }
     else { setLockError('Incorrect PIN'); setLockPin(''); }
@@ -160,29 +250,29 @@ export default function DailyStatus({ data, updateData, user }) {
     return 'bg-gray-100 text-gray-600';
   };
 
-  const alCount = countALOnDate(currentDate, data.overrides);
+  const alCount = schedData ? countALOnDate(currentDate, schedData.overrides) : 0;
   const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const getBlockingReasons = (s) => {
+    if (!schedData) return [];
     const reasons = [];
-    if (data.config.enforce_onboarding_blocking && isCareRole(s.role)) {
-      reasons.push(...getOnboardingBlockingReasons(s.id, data.onboarding));
+    if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role)) {
+      reasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
     }
-    if (data.config.enforce_training_blocking && isCareRole(s.role)) {
-      reasons.push(...getTrainingBlockingReasons(s.id, s.role, data.training, data.config, dateStr));
+    if (schedData.config.enforce_training_blocking && isCareRole(s.role)) {
+      reasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, dateStr));
     }
     return reasons;
   };
 
   // Cascade coverage panel — shown after a sick override creates a gap
   const CoverageGapPanel = () => {
+    if (!schedData) return null;
     const floaters = staffForDay.filter(s => s.shift === 'AVL' && isCareRole(s.role));
     const otCandidates = staffForDay.filter(s =>
       isCareRole(s.role) && !isWorkingShift(s.shift) && s.shift !== 'SICK' && s.shift !== 'AL'
     );
     const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
-    // Per-period shift codes — buttons shown once per short period so manager
-    // explicitly picks which gap each person fills (fixes single-target bug)
     const periodShift = { early: 'E', late: 'L', night: 'N' };
     const periodOcShift = { early: 'OC-E', late: 'OC-L', night: 'OC-N' };
     const label = p => p.charAt(0).toUpperCase() + p.slice(1);
@@ -203,14 +293,14 @@ export default function DailyStatus({ data, updateData, user }) {
             ? <div className="text-xs text-gray-400">No floaters available today</div>
             : <div className="space-y-1">
                 {floaters.map(s => {
-                  const fatigue = checkFatigueRisk(s, currentDate, data.overrides, data.config);
+                  const fatigue = checkFatigueRisk(s, currentDate, schedData.overrides, schedData.config);
                   return (
                     <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                       <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.role})</span></span>
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
                         {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual')} className={`${BTN.success} ${BTN.xs}`}>{label(p)}</button>
+                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual')} disabled={saving} className={`${BTN.success} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
                         ))}
                       </div>
                     </div>
@@ -225,14 +315,14 @@ export default function DailyStatus({ data, updateData, user }) {
             ? <div className="text-xs text-gray-400">No off-duty staff available</div>
             : <div className="space-y-1">
                 {otCandidates.slice(0, 5).map(s => {
-                  const fatigue = checkFatigueRisk(s, currentDate, data.overrides, data.config);
+                  const fatigue = checkFatigueRisk(s, currentDate, schedData.overrides, schedData.config);
                   return (
                     <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                       <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.shift})</span></span>
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
                         {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot')} className={`${BTN.primary} ${BTN.xs}`}>{label(p)}</button>
+                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot')} disabled={saving} className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
                         ))}
                       </div>
                     </div>
@@ -272,7 +362,7 @@ export default function DailyStatus({ data, updateData, user }) {
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
       <td className={TABLE.td}>
         {s.isOverride && (
-          <button onClick={() => withLockCheck(() => removeOverride(s.id))} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50`}>Revert</button>
+          <button onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50`}>Revert</button>
         )}
       </td>
     </tr>
@@ -294,11 +384,25 @@ export default function DailyStatus({ data, updateData, user }) {
     </div>
   );
 
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-6">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+    </div>
+  );
+
+  if (!schedData) return null;
+
   return (
     <div className={PAGE.container}>
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Daily Status</h1>
+        <h1 className="text-xl font-bold">{schedData.config.home_name} — Daily Status</h1>
         <p className="text-xs text-gray-500">{dayName} | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -317,6 +421,7 @@ export default function DailyStatus({ data, updateData, user }) {
             )}
           </h1>
           <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
+          {saving && <span className="text-xs text-blue-500">Saving...</span>}
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
@@ -385,20 +490,31 @@ export default function DailyStatus({ data, updateData, user }) {
           </div>
 
           <div className="border-t mt-3 pt-2 text-xs text-gray-500">
-            AL: {alCount}/{data.config.max_al_same_day} | Sick: {sickStaff.length}
+            AL: {alCount}/{schedData.config.max_al_same_day} | Sick: {sickStaff.length}
           </div>
 
           {/* Day Notes */}
           <div className="border-t mt-3 pt-3">
             <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Handover Notes</h3>
             <textarea
-              value={data.day_notes?.[dateStr] || ''}
+              value={schedData.day_notes?.[dateStr] || ''}
               readOnly={isLocked}
               onChange={e => {
                 if (isLocked) return;
-                const newNotes = { ...(data.day_notes || {}), [dateStr]: e.target.value };
-                if (!e.target.value) delete newNotes[dateStr];
-                updateData({ ...data, day_notes: newNotes });
+                const note = e.target.value;
+                // Optimistic local update for responsive UI
+                setSchedData(prev => ({
+                  ...prev,
+                  day_notes: { ...prev.day_notes, [dateStr]: note },
+                }));
+                clearTimeout(noteTimerRef.current);
+                noteTimerRef.current = setTimeout(async () => {
+                  try {
+                    await upsertDayNote(getCurrentHome(), dateStr, note);
+                  } catch (err) {
+                    setError(err.message);
+                  }
+                }, 800);
               }}
               placeholder={isLocked ? 'Unlock to edit notes' : 'Add notes for handover, incidents, or reminders...'}
               className={`${INPUT.base} h-20 resize-y ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -411,13 +527,13 @@ export default function DailyStatus({ data, updateData, user }) {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
             <div className="flex gap-1.5 print:hidden">
-              <button onClick={() => withLockCheck(() => setModal('sick'))} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Sick</button>
-              <button onClick={() => withLockCheck(() => setModal('al'))} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100`}>+AL</button>
-              <button onClick={() => withLockCheck(() => setModal('ot'))} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100`}>+OT</button>
-              <button onClick={() => withLockCheck(() => setModal('agency'))} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100`}>+Agency</button>
-              <button onClick={() => withLockCheck(() => setModal('training'))} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>+Training</button>
-              <button onClick={() => withLockCheck(() => setModal('sleepIn'))} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100`}>+Sleep In</button>
-              <button onClick={() => withLockCheck(() => setModal('swap'))} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100`}>Swap</button>
+              <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
+              <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
+              <button onClick={() => withLockCheck(() => setModal('ot'))} disabled={saving} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100 disabled:opacity-50`}>+OT</button>
+              <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Agency</button>
+              <button onClick={() => withLockCheck(() => setModal('training'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Training</button>
+              <button onClick={() => withLockCheck(() => setModal('sleepIn'))} disabled={saving} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100 disabled:opacity-50`}>+Sleep In</button>
+              <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>Swap</button>
             </div>
           </div>
 
@@ -484,12 +600,10 @@ export default function DailyStatus({ data, updateData, user }) {
                   const a = staffForDay.find(s => s.id === swapFrom);
                   const b = staffForDay.find(s => s.id === swapTo);
                   if (!a || !b) return null;
-                  const valAB = validateSwap(a, b, currentDate, data.overrides, data.config, data.training);
-                  const valBA = validateSwap(b, a, currentDate, data.overrides, data.config, data.training);
+                  const valAB = validateSwap(a, b, currentDate, schedData.overrides, schedData.config, schedData.training);
+                  const valBA = validateSwap(b, a, currentDate, schedData.overrides, schedData.config, schedData.training);
                   const allIssues = [...valAB.issues, ...valBA.issues];
-                  const configShifts = data.config.shifts || {};
-                  // OC-*/AG-* are OT/agency variants of base shifts — use base shift hours.
-                  // BH-D is a full day (EL), BH-N is a night.
+                  const configShifts = schedData.config.shifts || {};
                   const hrs = s => {
                     if (!s) return 0;
                     if (s.startsWith('OC-') || s.startsWith('AG-')) return configShifts[s.slice(3)]?.hours || 0;
@@ -530,16 +644,20 @@ export default function DailyStatus({ data, updateData, user }) {
                       <>
                         {isAdmin && (
                           <button
-                            disabled={!canSwap || isFloat}
+                            disabled={!canSwap || isFloat || saving}
                             title={isFloat ? 'Float staff have no fixed rotation to swap permanently' : `${a?.name}: ${a?.team} → ${b?.team} | ${b?.name}: ${b?.team} → ${a?.team}`}
-                            onClick={() => {
+                            onClick={async () => {
                               if (!a || !b) return;
-                              const newStaff = data.staff.map(s => {
-                                if (s.id === a.id) return { ...s, team: b.team };
-                                if (s.id === b.id) return { ...s, team: a.team };
-                                return s;
-                              });
-                              updateData({ ...data, staff: newStaff });
+                              setSaving(true);
+                              try {
+                                await updateStaffMember(getCurrentHome(), a.id, { ...schedData.staff.find(s => s.id === a.id), team: b.team });
+                                await updateStaffMember(getCurrentHome(), b.id, { ...schedData.staff.find(s => s.id === b.id), team: a.team });
+                                await loadData();
+                              } catch (e) {
+                                setError(e.message);
+                              } finally {
+                                setSaving(false);
+                              }
                               setModal(null); setSwapFrom(''); setSwapTo('');
                             }}
                             className={`${BTN.secondary} disabled:opacity-50 text-xs`}
@@ -548,19 +666,24 @@ export default function DailyStatus({ data, updateData, user }) {
                           </button>
                         )}
                         <button
-                          disabled={!canSwap}
-                          onClick={() => {
+                          disabled={!canSwap || saving}
+                          onClick={async () => {
                             if (!a || !b) return;
-                            const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-                            if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-                            newOverrides[dateStr][swapFrom] = { shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' };
-                            newOverrides[dateStr][swapTo] = { shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' };
-                            updateData({ ...data, overrides: newOverrides });
+                            setSaving(true);
+                            try {
+                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapFrom, shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' });
+                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapTo, shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' });
+                              await loadData();
+                            } catch (e) {
+                              setError(e.message);
+                            } finally {
+                              setSaving(false);
+                            }
                             setModal(null); setSwapFrom(''); setSwapTo('');
                           }}
                           className={`${BTN.primary} disabled:opacity-50`}
                         >
-                          Today Only
+                          {saving ? 'Saving...' : 'Today Only'}
                         </button>
                       </>
                     );
@@ -581,9 +704,9 @@ export default function DailyStatus({ data, updateData, user }) {
                     : agencyShiftType === 'AG-L' ? 'Late'
                     : agencyShiftType === 'AG-EL' ? 'Early + Late (full day)'
                     : 'Night';
-                  const agHours = getShiftHours(agencyShiftType, data.config);
+                  const agHours = getShiftHours(agencyShiftType, schedData.config);
                   const isNight = agencyShiftType === 'AG-N';
-                  const agRate = isNight ? (data.config.agency_rate_night || 0) : (data.config.agency_rate_day || 0);
+                  const agRate = isNight ? (schedData.config.agency_rate_night || 0) : (schedData.config.agency_rate_day || 0);
                   const agCost = (agHours * agRate).toFixed(2);
                   const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
                   const absentToday = staffForDay.filter(s => s.shift === 'SICK' || s.shift === 'AL');
@@ -605,14 +728,19 @@ export default function DailyStatus({ data, updateData, user }) {
                 })()}
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setAgencyShiftType(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!agencyShiftType} onClick={() => {
+                  <button disabled={!agencyShiftType || saving} onClick={async () => {
                     const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
-                    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-                    if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-                    newOverrides[dateStr][agId] = { shift: agencyShiftType, reason: 'Agency', source: 'agency' };
-                    updateData({ ...data, overrides: newOverrides });
+                    setSaving(true);
+                    try {
+                      await upsertOverride(getCurrentHome(), { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency' });
+                      await loadData();
+                    } catch (e) {
+                      setError(e.message);
+                    } finally {
+                      setSaving(false);
+                    }
                     setModal(null); setAgencyShiftType('');
-                  }} className={`${BTN.danger} disabled:opacity-50`}>Book</button>
+                  }} className={`${BTN.danger} disabled:opacity-50`}>{saving ? 'Booking...' : 'Book'}</button>
                 </div>
               </div>
             ) : modal === 'training' ? (
@@ -624,8 +752,8 @@ export default function DailyStatus({ data, updateData, user }) {
                 </select>
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff} onClick={() => applyOverride(selectedStaff, 'TRN', 'Training', 'manual')}
-                    className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
+                  <button disabled={!selectedStaff || saving} onClick={() => applyOverride(selectedStaff, 'TRN', 'Training', 'manual')}
+                    className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
               </div>
             ) : modal === 'sleepIn' ? (
@@ -638,8 +766,8 @@ export default function DailyStatus({ data, updateData, user }) {
                 </select>
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff} onClick={() => toggleSleepIn(selectedStaff)}
-                    className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
+                  <button disabled={!selectedStaff || saving} onClick={() => toggleSleepIn(selectedStaff)}
+                    className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
               </div>
             ) : (
@@ -657,18 +785,18 @@ export default function DailyStatus({ data, updateData, user }) {
                     <option value="OC-N">OC-N (Night)</option>
                   </select>
                 )}
-                {modal === 'al' && alCount >= data.config.max_al_same_day && (
-                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({data.config.max_al_same_day}) reached</div>
+                {modal === 'al' && alCount >= schedData.config.max_al_same_day && (
+                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
                 )}
                 <div className={MODAL.footer}>
                   <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff || (modal === 'al' && alCount >= data.config.max_al_same_day)} onClick={() => {
+                  <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day)} onClick={() => {
                     if (modal === 'sick') applySickOverride(selectedStaff);
                     else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');
                     else {
                       applyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
                     }
-                  }} className={`${BTN.primary} disabled:opacity-50`}>Confirm</button>
+                  }} className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
               </div>
             )}

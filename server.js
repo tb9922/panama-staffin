@@ -36,6 +36,7 @@ import trainingRouter from './routes/training.js';
 import careCertRouter from './routes/careCert.js';
 import onboardingRouter from './routes/onboarding.js';
 import staffRouter from './routes/staff.js';
+import schedulingRouter from './routes/scheduling.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 
@@ -89,6 +90,7 @@ app.use('/api/training', trainingRouter);
 app.use('/api/care-cert', careCertRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/staff', staffRouter);
+app.use('/api/scheduling', schedulingRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

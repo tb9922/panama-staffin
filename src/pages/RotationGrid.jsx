@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
   getScheduledShift, isCareRole,
@@ -8,6 +8,14 @@ import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
+import {
+  getCurrentHome,
+  getSchedulingData,
+  upsertOverride,
+  deleteOverride,
+  bulkUpsertOverrides,
+  revertMonthOverrides,
+} from '../lib/api.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -59,11 +67,31 @@ function parseLocalDate(str) {
   return new Date(y, m - 1, d);
 }
 
-export default function RotationGrid({ data, updateData }) {
+export default function RotationGrid() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   const [filterTeam, setFilterTeam] = useState('All');
   const [editing, setEditing] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [bulkModal, setBulkModal] = useState(null);
+
+  const loadData = useCallback(async () => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    setLoading(true);
+    try {
+      setSchedData(await getSchedulingData(homeSlug));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   // Dynamic calendar month dates
   const { monthDates, monthLabel } = useMemo(() => {
@@ -75,40 +103,42 @@ export default function RotationGrid({ data, updateData }) {
   }, [monthOffset]);
 
   const activeStaff = useMemo(() => {
-    let list = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+    if (!schedData) return [];
+    let list = schedData.staff.filter(s => s.active !== false && isCareRole(s.role));
     if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
     const teamOrder = { 'Day A': 0, 'Day B': 1, 'Night A': 2, 'Night B': 3, 'Float': 4 };
     list.sort((a, b) => (teamOrder[a.team] ?? 9) - (teamOrder[b.team] ?? 9) || a.name.localeCompare(b.name));
     return list;
-  }, [data.staff, filterTeam]);
+  }, [schedData, filterTeam]);
 
   const staffStats = useMemo(() => {
+    if (!schedData) return {};
     const map = {};
     activeStaff.forEach(s => {
-      map[s.id] = calculateStaffPeriodHours(s, monthDates, data.overrides, data.config);
+      map[s.id] = calculateStaffPeriodHours(s, monthDates, schedData.overrides, schedData.config);
     });
     return map;
-  }, [activeStaff, monthDates, data]);
+  }, [activeStaff, monthDates, schedData]);
 
   // Impact preview
   const impact = useMemo(() => {
-    if (!editing || !editing.proposedShift) return null;
+    if (!schedData || !editing || !editing.proposedShift) return null;
     const { staffId, dateStr, currentShift, proposedShift } = editing;
     if (proposedShift === currentShift) return null;
 
-    const staff = data.staff.find(s => s.id === staffId);
+    const staff = schedData.staff.find(s => s.id === staffId);
     if (!staff) return null;
 
     const date = parseLocalDate(dateStr);
 
-    const staffForDayBefore = getStaffForDay(data.staff, date, data.overrides, data.config);
-    const coverageBefore = getDayCoverageStatus(staffForDayBefore, data.config);
-    const costBefore = calculateDayCost(staffForDayBefore, data.config);
-    const statsBefore = calculateStaffPeriodHours(staff, monthDates, data.overrides, data.config);
-    const fatigueBefore = checkFatigueRisk(staff, date, data.overrides, data.config);
+    const staffForDayBefore = getStaffForDay(schedData.staff, date, schedData.overrides, schedData.config);
+    const coverageBefore = getDayCoverageStatus(staffForDayBefore, schedData.config);
+    const costBefore = calculateDayCost(staffForDayBefore, schedData.config);
+    const statsBefore = calculateStaffPeriodHours(staff, monthDates, schedData.overrides, schedData.config);
+    const fatigueBefore = checkFatigueRisk(staff, date, schedData.overrides, schedData.config);
 
-    const simOverrides = JSON.parse(JSON.stringify(data.overrides));
-    const scheduled = getScheduledShift(staff, getCycleDay(date, data.config.cycle_start_date));
+    const simOverrides = JSON.parse(JSON.stringify(schedData.overrides));
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date));
     if (proposedShift === scheduled) {
       if (simOverrides[dateStr]) {
         delete simOverrides[dateStr][staffId];
@@ -119,11 +149,11 @@ export default function RotationGrid({ data, updateData }) {
       simOverrides[dateStr][staffId] = { shift: proposedShift, reason: 'Manual edit' };
     }
 
-    const staffForDayAfter = getStaffForDay(data.staff, date, simOverrides, data.config);
-    const coverageAfter = getDayCoverageStatus(staffForDayAfter, data.config);
-    const costAfter = calculateDayCost(staffForDayAfter, data.config);
-    const statsAfter = calculateStaffPeriodHours(staff, monthDates, simOverrides, data.config);
-    const fatigueAfter = checkFatigueRisk(staff, date, simOverrides, data.config);
+    const staffForDayAfter = getStaffForDay(schedData.staff, date, simOverrides, schedData.config);
+    const coverageAfter = getDayCoverageStatus(staffForDayAfter, schedData.config);
+    const costAfter = calculateDayCost(staffForDayAfter, schedData.config);
+    const statsAfter = calculateStaffPeriodHours(staff, monthDates, simOverrides, schedData.config);
+    const fatigueAfter = checkFatigueRisk(staff, date, simOverrides, schedData.config);
 
     const wtrBefore = statsBefore.wtrStatus;
     const wtrAfter = statsAfter.wtrStatus;
@@ -157,7 +187,7 @@ export default function RotationGrid({ data, updateData }) {
     }
 
     if (fatigueAfter.exceeded && !fatigueBefore.exceeded) {
-      errors.push(`Fatigue: ${fatigueAfter.consecutive} consecutive days (max ${data.config.max_consecutive_days})`);
+      errors.push(`Fatigue: ${fatigueAfter.consecutive} consecutive days (max ${schedData.config.max_consecutive_days})`);
     } else if (fatigueAfter.atRisk && !fatigueBefore.atRisk) {
       warnings.push(`Fatigue risk: ${fatigueAfter.consecutive} consecutive days`);
     }
@@ -175,69 +205,85 @@ export default function RotationGrid({ data, updateData }) {
       wtrBefore, wtrAfter,
       warnings, errors, approved,
     };
-  }, [editing, data, monthDates]);
+  }, [editing, schedData, monthDates]);
 
   function openEditor(staffId, dateStr) {
-    const actual = data.overrides[dateStr]?.[staffId]?.shift;
-    const staff = data.staff.find(s => s.id === staffId);
-    const cycleDay = getCycleDay(parseLocalDate(dateStr), data.config.cycle_start_date);
+    const actual = schedData.overrides[dateStr]?.[staffId]?.shift;
+    const staff = schedData.staff.find(s => s.id === staffId);
+    const cycleDay = getCycleDay(parseLocalDate(dateStr), schedData.config.cycle_start_date);
     const scheduled = getScheduledShift(staff, cycleDay);
     const currentShift = actual || scheduled;
     setEditing({ staffId, dateStr, currentShift, proposedShift: currentShift });
   }
 
-  function applyChange() {
+  async function applyChange() {
     if (!editing || !editing.proposedShift) return;
     const { staffId, dateStr, proposedShift } = editing;
-    const staff = data.staff.find(s => s.id === staffId);
+    const staff = schedData.staff.find(s => s.id === staffId);
     const date = parseLocalDate(dateStr);
-    const scheduled = getScheduledShift(staff, getCycleDay(date, data.config.cycle_start_date));
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date));
 
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    if (proposedShift === scheduled) {
-      if (newOverrides[dateStr]) {
-        delete newOverrides[dateStr][staffId];
-        if (Object.keys(newOverrides[dateStr]).length === 0) delete newOverrides[dateStr];
+    setSaving(true);
+    try {
+      if (proposedShift === scheduled) {
+        await deleteOverride(getCurrentHome(), dateStr, staffId);
+      } else {
+        await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift: proposedShift, reason: 'Manual edit', source: 'manual' });
       }
-    } else {
-      if (!newOverrides[dateStr]) newOverrides[dateStr] = {};
-      newOverrides[dateStr][staffId] = { shift: proposedShift, reason: 'Manual edit' };
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, overrides: newOverrides });
     setEditing(null);
   }
 
-  function bulkSickWeek(staffId, startDateStr) {
-    const staff = data.staff.find(s => s.id === staffId);
+  async function bulkSickWeek(staffId, startDateStr) {
+    const staff = schedData.staff.find(s => s.id === staffId);
     if (!staff) return;
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    const sickRows = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(parseLocalDate(startDateStr));
       d.setDate(d.getDate() + i);
       const dk = formatDate(d);
-      const cycleDay = getCycleDay(d, data.config.cycle_start_date);
+      const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
       const sched = getScheduledShift(staff, cycleDay);
       if (sched !== 'OFF') {
-        if (!newOverrides[dk]) newOverrides[dk] = {};
-        newOverrides[dk][staffId] = { shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' };
+        sickRows.push({ date: dk, staffId, shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' });
       }
     }
-    updateData({ ...data, overrides: newOverrides });
+    if (sickRows.length === 0) { setBulkModal(null); return; }
+    setSaving(true);
+    try {
+      await bulkUpsertOverrides(getCurrentHome(), sickRows);
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
     setBulkModal(null);
   }
 
-  function revertAllOverrides() {
-    if (!confirm(`Revert ALL overrides for ${monthLabel}? This cannot be undone (but you can use Ctrl+Z).`)) return;
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    monthDates.forEach(d => {
-      const dk = formatDate(d);
-      delete newOverrides[dk];
-    });
-    updateData({ ...data, overrides: newOverrides });
+  async function revertAllOverrides() {
+    if (!confirm(`Revert ALL overrides for ${monthLabel}? This cannot be undone.`)) return;
+    const firstOfMonth = formatDate(monthDates[0]);
+    const lastOfMonth = formatDate(monthDates[monthDates.length - 1]);
+    setSaving(true);
+    try {
+      await revertMonthOverrides(getCurrentHome(), firstOfMonth, lastOfMonth);
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
     setBulkModal(null);
   }
 
   function exportCSV() {
+    if (!schedData) return;
     const headers = ['ID', 'Name', 'Team', 'Role', 'Pref',
       ...monthDates.map(d => formatDate(d)),
       'Hours', 'Pay £', 'OT Hrs', 'WTR'];
@@ -246,7 +292,7 @@ export default function RotationGrid({ data, updateData }) {
       return [
         s.id, s.name, s.team, s.role, s.pref,
         ...monthDates.map(d => {
-          const actual = getActualShift(s, d, data.overrides, data.config.cycle_start_date);
+          const actual = getActualShift(s, d, schedData.overrides, schedData.config.cycle_start_date);
           return actual.shift;
         }),
         stats?.totalHours.toFixed(1) ?? '',
@@ -257,6 +303,20 @@ export default function RotationGrid({ data, updateData }) {
     });
     downloadCSV(`roster_${monthLabel.replace(' ', '_')}.csv`, headers, rows);
   }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-6">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+    </div>
+  );
+
+  if (!schedData) return null;
 
   let lastTeam = null;
 
@@ -303,7 +363,7 @@ export default function RotationGrid({ data, updateData }) {
     <div className="p-4 max-w-full mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Roster: {monthLabel}</h1>
+        <h1 className="text-xl font-bold">{schedData.config.home_name} — Roster: {monthLabel}</h1>
         <p className="text-xs text-gray-500">{monthDates.length} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -323,6 +383,7 @@ export default function RotationGrid({ data, updateData }) {
           </div>
           <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
           <span className="text-xs text-gray-400">({monthDates.length} days)</span>
+          {saving && <span className="text-xs text-blue-500">Saving...</span>}
         </div>
         <div className="flex items-center gap-2">
           <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
@@ -330,8 +391,8 @@ export default function RotationGrid({ data, updateData }) {
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button onClick={() => setBulkModal({ type: 'revert-all' })}
-            className={`${BTN.secondary} ${BTN.xs}`}>Revert All</button>
+          <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
+            className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>
           <button onClick={exportCSV}
             className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
           <button onClick={() => window.print()}
@@ -379,12 +440,12 @@ export default function RotationGrid({ data, updateData }) {
                   <td className="py-1 px-2 font-medium sticky left-0 bg-white z-10 border-r">
                     {(() => {
                       const blockReasons = [];
-                      if (data.config.enforce_onboarding_blocking && isCareRole(s.role))
-                        blockReasons.push(...getOnboardingBlockingReasons(s.id, data.onboarding));
-                      if (data.config.enforce_training_blocking && isCareRole(s.role))
-                        blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, data.training, data.config, formatDate(new Date())));
+                      if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role))
+                        blockReasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
+                      if (schedData.config.enforce_training_blocking && isCareRole(s.role))
+                        blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, formatDate(new Date())));
                       return (
-                        <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n⚠ ' + blockReasons.join(', ') : ''}`}>
+                        <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n! ' + blockReasons.join(', ') : ''}`}>
                           {s.name}
                           {blockReasons.length > 0 && <span className="text-red-500 ml-0.5 text-[9px]" title={blockReasons.join(', ')}>!</span>}
                         </div>
@@ -395,21 +456,22 @@ export default function RotationGrid({ data, updateData }) {
                   <td className="py-1 px-1 text-[10px] text-gray-500">{s.pref}</td>
                   {monthDates.map((date, i) => {
                     const dateKey = formatDate(date);
-                    const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
+                    const actual = getActualShift(s, date, schedData.overrides, schedData.config.cycle_start_date);
                     const shift = actual.shift;
-                    const isOverride = !!data.overrides[dateKey]?.[s.id];
+                    const isOverride = !!schedData.overrides[dateKey]?.[s.id];
                     const isEditing = editing?.staffId === s.id && editing?.dateStr === dateKey;
                     const isMonday = date.getDay() === 1 && i > 0;
                     return (
                       <td key={i} className={`py-0.5 px-0.5 text-center ${isMonday ? 'border-l border-gray-200' : ''}`}>
                         <button
                           onClick={() => openEditor(s.id, dateKey)}
+                          disabled={saving}
                           className={`inline-block w-full px-0.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
-                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'}`}
-                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}${data.overrides[dateKey]?.[s.id]?.sleep_in ? ' +SI' : ''}\nClick to change`}>
+                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'} disabled:cursor-not-allowed`}
+                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}${schedData.overrides[dateKey]?.[s.id]?.sleep_in ? ' +SI' : ''}\nClick to change`}>
                           {shift === 'OFF' ? '-' : shift}
-                          {data.overrides[dateKey]?.[s.id]?.sleep_in && <span className="text-[7px]"> SI</span>}
+                          {schedData.overrides[dateKey]?.[s.id]?.sleep_in && <span className="text-[7px]"> SI</span>}
                         </button>
                       </td>
                     );
@@ -449,10 +511,12 @@ export default function RotationGrid({ data, updateData }) {
           <div className={MODAL.panelSm}>
             <h2 className={MODAL.title}>Revert All Overrides</h2>
             <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
-            <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month. You can undo with Ctrl+Z.</p>
+            <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month.</p>
             <div className={MODAL.footer}>
               <button onClick={() => setBulkModal(null)} className={BTN.secondary}>Cancel</button>
-              <button onClick={revertAllOverrides} className={BTN.danger}>Revert All</button>
+              <button onClick={revertAllOverrides} disabled={saving} className={`${BTN.danger} disabled:opacity-50`}>
+                {saving ? 'Reverting...' : 'Revert All'}
+              </button>
             </div>
           </div>
         </div>
@@ -466,7 +530,7 @@ export default function RotationGrid({ data, updateData }) {
             <div className="bg-gray-800 text-white px-5 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-semibold">{data.staff.find(s => s.id === editing.staffId)?.name}</h2>
+                  <h2 className="font-semibold">{schedData.staff.find(s => s.id === editing.staffId)?.name}</h2>
                   <p className="text-xs text-gray-400">
                     {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                   </p>
@@ -617,26 +681,27 @@ export default function RotationGrid({ data, updateData }) {
 
             {/* Footer */}
             <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-gray-50/80">
-              <button onClick={() => setEditing(null)} className={BTN.ghost}>
+              <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>
                 Cancel
               </button>
               <div className="flex gap-2">
                 <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
-                  className={`${BTN.ghost} ${BTN.xs} text-red-600`}>
+                  disabled={saving}
+                  className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}>
                   Sick 7 Days
                 </button>
-                {editing.currentShift !== getScheduledShift(data.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date)) && (
+                {editing.currentShift !== getScheduledShift(schedData.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date)) && (
                   <button onClick={() => {
-                    const staff = data.staff.find(s => s.id === editing.staffId);
-                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), data.config.cycle_start_date));
+                    const staff = schedData.staff.find(s => s.id === editing.staffId);
+                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date));
                     setEditing({ ...editing, proposedShift: scheduled });
-                  }} className={`${BTN.ghost} ${BTN.xs} text-blue-600`}>
+                  }} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-blue-600 disabled:opacity-50`}>
                     Revert to Scheduled
                   </button>
                 )}
                 <button
                   onClick={applyChange}
-                  disabled={!editing.proposedShift || editing.proposedShift === editing.currentShift}
+                  disabled={saving || !editing.proposedShift || editing.proposedShift === editing.currentShift}
                   className={`${
                     impact?.errors.length > 0
                       ? BTN.danger
@@ -644,7 +709,8 @@ export default function RotationGrid({ data, updateData }) {
                       ? 'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2'
                       : BTN.success
                   } disabled:opacity-30`}>
-                  {impact?.errors.length > 0 ? 'Apply Anyway' :
+                  {saving ? 'Saving...' :
+                   impact?.errors.length > 0 ? 'Apply Anyway' :
                    impact?.warnings.length > 0 ? 'Apply (with warnings)' :
                    'Approve & Apply'}
                 </button>

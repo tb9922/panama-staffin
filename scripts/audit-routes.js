@@ -123,6 +123,12 @@ const ADMIN_ROUTES = new Set([
   'POST /api/payroll/sick-periods',
   'PUT /api/payroll/sick-periods/:id',
   'PUT /api/payroll/hmrc/:id/paid',
+  // Scheduling — override + day-note mutations are admin-only
+  'PUT /api/scheduling/overrides',
+  'DELETE /api/scheduling/overrides',
+  'POST /api/scheduling/overrides/bulk',
+  'DELETE /api/scheduling/overrides/month',
+  'PUT /api/scheduling/day-notes',
 ]);
 
 // ── Step 1: parse server.js for app.use() mounts and import mappings ──────────

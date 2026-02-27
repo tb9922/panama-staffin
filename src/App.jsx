@@ -721,13 +721,13 @@ export default function App() {
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Dashboard data={data} updateData={safeUpdateData} />} />
-          <Route path="/day" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
-          <Route path="/day/:date" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
+          <Route path="/day" element={<DailyStatus />} />
+          <Route path="/day/:date" element={<DailyStatus />} />
           <Route path="/handover" element={<HandoverNotes data={data} user={user} />} />
-          <Route path="/rotation" element={<RotationGrid data={data} updateData={safeUpdateData} />} />
+          <Route path="/rotation" element={<RotationGrid />} />
           <Route path="/staff" element={<StaffRegister />} />
           <Route path="/costs" element={<CostTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/leave" element={<AnnualLeave data={data} updateData={safeUpdateData} />} />
+          <Route path="/leave" element={<AnnualLeave />} />
           <Route path="/scenarios" element={<ScenarioModel data={data} />} />
           <Route path="/fatigue" element={<FatigueTracker data={data} />} />
           <Route path="/sick-trends" element={<SickTrends data={data} />} />

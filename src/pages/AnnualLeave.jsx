@@ -1,7 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import {
+  getCurrentHome,
+  getSchedulingData,
+  bulkUpsertOverrides,
+  deleteOverride,
+} from '../lib/api.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -17,36 +23,66 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function AnnualLeave({ data, updateData }) {
+export default function AnnualLeave() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   const [filterTeam, setFilterTeam] = useState('All');
   const [bookingStaff, setBookingStaff] = useState('');
   const [bookingStart, setBookingStart] = useState('');
   const [bookingEnd, setBookingEnd] = useState('');
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
-  const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
-  const filtered = filterTeam === 'All' ? activeStaff : activeStaff.filter(s => s.team === filterTeam);
+
+  const loadData = useCallback(async () => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    setLoading(true);
+    try {
+      setSchedData(await getSchedulingData(homeSlug));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const today = new Date();
 
+  const activeStaff = useMemo(() => {
+    if (!schedData) return [];
+    return schedData.staff.filter(s => s.active !== false && isCareRole(s.role));
+  }, [schedData]);
+
+  const filtered = useMemo(() => {
+    if (filterTeam === 'All') return activeStaff;
+    return activeStaff.filter(s => s.team === filterTeam);
+  }, [activeStaff, filterTeam]);
+
   // Accrual calculations for all active staff
   const accruals = useMemo(() => {
-    return getAccrualSummary(activeStaff, data.config, data.overrides, today);
-  }, [data.staff, data.config, data.overrides]);
+    if (!schedData) return new Map();
+    return getAccrualSummary(activeStaff, schedData.config, schedData.overrides, today);
+  }, [schedData, activeStaff]);
 
   // Leave year for display
   const leaveYear = useMemo(() => {
-    return getLeaveYear(today, data.config.leave_year_start);
-  }, [data.config.leave_year_start]);
+    if (!schedData) return null;
+    return getLeaveYear(today, schedData.config.leave_year_start);
+  }, [schedData]);
 
   // Book AL — only on scheduled working days, enforces accrued entitlement
-  function bookAL() {
-    if (!bookingStaff || !bookingStart || !bookingEnd) return;
+  async function bookAL() {
+    if (!bookingStaff || !bookingStart || !bookingEnd || !schedData) return;
     const start = parseDate(bookingStart);
     const end = parseDate(bookingEnd);
     if (end < start) return;
 
-    const staff = data.staff.find(s => s.id === bookingStaff);
+    const staff = schedData.staff.find(s => s.id === bookingStaff);
     if (!staff) return;
 
     const accrual = accruals.get(bookingStaff);
@@ -58,28 +94,33 @@ export default function AnnualLeave({ data, updateData }) {
       return;
     }
 
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
+    // Build the same loop as before but collect rows for bulkUpsertOverrides
+    // Use a local clone of overrides to compute alOnDay correctly during iteration
+    const localOverrides = JSON.parse(JSON.stringify(schedData.overrides));
+    const toBook = [];
     const issues = [];
     let skippedOff = 0;
     let booked = 0;
     let d = new Date(start);
     while (d <= end) {
       const dateKey = formatDate(d);
-      const cycleDay = getCycleDay(d, data.config.cycle_start_date);
+      const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
       const scheduled = getScheduledShift(staff, cycleDay);
       if (scheduled === 'OFF' || scheduled === 'AVL') {
         skippedOff++;
         d = addDays(d, 1);
         continue;
       }
-      const alOnDay = countALOnDate(d, newOverrides);
-      if (alOnDay >= data.config.max_al_same_day) {
-        issues.push(`${dateKey}: max AL reached (${data.config.max_al_same_day})`);
+      const alOnDay = countALOnDate(d, localOverrides);
+      if (alOnDay >= schedData.config.max_al_same_day) {
+        issues.push(`${dateKey}: max AL reached (${schedData.config.max_al_same_day})`);
       } else if (booked >= bookabledays) {
         issues.push(`${dateKey}: earned leave exhausted (${accrual.accrued.toFixed(1)} earned, ${accrual.used + booked} would be used)`);
       } else {
-        if (!newOverrides[dateKey]) newOverrides[dateKey] = {};
-        newOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al' };
+        toBook.push({ date: dateKey, staffId: bookingStaff, shift: 'AL', reason: 'Annual leave booked', source: 'al' });
+        // Update local clone so subsequent alOnDay checks reflect this booking
+        if (!localOverrides[dateKey]) localOverrides[dateKey] = {};
+        localOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al' };
         booked++;
       }
       d = addDays(d, 1);
@@ -90,20 +131,34 @@ export default function AnnualLeave({ data, updateData }) {
     if (issues.length > 0) msgs.push('Skipped days:\n' + issues.join('\n'));
     if (msgs.length > 0) alert(`${booked} AL days booked.\n\n${msgs.join('\n\n')}`);
 
-    updateData({ ...data, overrides: newOverrides });
+    if (toBook.length > 0) {
+      setSaving(true);
+      try {
+        await bulkUpsertOverrides(getCurrentHome(), toBook);
+        await loadData();
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setSaving(false);
+      }
+    }
+
     setBookingStaff('');
     setBookingStart('');
     setBookingEnd('');
   }
 
   // Cancel AL for a staff member on a date
-  function cancelAL(staffId, dateKey) {
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    if (newOverrides[dateKey]) {
-      delete newOverrides[dateKey][staffId];
-      if (Object.keys(newOverrides[dateKey]).length === 0) delete newOverrides[dateKey];
+  async function cancelAL(staffId, dateKey) {
+    setSaving(true);
+    try {
+      await deleteOverride(getCurrentHome(), dateKey, staffId);
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, overrides: newOverrides });
   }
 
   // Selected staff accrual for booking panel info box
@@ -111,40 +166,60 @@ export default function AnnualLeave({ data, updateData }) {
 
   // Upcoming AL bookings
   const upcomingAL = useMemo(() => {
+    if (!schedData) return [];
     const todayStr = formatDate(new Date());
     const bookings = [];
-    Object.entries(data.overrides).forEach(([dateKey, dayOverrides]) => {
+    Object.entries(schedData.overrides).forEach(([dateKey, dayOverrides]) => {
       if (dateKey < todayStr) return;
       Object.entries(dayOverrides).forEach(([staffId, override]) => {
         if (override.shift === 'AL') {
-          const staff = data.staff.find(s => s.id === staffId);
+          const staff = schedData.staff.find(s => s.id === staffId);
           if (staff) bookings.push({ date: dateKey, staffId, staffName: staff.name, team: staff.team });
         }
       });
     });
     bookings.sort((a, b) => a.date.localeCompare(b.date));
     return bookings;
-  }, [data.overrides, data.staff]);
+  }, [schedData]);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-6">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+    </div>
+  );
+
+  if (!schedData) return null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Annual Leave</h1>
+        <h1 className="text-xl font-bold">{schedData.config.home_name} — Annual Leave</h1>
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
       <div className="flex items-center justify-between mb-2 print:hidden">
-        <h1 className="text-2xl font-bold text-gray-900">Annual Leave</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">Annual Leave</h1>
+          {saving && <span className="text-xs text-blue-500">Saving...</span>}
+        </div>
         <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
       </div>
 
       {/* Leave year banner */}
-      <div className="mb-6 text-xs text-gray-500 print:hidden">
-        Leave Year: <span className="font-medium text-gray-700">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</span>
-        <span className="mx-2 text-gray-300">|</span>
-        Accrual: monthly (1/12th per month)
-      </div>
+      {leaveYear && (
+        <div className="mb-6 text-xs text-gray-500 print:hidden">
+          Leave Year: <span className="font-medium text-gray-700">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</span>
+          <span className="mx-2 text-gray-300">|</span>
+          Accrual: monthly (1/12th per month)
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Book AL */}
@@ -192,10 +267,10 @@ export default function AnnualLeave({ data, updateData }) {
                 <input type="date" value={bookingEnd} onChange={e => setBookingEnd(e.target.value)} className={INPUT.base} />
               </div>
             </div>
-            <div className="text-xs text-gray-500">Max {data.config.max_al_same_day} staff on AL per day</div>
-            <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd}
+            <div className="text-xs text-gray-500">Max {schedData.config.max_al_same_day} staff on AL per day</div>
+            <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving}
               className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
-              Book Annual Leave
+              {saving ? 'Booking...' : 'Book Annual Leave'}
             </button>
           </div>
         </div>
@@ -205,7 +280,7 @@ export default function AnnualLeave({ data, updateData }) {
           <div className="flex items-center justify-between p-4 pb-0 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">AL Balances</h2>
-              <p className="text-xs text-gray-400 mt-0.5">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>
+              {leaveYear && <p className="text-xs text-gray-400 mt-0.5">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>}
             </div>
             <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
               <option value="All">All Teams</option>
@@ -278,8 +353,8 @@ export default function AnnualLeave({ data, updateData }) {
                     <div key={`pad-${i}`} className="w-8 h-8" />
                   ))}
                   {m.dates.map(d => {
-                    const alCount = countALOnDate(d, data.overrides);
-                    const max = data.config.max_al_same_day;
+                    const alCount = countALOnDate(d, schedData.overrides);
+                    const max = schedData.config.max_al_same_day;
                     const isToday = formatDate(d) === formatDate(new Date());
                     return (
                       <div key={formatDate(d)} className={`w-8 h-8 rounded-lg text-[10px] flex flex-col items-center justify-center transition-colors ${
@@ -320,7 +395,7 @@ export default function AnnualLeave({ data, updateData }) {
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                   </div>
-                  <button onClick={() => cancelAL(b.staffId, b.date)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Cancel</button>
+                  <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>
                 </div>
               ))}
             </div>
