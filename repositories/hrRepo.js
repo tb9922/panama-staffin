@@ -41,6 +41,9 @@ function shapeDisc(row) {
     disciplinary_paused_for_grievance: row.disciplinary_paused_for_grievance,
     status: row.status, closed_date: d(row.closed_date), closed_reason: row.closed_reason,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    outcome_notes: row.outcome_reason,
+    appeal_date: d(row.appeal_received_date),
   };
 }
 
@@ -306,6 +309,10 @@ function shapePerf(row) {
     appeal_outcome_reason: row.appeal_outcome_reason,
     status: row.status, closed_date: d(row.closed_date),
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    description: row.concern_summary,
+    informal_notes: row.informal_discussion_notes,
+    appeal_date: d(row.appeal_received_date),
   };
 }
 
@@ -392,6 +399,11 @@ function shapeRtw(row) {
     bradford_score_after: row.bradford_score_after != null ? parseFloat(row.bradford_score_after) : null, trigger_reached: row.trigger_reached,
     action_taken: row.action_taken, linked_case_id: row.linked_case_id,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    conducted_by: row.rtw_conducted_by,
+    fit_for_work: row.fit_to_return,
+    adjustments: row.adjustments_detail,
+    referral_needed: row.oh_referral_recommended,
   };
 }
 
@@ -467,6 +479,10 @@ function shapeOh(row) {
     follow_up_date: d(row.follow_up_date), adjustments_implemented: row.adjustments_implemented || [],
     status: row.status,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    provider: row.oh_provider,
+    report_date: d(row.report_received_date),
+    recommendations: row.adjustments_recommended,
   };
 }
 
@@ -552,6 +568,9 @@ function shapeContract(row) {
     exit_interview_date: d(row.exit_interview_date), exit_interview_notes: row.exit_interview_notes,
     references_agreed: row.references_agreed,
     status: row.status, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    start_date: d(row.contract_start_date),
+    end_date: d(row.contract_end_date),
   };
 }
 
@@ -659,6 +678,14 @@ function shapeFamilyLeave(row) {
     protected_period_start: d(row.protected_period_start), protected_period_end: d(row.protected_period_end),
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    leave_type: row.type,
+    start_date: d(row.leave_start_date),
+    end_date: d(row.leave_end_date),
+    expected_return: d(row.expected_return_date),
+    actual_return: d(row.actual_return_date),
+    kit_days_used: row.kit_days != null ? (Array.isArray(row.kit_days) ? row.kit_days.length : row.kit_days) : 0,
+    pay_type: row.statutory_pay_type,
   };
 }
 
@@ -748,6 +775,8 @@ function shapeFlex(row) {
     appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    decision_reason: row.refusal_reason,
   };
 }
 
@@ -827,6 +856,10 @@ function shapeEdi(row) {
     access_to_work_amount: f(row.access_to_work_amount),
     description: row.description, status: row.status, outcome: row.outcome, notes: row.notes,
     created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    date_recorded: d(row.complaint_date),
+    category: row.harassment_category,
+    respondent_role: row.respondent_type,
   };
 }
 
@@ -913,6 +946,12 @@ function shapeTupe(row) {
     outstanding_tribunal_claims: row.outstanding_tribunal_claims,
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases
+    staff_affected: Array.isArray(row.employees) ? row.employees.length : (row.employees?.count ?? null),
+    consultation_start: d(row.consultation_start_date),
+    consultation_end: d(row.consultation_end_date),
+    eli_sent_date: d(row.eli_received_date),
+    measures_proposed: row.measures_description,
   };
 }
 
@@ -988,6 +1027,12 @@ function shapeRenewal(row) {
     rtw_document_expiry: d(row.rtw_document_expiry), rtw_next_check_due: d(row.rtw_next_check_due),
     status: row.status, checked_by: row.checked_by, notes: row.notes,
     created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    // Frontend aliases (type-aware)
+    last_checked: d(row.check_type === 'dbs' ? row.dbs_check_date : row.rtw_check_date),
+    expiry_date: d(row.check_type === 'dbs' ? row.dbs_next_renewal_due : row.rtw_document_expiry),
+    reference: row.check_type === 'dbs' ? row.dbs_certificate_number : null,
+    certificate_number: row.dbs_certificate_number,
+    document_type: row.rtw_document_type,
   };
 }
 

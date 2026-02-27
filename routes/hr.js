@@ -64,44 +64,80 @@ const disciplinaryBodySchema = z.object({
   date_raised:          dateSchema,
   category:             z.enum(['misconduct','gross_misconduct']),
   allegation_summary:   z.string().min(1).max(5000),
+  allegation_detail:    z.string().max(10000).nullable().optional(),
+  raised_by:            z.string().max(200).optional(),
+  source:               z.string().max(50).optional(),
+  source_ref:           z.string().max(200).nullable().optional(),
   status:               z.enum(['open','investigation','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
-  severity:             z.string().max(50).optional(),
-  investigating_manager: z.string().max(200).optional(),
-  investigation_start_date: dateSchema.optional(),
-  investigation_end_date:   dateSchema.optional(),
-  hearing_date:         dateSchema.optional(),
-  hearing_panel:        z.string().max(500).optional(),
-  outcome:              z.enum(['no_action','verbal_warning','first_written','final_written','dismissal','demotion','transfer']).optional(),
-  outcome_date:         dateSchema.optional(),
-  sanction_type:        z.string().max(100).optional(),
-  sanction_expiry:      dateSchema.optional(),
-  appeal_date:          dateSchema.optional(),
-  appeal_outcome:       z.string().max(100).optional(),
-  appeal_outcome_date:  dateSchema.optional(),
-  acas_code_followed:   z.boolean().optional(),
-  notes:                z.string().max(5000).nullable().optional(),
 });
 
 const disciplinaryUpdateSchema = z.object({
+  // Core
   date_raised:          dateSchema.optional(),
   category:             z.enum(['misconduct','gross_misconduct']).optional(),
   allegation_summary:   z.string().min(1).max(5000).optional(),
-  status:               z.enum(['open','investigation','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
-  severity:             z.string().max(50).optional(),
-  investigating_manager: z.string().max(200).optional(),
+  allegation_detail:    z.string().max(10000).nullable().optional(),
+  // Investigation
+  investigation_status: z.enum(['not_started','in_progress','complete']).optional(),
+  investigation_officer: z.string().max(200).nullable().optional(),
   investigation_start_date: dateSchema.nullable().optional(),
-  investigation_end_date:   dateSchema.nullable().optional(),
+  investigation_notes:  z.string().max(5000).nullable().optional(),
+  witnesses:            z.array(z.any()).optional(),
+  evidence_items:       z.array(z.any()).optional(),
+  investigation_completed_date: dateSchema.nullable().optional(),
+  investigation_findings: z.string().max(5000).nullable().optional(),
+  investigation_recommendation: z.string().max(5000).nullable().optional(),
+  // Suspension
+  suspended:            z.boolean().optional(),
+  suspension_date:      dateSchema.nullable().optional(),
+  suspension_reason:    z.string().max(2000).nullable().optional(),
+  suspension_review_date: dateSchema.nullable().optional(),
+  suspension_end_date:  dateSchema.nullable().optional(),
+  suspension_on_full_pay: z.boolean().optional(),
+  // Hearing
+  hearing_status:       z.enum(['not_scheduled','scheduled','held','adjourned','cancelled']).optional(),
   hearing_date:         dateSchema.nullable().optional(),
-  hearing_panel:        z.string().max(500).nullable().optional(),
+  hearing_time:         z.string().max(10).nullable().optional(),
+  hearing_location:     z.string().max(200).nullable().optional(),
+  hearing_chair:        z.string().max(200).nullable().optional(),
+  hearing_letter_sent_date: dateSchema.nullable().optional(),
+  hearing_companion_name: z.string().max(200).nullable().optional(),
+  hearing_companion_role: z.enum(['colleague','trade_union_rep']).nullable().optional(),
+  hearing_notes:        z.string().max(5000).nullable().optional(),
+  hearing_employee_response: z.string().max(5000).nullable().optional(),
+  // Outcome
   outcome:              z.enum(['no_action','verbal_warning','first_written','final_written','dismissal','demotion','transfer']).nullable().optional(),
   outcome_date:         dateSchema.nullable().optional(),
-  sanction_type:        z.string().max(100).nullable().optional(),
-  sanction_expiry:      dateSchema.nullable().optional(),
-  appeal_date:          dateSchema.nullable().optional(),
+  outcome_reason:       z.string().max(5000).nullable().optional(),
+  outcome_notes:        z.string().max(5000).nullable().optional(),  // Frontend alias → outcome_reason
+  outcome_letter_sent_date: dateSchema.nullable().optional(),
+  outcome_letter_method: z.string().max(50).nullable().optional(),
+  warning_expiry_date:  dateSchema.nullable().optional(),
+  // Dismissal
+  notice_period_start:  dateSchema.nullable().optional(),
+  notice_period_end:    dateSchema.nullable().optional(),
+  pay_in_lieu_of_notice: z.number().nullable().optional(),
+  dismissal_effective_date: dateSchema.nullable().optional(),
+  // Appeal
+  appeal_status:        z.enum(['none','requested','scheduled','held','decided']).optional(),
+  appeal_received_date: dateSchema.nullable().optional(),
+  appeal_date:          dateSchema.nullable().optional(),  // Frontend alias → appeal_received_date
+  appeal_deadline:      dateSchema.nullable().optional(),
+  appeal_grounds:       z.string().max(5000).nullable().optional(),
+  appeal_hearing_date:  dateSchema.nullable().optional(),
+  appeal_hearing_chair: z.string().max(200).nullable().optional(),
+  appeal_hearing_companion_name: z.string().max(200).nullable().optional(),
   appeal_outcome:       z.string().max(100).nullable().optional(),
   appeal_outcome_date:  dateSchema.nullable().optional(),
-  acas_code_followed:   z.boolean().optional(),
-  notes:                z.string().max(5000).nullable().optional(),
+  appeal_outcome_reason: z.string().max(5000).nullable().optional(),
+  appeal_outcome_letter_sent_date: dateSchema.nullable().optional(),
+  // Linked
+  linked_grievance_id:  z.number().int().nullable().optional(),
+  disciplinary_paused_for_grievance: z.boolean().optional(),
+  // Meta
+  status:               z.enum(['open','investigation','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
+  closed_date:          dateSchema.nullable().optional(),
+  closed_reason:        z.string().max(200).nullable().optional(),
 });
 
 // ── Grievance Schemas ───────────────────────────────────────────────────────
@@ -205,27 +241,70 @@ const performanceBodySchema = z.object({
   staff_id:         staffIdSchema,
   date_raised:      dateSchema,
   type:             z.enum(['capability','pip','probation_concern']),
-  description:      z.string().max(5000).nullable().optional(),
+  description:      z.string().max(5000).nullable().optional(),  // Frontend alias → concern_summary
+  concern_summary:  z.string().max(5000).nullable().optional(),
+  concern_detail:   z.string().max(10000).nullable().optional(),
+  performance_area: z.string().max(200).nullable().optional(),
+  manager:          z.string().max(200).optional(),  // Ghost — ignored
   status:           z.enum(['open','informal','pip_active','pip_review','hearing_scheduled','outcome_issued','appeal_pending','closed']).optional(),
-  objectives:       z.string().max(5000).nullable().optional(),
-  support_plan:     z.string().max(5000).nullable().optional(),
-  review_date:      dateSchema.optional(),
-  review_outcome:   z.enum(['no_action','further_pip','redeployment','first_written','final_written','dismissal']).optional(),
-  manager:          z.string().max(200).optional(),
-  notes:            z.string().max(5000).nullable().optional(),
 });
 
 const performanceUpdateSchema = z.object({
+  // Core
   date_raised:      dateSchema.optional(),
   type:             z.enum(['capability','pip','probation_concern']).optional(),
-  description:      z.string().max(5000).nullable().optional(),
+  description:      z.string().max(5000).nullable().optional(),  // Frontend alias → concern_summary
+  concern_summary:  z.string().max(5000).nullable().optional(),
+  concern_detail:   z.string().max(10000).nullable().optional(),
+  performance_area: z.string().max(200).nullable().optional(),
+  manager:          z.string().max(200).nullable().optional(),   // Ghost — ignored
+  // Informal
+  informal_discussion_date: dateSchema.nullable().optional(),
+  informal_discussion_notes: z.string().max(5000).nullable().optional(),
+  informal_notes:   z.string().max(5000).nullable().optional(),  // Frontend alias → informal_discussion_notes
+  informal_targets: z.array(z.any()).optional(),
+  informal_review_date: dateSchema.nullable().optional(),
+  informal_outcome: z.string().max(500).nullable().optional(),
+  // PIP
+  pip_start_date:   dateSchema.nullable().optional(),
+  pip_end_date:     dateSchema.nullable().optional(),
+  pip_objectives:   z.array(z.any()).optional(),
+  pip_overall_outcome: z.string().max(500).nullable().optional(),
+  pip_extended_to:  dateSchema.nullable().optional(),
+  pip_review_dates: z.string().max(2000).nullable().optional(),  // Ghost — ignored
+  // Hearing
+  hearing_status:   z.enum(['not_scheduled','scheduled','held','adjourned','cancelled']).optional(),
+  hearing_date:     dateSchema.nullable().optional(),
+  hearing_time:     z.string().max(10).nullable().optional(),
+  hearing_location: z.string().max(200).nullable().optional(),
+  hearing_chair:    z.string().max(200).nullable().optional(),
+  hearing_letter_sent_date: dateSchema.nullable().optional(),
+  hearing_companion_name: z.string().max(200).nullable().optional(),
+  hearing_companion_role: z.enum(['colleague','trade_union_rep']).nullable().optional(),
+  hearing_notes:    z.string().max(5000).nullable().optional(),
+  // Outcome
+  outcome:          z.string().max(200).nullable().optional(),
+  outcome_date:     dateSchema.nullable().optional(),
+  outcome_reason:   z.string().max(5000).nullable().optional(),
+  outcome_letter_sent_date: dateSchema.nullable().optional(),
+  warning_expiry_date: dateSchema.nullable().optional(),
+  // Redeployment
+  redeployment_offered: z.boolean().optional(),
+  redeployment_role: z.string().max(200).nullable().optional(),
+  redeployment_accepted: z.boolean().optional(),
+  // Appeal
+  appeal_status:    z.enum(['none','requested','scheduled','held','decided']).optional(),
+  appeal_received_date: dateSchema.nullable().optional(),
+  appeal_date:      dateSchema.nullable().optional(),  // Frontend alias → appeal_received_date
+  appeal_deadline:  dateSchema.nullable().optional(),
+  appeal_grounds:   z.string().max(5000).nullable().optional(),
+  appeal_hearing_date: dateSchema.nullable().optional(),
+  appeal_outcome:   z.string().max(200).nullable().optional(),
+  appeal_outcome_date: dateSchema.nullable().optional(),
+  appeal_outcome_reason: z.string().max(5000).nullable().optional(),
+  // Meta
   status:           z.enum(['open','informal','pip_active','pip_review','hearing_scheduled','outcome_issued','appeal_pending','closed']).optional(),
-  objectives:       z.string().max(5000).nullable().optional(),
-  support_plan:     z.string().max(5000).nullable().optional(),
-  review_date:      dateSchema.nullable().optional(),
-  review_outcome:   z.enum(['no_action','further_pip','redeployment','first_written','final_written','dismissal']).nullable().optional(),
-  manager:          z.string().max(200).nullable().optional(),
-  notes:            z.string().max(5000).nullable().optional(),
+  closed_date:      dateSchema.nullable().optional(),
 });
 
 // ── RTW Interview Schemas ───────────────────────────────────────────────────
@@ -382,20 +461,61 @@ const flexWorkingUpdateSchema = z.object({
 // ── EDI Schemas ─────────────────────────────────────────────────────────────
 
 const ediBodySchema = z.object({
-  record_type:    z.enum(['harassment_complaint','reasonable_adjustment']),
-  staff_id:       staffIdSchema.optional(),
-  date_recorded:  dateSchema.optional(),
-  category:       z.string().max(100).optional(),
-  data:           z.record(z.unknown()).optional(),
-  notes:          z.string().max(5000).nullable().optional(),
+  record_type:          z.enum(['harassment_complaint','reasonable_adjustment']),
+  staff_id:             staffIdSchema.optional(),
+  date_recorded:        dateSchema.optional(),        // Frontend alias → complaint_date
+  complaint_date:       dateSchema.optional(),
+  category:             z.string().max(100).optional(),  // Frontend alias → harassment_category
+  harassment_category:  z.string().max(100).optional(),
+  // Harassment fields
+  third_party:          z.boolean().optional(),
+  third_party_type:     z.string().max(100).nullable().optional(),
+  respondent_type:      z.string().max(100).nullable().optional(),
+  respondent_staff_id:  z.string().max(20).nullable().optional(),
+  respondent_name:      z.string().max(200).nullable().optional(),
+  respondent_role:      z.string().max(100).nullable().optional(),  // Frontend alias → respondent_type
+  handling_route:       z.string().max(100).nullable().optional(),
+  linked_case_id:       z.number().int().nullable().optional(),
+  reasonable_steps_evidence: z.string().max(5000).nullable().optional(),
+  // Reasonable adjustment fields
+  condition_description: z.string().max(5000).nullable().optional(),
+  adjustments:          z.string().max(5000).nullable().optional(),
+  oh_referral_id:       z.number().int().nullable().optional(),
+  access_to_work_applied: z.boolean().optional(),
+  access_to_work_reference: z.string().max(200).nullable().optional(),
+  access_to_work_amount: z.number().nullable().optional(),
+  // Common
+  description:          z.string().max(5000).nullable().optional(),
+  status:               z.string().max(50).nullable().optional(),
+  outcome:              z.string().max(5000).nullable().optional(),
+  notes:                z.string().max(5000).nullable().optional(),
 });
 
 const ediUpdateSchema = z.object({
-  record_type:    z.enum(['harassment_complaint','reasonable_adjustment']).optional(),
-  date_recorded:  dateSchema.nullable().optional(),
-  category:       z.string().max(100).nullable().optional(),
-  data:           z.record(z.unknown()).optional(),
-  notes:          z.string().max(5000).nullable().optional(),
+  record_type:          z.enum(['harassment_complaint','reasonable_adjustment']).optional(),
+  date_recorded:        dateSchema.nullable().optional(),
+  complaint_date:       dateSchema.nullable().optional(),
+  category:             z.string().max(100).nullable().optional(),
+  harassment_category:  z.string().max(100).nullable().optional(),
+  third_party:          z.boolean().optional(),
+  third_party_type:     z.string().max(100).nullable().optional(),
+  respondent_type:      z.string().max(100).nullable().optional(),
+  respondent_staff_id:  z.string().max(20).nullable().optional(),
+  respondent_name:      z.string().max(200).nullable().optional(),
+  respondent_role:      z.string().max(100).nullable().optional(),
+  handling_route:       z.string().max(100).nullable().optional(),
+  linked_case_id:       z.number().int().nullable().optional(),
+  reasonable_steps_evidence: z.string().max(5000).nullable().optional(),
+  condition_description: z.string().max(5000).nullable().optional(),
+  adjustments:          z.string().max(5000).nullable().optional(),
+  oh_referral_id:       z.number().int().nullable().optional(),
+  access_to_work_applied: z.boolean().optional(),
+  access_to_work_reference: z.string().max(200).nullable().optional(),
+  access_to_work_amount: z.number().nullable().optional(),
+  description:          z.string().max(5000).nullable().optional(),
+  status:               z.string().max(50).nullable().optional(),
+  outcome:              z.string().max(5000).nullable().optional(),
+  notes:                z.string().max(5000).nullable().optional(),
 });
 
 // ── TUPE Schemas ────────────────────────────────────────────────────────────
@@ -431,24 +551,51 @@ const tupeUpdateSchema = z.object({
 // ── Renewal Schemas ─────────────────────────────────────────────────────────
 
 const renewalBodySchema = z.object({
-  staff_id:       staffIdSchema,
-  check_type:     z.enum(['dbs','rtw']),
-  last_checked:   dateSchema.optional(),
-  expiry_date:    dateSchema.optional(),
-  status:         z.enum(['current','due_soon','overdue','pending','expired']).optional(),
-  reference:      z.string().max(200).optional(),
-  checked_by:     z.string().max(200).optional(),
-  notes:          z.string().max(5000).nullable().optional(),
+  staff_id:             staffIdSchema,
+  check_type:           z.enum(['dbs','rtw']),
+  last_checked:         dateSchema.optional(),           // Frontend alias → dbs_check_date / rtw_check_date
+  expiry_date:          dateSchema.optional(),           // Frontend alias → dbs_next_renewal_due / rtw_document_expiry
+  reference:            z.string().max(200).optional(),  // Frontend alias → dbs_certificate_number
+  certificate_number:   z.string().max(200).optional(),  // Frontend → dbs_certificate_number
+  document_type:        z.string().max(100).optional(),  // Frontend → rtw_document_type
+  status:               z.enum(['current','due_soon','overdue','pending','expired']).optional(),
+  checked_by:           z.string().max(200).optional(),
+  notes:                z.string().max(5000).nullable().optional(),
+  // DB column names (also accepted directly)
+  dbs_certificate_number: z.string().max(200).nullable().optional(),
+  dbs_disclosure_level: z.string().max(50).nullable().optional(),
+  dbs_check_date:       dateSchema.optional(),
+  dbs_next_renewal_due: dateSchema.optional(),
+  dbs_update_service_registered: z.boolean().optional(),
+  dbs_update_service_last_checked: dateSchema.optional(),
+  dbs_barred_list_check: z.boolean().optional(),
+  rtw_document_type:    z.string().max(100).nullable().optional(),
+  rtw_check_date:       dateSchema.optional(),
+  rtw_document_expiry:  dateSchema.optional(),
+  rtw_next_check_due:   dateSchema.optional(),
 });
 
 const renewalUpdateSchema = z.object({
-  check_type:     z.enum(['dbs','rtw']).optional(),
-  last_checked:   dateSchema.nullable().optional(),
-  expiry_date:    dateSchema.nullable().optional(),
-  status:         z.enum(['current','due_soon','overdue','pending','expired']).optional(),
-  reference:      z.string().max(200).nullable().optional(),
-  checked_by:     z.string().max(200).nullable().optional(),
-  notes:          z.string().max(5000).nullable().optional(),
+  check_type:           z.enum(['dbs','rtw']).optional(),
+  last_checked:         dateSchema.nullable().optional(),
+  expiry_date:          dateSchema.nullable().optional(),
+  reference:            z.string().max(200).nullable().optional(),
+  certificate_number:   z.string().max(200).nullable().optional(),
+  document_type:        z.string().max(100).nullable().optional(),
+  status:               z.enum(['current','due_soon','overdue','pending','expired']).optional(),
+  checked_by:           z.string().max(200).nullable().optional(),
+  notes:                z.string().max(5000).nullable().optional(),
+  dbs_certificate_number: z.string().max(200).nullable().optional(),
+  dbs_disclosure_level: z.string().max(50).nullable().optional(),
+  dbs_check_date:       dateSchema.nullable().optional(),
+  dbs_next_renewal_due: dateSchema.nullable().optional(),
+  dbs_update_service_registered: z.boolean().optional(),
+  dbs_update_service_last_checked: dateSchema.nullable().optional(),
+  dbs_barred_list_check: z.boolean().optional(),
+  rtw_document_type:    z.string().max(100).nullable().optional(),
+  rtw_check_date:       dateSchema.nullable().optional(),
+  rtw_document_expiry:  dateSchema.nullable().optional(),
+  rtw_next_check_due:   dateSchema.nullable().optional(),
 });
 
 // ── Case Note Schemas ───────────────────────────────────────────────────────
@@ -456,6 +603,119 @@ const renewalUpdateSchema = z.object({
 const caseNoteBodySchema = z.object({
   note: z.string().min(1).max(5000),
 });
+
+// ── Field Mapping Functions (frontend → DB column names) ────────────────────
+// Each function renames frontend aliases to their actual DB column names.
+// The repo layer uses DB column names; the frontend may use shorter/different names.
+
+function mapDisciplinaryFields(data) {
+  const m = { ...data };
+  if ('outcome_notes' in m && !('outcome_reason' in m)) { m.outcome_reason = m.outcome_notes; delete m.outcome_notes; }
+  if ('appeal_date' in m && !('appeal_received_date' in m)) { m.appeal_received_date = m.appeal_date; delete m.appeal_date; }
+  return m;
+}
+
+function mapPerformanceFields(data) {
+  const m = { ...data };
+  if ('description' in m && !('concern_summary' in m)) { m.concern_summary = m.description; delete m.description; }
+  if ('informal_notes' in m && !('informal_discussion_notes' in m)) { m.informal_discussion_notes = m.informal_notes; delete m.informal_notes; }
+  if ('appeal_date' in m && !('appeal_received_date' in m)) { m.appeal_received_date = m.appeal_date; delete m.appeal_date; }
+  delete m.manager;          // Ghost field — no DB column
+  delete m.pip_review_dates; // Ghost field — no DB column
+  return m;
+}
+
+function mapRtwFields(data) {
+  const m = { ...data };
+  if ('conducted_by' in m && !('rtw_conducted_by' in m)) { m.rtw_conducted_by = m.conducted_by; delete m.conducted_by; }
+  if ('fit_for_work' in m && !('fit_to_return' in m)) { m.fit_to_return = m.fit_for_work; delete m.fit_for_work; }
+  if ('adjustments' in m && !('adjustments_needed' in m)) { m.adjustments_needed = !!m.adjustments; m.adjustments_detail = m.adjustments; delete m.adjustments; }
+  if ('referral_needed' in m && !('oh_referral_recommended' in m)) { m.oh_referral_recommended = m.referral_needed; delete m.referral_needed; }
+  return m;
+}
+
+function mapOhFields(data) {
+  const m = { ...data };
+  if ('provider' in m && !('oh_provider' in m)) { m.oh_provider = m.provider; delete m.provider; }
+  if ('report_date' in m && !('report_received_date' in m)) { m.report_received_date = m.report_date; delete m.report_date; }
+  if ('recommendations' in m && !('adjustments_recommended' in m)) { m.adjustments_recommended = m.recommendations; delete m.recommendations; }
+  delete m.report_received;  // Ghost field — DB uses report_received_date
+  return m;
+}
+
+function mapContractFields(data) {
+  const m = { ...data };
+  if ('start_date' in m && !('contract_start_date' in m)) { m.contract_start_date = m.start_date; delete m.start_date; }
+  if ('end_date' in m && !('contract_end_date' in m)) { m.contract_end_date = m.end_date; delete m.end_date; }
+  delete m.salary;              // Ghost — no DB column
+  delete m.notice_period_weeks; // Ghost — DB has notice_period_employer/employee
+  delete m.signed_date;         // Ghost — no DB column
+  return m;
+}
+
+function mapFamilyLeaveFields(data) {
+  const m = { ...data };
+  if ('leave_type' in m && !('type' in m)) { m.type = m.leave_type; delete m.leave_type; }
+  if ('start_date' in m && !('leave_start_date' in m)) { m.leave_start_date = m.start_date; delete m.start_date; }
+  if ('end_date' in m && !('leave_end_date' in m)) { m.leave_end_date = m.end_date; delete m.end_date; }
+  if ('expected_return' in m && !('expected_return_date' in m)) { m.expected_return_date = m.expected_return; delete m.expected_return; }
+  if ('actual_return' in m && !('actual_return_date' in m)) { m.actual_return_date = m.actual_return; delete m.actual_return; }
+  if ('kit_days_used' in m && !('kit_days' in m)) { m.kit_days = m.kit_days_used; delete m.kit_days_used; }
+  if ('pay_type' in m && !('statutory_pay_type' in m)) { m.statutory_pay_type = m.pay_type; delete m.pay_type; }
+  return m;
+}
+
+function mapFlexFields(data) {
+  const m = { ...data };
+  if ('decision_reason' in m && !('refusal_reason' in m)) { m.refusal_reason = m.decision_reason; delete m.decision_reason; }
+  delete m.proposed_pattern; // Ghost — DB has approved_pattern (different meaning)
+  return m;
+}
+
+function mapEdiFields(data) {
+  const m = { ...data };
+  if ('date_recorded' in m && !('complaint_date' in m)) { m.complaint_date = m.date_recorded; delete m.date_recorded; }
+  if ('category' in m && !('harassment_category' in m)) { m.harassment_category = m.category; delete m.category; }
+  if ('respondent_role' in m && !('respondent_type' in m)) { m.respondent_type = m.respondent_role; delete m.respondent_role; }
+  delete m.data;  // Remove catch-all — individual fields are mapped instead
+  return m;
+}
+
+function mapTupeFields(data) {
+  const m = { ...data };
+  if ('staff_affected' in m && !('employees' in m)) { m.employees = m.staff_affected != null ? { count: m.staff_affected } : null; delete m.staff_affected; }
+  if ('consultation_start' in m && !('consultation_start_date' in m)) { m.consultation_start_date = m.consultation_start; delete m.consultation_start; }
+  if ('consultation_end' in m && !('consultation_end_date' in m)) { m.consultation_end_date = m.consultation_end; delete m.consultation_end; }
+  if ('eli_sent_date' in m && !('eli_received_date' in m)) { m.eli_received_date = m.eli_sent_date; delete m.eli_sent_date; }
+  if ('measures_proposed' in m && !('measures_description' in m)) { m.measures_description = m.measures_proposed; delete m.measures_proposed; }
+  return m;
+}
+
+function mapRenewalFields(data) {
+  const m = { ...data };
+  const isDbs = m.check_type === 'dbs';
+  if ('last_checked' in m) {
+    m[isDbs ? 'dbs_check_date' : 'rtw_check_date'] = m.last_checked;
+    delete m.last_checked;
+  }
+  if ('expiry_date' in m) {
+    m[isDbs ? 'dbs_next_renewal_due' : 'rtw_document_expiry'] = m.expiry_date;
+    delete m.expiry_date;
+  }
+  if ('reference' in m) {
+    if (isDbs) m.dbs_certificate_number = m.reference;
+    delete m.reference;
+  }
+  if ('certificate_number' in m && !('dbs_certificate_number' in m)) {
+    m.dbs_certificate_number = m.certificate_number;
+    delete m.certificate_number;
+  }
+  if ('document_type' in m && !('rtw_document_type' in m)) {
+    m.rtw_document_type = m.document_type;
+    delete m.document_type;
+  }
+  return m;
+}
 
 // ── Helper ──────────────────────────────────────────────────────────────────
 
@@ -500,7 +760,7 @@ router.post('/cases/disciplinary', requireAuth, requireAdmin, async (req, res, n
     const parsed = disciplinaryBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createDisciplinary(home.id, {
-      ...parsed.data,
+      ...mapDisciplinaryFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_disciplinary_create', home.slug, req.user.username, { id: result.id });
@@ -530,7 +790,7 @@ router.put('/cases/disciplinary/:id', requireAuth, requireAdmin, async (req, res
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = disciplinaryUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateDisciplinary(idP.data, home.id, parsed.data);
+    const result = await hrService.updateDisciplinary(idP.data, home.id, mapDisciplinaryFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Disciplinary case not found' });
     await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -666,7 +926,7 @@ router.post('/cases/performance', requireAuth, requireAdmin, async (req, res, ne
     const parsed = performanceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createPerformance(home.id, {
-      ...parsed.data,
+      ...mapPerformanceFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_performance_create', home.slug, req.user.username, { id: result.id });
@@ -696,7 +956,7 @@ router.put('/cases/performance/:id', requireAuth, requireAdmin, async (req, res,
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = performanceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updatePerformance(idP.data, home.id, parsed.data);
+    const result = await hrService.updatePerformance(idP.data, home.id, mapPerformanceFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Performance case not found' });
     await auditService.log('hr_performance_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -746,7 +1006,7 @@ router.post('/rtw-interviews', requireAuth, requireAdmin, async (req, res, next)
     const parsed = rtwInterviewBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createRtwInterview(home.id, {
-      ...parsed.data,
+      ...mapRtwFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_rtw_create', home.slug, req.user.username, { id: result.id });
@@ -763,7 +1023,7 @@ router.put('/rtw-interviews/:id', requireAuth, requireAdmin, async (req, res, ne
     if (!idP.success) return res.status(400).json({ error: 'Invalid interview ID' });
     const parsed = rtwInterviewUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateRtwInterview(idP.data, home.id, parsed.data);
+    const result = await hrService.updateRtwInterview(idP.data, home.id, mapRtwFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'RTW interview not found' });
     await auditService.log('hr_rtw_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -792,7 +1052,7 @@ router.post('/oh-referrals', requireAuth, requireAdmin, async (req, res, next) =
     const parsed = ohReferralBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createOhReferral(home.id, {
-      ...parsed.data,
+      ...mapOhFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_oh_referral_create', home.slug, req.user.username, { id: result.id });
@@ -809,7 +1069,7 @@ router.put('/oh-referrals/:id', requireAuth, requireAdmin, async (req, res, next
     if (!idP.success) return res.status(400).json({ error: 'Invalid referral ID' });
     const parsed = ohReferralUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateOhReferral(idP.data, home.id, parsed.data);
+    const result = await hrService.updateOhReferral(idP.data, home.id, mapOhFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'OH referral not found' });
     await auditService.log('hr_oh_referral_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -838,7 +1098,7 @@ router.post('/contracts', requireAuth, requireAdmin, async (req, res, next) => {
     const parsed = contractBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createContract(home.id, {
-      ...parsed.data,
+      ...mapContractFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_contract_create', home.slug, req.user.username, { id: result.id });
@@ -868,7 +1128,7 @@ router.put('/contracts/:id', requireAuth, requireAdmin, async (req, res, next) =
     if (!idP.success) return res.status(400).json({ error: 'Invalid contract ID' });
     const parsed = contractUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateContract(idP.data, home.id, parsed.data);
+    const result = await hrService.updateContract(idP.data, home.id, mapContractFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Contract not found' });
     await auditService.log('hr_contract_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -897,7 +1157,7 @@ router.post('/family-leave', requireAuth, requireAdmin, async (req, res, next) =
     const parsed = familyLeaveBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createFamilyLeave(home.id, {
-      ...parsed.data,
+      ...mapFamilyLeaveFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_family_leave_create', home.slug, req.user.username, { id: result.id });
@@ -927,7 +1187,7 @@ router.put('/family-leave/:id', requireAuth, requireAdmin, async (req, res, next
     if (!idP.success) return res.status(400).json({ error: 'Invalid family leave ID' });
     const parsed = familyLeaveUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateFamilyLeave(idP.data, home.id, parsed.data);
+    const result = await hrService.updateFamilyLeave(idP.data, home.id, mapFamilyLeaveFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Family leave record not found' });
     await auditService.log('hr_family_leave_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -956,7 +1216,7 @@ router.post('/flexible-working', requireAuth, requireAdmin, async (req, res, nex
     const parsed = flexWorkingBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createFlexWorking(home.id, {
-      ...parsed.data,
+      ...mapFlexFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_flex_working_create', home.slug, req.user.username, { id: result.id });
@@ -986,7 +1246,7 @@ router.put('/flexible-working/:id', requireAuth, requireAdmin, async (req, res, 
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = flexWorkingUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateFlexWorking(idP.data, home.id, parsed.data);
+    const result = await hrService.updateFlexWorking(idP.data, home.id, mapFlexFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Flexible working request not found' });
     await auditService.log('hr_flex_working_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -1015,7 +1275,7 @@ router.post('/edi', requireAuth, requireAdmin, async (req, res, next) => {
     const parsed = ediBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createEdi(home.id, {
-      ...parsed.data,
+      ...mapEdiFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_edi_create', home.slug, req.user.username, { id: result.id });
@@ -1045,7 +1305,7 @@ router.put('/edi/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!idP.success) return res.status(400).json({ error: 'Invalid EDI record ID' });
     const parsed = ediUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateEdi(idP.data, home.id, parsed.data);
+    const result = await hrService.updateEdi(idP.data, home.id, mapEdiFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'EDI record not found' });
     await auditService.log('hr_edi_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -1071,7 +1331,7 @@ router.post('/tupe', requireAuth, requireAdmin, async (req, res, next) => {
     const parsed = tupeBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createTupe(home.id, {
-      ...parsed.data,
+      ...mapTupeFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_tupe_create', home.slug, req.user.username, { id: result.id });
@@ -1101,7 +1361,7 @@ router.put('/tupe/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!idP.success) return res.status(400).json({ error: 'Invalid TUPE record ID' });
     const parsed = tupeUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateTupe(idP.data, home.id, parsed.data);
+    const result = await hrService.updateTupe(idP.data, home.id, mapTupeFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'TUPE record not found' });
     await auditService.log('hr_tupe_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
@@ -1131,7 +1391,7 @@ router.post('/renewals', requireAuth, requireAdmin, async (req, res, next) => {
     const parsed = renewalBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createRenewal(home.id, {
-      ...parsed.data,
+      ...mapRenewalFields(parsed.data),
       created_by: req.user.username,
     });
     await auditService.log('hr_dbs_renewal_create', home.slug, req.user.username, { id: result.id });
@@ -1161,7 +1421,7 @@ router.put('/renewals/:id', requireAuth, requireAdmin, async (req, res, next) =>
     if (!idP.success) return res.status(400).json({ error: 'Invalid renewal ID' });
     const parsed = renewalUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateRenewal(idP.data, home.id, parsed.data);
+    const result = await hrService.updateRenewal(idP.data, home.id, mapRenewalFields(parsed.data));
     if (!result) return res.status(404).json({ error: 'Renewal record not found' });
     await auditService.log('hr_dbs_renewal_update', home.slug, req.user.username, { id: result.id });
     res.json(result);

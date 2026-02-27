@@ -375,7 +375,7 @@ export default function DisciplinaryTracker() {
         </div>
         <div>
           <label className={INPUT.label}>Outcome Notes</label>
-          <textarea className={INPUT.base} rows={3} value={form.outcome_notes || ''} onChange={e => f('outcome_notes', e.target.value)} />
+          <textarea className={INPUT.base} rows={3} value={form.outcome_reason || ''} onChange={e => f('outcome_reason', e.target.value)} />
         </div>
       </div>
     );
