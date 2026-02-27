@@ -4,6 +4,7 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getCurrentHome, freezeIncident, getIncidentAddenda, addIncidentAddendum } from '../lib/api.js';
 import {
   ensureIncidentDefaults, getIncidentTypes, getIncidentStats,
   SEVERITY_LEVELS, INVESTIGATION_STATUSES, LOCATIONS,
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'details', label: 'Details' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'investigation', label: 'Investigation' },
+  { id: 'addenda', label: 'Notes' },
 ];
 
 const EMPTY_FORM = {
@@ -40,7 +42,11 @@ export default function IncidentTracker({ data, updateData }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
-  useDirtyGuard(showModal);
+  const [isFrozen, setIsFrozen] = useState(false);
+  const [addenda, setAddenda] = useState([]);
+  const [addendumText, setAddendumText] = useState('');
+  const [freezing, setFreezing] = useState(false);
+  useDirtyGuard(showModal && !isFrozen);
   const [filterType, setFilterType] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -84,6 +90,9 @@ export default function IncidentTracker({ data, updateData }) {
 
   function openAdd() {
     setEditingId(null);
+    setIsFrozen(false);
+    setAddenda([]);
+    setAddendumText('');
     setForm({ ...EMPTY_FORM, date: today });
     setActiveTab('details');
     setShowModal(true);
@@ -91,6 +100,9 @@ export default function IncidentTracker({ data, updateData }) {
 
   function openEdit(inc) {
     setEditingId(inc.id);
+    setIsFrozen(!!inc.frozen_at);
+    setAddenda([]);
+    setAddendumText('');
     setForm({
       date: inc.date || '', time: inc.time || '', location: inc.location || '',
       type: inc.type || '', severity: inc.severity || 'minor',
@@ -125,11 +137,47 @@ export default function IncidentTracker({ data, updateData }) {
       lessons_learned: inc.lessons_learned || '',
       investigation_closed_date: inc.investigation_closed_date || '',
     });
-    setActiveTab('details');
+    setActiveTab(inc.frozen_at ? 'addenda' : 'details');
     setShowModal(true);
+    // Load addenda in background
+    const home = getCurrentHome();
+    if (home) getIncidentAddenda(home, inc.id).then(setAddenda).catch(() => {});
+  }
+
+  async function handleFreeze() {
+    if (!editingId) return;
+    if (!confirm('Freeze this incident record? Once frozen, the incident details cannot be edited. You can still add notes.')) return;
+    setFreezing(true);
+    try {
+      const home = getCurrentHome();
+      await freezeIncident(home, editingId);
+      setIsFrozen(true);
+      // Update the local data so the frozen_at flag persists
+      const incidents = (data.incidents || []).map(i =>
+        i.id === editingId ? { ...i, frozen_at: new Date().toISOString() } : i
+      );
+      updateData({ ...data, incidents });
+    } catch (err) {
+      alert(err.message || 'Failed to freeze incident');
+    } finally {
+      setFreezing(false);
+    }
+  }
+
+  async function handleAddAddendum() {
+    if (!editingId || !addendumText.trim()) return;
+    try {
+      const home = getCurrentHome();
+      const result = await addIncidentAddendum(home, editingId, addendumText.trim());
+      setAddenda(prev => [...prev, result]);
+      setAddendumText('');
+    } catch (err) {
+      alert(err.message || 'Failed to add note');
+    }
   }
 
   function handleSave() {
+    if (isFrozen) return;
     if (!form.date || !form.type || !form.severity) return;
     const now = new Date().toISOString();
     const incidents = JSON.parse(JSON.stringify(data.incidents || []));
@@ -145,6 +193,7 @@ export default function IncidentTracker({ data, updateData }) {
   }
 
   function handleDelete() {
+    if (isFrozen) return;
     if (!editingId || !confirm('Delete this incident record?')) return;
     const incidents = JSON.parse(JSON.stringify((data.incidents || []).filter(i => i.id !== editingId)));
     updateData({ ...data, incidents });
@@ -279,11 +328,12 @@ export default function IncidentTracker({ data, updateData }) {
                 <th className={TABLE.th}>Status</th>
                 <th className={TABLE.th}>CQC</th>
                 <th className={TABLE.th}>RIDDOR</th>
+                <th className={TABLE.th}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className={TABLE.empty}>No incidents recorded</td></tr>
+                <tr><td colSpan={9} className={TABLE.empty}>No incidents recorded</td></tr>
               )}
               {filtered.map(inc => {
                 const typeDef = incidentTypes.find(t => t.id === inc.type);
@@ -312,6 +362,9 @@ export default function IncidentTracker({ data, updateData }) {
                           : <span className={BADGE.amber}>Pending</span>
                       ) : <span className="text-gray-300">-</span>}
                     </td>
+                    <td className={TABLE.td}>
+                      {inc.frozen_at && <span className={BADGE.purple} title={`Frozen ${inc.frozen_at.slice(0, 10)}`}>Frozen</span>}
+                    </td>
                   </tr>
                 );
               })}
@@ -321,7 +374,13 @@ export default function IncidentTracker({ data, updateData }) {
       </div>
 
       {/* Add/Edit Modal */}
-      <ModalWrapper isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Incident' : 'New Incident'} size="xl">
+      <ModalWrapper isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? (isFrozen ? 'Incident (Frozen)' : 'Edit Incident') : 'New Incident'} size="xl">
+            {/* Frozen banner */}
+            {isFrozen && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 mb-3 text-sm text-purple-700">
+                This incident record is frozen and cannot be edited. Use the Notes tab to add post-freeze addenda.
+              </div>
+            )}
             {/* Tabs */}
             <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
               {TABS.map(tab => (
@@ -334,7 +393,7 @@ export default function IncidentTracker({ data, updateData }) {
 
             {/* Details Tab */}
             {activeTab === 'details' && (
-              <div className="space-y-3">
+              <fieldset disabled={isFrozen} className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className={INPUT.label}>Date *</label>
@@ -447,12 +506,12 @@ export default function IncidentTracker({ data, updateData }) {
                     </div>
                   ))}
                 </div>
-              </div>
+              </fieldset>
             )}
 
             {/* Notifications Tab */}
             {activeTab === 'notifications' && (
-              <div className="space-y-5">
+              <fieldset disabled={isFrozen} className="space-y-5">
                 {/* CQC */}
                 <div>
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">CQC Notification (Regulation 16/18)</div>
@@ -628,12 +687,12 @@ export default function IncidentTracker({ data, updateData }) {
                     </div>
                   )}
                 </div>
-              </div>
+              </fieldset>
             )}
 
             {/* Investigation Tab */}
             {activeTab === 'investigation' && (
-              <div className="space-y-3">
+              <fieldset disabled={isFrozen} className="space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className={INPUT.label}>Status</label>
@@ -706,18 +765,49 @@ export default function IncidentTracker({ data, updateData }) {
                   <label className={INPUT.label}>Lessons Learned</label>
                   <textarea className={`${INPUT.base} h-16`} placeholder="Key learnings..." value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })} />
                 </div>
+              </fieldset>
+            )}
+
+            {/* Addenda / Notes Tab */}
+            {activeTab === 'addenda' && (
+              <div className="space-y-3">
+                {addenda.length === 0 && <p className="text-xs text-gray-400">No addenda recorded</p>}
+                {addenda.map(a => (
+                  <div key={a.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between text-xs text-gray-400 mb-1">
+                      <span className="font-medium text-gray-600">{a.author}</span>
+                      <span>{a.created_at ? new Date(a.created_at).toLocaleString('en-GB') : ''}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{a.content}</p>
+                  </div>
+                ))}
+                <div>
+                  <label className={INPUT.label}>Add Note</label>
+                  <textarea className={`${INPUT.base} h-20`} placeholder="Post-event note, update, or correction..."
+                    value={addendumText} onChange={e => setAddendumText(e.target.value)} />
+                  <button onClick={handleAddAddendum} disabled={!addendumText.trim()}
+                    className={`${BTN.primary} ${BTN.sm} mt-2`}>Add Note</button>
+                </div>
               </div>
             )}
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && !isFrozen && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={!form.date || !form.type || !form.severity} className={BTN.primary}>
-                {editingId ? 'Update' : 'Save'}
-              </button>
+              {editingId && !isFrozen && (form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed') && (
+                <button onClick={handleFreeze} disabled={freezing} className={`${BTN.secondary} ${BTN.sm}`}>
+                  {freezing ? 'Freezing...' : 'Freeze Record'}
+                </button>
+              )}
+              <div className="flex-1" />
+              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Close</button>
+              {!isFrozen && (
+                <button onClick={handleSave} disabled={!form.date || !form.type || !form.severity} className={BTN.primary}>
+                  {editingId ? 'Update' : 'Save'}
+                </button>
+              )}
             </div>
       </ModalWrapper>
     </div>

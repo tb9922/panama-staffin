@@ -1,17 +1,87 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { config } from '../config.js';
 import { AuthenticationError } from '../errors.js';
+import * as authRepo from '../repositories/authRepo.js';
+import logger from '../logger.js';
+
+// In-memory deny-list for fast lookups (jti Set + username Set)
+const deniedJtis = new Set();
+const deniedUsernames = new Set();
+
+/**
+ * Load active deny-list entries from DB into memory.
+ * Called once on startup.
+ */
+export async function loadDenyList() {
+  try {
+    const jtis = await authRepo.loadActive();
+    jtis.forEach(jti => deniedJtis.add(jti));
+    logger.info({ count: jtis.length }, 'Token deny-list loaded');
+  } catch (err) {
+    // Non-fatal on startup — table may not exist yet (pre-migration)
+    logger.warn({ error: err.message }, 'Could not load token deny-list');
+  }
+}
 
 export async function login(username, password) {
   const user = config.users.find(u => u.username === username);
   if (!user) throw new AuthenticationError('Invalid credentials');
   const valid = await bcrypt.compare(password, user.hash);
   if (!valid) throw new AuthenticationError('Invalid credentials');
-  const token = jwt.sign({ username: user.username, role: user.role }, config.jwtSecret, { expiresIn: '12h' });
+
+  // Clear any deny-list entries for this user on successful login
+  deniedUsernames.delete(username);
+
+  const jti = randomUUID();
+  const token = jwt.sign(
+    { username: user.username, role: user.role, jti },
+    config.jwtSecret,
+    { expiresIn: config.jwtExpiresIn }
+  );
   return { username: user.username, role: user.role, token };
 }
 
 export function verifyToken(token) {
   return jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
+}
+
+/**
+ * Check if a decoded token has been revoked.
+ * Checks both the specific jti and the username.
+ * @param {object} decoded - decoded JWT payload
+ * @returns {boolean}
+ */
+export function isTokenDenied(decoded) {
+  if (decoded.jti && deniedJtis.has(decoded.jti)) return true;
+  if (decoded.username && deniedUsernames.has(decoded.username)) return true;
+  return false;
+}
+
+/**
+ * Revoke all tokens for a username. Used when terminating staff access.
+ * Adds to both DB (persistence across restarts) and in-memory Set (fast checks).
+ * @param {string} username
+ */
+export async function revokeUser(username) {
+  await authRepo.revokeAllForUser(username);
+  deniedUsernames.add(username);
+  logger.info({ username }, 'All tokens revoked for user');
+}
+
+/**
+ * Prune expired deny-list entries from DB and refresh memory.
+ * Call periodically.
+ */
+export async function pruneDenyList() {
+  const count = await authRepo.pruneExpired();
+  if (count > 0) {
+    // Rebuild in-memory sets from DB
+    deniedJtis.clear();
+    deniedUsernames.clear();
+    const jtis = await authRepo.loadActive();
+    jtis.forEach(jti => deniedJtis.add(jti));
+    logger.info({ pruned: count, active: jtis.length }, 'Deny-list pruned');
+  }
 }

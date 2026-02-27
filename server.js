@@ -18,6 +18,7 @@ import gdprRouter     from './routes/gdpr.js';
 import hrRouter       from './routes/hr.js';
 import financeRouter  from './routes/finance.js';
 import { accessLog } from './middleware/accessLog.js';
+import { loadDenyList } from './services/authService.js';
 
 const app = express();
 
@@ -97,8 +98,10 @@ app.use((err, req, res, next) => {
 
 // ── Server startup ────────────────────────────────────────────────────────────
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, async () => {
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
+  // Load token deny-list into memory (non-blocking, non-fatal)
+  await loadDenyList().catch(() => {});
 });
 
 // Graceful shutdown — drain in-flight requests then close DB pool

@@ -6,7 +6,7 @@ function shapeRow(row) {
   for (const col of ['date', 'cqc_notified_date', 'riddor_reported_date', 'safeguarding_date',
     'candour_notification_date', 'candour_letter_sent_date', 'police_contact_date',
     'investigation_start_date', 'investigation_review_date', 'investigation_closed_date',
-    'reported_at', 'updated_at']) {
+    'reported_at', 'updated_at', 'frozen_at']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
   }
   if (shaped.cqc_notification_deadline instanceof Date) {
@@ -78,7 +78,8 @@ export async function sync(homeId, incidentsArr, client) {
          investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
          investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
          corrective_actions=$48,reported_by=$49,reported_at=$50,updated_at=$51,
-         deleted_at=NULL`,
+         deleted_at=NULL
+       WHERE incidents.frozen_at IS NULL`,
       [
         inc.id, homeId, inc.date || null, inc.time || null, inc.location || null,
         inc.type || null, inc.severity || null, inc.description || null,
@@ -107,17 +108,81 @@ export async function sync(homeId, incidentsArr, client) {
     );
   }
 
-  // Soft-delete records removed from the frontend
+  // Soft-delete records removed from the frontend (skip frozen records)
   if (incomingIds.length > 0) {
     await conn.query(
       `UPDATE incidents SET deleted_at = NOW()
-       WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+       WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL AND frozen_at IS NULL`,
       [homeId, incomingIds]
     );
   } else {
     await conn.query(
-      `UPDATE incidents SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`,
+      `UPDATE incidents SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL AND frozen_at IS NULL`,
       [homeId]
     );
   }
+}
+
+// ── Incident freeze ────────────────────────────────────────────────────────────
+
+/**
+ * Freeze an incident. Once frozen, the incident body is immutable.
+ * @param {string} incidentId
+ * @param {number} homeId
+ */
+export async function freeze(incidentId, homeId) {
+  const { rowCount } = await pool.query(
+    `UPDATE incidents SET frozen_at = NOW()
+     WHERE id = $1 AND home_id = $2 AND frozen_at IS NULL AND deleted_at IS NULL`,
+    [incidentId, homeId]
+  );
+  return rowCount > 0;
+}
+
+/**
+ * Check if an incident is frozen.
+ * @param {string} incidentId
+ * @param {number} homeId
+ * @returns {Promise<boolean>}
+ */
+export async function isFrozen(incidentId, homeId) {
+  const { rows } = await pool.query(
+    'SELECT frozen_at FROM incidents WHERE id = $1 AND home_id = $2',
+    [incidentId, homeId]
+  );
+  return rows.length > 0 && rows[0].frozen_at != null;
+}
+
+// ── Incident addenda (append-only post-freeze notes) ───────────────────────────
+
+/**
+ * Add an addendum to an incident. Works on both frozen and unfrozen incidents.
+ * @param {string} incidentId
+ * @param {number} homeId
+ * @param {string} author
+ * @param {string} content
+ */
+export async function addAddendum(incidentId, homeId, author, content) {
+  const { rows } = await pool.query(
+    `INSERT INTO incident_addenda (incident_id, home_id, author, content)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [incidentId, homeId, author, content]
+  );
+  return rows[0];
+}
+
+/**
+ * Get all addenda for an incident, oldest first.
+ * @param {string} incidentId
+ * @param {number} homeId
+ */
+export async function getAddenda(incidentId, homeId) {
+  const { rows } = await pool.query(
+    `SELECT id, author, content, created_at
+     FROM incident_addenda
+     WHERE incident_id = $1 AND home_id = $2
+     ORDER BY created_at ASC`,
+    [incidentId, homeId]
+  );
+  return rows;
 }

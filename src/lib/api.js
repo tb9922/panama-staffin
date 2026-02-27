@@ -107,6 +107,34 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
   });
 }
 
+// ── Incident Freeze & Addenda ────────────────────────────────────────────────
+
+export async function freezeIncident(homeSlug, incidentId) {
+  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/freeze?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+
+export async function getIncidentAddenda(homeSlug, incidentId) {
+  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function addIncidentAddendum(homeSlug, incidentId, content) {
+  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ content }),
+  });
+}
+
+// ── Token Revocation ────────────────────────────────────────────────────────
+
+export async function revokeUserTokens(username) {
+  return apiFetch(`${API_BASE}/login/revoke`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ username }),
+  });
+}
+
 // ── Payroll API ───────────────────────────────────────────────────────────────
 
 const h = (homeSlug) => encodeURIComponent(homeSlug);
