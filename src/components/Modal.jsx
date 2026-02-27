@@ -24,7 +24,11 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 export default function Modal({ isOpen, onClose, title, size = 'md', children }) {
   const panelRef = useRef(null);
   const previousFocus = useRef(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
+
+  // Keep ref fresh without triggering effect re-runs
+  onCloseRef.current = onClose;
 
   // Focus trap + Escape key + restore focus
   useEffect(() => {
@@ -41,7 +45,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -73,7 +77,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
       // Restore focus to previously focused element
       if (previousFocus.current?.focus) previousFocus.current.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

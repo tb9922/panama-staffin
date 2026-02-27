@@ -58,13 +58,6 @@ export default function DisciplinaryTracker() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
-
   function openCreate() {
     setEditing(null);
     setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'misconduct', status: 'open', source: 'other' });
