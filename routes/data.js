@@ -45,10 +45,28 @@ router.post('/', requireAuth, requireAdmin, saveLimiter, async (req, res, next) 
     if (!homeParam.success) return res.status(400).json({ error: 'Invalid home parameter' });
     const homeSlug = homeParam.data || body.config?.home_name?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
 
-    const warnings = validateAll(body);
-    await homeService.saveData(homeSlug, body, req.user?.username || 'unknown');
+    // Optimistic locking — detect concurrent saves before writing
+    // Client sends _clientUpdatedAt (the server timestamp from when it last loaded data).
+    // If the DB timestamp has moved on, someone else saved in the meantime — return 409.
+    const clientUpdatedAt = body._clientUpdatedAt;
+    if (clientUpdatedAt) {
+      const home = await homeRepo.findBySlug(homeSlug);
+      if (home?.updated_at) {
+        const serverUpdatedAt = home.updated_at.toISOString();
+        if (serverUpdatedAt !== clientUpdatedAt) {
+          return res.status(409).json({
+            error: 'Conflict',
+            message: 'This home was modified by someone else since you last loaded it.',
+            serverUpdatedAt,
+          });
+        }
+      }
+    }
 
-    res.json({ ok: true, warnings, backedUp: true });
+    const warnings = validateAll(body);
+    const result = await homeService.saveData(homeSlug, body, req.user?.username || 'unknown');
+
+    res.json({ ok: true, warnings, backedUp: true, _updatedAt: result?.updatedAt });
   } catch (err) {
     next(err);
   }

@@ -63,6 +63,7 @@ export async function assembleData(homeSlug, userRole) {
   ]);
 
   const payload = {
+    _updatedAt: home.updated_at?.toISOString() || null,
     config: home.config,
     annual_leave: home.annual_leave,
     staff,
@@ -128,6 +129,10 @@ export async function saveData(homeSlug, body, username) {
     await cqcEvidenceRepo.sync(home.id, body.cqc_evidence || [], client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });
+
+  // Return the new updated_at so the client can track the server's timestamp
+  const fresh = await homeRepo.findBySlug(homeSlug);
+  return { updatedAt: fresh?.updated_at?.toISOString() || null };
 }
 
 // Ensure a home row exists for the given slug. Used by the import script.

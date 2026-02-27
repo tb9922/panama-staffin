@@ -336,6 +336,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [conflictError, setConflictError] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
   const [homes, setHomes] = useState([]);
@@ -350,11 +351,16 @@ export default function App() {
   // capturing it as a closure dependency, and keeps stack mutations out of
   // the setData updater (React StrictMode double-invokes updaters in dev).
   const dataRef = useRef(null);
+  // Server's homes.updated_at — kept separate from data state so it never
+  // enters the undo/redo stack. Passed to saveData as clientUpdatedAt so the
+  // server can detect concurrent saves (optimistic locking).
+  const serverUpdatedAt = useRef(null);
 
   const isViewer = user?.role === 'viewer';
 
   function handleApiError(e) {
     if (e.status === 401) { logout(); setUser(null); setData(null); return; }
+    if (e.status === 409) { setConflictError(true); return; }
     setError(e.message);
   }
 
@@ -372,7 +378,7 @@ export default function App() {
         setCurrentHome(firstHome);
         return loadData(firstHome);
       })
-      .then(setData)
+      .then(d => { serverUpdatedAt.current = d._updatedAt || null; setData(d); })
       .catch(handleApiError)
       .finally(() => setLoading(false));
   }, [user]);
@@ -386,7 +392,7 @@ export default function App() {
     setUndoCount(0);
     setRedoCount(0);
     loadData(homeId)
-      .then(setData)
+      .then(d => { serverUpdatedAt.current = d._updatedAt || null; setData(d); })
       .catch(handleApiError)
       .finally(() => setLoading(false));
   }
@@ -404,7 +410,8 @@ export default function App() {
     setRedoCount(0);
     setData(newData);
     try {
-      await saveData(newData);
+      const result = await saveData(newData, null, serverUpdatedAt.current);
+      if (result?._updatedAt) serverUpdatedAt.current = result._updatedAt;
     } catch (e) {
       // Rollback: restore previous state and pop the undo entry we just pushed
       if (prevData !== null) {
@@ -425,7 +432,10 @@ export default function App() {
     setRedoCount(redoStack.current.length);
     setData(prevState);
     try {
-      await saveData(prevState);
+      // Undo saves are unconditional (no clientUpdatedAt) — the user is
+      // intentionally reverting their own change, not racing another user.
+      const result = await saveData(prevState);
+      if (result?._updatedAt) serverUpdatedAt.current = result._updatedAt;
     } catch (e) {
       // Rollback: reverse the undo — restore current state, undo the stack changes
       if (currentState !== null) {
@@ -448,7 +458,9 @@ export default function App() {
     setUndoCount(undoStack.current.length);
     setData(nextState);
     try {
-      await saveData(nextState);
+      // Redo saves are unconditional (no clientUpdatedAt) — same reasoning as undo.
+      const result = await saveData(nextState);
+      if (result?._updatedAt) serverUpdatedAt.current = result._updatedAt;
     } catch (e) {
       // Rollback: reverse the redo — restore current state, undo the stack changes
       if (currentState !== null) {
@@ -511,6 +523,25 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-50">
+      {/* Concurrent-save conflict modal — non-dismissible, requires page reload */}
+      {conflictError && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+          <div className="bg-white border border-amber-300 rounded-2xl shadow-2xl p-6 max-w-md mx-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Save conflict</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Another user saved changes while you were editing. Reload the page to see the latest version, then reapply your changes.
+            </p>
+            <button onClick={() => window.location.reload()} className={BTN.primary}>
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )}
       {/* Mobile top bar */}
       <div className="mobile-topbar hidden bg-gray-900 text-white items-center justify-between px-3 py-2.5 print:hidden">
         <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white p-1">
