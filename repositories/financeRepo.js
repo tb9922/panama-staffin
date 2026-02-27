@@ -277,7 +277,7 @@ function shapeExpense(row) {
     net_amount: f(row.net_amount), vat_amount: f(row.vat_amount), gross_amount: f(row.gross_amount),
     status: row.status,
     approved_by: row.approved_by, approved_date: d(row.approved_date),
-    rejected_by: row.rejected_by, rejected_date: d(row.rejected_date),
+    rejected_by: row.rejected_by, rejected_date: d(row.rejected_date), rejection_reason: row.rejection_reason,
     paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
     recurring: row.recurring, recurrence_frequency: row.recurrence_frequency,
     notes: row.notes,
@@ -337,7 +337,7 @@ export async function updateExpense(id, homeId, data, client) {
   const settable = [
     'expense_date', 'category', 'subcategory', 'description', 'supplier', 'invoice_ref',
     'net_amount', 'vat_amount', 'gross_amount',
-    'status', 'approved_by', 'approved_date', 'rejected_by', 'rejected_date',
+    'status', 'approved_by', 'approved_date', 'rejected_by', 'rejected_date', 'rejection_reason',
     'paid_date', 'payment_method', 'payment_reference',
     'recurring', 'recurrence_frequency', 'notes',
   ];

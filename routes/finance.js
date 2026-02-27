@@ -405,7 +405,8 @@ router.put('/expenses/:id/reject', requireAuth, requireAdmin, async (req, res, n
     if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
-    const result = await financeService.rejectExpense(idP.data, home.id, req.user.username);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : null;
+    const result = await financeService.rejectExpense(idP.data, home.id, req.user.username, reason);
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });

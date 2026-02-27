@@ -429,7 +429,7 @@ function advanceDate(dateStr, frequency) {
 
 // ── Reject Expense ──────────────────────────────────────────────────────────
 
-export async function rejectExpense(id, homeId, rejector) {
+export async function rejectExpense(id, homeId, rejector, reason) {
   const expense = await financeRepo.findExpenseById(id, homeId);
   if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
   if (expense.status !== 'pending') {
@@ -439,6 +439,7 @@ export async function rejectExpense(id, homeId, rejector) {
     status: 'rejected',
     rejected_by: rejector,
     rejected_date: new Date().toISOString().slice(0, 10),
+    rejection_reason: reason || null,
   });
   logger.info({ homeId, expenseId: id, rejector }, 'Expense rejected');
   return updated;
@@ -458,9 +459,14 @@ export async function softDeleteInvoice(id, homeId, username) {
   if (invoice.status !== 'draft' && invoice.status !== 'void') {
     throw Object.assign(new Error(`Cannot delete invoice with status '${invoice.status}' — void it first`), { statusCode: 400 });
   }
-  const deleted = await financeRepo.softDelete('invoice', id, homeId);
-  if (deleted) logger.info({ homeId, invoiceId: id, deletedBy: username }, 'Invoice soft-deleted');
-  return deleted;
+  return withTransaction(async (client) => {
+    const deleted = await financeRepo.softDelete('invoice', id, homeId, client);
+    if (deleted) {
+      await financeRepo.deleteInvoiceLines(id, client);
+      logger.info({ homeId, invoiceId: id, deletedBy: username }, 'Invoice soft-deleted');
+    }
+    return deleted;
+  });
 }
 
 export async function softDeleteExpense(id, homeId, username) {
