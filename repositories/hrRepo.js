@@ -181,10 +181,10 @@ export async function createGrievance(homeId, data, client) {
        (home_id, staff_id, date_raised, raised_by_method, category, protected_characteristic,
         subject_summary, subject_detail, desired_outcome, status, confidential, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-    [homeId, data.staff_id, data.date_raised, data.raised_by_method, data.category,
-     data.protected_characteristic || null, data.subject_summary,
+    [homeId, data.staff_id, data.date_raised, data.raised_by_method || 'written', data.category,
+     data.protected_characteristic || null, data.description,
      data.subject_detail || null, data.desired_outcome || null,
-     data.status || 'open', data.confidential ?? true, data.created_by]
+     data.status || 'open', data.confidential ?? false, data.created_by]
   );
   return shapeGrv(rows[0]);
 }

@@ -16,8 +16,8 @@ const PROTECTED_CHARACTERISTICS = [
   { id: 'age', name: 'Age' },
   { id: 'disability', name: 'Disability' },
   { id: 'gender_reassignment', name: 'Gender Reassignment' },
-  { id: 'marriage_civil_partnership', name: 'Marriage & Civil Partnership' },
-  { id: 'pregnancy_maternity', name: 'Pregnancy & Maternity' },
+  { id: 'marriage', name: 'Marriage & Civil Partnership' },
+  { id: 'pregnancy', name: 'Pregnancy & Maternity' },
   { id: 'race', name: 'Race' },
   { id: 'religion_belief', name: 'Religion or Belief' },
   { id: 'sex', name: 'Sex' },
@@ -78,7 +78,7 @@ export default function GrievanceTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'other', status: 'open', confidential: false });
+    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'other', status: 'open', confidential: false, raised_by_method: 'written' });
     setModalTab('details');
     setCaseNotes([]);
     setActions([]);
@@ -119,7 +119,7 @@ export default function GrievanceTracker() {
 
   async function handleSave() {
     setError(null);
-    if (!form.staff_id || !form.date_raised || !form.category) return;
+    if (!form.staff_id || !form.date_raised || !form.category || !form.description?.trim()) return;
     try {
       if (editing?.id) {
         await updateHrGrievance(editing.id, form);
@@ -300,12 +300,20 @@ export default function GrievanceTracker() {
             <input type="date" className={INPUT.base} value={form.date_raised || ''} onChange={e => f('date_raised', e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className={INPUT.label}>Category</label>
             <select className={INPUT.select} value={form.category || ''} onChange={e => f('category', e.target.value)}>
               <option value="">Select...</option>
               {GRIEVANCE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={INPUT.label}>Raised By</label>
+            <select className={INPUT.select} value={form.raised_by_method || 'written'} onChange={e => f('raised_by_method', e.target.value)}>
+              <option value="verbal">Verbal</option>
+              <option value="written">Written</option>
+              <option value="email">Email</option>
             </select>
           </div>
           <div>
