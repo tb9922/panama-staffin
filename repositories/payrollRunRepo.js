@@ -97,10 +97,15 @@ export async function updateTotals(runId, homeId, totals, client) {
 }
 
 /** Delete all lines + shifts for a run (used when recalculating). */
-export async function deleteLines(runId, client) {
+export async function deleteLines(runId, homeId, client) {
   const conn = client || pool;
   // payroll_line_shifts cascade deletes when payroll_lines are deleted
-  await conn.query(`DELETE FROM payroll_lines WHERE payroll_run_id = $1`, [runId]);
+  await conn.query(
+    `DELETE FROM payroll_lines
+     WHERE payroll_run_id = $1
+       AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE id = $1 AND home_id = $2)`,
+    [runId, homeId]
+  );
 }
 
 // ── payroll_lines ─────────────────────────────────────────────────────────────

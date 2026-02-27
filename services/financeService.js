@@ -206,23 +206,24 @@ export async function updateExpense(id, homeId, data) {
 }
 
 export async function approveExpense(id, homeId, approver) {
-  const expense = await financeRepo.findExpenseById(id, homeId);
-  if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
-  if (expense.status !== 'pending') {
-    throw Object.assign(new Error(`Cannot approve expense with status '${expense.status}'`), { statusCode: 400 });
-  }
-  if (expense.created_by === approver) {
-    logger.warn({ homeId, expenseId: id, createdBy: expense.created_by, approver }, 'Expense approval rejected: same user');
-    throw Object.assign(new Error('Cannot approve your own expense'), { statusCode: 400 });
-  }
-
-  const updated = await financeRepo.updateExpense(id, homeId, {
-    status: 'approved',
-    approved_by: approver,
-    approved_date: new Date().toISOString().slice(0, 10),
+  return withTransaction(async (client) => {
+    const expense = await financeRepo.findExpenseById(id, homeId, client, { forUpdate: true });
+    if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
+    if (expense.status !== 'pending') {
+      throw Object.assign(new Error(`Cannot approve expense with status '${expense.status}'`), { statusCode: 400 });
+    }
+    if (expense.created_by === approver) {
+      logger.warn({ homeId, expenseId: id, createdBy: expense.created_by, approver }, 'Expense approval rejected: same user');
+      throw Object.assign(new Error('Cannot approve your own expense'), { statusCode: 400 });
+    }
+    const updated = await financeRepo.updateExpense(id, homeId, {
+      status: 'approved',
+      approved_by: approver,
+      approved_date: new Date().toISOString().slice(0, 10),
+    }, client);
+    logger.info({ homeId, expenseId: id, approver, gross: expense.gross_amount }, 'Expense approved');
+    return updated;
   });
-  logger.info({ homeId, expenseId: id, approver, gross: expense.gross_amount }, 'Expense approved');
-  return updated;
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -430,19 +431,21 @@ function advanceDate(dateStr, frequency) {
 // ── Reject Expense ──────────────────────────────────────────────────────────
 
 export async function rejectExpense(id, homeId, rejector, reason) {
-  const expense = await financeRepo.findExpenseById(id, homeId);
-  if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
-  if (expense.status !== 'pending') {
-    throw Object.assign(new Error(`Cannot reject expense with status '${expense.status}'`), { statusCode: 400 });
-  }
-  const updated = await financeRepo.updateExpense(id, homeId, {
-    status: 'rejected',
-    rejected_by: rejector,
-    rejected_date: new Date().toISOString().slice(0, 10),
-    rejection_reason: reason || null,
+  return withTransaction(async (client) => {
+    const expense = await financeRepo.findExpenseById(id, homeId, client, { forUpdate: true });
+    if (!expense) throw Object.assign(new Error('Expense not found'), { statusCode: 404 });
+    if (expense.status !== 'pending') {
+      throw Object.assign(new Error(`Cannot reject expense with status '${expense.status}'`), { statusCode: 400 });
+    }
+    const updated = await financeRepo.updateExpense(id, homeId, {
+      status: 'rejected',
+      rejected_by: rejector,
+      rejected_date: new Date().toISOString().slice(0, 10),
+      rejection_reason: reason || null,
+    }, client);
+    logger.info({ homeId, expenseId: id, rejector }, 'Expense rejected');
+    return updated;
   });
-  logger.info({ homeId, expenseId: id, rejector }, 'Expense rejected');
-  return updated;
 }
 
 // ── Soft Delete ─────────────────────────────────────────────────────────────

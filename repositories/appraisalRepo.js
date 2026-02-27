@@ -21,7 +21,7 @@ function shapeRow(row) {
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
     `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes
-     FROM appraisals WHERE home_id = $1 ORDER BY staff_id, date`,
+     FROM appraisals WHERE home_id = $1 AND deleted_at IS NULL ORDER BY staff_id, date`,
     [homeId]
   );
   const result = {};
@@ -69,12 +69,14 @@ export async function sync(homeId, appraisalsObj, client) {
     }
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `DELETE FROM appraisals WHERE home_id = $1 AND id != ALL($2::text[])`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query('DELETE FROM appraisals WHERE home_id = $1', [homeId]);
+  // Soft-delete appraisals removed from the frontend (CQC Reg 18 — must retain)
+  if (incomingIds.length === 0) {
+    // Empty payload guard: skip — never wipe all appraisals on empty incoming list
+    return;
   }
+  await conn.query(
+    `UPDATE appraisals SET deleted_at = NOW()
+     WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }

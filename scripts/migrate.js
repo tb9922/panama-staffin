@@ -2,14 +2,18 @@
 /**
  * Database migration runner.
  *
- * Reads all .sql files from migrations/ in alphabetical order and runs any
- * that haven't been run yet. Tracks completed migrations in the `migrations`
- * table. Each migration runs in its own transaction — failure stops the run.
+ * Usage: node scripts/migrate.js [--db <connection_string>]
  *
- * Usage:
- *   node scripts/migrate.js                         # uses .env DB config
- *   node scripts/migrate.js --db panama_test        # override database name
- *   node scripts/migrate.js --down 003              # roll back migration 003 (DOWN section)
+ * Options:
+ *   --db <name>   Override database name (default: DB_NAME env var or 'panama_dev')
+ *
+ * Reads all .sql files from migrations/ in alphabetical order and runs any
+ * that haven't been run yet. Tracks completed migrations in the `schema_migrations`
+ * table. Each migration runs in its own transaction — failure stops the run.
+ * Safe to run multiple times (idempotent).
+ *
+ * NOTE: Rollback (--down) is not implemented. To roll back a migration,
+ * apply the -- DOWN section manually via psql.
  */
 
 import { readFileSync, readdirSync } from 'fs';

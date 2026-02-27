@@ -9,7 +9,7 @@ const router = Router();
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
-const homeIdSchema = z.string().min(1).max(200).optional();
+const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -216,8 +216,8 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, async (req, res, 
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
     const home = await resolveHome(req, res);
     if (!home) return;
-    const breach = await gdprService.findBreachById(idP.data);
-    if (!breach || breach.home_id !== home.id) return res.status(404).json({ error: 'Breach not found' });
+    const breach = await gdprService.findBreachById(idP.data, home.id);
+    if (!breach) return res.status(404).json({ error: 'Breach not found' });
     const assessment = gdprService.assessBreachRisk(breach);
     // Auto-update breach with assessment results + ICO notification deadline
     const updates = { ico_notifiable: assessment.icoNotifiable };
@@ -323,12 +323,20 @@ router.put('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) 
 
 // ── Access Log ───────────────────────────────────────────────────────────────
 
-// GET /api/gdpr/access-log — global access log (admin only, not per-home)
+// GET /api/gdpr/access-log?home=X — access log scoped to home when ?home= provided
 router.get('/access-log', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-    res.json(await gdprService.getAccessLog({ limit, offset }));
+    const homeP = homeIdSchema.safeParse(req.query.home);
+    if (!homeP.success) return res.status(400).json({ error: 'Invalid home parameter' });
+    let homeSlug;
+    if (homeP.data) {
+      const home = await homeRepo.findBySlug(homeP.data);
+      if (!home) return res.status(404).json({ error: 'Home not found' });
+      homeSlug = home.slug;
+    }
+    res.json(await gdprService.getAccessLog({ limit, offset, homeSlug }));
   } catch (err) { next(err); }
 });
 

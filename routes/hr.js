@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as hrService from '../services/hrService.js';
+import * as auditService from '../services/auditService.js';
 
 const router = Router();
 
@@ -46,7 +47,7 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.m
 
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
-const homeIdSchema = z.string().min(1).max(200).optional();
+const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const staffIdSchema = z.string().min(1).max(20);
@@ -429,7 +430,7 @@ async function resolveHome(req, res) {
 }
 
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
-router.get('/staff', requireAuth, async (req, res, next) => {
+router.get('/staff', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const home = await resolveHome(req, res);
     if (!home) return;
@@ -459,10 +460,12 @@ router.post('/cases/disciplinary', requireAuth, requireAdmin, async (req, res, n
     if (!home) return;
     const parsed = disciplinaryBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createDisciplinary(home.id, {
+    const result = await hrService.createDisciplinary(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_disciplinary_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -490,6 +493,7 @@ router.put('/cases/disciplinary/:id', requireAuth, requireAdmin, async (req, res
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateDisciplinary(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Disciplinary case not found' });
+    await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -515,10 +519,12 @@ router.post('/cases/grievance', requireAuth, requireAdmin, async (req, res, next
     if (!home) return;
     const parsed = grievanceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createGrievance(home.id, {
+    const result = await hrService.createGrievance(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_grievance_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -546,6 +552,7 @@ router.put('/cases/grievance/:id', requireAuth, requireAdmin, async (req, res, n
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateGrievance(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Grievance case not found' });
+    await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -570,7 +577,9 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (re
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceActionBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createGrievanceAction(idP.data, home.id, parsed.data));
+    const result = await hrService.createGrievanceAction(idP.data, home.id, parsed.data);
+    await auditService.log('hr_grievance_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -585,6 +594,7 @@ router.put('/grievance-actions/:id', requireAuth, requireAdmin, async (req, res,
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateGrievanceAction(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
+    await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -611,10 +621,12 @@ router.post('/cases/performance', requireAuth, requireAdmin, async (req, res, ne
     if (!home) return;
     const parsed = performanceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createPerformance(home.id, {
+    const result = await hrService.createPerformance(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_performance_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -642,6 +654,7 @@ router.put('/cases/performance/:id', requireAuth, requireAdmin, async (req, res,
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updatePerformance(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Performance case not found' });
+    await auditService.log('hr_performance_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -688,22 +701,27 @@ router.post('/rtw-interviews', requireAuth, requireAdmin, async (req, res, next)
     if (!home) return;
     const parsed = rtwInterviewBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createRtwInterview(home.id, {
+    const result = await hrService.createRtwInterview(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_rtw_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
 // PUT /api/hr/rtw-interviews/:id
 router.put('/rtw-interviews/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid interview ID' });
     const parsed = rtwInterviewUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await hrService.updateRtwInterview(idP.data, parsed.data);
+    const result = await hrService.updateRtwInterview(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'RTW interview not found' });
+    await auditService.log('hr_rtw_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -729,22 +747,27 @@ router.post('/oh-referrals', requireAuth, requireAdmin, async (req, res, next) =
     if (!home) return;
     const parsed = ohReferralBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createOhReferral(home.id, {
+    const result = await hrService.createOhReferral(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_oh_referral_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
 // PUT /api/hr/oh-referrals/:id
 router.put('/oh-referrals/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid referral ID' });
     const parsed = ohReferralUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await hrService.updateOhReferral(idP.data, parsed.data);
+    const result = await hrService.updateOhReferral(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'OH referral not found' });
+    await auditService.log('hr_oh_referral_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -770,10 +793,12 @@ router.post('/contracts', requireAuth, requireAdmin, async (req, res, next) => {
     if (!home) return;
     const parsed = contractBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createContract(home.id, {
+    const result = await hrService.createContract(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_contract_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -801,6 +826,7 @@ router.put('/contracts/:id', requireAuth, requireAdmin, async (req, res, next) =
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateContract(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Contract not found' });
+    await auditService.log('hr_contract_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -826,10 +852,12 @@ router.post('/family-leave', requireAuth, requireAdmin, async (req, res, next) =
     if (!home) return;
     const parsed = familyLeaveBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createFamilyLeave(home.id, {
+    const result = await hrService.createFamilyLeave(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_family_leave_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -857,6 +885,7 @@ router.put('/family-leave/:id', requireAuth, requireAdmin, async (req, res, next
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateFamilyLeave(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Family leave record not found' });
+    await auditService.log('hr_family_leave_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -882,10 +911,12 @@ router.post('/flexible-working', requireAuth, requireAdmin, async (req, res, nex
     if (!home) return;
     const parsed = flexWorkingBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createFlexWorking(home.id, {
+    const result = await hrService.createFlexWorking(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_flex_working_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -913,6 +944,7 @@ router.put('/flexible-working/:id', requireAuth, requireAdmin, async (req, res, 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateFlexWorking(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Flexible working request not found' });
+    await auditService.log('hr_flex_working_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -938,10 +970,12 @@ router.post('/edi', requireAuth, requireAdmin, async (req, res, next) => {
     if (!home) return;
     const parsed = ediBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createEdi(home.id, {
+    const result = await hrService.createEdi(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_edi_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -969,6 +1003,7 @@ router.put('/edi/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateEdi(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'EDI record not found' });
+    await auditService.log('hr_edi_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -991,10 +1026,12 @@ router.post('/tupe', requireAuth, requireAdmin, async (req, res, next) => {
     if (!home) return;
     const parsed = tupeBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createTupe(home.id, {
+    const result = await hrService.createTupe(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_tupe_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -1022,6 +1059,7 @@ router.put('/tupe/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateTupe(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'TUPE record not found' });
+    await auditService.log('hr_tupe_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -1048,10 +1086,12 @@ router.post('/renewals', requireAuth, requireAdmin, async (req, res, next) => {
     if (!home) return;
     const parsed = renewalBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createRenewal(home.id, {
+    const result = await hrService.createRenewal(home.id, {
       ...parsed.data,
       created_by: req.user.username,
-    }));
+    });
+    await auditService.log('hr_dbs_renewal_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -1079,6 +1119,7 @@ router.put('/renewals/:id', requireAuth, requireAdmin, async (req, res, next) =>
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const result = await hrService.updateRenewal(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Renewal record not found' });
+    await auditService.log('hr_dbs_renewal_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -1129,10 +1170,12 @@ router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (r
     if (!home) return;
     const parsed = caseNoteBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    res.status(201).json(await hrService.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
+    const result = await hrService.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
       author: req.user.username,
       content: parsed.data.note,
-    }));
+    });
+    await auditService.log('hr_case_note_create', home.slug, req.user.username, { id: result.id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -1153,9 +1196,15 @@ router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (r
 });
 
 // POST /api/hr/attachments/:caseType/:caseId?home=X
-router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, (req, res, next) => {
-  homeRepo.findBySlug(req.query.home).then(home => {
-    if (!home) return res.status(404).json({ error: 'Home not found' });
+router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    // Validate home and caseType BEFORE multer writes any bytes to disk
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const caseTypeParsed = caseTypeSchema.safeParse(req.params.caseType);
+    if (!caseTypeParsed.success) return res.status(400).json({ error: 'Invalid case type' });
+    const caseId = Number(req.params.caseId);
+    if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
     req._homeId = home.id;
     upload.single('file')(req, res, async (err) => {
       if (err) {
@@ -1164,11 +1213,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, (req, r
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       try {
-        const parsed = caseTypeSchema.safeParse(req.params.caseType);
-        if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
-        const caseId = Number(req.params.caseId);
-        if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-        const attachment = await hrService.createAttachment(home.id, parsed.data, caseId, {
+        const attachment = await hrService.createAttachment(home.id, caseTypeParsed.data, caseId, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,
           mime_type: req.file.mimetype,
@@ -1176,10 +1221,11 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, (req, r
           description: req.body.description || null,
           uploaded_by: req.user.username,
         });
+        await auditService.log('hr_attachment_upload', home.slug, req.user.username, { id: attachment.id });
         res.status(201).json(attachment);
       } catch (e) { next(e); }
     });
-  }).catch(next);
+  } catch (err) { next(err); }
 });
 
 // GET /api/hr/attachments/download/:id?home=X
@@ -1264,6 +1310,7 @@ router.post('/meetings/:caseType/:caseId', requireAuth, requireAdmin, async (req
       ...parsed.data,
       recorded_by: req.user.username,
     });
+    await auditService.log(`hr_${ctParsed.data}_create`, home.slug, req.user.username, { id: meeting.id });
     res.status(201).json(meeting);
   } catch (err) { next(err); }
 });
@@ -1279,6 +1326,7 @@ router.put('/meetings/:id', requireAuth, requireAdmin, async (req, res, next) =>
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const meeting = await hrService.updateMeeting(id, home.id, parsed.data);
     if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+    await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);
   } catch (err) { next(err); }
 });

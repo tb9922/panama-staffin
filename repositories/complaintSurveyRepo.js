@@ -12,7 +12,7 @@ function shapeRow(row) {
 
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM complaint_surveys WHERE home_id = $1 ORDER BY date DESC NULLS LAST',
+    'SELECT * FROM complaint_surveys WHERE home_id = $1 AND deleted_at IS NULL ORDER BY date DESC NULLS LAST',
     [homeId]
   );
   return rows.map(shapeRow);
@@ -42,12 +42,14 @@ export async function sync(homeId, arr, client) {
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `DELETE FROM complaint_surveys WHERE home_id = $1 AND id != ALL($2::text[])`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query('DELETE FROM complaint_surveys WHERE home_id = $1', [homeId]);
+  // Soft-delete surveys removed from the frontend (CQC Reg 16 evidence — must retain)
+  if (incomingIds.length === 0) {
+    // Empty payload guard: skip — never wipe all surveys on empty incoming list
+    return;
   }
+  await conn.query(
+    `UPDATE complaint_surveys SET deleted_at = NOW()
+     WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }

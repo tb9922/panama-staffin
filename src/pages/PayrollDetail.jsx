@@ -57,13 +57,14 @@ export default function PayrollDetail({ data, user }) {
   const isAdmin   = user?.role === 'admin';
   const navigate  = useNavigate();
 
-  const [run, setRun]           = useState(null);
-  const [lines, setLines]       = useState([]);
-  const [payslips, setPayslips] = useState([]);   // keyed by staff_id after load
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
-  const [action, setAction]     = useState(null); // 'calculating' | 'approving' | 'exporting'
-  const [expanded, setExpanded] = useState({});   // staffId → bool
+  const [run, setRun]                     = useState(null);
+  const [lines, setLines]                 = useState([]);
+  const [payslips, setPayslips]           = useState([]);   // keyed by staff_id after load
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
+  const [action, setAction]               = useState(null); // 'calculating' | 'approving' | 'exporting'
+  const [expanded, setExpanded]           = useState({});   // staffId → bool
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
   // staffMap from props for name/role lookup
   const staffMap = {};
@@ -231,7 +232,7 @@ export default function PayrollDetail({ data, user }) {
             </button>
           )}
           {canApprove && (
-            <button className={BTN.success} onClick={handleApprove} disabled={isBusy}>
+            <button className={BTN.success} onClick={() => setShowApproveConfirm(true)} disabled={isBusy}>
               {action === 'approving' ? 'Approving…' : 'Approve'}
             </button>
           )}
@@ -488,6 +489,58 @@ export default function PayrollDetail({ data, user }) {
       {run.notes && (
         <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
           <span className="font-medium">Notes: </span>{run.notes}
+        </div>
+      )}
+
+      {/* Approve confirmation modal */}
+      {showApproveConfirm && (
+        <div className={MODAL.overlay}>
+          <div className={MODAL.panelSm}>
+            <h2 className={MODAL.title}>Approve Pay Run</h2>
+            <div className="space-y-3 mb-6">
+              <p className="text-sm text-gray-600">
+                This will lock the pay run and mark it ready for export to your accountant.
+                <strong className="text-red-600"> This cannot be undone.</strong>
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Period</span>
+                  <span className="font-medium">{run?.period_start} &rarr; {run?.period_end}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Staff count</span>
+                  <span className="font-medium">{run?.staff_count ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total gross pay</span>
+                  <span className="font-medium">
+                    {run?.total_gross != null
+                      ? `£${parseFloat(run.total_gross).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className={MODAL.footer}>
+              <button
+                className={BTN.secondary}
+                onClick={() => setShowApproveConfirm(false)}
+                disabled={action === 'approving'}
+              >
+                Cancel
+              </button>
+              <button
+                className={BTN.danger}
+                onClick={async () => {
+                  setShowApproveConfirm(false);
+                  await handleApprove();
+                }}
+                disabled={action === 'approving'}
+              >
+                {action === 'approving' ? 'Approving…' : 'Confirm Approve'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

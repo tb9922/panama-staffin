@@ -109,23 +109,24 @@ export function ensureIncidentDefaults(data) {
 
 // ── CQC Notification Deadline ─────────────────────────────────────────────
 
-export function getCqcNotificationDeadline(incident) {
+export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
   if (!incident.cqc_notifiable || !incident.date) return { deadline: null, hoursAllowed: null, isOverdue: false };
 
   const hoursAllowed = incident.cqc_notification_deadline === 'immediate' ? 24 : 72;
   const incidentTime = incident.time || '00:00';
-  const incidentDate = new Date(incident.date + 'T' + incidentTime + ':00');
+  // Append 'Z' to parse as UTC, avoiding BST/GMT offset in deadline calculation
+  const incidentDate = new Date(incident.date + 'T' + incidentTime + ':00Z');
   const deadline = new Date(incidentDate.getTime() + hoursAllowed * 60 * 60 * 1000);
 
   if (incident.cqc_notified) return { deadline, hoursAllowed, isOverdue: false };
-  return { deadline, hoursAllowed, isOverdue: new Date() > deadline };
+  return { deadline, hoursAllowed, isOverdue: asOfDate > deadline };
 }
 
-export function isCqcNotificationOverdue(incident) {
-  return getCqcNotificationDeadline(incident).isOverdue;
+export function isCqcNotificationOverdue(incident, asOfDate = new Date()) {
+  return getCqcNotificationDeadline(incident, asOfDate).isOverdue;
 }
 
-export function isRiddorOverdue(incident) {
+export function isRiddorOverdue(incident, asOfDate = new Date()) {
   if (!incident.riddor_reportable || !incident.date || incident.riddor_reported) return false;
   const cat = RIDDOR_CATEGORIES.find(r => r.id === incident.riddor_category);
   if (!cat) return false;
@@ -133,7 +134,7 @@ export function isRiddorOverdue(incident) {
   // deadlineDays=0 means "immediate" — give until end of next day (day + 1)
   // deadlineDays=15 means "within 15 calendar days" — deadline is exactly day 15 (no +1)
   const deadline = addDays(incidentDate, cat.deadlineDays === 0 ? 1 : cat.deadlineDays);
-  return new Date() > deadline;
+  return asOfDate > deadline;
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────

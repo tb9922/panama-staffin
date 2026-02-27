@@ -20,7 +20,7 @@ function shapeRow(row) {
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
     `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes
-     FROM supervisions WHERE home_id = $1 ORDER BY staff_id, date`,
+     FROM supervisions WHERE home_id = $1 AND deleted_at IS NULL ORDER BY staff_id, date`,
     [homeId]
   );
   const result = {};
@@ -66,13 +66,15 @@ export async function sync(homeId, supervisionsObj, client) {
     }
   }
 
-  // Hard-delete sessions removed from the frontend
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `DELETE FROM supervisions WHERE home_id = $1 AND id != ALL($2::text[])`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query('DELETE FROM supervisions WHERE home_id = $1', [homeId]);
+  // Soft-delete sessions removed from the frontend (CQC Reg 18 evidence must be retained)
+  if (incomingIds.length === 0) {
+    // Empty payload guard: never wipe all records — this indicates a likely frontend/network error
+    // A manager cannot have zero supervision sessions after any real usage
+    return;
   }
+  await conn.query(
+    `UPDATE supervisions SET deleted_at = NOW()
+     WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }

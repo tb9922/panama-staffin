@@ -29,7 +29,7 @@ function shapeDisc(row) {
     outcome_letter_sent_date: d(row.outcome_letter_sent_date), outcome_letter_method: row.outcome_letter_method,
     warning_expiry_date: d(row.warning_expiry_date),
     notice_period_start: d(row.notice_period_start), notice_period_end: d(row.notice_period_end),
-    pay_in_lieu_of_notice: row.pay_in_lieu_of_notice, dismissal_effective_date: d(row.dismissal_effective_date),
+    pay_in_lieu_of_notice: row.pay_in_lieu_of_notice != null ? parseFloat(row.pay_in_lieu_of_notice) : null, dismissal_effective_date: d(row.dismissal_effective_date),
     appeal_status: row.appeal_status, appeal_received_date: d(row.appeal_received_date),
     appeal_deadline: d(row.appeal_deadline), appeal_grounds: row.appeal_grounds,
     appeal_hearing_date: d(row.appeal_hearing_date), appeal_hearing_chair: row.appeal_hearing_chair,
@@ -377,7 +377,7 @@ function shapeRtw(row) {
   return {
     id: row.id, home_id: row.home_id, staff_id: row.staff_id,
     absence_start_date: d(row.absence_start_date), absence_end_date: d(row.absence_end_date),
-    absence_days: row.absence_days, absence_reason: row.absence_reason,
+    absence_days: row.absence_days != null ? parseInt(row.absence_days, 10) : null, absence_reason: row.absence_reason,
     rtw_date: d(row.rtw_date), rtw_conducted_by: row.rtw_conducted_by,
     fit_to_return: row.fit_to_return, adjustments_needed: row.adjustments_needed,
     adjustments_detail: row.adjustments_detail, underlying_condition: row.underlying_condition,
@@ -386,7 +386,7 @@ function shapeRtw(row) {
     fit_note_received: row.fit_note_received, fit_note_date: d(row.fit_note_date),
     fit_note_type: row.fit_note_type, fit_note_adjustments: row.fit_note_adjustments,
     fit_note_review_date: d(row.fit_note_review_date),
-    bradford_score_after: row.bradford_score_after, trigger_reached: row.trigger_reached,
+    bradford_score_after: row.bradford_score_after != null ? parseFloat(row.bradford_score_after) : null, trigger_reached: row.trigger_reached,
     action_taken: row.action_taken, linked_case_id: row.linked_case_id,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };

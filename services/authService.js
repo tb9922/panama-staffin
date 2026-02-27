@@ -18,7 +18,9 @@ export async function loadDenyList() {
   try {
     const jtis = await authRepo.loadActive();
     jtis.forEach(jti => deniedJtis.add(jti));
-    logger.info({ count: jtis.length }, 'Token deny-list loaded');
+    const usernames = await authRepo.loadActiveUsernames();
+    usernames.forEach(u => deniedUsernames.add(u));
+    logger.info({ jtis: jtis.length, usernames: usernames.length }, 'Token deny-list loaded');
   } catch (err) {
     // Non-fatal on startup — table may not exist yet (pre-migration)
     logger.warn({ error: err.message }, 'Could not load token deny-list');
@@ -77,11 +79,13 @@ export async function revokeUser(username) {
 export async function pruneDenyList() {
   const count = await authRepo.pruneExpired();
   if (count > 0) {
-    // Rebuild in-memory sets from DB
+    // Rebuild in-memory sets from DB after pruning
     deniedJtis.clear();
     deniedUsernames.clear();
     const jtis = await authRepo.loadActive();
-    jtis.forEach(jti => deniedJtis.add(jti));
+    jtis.forEach(j => deniedJtis.add(j));
+    const usernames = await authRepo.loadActiveUsernames();
+    usernames.forEach(u => deniedUsernames.add(u));
     logger.info({ pruned: count, active: jtis.length }, 'Deny-list pruned');
   }
 }

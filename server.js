@@ -18,7 +18,7 @@ import gdprRouter     from './routes/gdpr.js';
 import hrRouter       from './routes/hr.js';
 import financeRouter  from './routes/finance.js';
 import { accessLog } from './middleware/accessLog.js';
-import { loadDenyList } from './services/authService.js';
+import { loadDenyList, pruneDenyList } from './services/authService.js';
 
 const app = express();
 
@@ -102,6 +102,11 @@ const server = app.listen(config.port, async () => {
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(() => {});
+  // Prune expired deny-list entries daily
+  setInterval(
+    () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
+    24 * 60 * 60 * 1000
+  ).unref();
 });
 
 // Graceful shutdown — drain in-flight requests then close DB pool
@@ -117,8 +122,7 @@ function shutdown(signal) {
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-// SIGINT (Ctrl+C) only in interactive terminals — piped stdin on Windows fires it spuriously
-if (process.stdin.isTTY) process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Catch unhandled promise rejections — without this, Node silently crashes
 process.on('unhandledRejection', (reason, promise) => {

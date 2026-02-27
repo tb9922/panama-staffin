@@ -142,9 +142,12 @@ export async function findBreaches(homeId, client) {
   return rows.map(shapeBreach);
 }
 
-export async function findBreachById(id, client) {
+export async function findBreachById(id, homeId, client) {
   const conn = client || pool;
-  const { rows } = await conn.query(`SELECT * FROM data_breaches WHERE id = $1`, [id]);
+  const { rows } = await conn.query(
+    `SELECT * FROM data_breaches WHERE id = $1 AND home_id = $2`,
+    [id, homeId]
+  );
   return rows[0] ? shapeBreach(rows[0]) : null;
 }
 

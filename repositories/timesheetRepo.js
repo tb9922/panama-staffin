@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 
 function shapeRow(row) {
   const toDateStr = (v) => v
@@ -177,6 +177,9 @@ export async function totalSnapSavings(homeId, start, end) {
 
 /** Bulk upsert multiple timesheet entries in a single transaction. */
 export async function bulkUpsert(homeId, entries, client) {
+  if (!client) {
+    return withTransaction(c => bulkUpsert(homeId, entries, c));
+  }
   const conn = client || pool;
   const results = [];
   for (const entry of entries) {

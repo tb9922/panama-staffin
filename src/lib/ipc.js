@@ -110,8 +110,10 @@ export function getIpcAlerts(audits, asOfDate, config) {
     }
   }
 
-  // Low score audits (<80%)
+  // Low score audits (<80%) — only flag audits within the last 365 days
+  const cutoff = formatDate(addDays(asOfDate ? parseDate(asOfDate) : new Date(), -365));
   for (const audit of arr) {
+    if (audit.audit_date && audit.audit_date < cutoff) continue; // skip historic audits
     if (audit.overall_score != null && audit.overall_score < 80) {
       const typeDef = getIpcAuditTypes(config).find(t => t.id === audit.audit_type);
       alerts.push({ type: 'warning', msg: `IPC: ${typeDef?.name || audit.audit_type} scored ${audit.overall_score}% on ${audit.audit_date}` });

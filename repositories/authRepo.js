@@ -44,6 +44,18 @@ export async function loadActive() {
 }
 
 /**
+ * Load all currently-denied usernames from DB (for in-memory Set rebuild after restart).
+ * @returns {Promise<string[]>}
+ */
+export async function loadActiveUsernames() {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT username FROM token_denylist
+     WHERE expires_at > NOW() AND username IS NOT NULL`
+  );
+  return rows.map(r => r.username);
+}
+
+/**
  * Remove expired entries from the deny-list.
  * Call periodically (e.g. daily) to keep the table small.
  * @returns {Promise<number>} count of pruned rows

@@ -34,11 +34,16 @@ try {
 
 // Required variables — missing any of these is a fatal startup error.
 // Use console.error here; the logger hasn't been initialised yet.
-const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH', 'DB_PASSWORD'];
+const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH', 'DB_PASSWORD', 'ALLOWED_ORIGIN'];
 const missing = REQUIRED_VARS.filter(k => !process.env[k]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
   console.error('See .env.example for required configuration.');
+  process.exit(1);
+}
+
+if (process.env.ALLOWED_ORIGIN === '*') {
+  console.error('FATAL: ALLOWED_ORIGIN=* is not permitted — this would expose all endpoints including health records');
   process.exit(1);
 }
 

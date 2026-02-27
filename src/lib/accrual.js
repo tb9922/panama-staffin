@@ -7,19 +7,36 @@ import { formatDate, parseDate, addDays } from './rotation.js';
  * @returns {{ start: Date, end: Date, startStr: string, endStr: string }}
  */
 export function getLeaveYear(date, leaveYearStart) {
-  const d = typeof date === 'string' ? parseDate(date) : new Date(date);
+  // Use string comparison to avoid UTC/local timezone mixing.
+  // parseDate() returns local-time Dates; Date.UTC() returns UTC — they are not comparable.
+  const dateStr = typeof date === 'string' ? date : formatDate(date);
   const [mm, dd] = (leaveYearStart || '04-01').split('-').map(Number);
+  const y = parseInt(dateStr.slice(0, 4), 10);
+  const mmStr = String(mm).padStart(2, '0');
+  const ddStr = String(dd).padStart(2, '0');
 
-  const thisYearStart = new Date(Date.UTC(d.getUTCFullYear(), mm - 1, dd));
+  const thisStartStr = `${y}-${mmStr}-${ddStr}`;
+  const prevStartStr = `${y - 1}-${mmStr}-${ddStr}`;
+  const nextStartStr = `${y + 1}-${mmStr}-${ddStr}`;
 
-  if (d >= thisYearStart) {
-    const nextYearStart = new Date(Date.UTC(d.getUTCFullYear() + 1, mm - 1, dd));
-    const end = addDays(nextYearStart, -1);
-    return { start: thisYearStart, end, startStr: formatDate(thisYearStart), endStr: formatDate(end) };
+  if (dateStr >= thisStartStr) {
+    // dateStr is in the leave year that starts thisStartStr
+    const endStr = formatDate(addDays(parseDate(nextStartStr), -1));
+    return {
+      start: parseDate(thisStartStr),
+      end: parseDate(endStr),
+      startStr: thisStartStr,
+      endStr,
+    };
   } else {
-    const prevYearStart = new Date(Date.UTC(d.getUTCFullYear() - 1, mm - 1, dd));
-    const end = addDays(thisYearStart, -1);
-    return { start: prevYearStart, end, startStr: formatDate(prevYearStart), endStr: formatDate(end) };
+    // dateStr is before thisStartStr — it's in the previous leave year
+    const endStr = formatDate(addDays(parseDate(thisStartStr), -1));
+    return {
+      start: parseDate(prevStartStr),
+      end: parseDate(endStr),
+      startStr: prevStartStr,
+      endStr,
+    };
   }
 }
 

@@ -2,6 +2,7 @@ import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 import { ValidationError } from '../errors.js';
+import logger from '../logger.js';
 
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
       hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
       hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
-      onboarding, careCertificates, complaints,
+      onboarding, careCertificates, complaints, incidentAddenda,
     ] = await Promise.all([
       conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -46,11 +47,11 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       ) ORDER BY ts DESC LIMIT 500`, [homeId, subjectId]),
       // Staff appears in incident staff_involved JSONB array
       conn.query(
-        `SELECT * FROM incidents WHERE home_id = $1 AND jsonb_exists(staff_involved, $2) AND deleted_at IS NULL`,
+        `SELECT * FROM incidents WHERE home_id = $1 AND staff_involved @> jsonb_build_array($2::text) AND deleted_at IS NULL`,
         [homeId, subjectId]),
       // Staff appears in fire drill staff_present JSONB array
       conn.query(
-        `SELECT * FROM fire_drills WHERE home_id = $1 AND jsonb_exists(staff_present, $2)`,
+        `SELECT * FROM fire_drills WHERE home_id = $1 AND staff_present @> jsonb_build_array($2::text)`,
         [homeId, subjectId]),
       // Handover entries authored by this staff member (matched via staff name)
       conn.query(
@@ -95,6 +96,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         `SELECT * FROM complaints WHERE home_id = $1 AND deleted_at IS NULL AND raised_by_name = (
            SELECT name FROM staff WHERE home_id = $1 AND id = $2
          )`, [homeId, subjectId]),
+      // Post-freeze addenda authored by this staff member
+      conn.query(
+        `SELECT * FROM incident_addenda WHERE home_id = $1 AND author = (
+           SELECT name FROM staff WHERE home_id = $1 AND id = $2
+         ) ORDER BY created_at ASC`,
+        [homeId, subjectId]
+      ),
     ]);
 
     return {
@@ -129,11 +137,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hr_flexible_working: hrFlexWorking.rows,
         hr_edi_records: hrEdi.rows,
         hr_tupe_transfers: hrTupe.rows,
+        tupe_note: 'TUPE records are home-level only; verify manually if subject was involved in a transfer',
         hr_rtw_dbs_renewals: hrRenewals.rows,
         hr_case_notes: hrCaseNotes.rows,
         onboarding: onboarding.rows,
         care_certificates: careCertificates.rows,
         complaints: complaints.rows,
+        incident_addenda: incidentAddenda.rows,
       },
     };
   }
@@ -316,6 +326,15 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Anonymise incident addenda authored by this staff member (post-freeze notes)
+    if (originalName) {
+      await client.query(
+        `UPDATE incident_addenda SET author = $1, content = '[REDACTED]'
+         WHERE home_id = $2 AND author = $3`,
+        [anon, homeId, originalName]
+      );
+    }
+
     // Remove onboarding data (pre-employment checks — not needed after erasure)
     await client.query(
       `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
@@ -419,8 +438,8 @@ export async function scanRetention(homeId) {
         );
         expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
       }
-    } catch {
-      // Table might not have the expected date column — skip
+    } catch (err) {
+      logger.warn({ table, err: err?.message }, 'Retention scan: table query failed — skipping');
     }
 
     results.push({
@@ -504,11 +523,11 @@ export async function createRequest(homeId, data) { return gdprRepo.createReques
 export async function updateRequest(id, homeId, data, client) { return gdprRepo.updateRequest(id, homeId, data, client); }
 
 export async function findBreaches(homeId) { return gdprRepo.findBreaches(homeId); }
-export async function findBreachById(id) { return gdprRepo.findBreachById(id); }
+export async function findBreachById(id, homeId) { return gdprRepo.findBreachById(id, homeId); }
 export async function createBreach(homeId, data) { return gdprRepo.createBreach(homeId, data); }
 export async function updateBreach(id, homeId, data) {
   if (data.status && ['resolved', 'closed'].includes(data.status)) {
-    const current = await gdprRepo.findBreachById(id);
+    const current = await gdprRepo.findBreachById(id, homeId);
     if (current?.ico_notifiable && !current?.ico_notified) {
       throw new ValidationError('ICO must be notified before resolving a notifiable breach');
     }
@@ -526,4 +545,17 @@ export async function findDPComplaints(homeId) { return gdprRepo.findDPComplaint
 export async function createDPComplaint(homeId, data) { return gdprRepo.createDPComplaint(homeId, data); }
 export async function updateDPComplaint(id, homeId, data) { return gdprRepo.updateDPComplaint(id, homeId, data); }
 
-export async function getAccessLog(opts) { return gdprRepo.getAccessLog(opts); }
+export async function getAccessLog({ limit = 100, offset = 0, homeSlug } = {}) {
+  if (!homeSlug) {
+    return gdprRepo.getAccessLog({ limit, offset });
+  }
+  // Filter by home — join access_log.home_id to homes.slug
+  const { rows } = await pool.query(
+    `SELECT al.* FROM access_log al
+     JOIN homes h ON h.id = al.home_id
+     WHERE h.slug = $1
+     ORDER BY al.ts DESC LIMIT $2 OFFSET $3`,
+    [homeSlug, limit, offset]
+  );
+  return rows;
+}

@@ -13,11 +13,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { pool } from '../../db.js';
 import * as payrollRunRepo from '../../repositories/payrollRunRepo.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
+import * as gdprRepo from '../../repositories/gdprRepo.js';
 
 // Test fixture IDs — set in beforeAll, cleaned up in afterAll
 let homeA, homeB, payrollRunId, caseNoteId;
 
 beforeAll(async () => {
+  // Clean up any leftover test data from previous failed runs
+  await pool.query(`DELETE FROM homes WHERE slug LIKE 'idor-test-%'`);
+
   // Create two test homes
   const { rows: [ha] } = await pool.query(
     `INSERT INTO homes (slug, name) VALUES ('idor-test-home-a', 'IDOR Test Home A') RETURNING id`
@@ -51,7 +55,6 @@ afterAll(async () => {
   if (payrollRunId) await pool.query('DELETE FROM payroll_runs WHERE id = $1', [payrollRunId]);
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
-  await pool.end();
 });
 
 // ── payrollRunRepo.findById ───────────────────────────────────────────────────
@@ -111,5 +114,39 @@ describe('IDOR: hrRepo.findCaseNotes', () => {
   it('returns empty array when home_id does not match', async () => {
     const notes = await hrRepo.findCaseNotes(homeB, 'disciplinary', 999999);
     expect(notes).toHaveLength(0);
+  });
+});
+
+// ── gdprRepo.findBreachById ───────────────────────────────────────────────────
+
+describe('IDOR: gdprRepo.findBreachById', () => {
+  let breachIdFromHomeB;
+
+  beforeAll(async () => {
+    // Create a breach record in home B
+    const { rows } = await pool.query(
+      `INSERT INTO data_breaches (home_id, title, description, discovered_date, severity, status, individuals_affected)
+       VALUES ($1, 'Test breach', 'Test', CURRENT_DATE, 'low', 'open', 1)
+       RETURNING id`,
+      [homeB]
+    );
+    breachIdFromHomeB = rows[0].id;
+  });
+
+  afterAll(async () => {
+    if (breachIdFromHomeB) {
+      await pool.query('DELETE FROM data_breaches WHERE id = $1', [breachIdFromHomeB]);
+    }
+  });
+
+  it('returns breach when home_id matches', async () => {
+    const breach = await gdprRepo.findBreachById(breachIdFromHomeB, homeB);
+    expect(breach).not.toBeNull();
+    expect(breach.home_id).toBe(homeB);
+  });
+
+  it('returns null when home_id does not match (cross-home access blocked)', async () => {
+    const breach = await gdprRepo.findBreachById(breachIdFromHomeB, homeA);
+    expect(breach).toBeNull();
   });
 });

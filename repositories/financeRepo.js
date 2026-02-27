@@ -301,10 +301,12 @@ export async function findExpenses(homeId, { category, status, from, to, limit =
   return { rows: rows.map(shapeExpense), total };
 }
 
-export async function findExpenseById(id, homeId, client) {
+export async function findExpenseById(id, homeId, client, options = {}) {
   const conn = client || pool;
+  const forUpdate = options.forUpdate ? ' FOR UPDATE' : '';
   const { rows } = await conn.query(
-    'SELECT * FROM finance_expenses WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT * FROM finance_expenses WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate}`,
+    [id, homeId]);
   return shapeExpense(rows[0]);
 }
 

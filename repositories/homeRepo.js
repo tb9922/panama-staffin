@@ -5,8 +5,9 @@ import { pool } from '../db.js';
  * Returns null if not found.
  * @param {number} id
  */
-export async function findById(id) {
-  const { rows } = await pool.query(
+export async function findById(id, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     'SELECT * FROM homes WHERE id = $1',
     [id],
   );

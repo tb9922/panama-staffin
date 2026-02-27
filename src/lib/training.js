@@ -151,9 +151,12 @@ export function isTrainingRequired(trainingType, staffRole) {
 }
 
 export function calculateExpiry(completedDateStr, refresherMonths) {
-  const d = parseDate(completedDateStr);
-  d.setUTCMonth(d.getUTCMonth() + refresherMonths);
-  return formatDate(d);
+  // Pure integer calendar arithmetic — no Date objects to avoid UTC/local mixing.
+  const [y, m, d] = completedDateStr.split('-').map(Number);
+  const totalMonths = (y * 12 + (m - 1)) + refresherMonths;
+  const expiryYear = Math.floor(totalMonths / 12);
+  const expiryMonth = (totalMonths % 12) + 1;
+  return `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 // ── Status Calculation ─────────────────────────────────────────────────────
@@ -243,6 +246,8 @@ export function getTrainingAlerts(activeStaff, trainingTypes, trainingData, asOf
         alerts.push({ type: 'error', msg: `${s.name}: ${t.name} expired` });
       } else if (result.status === TRAINING_STATUS.URGENT) {
         alerts.push({ type: 'warning', msg: `${s.name}: ${t.name} expires in ${result.daysUntilExpiry}d` });
+      } else if (result.status === TRAINING_STATUS.EXPIRING_SOON) {
+        alerts.push({ type: 'warning', msg: `${s.name}: ${t.name} expires in ${result.daysUntilExpiry} days` });
       } else if (result.status === TRAINING_STATUS.WRONG_LEVEL) {
         const hasLevel = t.levels?.find(l => l.id === result.record?.level);
         alerts.push({ type: 'warning', msg: `${s.name}: ${t.name} — has ${hasLevel?.name || 'none'}, needs ${result.requiredLevel?.name}` });
@@ -278,7 +283,8 @@ export function getSupervisionStatus(staff, config, supervisionsData, asOfDate) 
   }
   const sorted = [...staffSups].sort((a, b) => b.date.localeCompare(a.date));
   const latest = sorted[0];
-  const freq = getSupervisionFrequency(staff, config, asOfDate);
+  // Use the session date, not today — frequency may have changed since the session
+  const freq = getSupervisionFrequency(staff, config, latest.date);
   const lastDate = parseDate(latest.date);
   const nextDue = addDays(lastDate, freq);
   const now = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);

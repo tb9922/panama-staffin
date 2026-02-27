@@ -105,7 +105,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
     }
 
-    const home = await homeRepo.findById(homeId);
+    const home = await homeRepo.findById(homeId, client);
     if (!home) throw new NotFoundError('Home not found');
 
     const allStaff    = await staffRepo.findByHome(homeId);
@@ -114,7 +114,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const nmwRates    = await payRateRulesRepo.getAllNmwRates();
 
     // Wipe existing lines (cascades to payroll_line_shifts)
-    await payrollRunRepo.deleteLines(runId, client);
+    await payrollRunRepo.deleteLines(runId, homeId, client);
 
     const dates = eachDayInRange(run.period_start, run.period_end);
     const activeStaff = allStaff.filter(s => s.active);
@@ -359,7 +359,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         net_pay:             netPay,
       }, client);
 
-      totalGross        += acc.gross_pay;
+      totalGross        += round2(acc.gross_pay + acc.holiday_pay + acc.ssp_amount);
       totalEnhancements += acc.total_enhancements;
       totalSleepIns     += acc.sleep_in_pay;
     }
@@ -469,9 +469,19 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
     const allStaff = await staffRepo.findByHome(homeId);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
+    // Load YTD for each staff member for the CSV
+    const taxYear = getTaxYear(new Date(run.period_end));
+    const ytdMap = new Map();
+    await Promise.all(
+      lines.map(async line => {
+        const ytd = await taxRepo.getYTD(homeId, line.staff_id, taxYear, client);
+        if (ytd) ytdMap.set(line.staff_id, ytd);
+      })
+    );
+
     const csv = format === 'sage'
-      ? buildSageCSV(lines, staffMap, run)
-      : buildGenericCSV(lines, staffMap, run);
+      ? buildSageCSV(lines, staffMap, run, ytdMap)
+      : buildGenericCSV(lines, staffMap, run, ytdMap);
 
     const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
 
@@ -537,7 +547,9 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
 
   // Fallback: contracted daily rate
   if (!staff) return 0;
-  const contractDailyRate = round2(((staff.contract_hours || 0) / 5) * parseFloat(staff.hourly_rate));
+  const contractHours = parseFloat(staff.contract_hours) || 0;
+  const hourlyRate = parseFloat(staff.hourly_rate) || 0;
+  const contractDailyRate = round2((contractHours / 5) * hourlyRate);
   return contractDailyRate;
 }
 
