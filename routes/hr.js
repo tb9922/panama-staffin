@@ -49,7 +49,7 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.m
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const staffIdSchema = z.string().min(1).max(20);
 const caseTypeSchema = z.enum([
   'disciplinary', 'grievance', 'performance', 'rtw_interview',
@@ -498,7 +498,7 @@ router.post('/cases/disciplinary', requireAuth, requireAdmin, async (req, res, n
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = disciplinaryBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createDisciplinary(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -529,7 +529,7 @@ router.put('/cases/disciplinary/:id', requireAuth, requireAdmin, async (req, res
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = disciplinaryUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateDisciplinary(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Disciplinary case not found' });
     await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: result.id });
@@ -557,7 +557,7 @@ router.post('/cases/grievance', requireAuth, requireAdmin, async (req, res, next
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = grievanceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createGrievance(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -588,7 +588,7 @@ router.put('/cases/grievance/:id', requireAuth, requireAdmin, async (req, res, n
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const updateData = { ...parsed.data };
     if ('description' in updateData) {
       updateData.subject_summary = updateData.description;
@@ -620,7 +620,7 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (re
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceActionBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createGrievanceAction(idP.data, home.id, parsed.data);
     await auditService.log('hr_grievance_create', home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
@@ -635,7 +635,7 @@ router.put('/grievance-actions/:id', requireAuth, requireAdmin, async (req, res,
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
     const parsed = grievanceActionUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateGrievanceAction(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
     await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
@@ -664,7 +664,7 @@ router.post('/cases/performance', requireAuth, requireAdmin, async (req, res, ne
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = performanceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createPerformance(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -695,7 +695,7 @@ router.put('/cases/performance/:id', requireAuth, requireAdmin, async (req, res,
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = performanceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updatePerformance(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Performance case not found' });
     await auditService.log('hr_performance_update', home.slug, req.user.username, { id: result.id });
@@ -744,7 +744,7 @@ router.post('/rtw-interviews', requireAuth, requireAdmin, async (req, res, next)
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = rtwInterviewBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createRtwInterview(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -762,7 +762,7 @@ router.put('/rtw-interviews/:id', requireAuth, requireAdmin, async (req, res, ne
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid interview ID' });
     const parsed = rtwInterviewUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateRtwInterview(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'RTW interview not found' });
     await auditService.log('hr_rtw_update', home.slug, req.user.username, { id: result.id });
@@ -790,7 +790,7 @@ router.post('/oh-referrals', requireAuth, requireAdmin, async (req, res, next) =
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = ohReferralBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createOhReferral(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -808,7 +808,7 @@ router.put('/oh-referrals/:id', requireAuth, requireAdmin, async (req, res, next
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid referral ID' });
     const parsed = ohReferralUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateOhReferral(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'OH referral not found' });
     await auditService.log('hr_oh_referral_update', home.slug, req.user.username, { id: result.id });
@@ -836,7 +836,7 @@ router.post('/contracts', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = contractBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createContract(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -867,7 +867,7 @@ router.put('/contracts/:id', requireAuth, requireAdmin, async (req, res, next) =
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid contract ID' });
     const parsed = contractUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateContract(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Contract not found' });
     await auditService.log('hr_contract_update', home.slug, req.user.username, { id: result.id });
@@ -895,7 +895,7 @@ router.post('/family-leave', requireAuth, requireAdmin, async (req, res, next) =
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = familyLeaveBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createFamilyLeave(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -926,7 +926,7 @@ router.put('/family-leave/:id', requireAuth, requireAdmin, async (req, res, next
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid family leave ID' });
     const parsed = familyLeaveUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateFamilyLeave(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Family leave record not found' });
     await auditService.log('hr_family_leave_update', home.slug, req.user.username, { id: result.id });
@@ -954,7 +954,7 @@ router.post('/flexible-working', requireAuth, requireAdmin, async (req, res, nex
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = flexWorkingBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createFlexWorking(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -985,7 +985,7 @@ router.put('/flexible-working/:id', requireAuth, requireAdmin, async (req, res, 
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = flexWorkingUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateFlexWorking(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Flexible working request not found' });
     await auditService.log('hr_flex_working_update', home.slug, req.user.username, { id: result.id });
@@ -1013,7 +1013,7 @@ router.post('/edi', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = ediBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createEdi(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -1044,7 +1044,7 @@ router.put('/edi/:id', requireAuth, requireAdmin, async (req, res, next) => {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid EDI record ID' });
     const parsed = ediUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateEdi(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'EDI record not found' });
     await auditService.log('hr_edi_update', home.slug, req.user.username, { id: result.id });
@@ -1069,7 +1069,7 @@ router.post('/tupe', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = tupeBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createTupe(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -1100,7 +1100,7 @@ router.put('/tupe/:id', requireAuth, requireAdmin, async (req, res, next) => {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid TUPE record ID' });
     const parsed = tupeUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateTupe(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'TUPE record not found' });
     await auditService.log('hr_tupe_update', home.slug, req.user.username, { id: result.id });
@@ -1129,7 +1129,7 @@ router.post('/renewals', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = renewalBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createRenewal(home.id, {
       ...parsed.data,
       created_by: req.user.username,
@@ -1160,7 +1160,7 @@ router.put('/renewals/:id', requireAuth, requireAdmin, async (req, res, next) =>
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid renewal ID' });
     const parsed = renewalUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.updateRenewal(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Renewal record not found' });
     await auditService.log('hr_dbs_renewal_update', home.slug, req.user.username, { id: result.id });
@@ -1213,7 +1213,7 @@ router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (r
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = caseNoteBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await hrService.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
       author: req.user.username,
       content: parsed.data.note,

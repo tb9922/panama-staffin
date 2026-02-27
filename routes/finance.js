@@ -10,7 +10,7 @@ const router = Router();
 
 const homeIdSchema = z.string().min(1).max(200).optional();
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
@@ -171,7 +171,7 @@ router.post('/residents', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = residentBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await financeService.createResident(home.id, { ...parsed.data, created_by: req.user.username }));
   } catch (err) { next(err); }
 });
@@ -195,7 +195,7 @@ router.put('/residents/:id', requireAuth, requireAdmin, async (req, res, next) =
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
     const parsed = residentUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.updateResident(idP.data, home.id, parsed.data, req.user.username);
     if (!result) return res.status(404).json({ error: 'Resident not found' });
     res.json(result);
@@ -249,7 +249,7 @@ router.post('/invoices', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = invoiceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.createInvoiceWithLines(home.id, parsed.data, req.user.username);
     res.status(201).json(result);
   } catch (err) {
@@ -277,7 +277,7 @@ router.put('/invoices/:id', requireAuth, requireAdmin, async (req, res, next) =>
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const parsed = invoiceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.updateInvoiceWithLines(idP.data, home.id, parsed.data, req.user.username);
     if (!result) return res.status(404).json({ error: 'Invoice not found' });
     res.json(result);
@@ -309,7 +309,7 @@ router.post('/invoices/:id/payment', requireAuth, requireAdmin, async (req, res,
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const parsed = paymentSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.recordPayment(idP.data, home.id, parsed.data, req.user.username);
     res.json(result);
   } catch (err) {
@@ -339,7 +339,7 @@ router.post('/expenses', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = expenseBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await financeService.createExpense(home.id, { ...parsed.data, created_by: req.user.username }));
   } catch (err) { next(err); }
 });
@@ -363,7 +363,7 @@ router.put('/expenses/:id', requireAuth, requireAdmin, async (req, res, next) =>
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
     const parsed = expenseUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.updateExpense(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Expense not found' });
     res.json(result);
@@ -433,7 +433,7 @@ router.post('/invoices/:id/chases', requireAuth, requireAdmin, async (req, res, 
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const parsed = chaseBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await financeService.createChase(home.id, { ...parsed.data, invoice_id: idP.data }, req.user.username));
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -469,7 +469,7 @@ router.post('/payment-schedules', requireAuth, requireAdmin, async (req, res, ne
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = paymentScheduleBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await financeService.createPaymentSchedule(home.id, parsed.data, req.user.username));
   } catch (err) { next(err); }
 });
@@ -481,7 +481,7 @@ router.put('/payment-schedules/:id', requireAuth, requireAdmin, async (req, res,
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
     const parsed = paymentScheduleUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.updatePaymentSchedule(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Payment schedule not found' });
     res.json(result);

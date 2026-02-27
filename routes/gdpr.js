@@ -11,7 +11,7 @@ const router = Router();
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
 const requestBodySchema = z.object({
   request_type:      z.enum(['sar', 'erasure', 'rectification', 'restriction', 'portability']),
@@ -114,7 +114,7 @@ router.post('/requests', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = requestBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await gdprService.createRequest(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -127,7 +127,7 @@ router.put('/requests/:id', requireAuth, requireAdmin, async (req, res, next) =>
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = requestUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await gdprService.updateRequest(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Request not found' });
     res.json(result);
@@ -189,7 +189,7 @@ router.post('/breaches', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = breachBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await gdprService.createBreach(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -202,7 +202,7 @@ router.put('/breaches/:id', requireAuth, requireAdmin, async (req, res, next) =>
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
     const parsed = breachUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await gdprService.updateBreach(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Breach not found' });
     res.json(result);
@@ -261,7 +261,7 @@ router.post('/consent', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = consentBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await gdprService.createConsent(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -277,7 +277,7 @@ router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => 
       withdrawn: z.string().nullable().optional(),
       notes: z.string().max(2000).nullable().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await gdprService.updateConsent(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Consent record not found' });
     res.json(result);
@@ -301,7 +301,7 @@ router.post('/complaints', requireAuth, requireAdmin, async (req, res, next) => 
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = dpComplaintBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await gdprService.createDPComplaint(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -314,7 +314,7 @@ router.put('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) 
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid complaint ID' });
     const parsed = dpComplaintUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await gdprService.updateDPComplaint(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Complaint not found' });
     res.json(result);

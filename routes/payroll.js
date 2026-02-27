@@ -37,7 +37,7 @@ const router = Router();
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
 const homeIdSchema   = z.string().min(1).max(100).regex(/^[\w\-]+$/);
-const dateSchema     = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema     = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();
 const tsIdSchema     = z.coerce.number().int().positive();
@@ -129,7 +129,7 @@ router.post('/rates', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = ruleBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const rule = await payRateRulesRepo.create(home.id, parsed.data);
     res.status(201).json(rule);
   } catch (err) { next(err); }
@@ -143,7 +143,7 @@ router.put('/rates/:ruleId', requireAuth, requireAdmin, async (req, res, next) =
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = ruleBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const rule = await payRateRulesRepo.update(ruleId.data, home.id, parsed.data);
     if (!rule) return res.status(404).json({ error: 'Rule not found or already closed' });
     res.json(rule);
@@ -204,7 +204,7 @@ router.post('/timesheets', requireAuth, requireAdmin, async (req, res, next) => 
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = timesheetBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const entry = await timesheetRepo.upsert(home.id, parsed.data);
     res.status(201).json(entry);
   } catch (err) { next(err); }
@@ -260,7 +260,7 @@ router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, async (req, r
     if (entries.length > 62) return res.status(400).json({ error: 'Maximum 62 entries per batch' });
     for (const e of entries) {
       const p = timesheetBodySchema.safeParse(e);
-      if (!p.success) return res.status(400).json({ error: `Invalid entry for ${e.date}: ${p.error.errors[0].message}` });
+      if (!p.success) return res.status(400).json({ error: `Invalid entry for ${e.date}: ${p.error.issues[0].message}` });
     }
     const results = await withTransaction(async (client) => {
       return timesheetRepo.bulkUpsert(home.id, entries, client);
@@ -302,7 +302,7 @@ router.post('/runs', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = runBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     if (parsed.data.period_start >= parsed.data.period_end) {
       return res.status(400).json({ error: 'period_start must be before period_end' });
     }
@@ -417,7 +417,7 @@ router.post('/agency/providers', requireAuth, requireAdmin, async (req, res, nex
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = providerBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const provider = await agencyRepo.createProvider(home.id, parsed.data);
     res.status(201).json(provider);
   } catch (err) { next(err); }
@@ -431,7 +431,7 @@ router.put('/agency/providers/:id', requireAuth, requireAdmin, async (req, res, 
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = providerBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const provider = await agencyRepo.updateProvider(idP.data, home.id, parsed.data);
     if (!provider) return res.status(404).json({ error: 'Provider not found' });
     res.json(provider);
@@ -456,7 +456,7 @@ router.post('/agency/shifts', requireAuth, requireAdmin, async (req, res, next) 
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = agencyShiftBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     // Calculate total_cost server-side
     const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
     const shift = await agencyRepo.createShift(home.id, data);
@@ -472,7 +472,7 @@ router.put('/agency/shifts/:id', requireAuth, requireAdmin, async (req, res, nex
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = agencyShiftBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
     const shift = await agencyRepo.updateShift(idP.data, home.id, data);
     if (!shift) return res.status(404).json({ error: 'Shift not found' });
@@ -520,7 +520,7 @@ router.post('/tax-codes', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = taxCodeBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await taxRepo.upsertTaxCode(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -565,7 +565,7 @@ router.post('/pensions', requireAuth, requireAdmin, async (req, res, next) => {
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = enrolmentBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await pensionRepo.upsertEnrolment(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -627,7 +627,7 @@ router.post('/sick-periods', requireAuth, requireAdmin, async (req, res, next) =
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = sickPeriodBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     res.status(201).json(await sspRepo.createSickPeriod(home.id, parsed.data));
   } catch (err) { next(err); }
 });
@@ -640,7 +640,7 @@ router.put('/sick-periods/:id', requireAuth, requireAdmin, async (req, res, next
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = sickPeriodUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const updated = await sspRepo.updateSickPeriod(idP.data, home.id, parsed.data);
     if (!updated) return res.status(404).json({ error: 'Sick period not found' });
     res.json(updated);
@@ -675,7 +675,7 @@ router.put('/hmrc/:id/paid', requireAuth, requireAdmin, async (req, res, next) =
     const home = await resolveHome(req, res);
     if (!home) return;
     const parsed = markPaidSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const updated = await hmrcRepo.markPaid(idP.data, home.id, parsed.data.paid_date, parsed.data.paid_reference);
     if (!updated) return res.status(404).json({ error: 'Liability not found' });
     res.json(updated);

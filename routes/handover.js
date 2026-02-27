@@ -7,7 +7,7 @@ import * as handoverRepo from '../repositories/handoverRepo.js';
 const router = Router();
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').optional();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').nullable());
 const uuidSchema = z.string().uuid('Invalid entry ID');
 
 const entryBodySchema = z.object({
@@ -66,7 +66,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     if (homeId === null) return;
 
     const parsed = entryBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
     const entry = await handoverRepo.createEntry(homeId, parsed.data, req.user.username);
     res.status(201).json(entry);
@@ -85,7 +85,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (homeId === null) return;
 
     const parsed = updateBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
     const entry = await handoverRepo.updateEntry(idParam.data, homeId, parsed.data);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });

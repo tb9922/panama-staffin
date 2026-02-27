@@ -28,7 +28,7 @@ const purgeSchema = z.object({
 router.delete('/purge', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const parsed = purgeSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const deleted = await auditService.purgeOlderThan(parsed.data.days);
     res.json({ deleted, days: parsed.data.days });
   } catch (err) {
