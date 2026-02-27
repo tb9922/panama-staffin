@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   ensureComplaintDefaults, getComplaintCategories, getComplaintStats, getSurveyStats,
   getComplaintStatus, COMPLAINT_STATUSES, RAISED_BY_TYPES, SURVEY_TYPES,
@@ -41,6 +43,8 @@ export default function ComplaintsTracker({ data, updateData }) {
   const [editingSurveyId, setEditingSurveyId] = useState(null);
   const [surveyForm, setSurveyForm] = useState({ ...EMPTY_SURVEY });
   const [viewMode, setViewMode] = useState('complaints');
+
+  useDirtyGuard(showModal || showSurveyModal);
 
   useEffect(() => {
     const updated = ensureComplaintDefaults(data);
@@ -328,10 +332,7 @@ export default function ComplaintsTracker({ data, updateData }) {
       )}
 
       {/* Complaint Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={() => setShowModal(false)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit Complaint' : 'Log Complaint'}</h2>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Complaint' : 'Log Complaint'} size="lg">
 
             {/* Tabs */}
             <div className="flex gap-1 mb-4 border-b border-gray-200 pb-2">
@@ -485,15 +486,10 @@ export default function ComplaintsTracker({ data, updateData }) {
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               <button onClick={handleSave} className={BTN.primary}>Save</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Survey Modal */}
-      {showSurveyModal && (
-        <div className={MODAL.overlay} onClick={() => setShowSurveyModal(false)}>
-          <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>{editingSurveyId ? 'Edit Survey' : 'Add Survey'}</h2>
+      <Modal isOpen={showSurveyModal} onClose={() => setShowSurveyModal(false)} title={editingSurveyId ? 'Edit Survey' : 'Add Survey'} size="md">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -560,9 +556,7 @@ export default function ComplaintsTracker({ data, updateData }) {
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
               <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   ensureDolsDefaults, getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
@@ -30,6 +32,8 @@ export default function DolsTracker({ data, updateData }) {
   const [viewMode, setViewMode] = useState('dols');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+
+  useDirtyGuard(showModal);
 
   useEffect(() => {
     const updated = ensureDolsDefaults(data);
@@ -383,10 +387,7 @@ export default function DolsTracker({ data, updateData }) {
       )}
 
       {/* ── DoLS/LPS Modal ────────────────────────────────────────────────── */}
-      {showModal && viewMode === 'dols' && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[90vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit DoLS/LPS' : 'New DoLS/LPS Application'}</h2>
+      <Modal isOpen={showModal && viewMode === 'dols'} onClose={() => setShowModal(false)} title={editingId ? 'Edit DoLS/LPS' : 'New DoLS/LPS Application'} size="lg">
 
             <div className="space-y-3">
               {/* Resident Info */}
@@ -503,15 +504,10 @@ export default function DolsTracker({ data, updateData }) {
                 {editingId ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ── MCA Modal ─────────────────────────────────────────────────────── */}
-      {showModal && viewMode === 'mca' && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={MODAL.panelLg}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit MCA Assessment' : 'New MCA Assessment'}</h2>
+      <Modal isOpen={showModal && viewMode === 'mca'} onClose={() => setShowModal(false)} title={editingId ? 'Edit MCA Assessment' : 'New MCA Assessment'} size="lg">
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -583,9 +579,7 @@ export default function DolsTracker({ data, updateData }) {
                 {editingId ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

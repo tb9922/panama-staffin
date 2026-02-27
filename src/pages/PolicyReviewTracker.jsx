@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, addDays, parseDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   ensurePolicyDefaults, getPolicyStatus, getPolicyStats, getPolicyAlerts,
   POLICY_STATUSES,
@@ -26,6 +28,8 @@ export default function PolicyReviewTracker({ data, updateData }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStatus, setFilterStatus] = useState('');
+
+  useDirtyGuard(showModal);
 
   useEffect(() => {
     const updated = ensurePolicyDefaults(data);
@@ -304,10 +308,7 @@ export default function PolicyReviewTracker({ data, updateData }) {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[90vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit Policy' : 'New Policy'}</h2>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Policy' : 'New Policy'} size="lg">
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -411,9 +412,7 @@ export default function PolicyReviewTracker({ data, updateData }) {
                 {editingId ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

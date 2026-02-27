@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS, ensureCqcDefaults,
   calculateComplianceScore, getDateRange, getEvidenceForStatement, getScoreBand,
@@ -39,6 +41,8 @@ export default function CQCEvidence({ data, updateData }) {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
   const [generating, setGenerating] = useState(false);
+
+  useDirtyGuard(showAddEvidence);
 
   // Ensure cqc_evidence exists in data
   useEffect(() => {
@@ -315,10 +319,7 @@ export default function CQCEvidence({ data, updateData }) {
       )}
 
       {/* Add Evidence Modal */}
-      {showAddEvidence && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowAddEvidence(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[85vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>Add Evidence Item</h2>
+      <Modal isOpen={showAddEvidence} onClose={() => setShowAddEvidence(false)} title="Add Evidence Item" size="lg">
 
             <div className="space-y-3">
               <div>
@@ -377,9 +378,7 @@ export default function CQCEvidence({ data, updateData }) {
                 disabled={!evidenceForm.quality_statement || !evidenceForm.title.trim()}
                 className={BTN.primary}>Save Evidence</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

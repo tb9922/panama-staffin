@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, addDays, parseDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   ensureMaintenanceDefaults, getMaintenanceCategories, getMaintenanceStats,
   getMaintenanceStatus, MAINTENANCE_STATUSES, FREQUENCY_OPTIONS, DEFAULT_MAINTENANCE_CATEGORIES,
@@ -20,6 +22,8 @@ export default function MaintenanceTracker({ data, updateData }) {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+
+  useDirtyGuard(showModal);
 
   useEffect(() => {
     const updated = ensureMaintenanceDefaults(data);
@@ -210,10 +214,7 @@ export default function MaintenanceTracker({ data, updateData }) {
       </div>
 
       {/* Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={() => setShowModal(false)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit Maintenance Check' : 'Add Maintenance Check'}</h2>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Maintenance Check' : 'Add Maintenance Check'} size="lg">
 
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -322,9 +323,7 @@ export default function MaintenanceTracker({ data, updateData }) {
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               <button onClick={handleSave} className={BTN.primary}>Save</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
