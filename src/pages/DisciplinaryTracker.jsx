@@ -8,6 +8,9 @@ import {
 } from '../lib/api.js';
 import {
   DISCIPLINARY_CATEGORIES, DISCIPLINARY_STATUSES, DISCIPLINARY_OUTCOMES,
+  DISCIPLINARY_SOURCES, INVESTIGATION_STATUSES, INVESTIGATION_RECOMMENDATIONS,
+  HEARING_STATUSES, APPEAL_STATUSES, APPEAL_OUTCOMES, OUTCOME_LETTER_METHODS,
+  CLOSED_REASONS, COMPANION_ROLES,
   getStatusBadge,
 } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -17,6 +20,7 @@ import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 const MODAL_TABS = [
   { id: 'details', label: 'Details' },
   { id: 'investigation', label: 'Investigation' },
+  { id: 'suspension', label: 'Suspension' },
   { id: 'hearing', label: 'Hearing' },
   { id: 'outcome', label: 'Outcome' },
   { id: 'appeal', label: 'Appeal' },
@@ -63,7 +67,7 @@ export default function DisciplinaryTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'misconduct', status: 'open' });
+    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'misconduct', status: 'open', source: 'other' });
     setModalTab('details');
     setCaseNotes([]);
     setNoteText('');
@@ -92,7 +96,7 @@ export default function DisciplinaryTracker() {
 
   async function handleSave() {
     setError(null);
-    if (!form.staff_id || !form.date_raised || !form.category) return;
+    if (!form.staff_id || !form.date_raised || !form.category || !form.raised_by?.trim()) return;
     try {
       if (editing?.id) {
         await updateHrDisciplinary(editing.id, form);
@@ -227,6 +231,7 @@ export default function DisciplinaryTracker() {
 
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'investigation' && renderInvestigationTab()}
+          {modalTab === 'suspension' && renderSuspensionTab()}
           {modalTab === 'hearing' && renderHearingTab()}
           {modalTab === 'outcome' && renderOutcomeTab()}
           {modalTab === 'appeal' && renderAppealTab()}
@@ -271,12 +276,14 @@ export default function DisciplinaryTracker() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={INPUT.label}>Raised By</label>
+            <label className={INPUT.label}>Raised By *</label>
             <input className={INPUT.base} value={form.raised_by || ''} onChange={e => f('raised_by', e.target.value)} />
           </div>
           <div>
             <label className={INPUT.label}>Source</label>
-            <input className={INPUT.base} value={form.source || ''} onChange={e => f('source', e.target.value)} placeholder="e.g. complaint, incident" />
+            <select className={INPUT.select} value={form.source || 'other'} onChange={e => f('source', e.target.value)}>
+              {DISCIPLINARY_SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
         </div>
       </div>
@@ -289,31 +296,50 @@ export default function DisciplinaryTracker() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Investigation Status</label>
-            <input className={INPUT.base} value={form.investigation_status || ''} onChange={e => f('investigation_status', e.target.value)} placeholder="e.g. pending, in_progress, complete" />
+            <select className={INPUT.select} value={form.investigation_status || 'not_started'} onChange={e => f('investigation_status', e.target.value)}>
+              {INVESTIGATION_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
           <div>
             <label className={INPUT.label}>Investigation Officer</label>
             <input className={INPUT.base} value={form.investigation_officer || ''} onChange={e => f('investigation_officer', e.target.value)} />
           </div>
         </div>
-        <div>
-          <label className={INPUT.label}>Investigation Start Date</label>
-          <input type="date" className={INPUT.base} value={form.investigation_start_date || ''} onChange={e => f('investigation_start_date', e.target.value)} />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Start Date</label>
+            <input type="date" className={INPUT.base} value={form.investigation_start_date || ''} onChange={e => f('investigation_start_date', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Completed Date</label>
+            <input type="date" className={INPUT.base} value={form.investigation_completed_date || ''} onChange={e => f('investigation_completed_date', e.target.value)} />
+          </div>
         </div>
         <div>
           <label className={INPUT.label}>Investigation Notes</label>
           <textarea className={INPUT.base} rows={3} value={form.investigation_notes || ''} onChange={e => f('investigation_notes', e.target.value)} />
         </div>
         <div>
+          <label className={INPUT.label}>Findings</label>
+          <textarea className={INPUT.base} rows={3} value={form.investigation_findings || ''} onChange={e => f('investigation_findings', e.target.value)} />
+        </div>
+        <div>
+          <label className={INPUT.label}>Recommendation</label>
+          <select className={INPUT.select} value={form.investigation_recommendation || ''} onChange={e => f('investigation_recommendation', e.target.value || null)}>
+            <option value="">Select...</option>
+            {INVESTIGATION_RECOMMENDATIONS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        </div>
+        <div>
           <label className={INPUT.label}>Witnesses (JSON)</label>
           <textarea className={INPUT.base + ' font-mono text-xs'} rows={3}
-            value={form.witnesses ? (typeof form.witnesses === 'string' ? form.witnesses : JSON.stringify(form.witnesses, null, 2)) : ''}
+            value={form.witnesses ? (typeof form.witnesses === 'string' ? form.witnesses : JSON.stringify(form.witnesses, null, 2)) : '[]'}
             onChange={e => f('witnesses', e.target.value)} placeholder='[{"name":"...","role":"..."}]' />
         </div>
         <div>
           <label className={INPUT.label}>Evidence Items (JSON)</label>
           <textarea className={INPUT.base + ' font-mono text-xs'} rows={3}
-            value={form.evidence_items ? (typeof form.evidence_items === 'string' ? form.evidence_items : JSON.stringify(form.evidence_items, null, 2)) : ''}
+            value={form.evidence_items ? (typeof form.evidence_items === 'string' ? form.evidence_items : JSON.stringify(form.evidence_items, null, 2)) : '[]'}
             onChange={e => f('evidence_items', e.target.value)} placeholder='[{"description":"...","type":"..."}]' />
         </div>
         <InvestigationMeetings caseType="disciplinary" caseId={editing?.id} />
@@ -322,9 +348,60 @@ export default function DisciplinaryTracker() {
     );
   }
 
+  function renderSuspensionTab() {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <input type="checkbox" checked={!!form.suspended} onChange={e => f('suspended', e.target.checked)} />
+          <label className="text-sm font-medium text-gray-700">Staff member suspended</label>
+        </div>
+        {form.suspended && (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={INPUT.label}>Suspension Date</label>
+                <input type="date" className={INPUT.base} value={form.suspension_date || ''} onChange={e => f('suspension_date', e.target.value)} />
+              </div>
+              <div>
+                <label className={INPUT.label}>Review Date</label>
+                <input type="date" className={INPUT.base} value={form.suspension_review_date || ''} onChange={e => f('suspension_review_date', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className={INPUT.label}>Suspension Reason</label>
+              <textarea className={INPUT.base} rows={2} value={form.suspension_reason || ''} onChange={e => f('suspension_reason', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={INPUT.label}>End Date</label>
+                <input type="date" className={INPUT.base} value={form.suspension_end_date || ''} onChange={e => f('suspension_end_date', e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input type="checkbox" checked={form.suspension_on_full_pay !== false} onChange={e => f('suspension_on_full_pay', e.target.checked)} />
+                <label className="text-sm text-gray-700">On Full Pay</label>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   function renderHearingTab() {
     return (
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Hearing Status</label>
+            <select className={INPUT.select} value={form.hearing_status || 'not_scheduled'} onChange={e => f('hearing_status', e.target.value)}>
+              {HEARING_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={INPUT.label}>Letter Sent Date</label>
+            <input type="date" className={INPUT.base} value={form.hearing_letter_sent_date || ''} onChange={e => f('hearing_letter_sent_date', e.target.value)} />
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Hearing Date</label>
@@ -337,17 +414,34 @@ export default function DisciplinaryTracker() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={INPUT.label}>Hearing Location</label>
+            <label className={INPUT.label}>Location</label>
             <input className={INPUT.base} value={form.hearing_location || ''} onChange={e => f('hearing_location', e.target.value)} />
           </div>
           <div>
-            <label className={INPUT.label}>Hearing Chair</label>
+            <label className={INPUT.label}>Chair</label>
             <input className={INPUT.base} value={form.hearing_chair || ''} onChange={e => f('hearing_chair', e.target.value)} />
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Companion Name</label>
+            <input className={INPUT.base} value={form.hearing_companion_name || ''} onChange={e => f('hearing_companion_name', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Companion Role</label>
+            <select className={INPUT.select} value={form.hearing_companion_role || ''} onChange={e => f('hearing_companion_role', e.target.value || null)}>
+              <option value="">Select...</option>
+              {COMPANION_ROLES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        </div>
         <div>
-          <label className={INPUT.label}>Companion Name</label>
-          <input className={INPUT.base} value={form.hearing_companion_name || ''} onChange={e => f('hearing_companion_name', e.target.value)} placeholder="Trade union rep or colleague" />
+          <label className={INPUT.label}>Hearing Notes</label>
+          <textarea className={INPUT.base} rows={3} value={form.hearing_notes || ''} onChange={e => f('hearing_notes', e.target.value)} />
+        </div>
+        <div>
+          <label className={INPUT.label}>Employee Response</label>
+          <textarea className={INPUT.base} rows={3} value={form.hearing_employee_response || ''} onChange={e => f('hearing_employee_response', e.target.value)} />
         </div>
       </div>
     );
@@ -359,7 +453,7 @@ export default function DisciplinaryTracker() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Outcome</label>
-            <select className={INPUT.select} value={form.outcome || ''} onChange={e => f('outcome', e.target.value)}>
+            <select className={INPUT.select} value={form.outcome || ''} onChange={e => f('outcome', e.target.value || null)}>
               <option value="">Select...</option>
               {DISCIPLINARY_OUTCOMES.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
@@ -370,13 +464,51 @@ export default function DisciplinaryTracker() {
           </div>
         </div>
         <div>
+          <label className={INPUT.label}>Outcome Reason</label>
+          <textarea className={INPUT.base} rows={3} value={form.outcome_reason || ''} onChange={e => f('outcome_reason', e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Letter Sent Date</label>
+            <input type="date" className={INPUT.base} value={form.outcome_letter_sent_date || ''} onChange={e => f('outcome_letter_sent_date', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Letter Method</label>
+            <select className={INPUT.select} value={form.outcome_letter_method || ''} onChange={e => f('outcome_letter_method', e.target.value || null)}>
+              <option value="">Select...</option>
+              {OUTCOME_LETTER_METHODS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
           <label className={INPUT.label}>Warning Expiry Date</label>
           <input type="date" className={INPUT.base} value={form.warning_expiry_date || ''} onChange={e => f('warning_expiry_date', e.target.value)} />
         </div>
-        <div>
-          <label className={INPUT.label}>Outcome Notes</label>
-          <textarea className={INPUT.base} rows={3} value={form.outcome_reason || ''} onChange={e => f('outcome_reason', e.target.value)} />
-        </div>
+        {(form.outcome === 'dismissal') && (
+          <div className="border-t border-gray-200 pt-4 space-y-4">
+            <h4 className="text-sm font-medium text-gray-700">Dismissal Details</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={INPUT.label}>Notice Period Start</label>
+                <input type="date" className={INPUT.base} value={form.notice_period_start || ''} onChange={e => f('notice_period_start', e.target.value)} />
+              </div>
+              <div>
+                <label className={INPUT.label}>Notice Period End</label>
+                <input type="date" className={INPUT.base} value={form.notice_period_end || ''} onChange={e => f('notice_period_end', e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={INPUT.label}>Dismissal Effective Date</label>
+                <input type="date" className={INPUT.base} value={form.dismissal_effective_date || ''} onChange={e => f('dismissal_effective_date', e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input type="checkbox" checked={!!form.pay_in_lieu_of_notice} onChange={e => f('pay_in_lieu_of_notice', e.target.checked)} />
+                <label className="text-sm text-gray-700">Pay in Lieu of Notice</label>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -386,21 +518,56 @@ export default function DisciplinaryTracker() {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={INPUT.label}>Appeal Date</label>
-            <input type="date" className={INPUT.base} value={form.appeal_date || ''} onChange={e => f('appeal_date', e.target.value)} />
+            <label className={INPUT.label}>Appeal Status</label>
+            <select className={INPUT.select} value={form.appeal_status || 'none'} onChange={e => f('appeal_status', e.target.value)}>
+              {APPEAL_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
           <div>
-            <label className={INPUT.label}>Appeal Outcome Date</label>
-            <input type="date" className={INPUT.base} value={form.appeal_outcome_date || ''} onChange={e => f('appeal_outcome_date', e.target.value)} />
+            <label className={INPUT.label}>Received Date</label>
+            <input type="date" className={INPUT.base} value={form.appeal_received_date || ''} onChange={e => f('appeal_received_date', e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Appeal Deadline</label>
+            <input type="date" className={INPUT.base} value={form.appeal_deadline || ''} onChange={e => f('appeal_deadline', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Appeal Hearing Date</label>
+            <input type="date" className={INPUT.base} value={form.appeal_hearing_date || ''} onChange={e => f('appeal_hearing_date', e.target.value)} />
           </div>
         </div>
         <div>
           <label className={INPUT.label}>Appeal Grounds</label>
           <textarea className={INPUT.base} rows={3} value={form.appeal_grounds || ''} onChange={e => f('appeal_grounds', e.target.value)} />
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Appeal Chair</label>
+            <input className={INPUT.base} value={form.appeal_hearing_chair || ''} onChange={e => f('appeal_hearing_chair', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Appeal Companion</label>
+            <input className={INPUT.base} value={form.appeal_hearing_companion_name || ''} onChange={e => f('appeal_hearing_companion_name', e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Appeal Outcome</label>
+            <select className={INPUT.select} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value || null)}>
+              <option value="">Select...</option>
+              {APPEAL_OUTCOMES.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={INPUT.label}>Outcome Date</label>
+            <input type="date" className={INPUT.base} value={form.appeal_outcome_date || ''} onChange={e => f('appeal_outcome_date', e.target.value)} />
+          </div>
+        </div>
         <div>
-          <label className={INPUT.label}>Appeal Outcome</label>
-          <input className={INPUT.base} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value)} placeholder="e.g. upheld, overturned, modified" />
+          <label className={INPUT.label}>Outcome Reason</label>
+          <textarea className={INPUT.base} rows={2} value={form.appeal_outcome_reason || ''} onChange={e => f('appeal_outcome_reason', e.target.value)} />
         </div>
       </div>
     );
@@ -415,7 +582,7 @@ export default function DisciplinaryTracker() {
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
               <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {n.created_by || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                {n.author || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
               </p>
             </div>
           ))}

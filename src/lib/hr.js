@@ -17,19 +17,84 @@ export const DISCIPLINARY_STATUSES = [
   { id: 'open', name: 'Open', badgeKey: 'blue' },
   { id: 'investigation', name: 'Investigation', badgeKey: 'amber' },
   { id: 'hearing_scheduled', name: 'Hearing Scheduled', badgeKey: 'orange' },
-  { id: 'decided', name: 'Decided', badgeKey: 'green' },
-  { id: 'appeal', name: 'Under Appeal', badgeKey: 'purple' },
+  { id: 'outcome_issued', name: 'Outcome Issued', badgeKey: 'green' },
+  { id: 'appeal_pending', name: 'Appeal Pending', badgeKey: 'purple' },
+  { id: 'appeal_complete', name: 'Appeal Complete', badgeKey: 'purple' },
   { id: 'closed', name: 'Closed', badgeKey: 'gray' },
   { id: 'withdrawn', name: 'Withdrawn', badgeKey: 'gray' },
 ];
 
 export const DISCIPLINARY_OUTCOMES = [
   { id: 'no_action', name: 'No Action' },
-  { id: 'informal_warning', name: 'Informal Warning' },
+  { id: 'verbal_warning', name: 'Verbal Warning' },
   { id: 'first_written', name: 'First Written Warning' },
   { id: 'final_written', name: 'Final Written Warning' },
   { id: 'dismissal', name: 'Dismissal' },
-  { id: 'summary_dismissal', name: 'Summary Dismissal' },
+  { id: 'demotion', name: 'Demotion' },
+  { id: 'transfer', name: 'Transfer' },
+];
+
+export const DISCIPLINARY_SOURCES = [
+  { id: 'incident', name: 'Incident' },
+  { id: 'complaint', name: 'Complaint' },
+  { id: 'observation', name: 'Observation' },
+  { id: 'whistleblowing', name: 'Whistleblowing' },
+  { id: 'other', name: 'Other' },
+];
+
+export const INVESTIGATION_STATUSES = [
+  { id: 'not_started', name: 'Not Started' },
+  { id: 'in_progress', name: 'In Progress' },
+  { id: 'complete', name: 'Complete' },
+];
+
+export const INVESTIGATION_RECOMMENDATIONS = [
+  { id: 'no_action', name: 'No Action' },
+  { id: 'informal_warning', name: 'Informal Warning' },
+  { id: 'formal_hearing', name: 'Formal Hearing' },
+  { id: 'refer_police', name: 'Refer to Police' },
+  { id: 'refer_safeguarding', name: 'Refer to Safeguarding' },
+];
+
+export const HEARING_STATUSES = [
+  { id: 'not_scheduled', name: 'Not Scheduled' },
+  { id: 'scheduled', name: 'Scheduled' },
+  { id: 'held', name: 'Held' },
+  { id: 'adjourned', name: 'Adjourned' },
+  { id: 'cancelled', name: 'Cancelled' },
+];
+
+export const APPEAL_STATUSES = [
+  { id: 'none', name: 'None' },
+  { id: 'requested', name: 'Requested' },
+  { id: 'scheduled', name: 'Scheduled' },
+  { id: 'held', name: 'Held' },
+  { id: 'decided', name: 'Decided' },
+];
+
+export const APPEAL_OUTCOMES = [
+  { id: 'upheld', name: 'Upheld' },
+  { id: 'partially_upheld', name: 'Partially Upheld' },
+  { id: 'overturned', name: 'Overturned' },
+];
+
+export const OUTCOME_LETTER_METHODS = [
+  { id: 'hand_delivered', name: 'Hand Delivered' },
+  { id: 'recorded_post', name: 'Recorded Post' },
+  { id: 'email', name: 'Email' },
+];
+
+export const CLOSED_REASONS = [
+  { id: 'resolved', name: 'Resolved' },
+  { id: 'warning_expired', name: 'Warning Expired' },
+  { id: 'appeal_overturned', name: 'Appeal Overturned' },
+  { id: 'employee_left', name: 'Employee Left' },
+  { id: 'withdrawn', name: 'Withdrawn' },
+];
+
+export const COMPANION_ROLES = [
+  { id: 'colleague', name: 'Colleague' },
+  { id: 'trade_union_rep', name: 'Trade Union Rep' },
 ];
 
 // ── Grievance ─────────────────────────────────────────────────────────────────

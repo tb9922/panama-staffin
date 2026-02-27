@@ -59,14 +59,19 @@ const caseTypeSchema = z.enum([
 
 // ── Disciplinary Schemas ────────────────────────────────────────────────────
 
+const jsonOrArray = z.preprocess(
+  v => { if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } } return v; },
+  z.array(z.any())
+);
+
 const disciplinaryBodySchema = z.object({
   staff_id:             staffIdSchema,
   date_raised:          dateSchema,
-  category:             z.enum(['misconduct','gross_misconduct']),
+  category:             z.enum(['misconduct','gross_misconduct','capability','attendance','conduct','other']),
   allegation_summary:   z.string().min(1).max(5000),
   allegation_detail:    z.string().max(10000).nullable().optional(),
-  raised_by:            z.string().max(200).optional(),
-  source:               z.string().max(50).optional(),
+  raised_by:            z.string().min(1).max(200),
+  source:               z.enum(['incident','complaint','observation','whistleblowing','other']).default('other'),
   source_ref:           z.string().max(200).nullable().optional(),
   status:               z.enum(['open','investigation','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
 });
@@ -74,7 +79,10 @@ const disciplinaryBodySchema = z.object({
 const disciplinaryUpdateSchema = z.object({
   // Core
   date_raised:          dateSchema.optional(),
-  category:             z.enum(['misconduct','gross_misconduct']).optional(),
+  raised_by:            z.string().max(200).optional(),
+  source:               z.enum(['incident','complaint','observation','whistleblowing','other']).optional(),
+  source_ref:           z.string().max(200).nullable().optional(),
+  category:             z.enum(['misconduct','gross_misconduct','capability','attendance','conduct','other']).optional(),
   allegation_summary:   z.string().min(1).max(5000).optional(),
   allegation_detail:    z.string().max(10000).nullable().optional(),
   // Investigation
@@ -82,11 +90,11 @@ const disciplinaryUpdateSchema = z.object({
   investigation_officer: z.string().max(200).nullable().optional(),
   investigation_start_date: dateSchema.nullable().optional(),
   investigation_notes:  z.string().max(5000).nullable().optional(),
-  witnesses:            z.array(z.any()).optional(),
-  evidence_items:       z.array(z.any()).optional(),
+  witnesses:            jsonOrArray.optional(),
+  evidence_items:       jsonOrArray.optional(),
   investigation_completed_date: dateSchema.nullable().optional(),
   investigation_findings: z.string().max(5000).nullable().optional(),
-  investigation_recommendation: z.string().max(5000).nullable().optional(),
+  investigation_recommendation: z.enum(['no_action','informal_warning','formal_hearing','refer_police','refer_safeguarding']).nullable().optional(),
   // Suspension
   suspended:            z.boolean().optional(),
   suspension_date:      dateSchema.nullable().optional(),
@@ -111,12 +119,12 @@ const disciplinaryUpdateSchema = z.object({
   outcome_reason:       z.string().max(5000).nullable().optional(),
   outcome_notes:        z.string().max(5000).nullable().optional(),  // Frontend alias → outcome_reason
   outcome_letter_sent_date: dateSchema.nullable().optional(),
-  outcome_letter_method: z.string().max(50).nullable().optional(),
+  outcome_letter_method: z.enum(['hand_delivered','recorded_post','email']).nullable().optional(),
   warning_expiry_date:  dateSchema.nullable().optional(),
   // Dismissal
   notice_period_start:  dateSchema.nullable().optional(),
   notice_period_end:    dateSchema.nullable().optional(),
-  pay_in_lieu_of_notice: z.number().nullable().optional(),
+  pay_in_lieu_of_notice: z.boolean().nullable().optional(),
   dismissal_effective_date: dateSchema.nullable().optional(),
   // Appeal
   appeal_status:        z.enum(['none','requested','scheduled','held','decided']).optional(),
@@ -127,7 +135,7 @@ const disciplinaryUpdateSchema = z.object({
   appeal_hearing_date:  dateSchema.nullable().optional(),
   appeal_hearing_chair: z.string().max(200).nullable().optional(),
   appeal_hearing_companion_name: z.string().max(200).nullable().optional(),
-  appeal_outcome:       z.string().max(100).nullable().optional(),
+  appeal_outcome:       z.enum(['upheld','partially_upheld','overturned']).nullable().optional(),
   appeal_outcome_date:  dateSchema.nullable().optional(),
   appeal_outcome_reason: z.string().max(5000).nullable().optional(),
   appeal_outcome_letter_sent_date: dateSchema.nullable().optional(),
@@ -137,7 +145,7 @@ const disciplinaryUpdateSchema = z.object({
   // Meta
   status:               z.enum(['open','investigation','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
   closed_date:          dateSchema.nullable().optional(),
-  closed_reason:        z.string().max(200).nullable().optional(),
+  closed_reason:        z.enum(['resolved','warning_expired','appeal_overturned','employee_left','withdrawn']).nullable().optional(),
 });
 
 // ── Grievance Schemas ───────────────────────────────────────────────────────
