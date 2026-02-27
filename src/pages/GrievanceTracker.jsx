@@ -119,7 +119,12 @@ export default function GrievanceTracker() {
 
   async function handleSave() {
     setError(null);
-    if (!form.staff_id || !form.date_raised || !form.category || !form.description?.trim()) return;
+    const missing = [];
+    if (!form.staff_id) missing.push('Staff Member');
+    if (!form.date_raised) missing.push('Date Raised');
+    if (!form.category) missing.push('Category');
+    if (!form.description?.trim()) missing.push('Description');
+    if (missing.length) { setError(`Required: ${missing.join(', ')}`); return; }
     try {
       if (editing?.id) {
         await updateHrGrievance(editing.id, form);
@@ -281,6 +286,7 @@ export default function GrievanceTracker() {
           {modalTab === 'actions' && renderActionsTab()}
           {modalTab === 'notes' && renderNotesTab()}
 
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">{error}</div>}
           <div className={MODAL.footer}>
             <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
             <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>

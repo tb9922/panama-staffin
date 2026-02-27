@@ -702,7 +702,7 @@ export async function getHrDisciplinaryById(homeSlug, id) {
   return apiFetch(`${API_BASE}/hr/cases/disciplinary/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function updateHrDisciplinary(id, data) {
-  return apiFetch(`${API_BASE}/hr/cases/disciplinary/${id}`, {
+  return apiFetch(`${API_BASE}/hr/cases/disciplinary/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -723,20 +723,20 @@ export async function getHrGrievanceById(homeSlug, id) {
   return apiFetch(`${API_BASE}/hr/cases/grievance/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function updateHrGrievance(id, data) {
-  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}`, {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
 export async function getGrievanceActions(id) {
-  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions?home=${h(getCurrentHome())}`, { headers: authHeaders() });
 }
 export async function createGrievanceAction(id, data) {
-  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions`, {
+  return apiFetch(`${API_BASE}/hr/cases/grievance/${id}/actions?home=${h(getCurrentHome())}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
 export async function updateGrievanceAction(id, data) {
-  return apiFetch(`${API_BASE}/hr/grievance-actions/${id}`, {
+  return apiFetch(`${API_BASE}/hr/grievance-actions/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -758,7 +758,7 @@ export async function getHrPerformanceById(homeSlug, id) {
   return apiFetch(`${API_BASE}/hr/cases/performance/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function updateHrPerformance(id, data) {
-  return apiFetch(`${API_BASE}/hr/cases/performance/${id}`, {
+  return apiFetch(`${API_BASE}/hr/cases/performance/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -783,7 +783,7 @@ export async function createHrRtwInterview(homeSlug, data) {
   });
 }
 export async function updateHrRtwInterview(id, data) {
-  return apiFetch(`${API_BASE}/hr/rtw-interviews/${id}`, {
+  return apiFetch(`${API_BASE}/hr/rtw-interviews/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -800,7 +800,7 @@ export async function createHrOhReferral(homeSlug, data) {
   });
 }
 export async function updateHrOhReferral(id, data) {
-  return apiFetch(`${API_BASE}/hr/oh-referrals/${id}`, {
+  return apiFetch(`${API_BASE}/hr/oh-referrals/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -818,7 +818,7 @@ export async function createHrContract(homeSlug, data) {
   });
 }
 export async function updateHrContract(id, data) {
-  return apiFetch(`${API_BASE}/hr/contracts/${id}`, {
+  return apiFetch(`${API_BASE}/hr/contracts/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -836,7 +836,7 @@ export async function createHrFamilyLeave(homeSlug, data) {
   });
 }
 export async function updateHrFamilyLeave(id, data) {
-  return apiFetch(`${API_BASE}/hr/family-leave/${id}`, {
+  return apiFetch(`${API_BASE}/hr/family-leave/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -854,7 +854,7 @@ export async function createHrFlexWorking(homeSlug, data) {
   });
 }
 export async function updateHrFlexWorking(id, data) {
-  return apiFetch(`${API_BASE}/hr/flexible-working/${id}`, {
+  return apiFetch(`${API_BASE}/hr/flexible-working/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -872,7 +872,7 @@ export async function createHrEdi(homeSlug, data) {
   });
 }
 export async function updateHrEdi(id, data) {
-  return apiFetch(`${API_BASE}/hr/edi/${id}`, {
+  return apiFetch(`${API_BASE}/hr/edi/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -887,7 +887,7 @@ export async function createHrTupe(homeSlug, data) {
   });
 }
 export async function updateHrTupe(id, data) {
-  return apiFetch(`${API_BASE}/hr/tupe/${id}`, {
+  return apiFetch(`${API_BASE}/hr/tupe/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -906,7 +906,7 @@ export async function createHrRenewal(homeSlug, data) {
   });
 }
 export async function updateHrRenewal(id, data) {
-  return apiFetch(`${API_BASE}/hr/renewals/${id}`, {
+  return apiFetch(`${API_BASE}/hr/renewals/${id}?home=${h(getCurrentHome())}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -919,7 +919,7 @@ export async function getHrStats(homeSlug) {
   return apiFetch(`${API_BASE}/hr/stats?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function getHrCaseNotes(caseType, caseId) {
-  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(getCurrentHome())}`, { headers: authHeaders() });
 }
 export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
   return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(homeSlug)}`, {
