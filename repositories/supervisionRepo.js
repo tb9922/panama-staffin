@@ -78,3 +78,24 @@ export async function sync(homeId, supervisionsObj, client) {
     [homeId, incomingIds]
   );
 }
+
+export async function upsertSession(homeId, staffId, record) {
+  const { rows } = await pool.query(
+    `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       date=$4, supervisor=$5, topics=$6, actions=$7, next_due=$8, notes=$9
+     RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes`,
+    [record.id, homeId, staffId, record.date, record.supervisor || null,
+     record.topics || null, record.actions || null, record.next_due || null, record.notes || null]
+  );
+  return shapeRow(rows[0]);
+}
+
+export async function softDeleteSession(homeId, id) {
+  const { rowCount } = await pool.query(
+    'UPDATE supervisions SET deleted_at=NOW() WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
+    [homeId, id]
+  );
+  return rowCount > 0;
+}

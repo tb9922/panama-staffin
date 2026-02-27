@@ -67,3 +67,40 @@ export async function sync(homeId, trainingObj, client) {
     }
   }
 }
+
+export async function upsertRecord(homeId, staffId, typeId, record) {
+  const { rows } = await pool.query(
+    `INSERT INTO training_records
+       (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
+        certificate_ref, level, notes, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+     ON CONFLICT (home_id, staff_id, training_type_id) DO UPDATE SET
+       completed = EXCLUDED.completed, expiry = EXCLUDED.expiry,
+       trainer = EXCLUDED.trainer, method = EXCLUDED.method,
+       certificate_ref = EXCLUDED.certificate_ref, level = EXCLUDED.level,
+       notes = EXCLUDED.notes, updated_at = NOW()
+     RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes`,
+    [homeId, staffId, typeId,
+     record.completed || null, record.expiry || null,
+     record.trainer || null, record.method || null,
+     record.certificate_ref || null, record.level || null,
+     record.notes || null]
+  );
+  const r = rows[0];
+  return {
+    completed: r.completed ? r.completed.toISOString().slice(0, 10) : null,
+    expiry:    r.expiry    ? r.expiry.toISOString().slice(0, 10)    : null,
+    trainer:   r.trainer   || undefined,
+    method:    r.method    || undefined,
+    certificate_ref: r.certificate_ref || undefined,
+    level:     r.level     || undefined,
+    notes:     r.notes     || undefined,
+  };
+}
+
+export async function removeRecord(homeId, staffId, typeId) {
+  await pool.query(
+    'DELETE FROM training_records WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3',
+    [homeId, staffId, typeId]
+  );
+}

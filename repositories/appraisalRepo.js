@@ -80,3 +80,27 @@ export async function sync(homeId, appraisalsObj, client) {
     [homeId, incomingIds]
   );
 }
+
+export async function upsertAppraisal(homeId, staffId, record) {
+  const { rows } = await pool.query(
+    `INSERT INTO appraisals
+       (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       date=$4, appraiser=$5, objectives=$6, training_needs=$7,
+       development_plan=$8, next_due=$9, notes=$10
+     RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes`,
+    [record.id, homeId, staffId, record.date, record.appraiser || null,
+     record.objectives || null, record.training_needs || null,
+     record.development_plan || null, record.next_due || null, record.notes || null]
+  );
+  return shapeRow(rows[0]);
+}
+
+export async function softDeleteAppraisal(homeId, id) {
+  const { rowCount } = await pool.query(
+    'UPDATE appraisals SET deleted_at=NOW() WHERE home_id=$1 AND id=$2 AND deleted_at IS NULL',
+    [homeId, id]
+  );
+  return rowCount > 0;
+}

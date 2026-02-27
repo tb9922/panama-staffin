@@ -1146,3 +1146,123 @@ export async function processPaymentSchedule(homeSlug, id) {
     method: 'POST', headers: authHeaders(),
   });
 }
+
+// ─── Training ─────────────────────────────────────────────────────────────────
+
+export async function getTrainingData(homeSlug) {
+  return apiFetch(`${API_BASE}/training?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function upsertTrainingRecord(homeSlug, staffId, typeId, data) {
+  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteTrainingRecord(homeSlug, staffId, typeId) {
+  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function updateTrainingTypes(homeSlug, trainingTypes) {
+  return apiFetch(`${API_BASE}/training/config/types?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ trainingTypes }),
+  });
+}
+
+export async function createSupervision(homeSlug, data) {
+  return apiFetch(`${API_BASE}/training/supervisions?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateSupervision(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/training/supervisions/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteSupervision(homeSlug, id) {
+  return apiFetch(`${API_BASE}/training/supervisions/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function createAppraisal(homeSlug, data) {
+  return apiFetch(`${API_BASE}/training/appraisals?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateAppraisal(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/training/appraisals/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAppraisal(homeSlug, id) {
+  return apiFetch(`${API_BASE}/training/appraisals/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function createFireDrill(homeSlug, data) {
+  return apiFetch(`${API_BASE}/training/fire-drills?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateFireDrill(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/training/fire-drills/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteFireDrill(homeSlug, id) {
+  return apiFetch(`${API_BASE}/training/fire-drills/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ─── Care Certificate ─────────────────────────────────────────────────────────
+
+export async function getCareCertData(homeSlug) {
+  return apiFetch(`${API_BASE}/care-cert?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function startCareCert(homeSlug, data) {
+  return apiFetch(`${API_BASE}/care-cert?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateCareCert(homeSlug, staffId, data) {
+  return apiFetch(`${API_BASE}/care-cert/${encodeURIComponent(staffId)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCareCert(homeSlug, staffId) {
+  return apiFetch(`${API_BASE}/care-cert/${encodeURIComponent(staffId)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+
+export async function getOnboardingData(homeSlug) {
+  return apiFetch(`${API_BASE}/onboarding?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function upsertOnboardingSection(homeSlug, staffId, section, data) {
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function clearOnboardingSection(homeSlug, staffId, section) {
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}

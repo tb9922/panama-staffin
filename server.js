@@ -32,6 +32,9 @@ import policiesRouter from './routes/policies.js';
 import whistleblowingRouter from './routes/whistleblowing.js';
 import dolsRouter from './routes/dols.js';
 import cqcEvidenceRouter from './routes/cqcEvidence.js';
+import trainingRouter from './routes/training.js';
+import careCertRouter from './routes/careCert.js';
+import onboardingRouter from './routes/onboarding.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 
@@ -81,6 +84,9 @@ app.use('/api/policies', policiesRouter);
 app.use('/api/whistleblowing', whistleblowingRouter);
 app.use('/api/dols', dolsRouter);
 app.use('/api/cqc-evidence', cqcEvidenceRouter);
+app.use('/api/training', trainingRouter);
+app.use('/api/care-cert', careCertRouter);
+app.use('/api/onboarding', onboardingRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

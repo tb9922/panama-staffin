@@ -1,12 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatDate } from '../lib/rotation.js';
 import {
   CARE_CERTIFICATE_STANDARDS, CC_CATEGORIES, CC_STATUSES, CC_STANDARD_STATUSES,
   TOTAL_STANDARDS, CC_COMPLETION_WEEKS,
-  ensureCareCertDefaults, getCareCertStatus, getCareCertStats,
+  getCareCertStatus, getCareCertStats,
 } from '../lib/careCertificate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
+import { getCurrentHome, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
 
 const STATUS_BADGE_MAP = {
   not_started: BADGE.gray,
@@ -22,32 +23,48 @@ const STD_BADGE_MAP = {
   failed: BADGE.red,
 };
 
-export default function CareCertificateTracker({ data, updateData }) {
+export default function CareCertificateTracker() {
+  const homeSlug = getCurrentHome();
+  const [state, setState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const [selectedStaffId, setSelectedStaffId] = useState(null);
   const [showStartModal, setShowStartModal] = useState(false);
   const [startForm, setStartForm] = useState({ staffId: '', start_date: '', supervisor: '' });
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
-  // Track which standard is expanded in the detail modal
   const [expandedStd, setExpandedStd] = useState(null);
-  // Editable supervisor in detail modal
   const [editSupervisor, setEditSupervisor] = useState('');
 
-  // Ensure defaults on first load
-  useEffect(() => {
-    const updated = ensureCareCertDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  // Pending standard updates buffered locally before save
+  const [pendingUpdates, setPendingUpdates] = useState(null);
 
   const today = new Date();
   const todayStr = formatDate(today);
-  const activeStaff = useMemo(() => (data.staff || []).filter(s => s.active !== false), [data.staff]);
-  const careCertData = data.care_certificate || {};
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getCareCertData(homeSlug);
+      setState(data);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [homeSlug]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
+  const careCertData = useMemo(() => state?.careCert || {}, [state]);
 
   const stats = useMemo(() => getCareCertStats(careCertData, activeStaff, today), [careCertData, activeStaff]);
 
-  // Staff who have CC records
   const trackedStaff = useMemo(() => {
     let list = activeStaff.filter(s => careCertData[s.id]);
     if (filterStatus !== 'all') {
@@ -63,12 +80,11 @@ export default function CareCertificateTracker({ data, updateData }) {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, careCertData, filterStatus, search]);
 
-  // Staff eligible to start CC (active, no existing CC record)
   const eligibleStaff = useMemo(() => {
     return activeStaff.filter(s => !careCertData[s.id]).sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, careCertData]);
 
-  // ── Start New CC ──────────────────────────────────────────────────────
+  // ── Start New CC ─────────────────────────────────────────────────────────
 
   function openStartModal() {
     setStartForm({
@@ -79,62 +95,55 @@ export default function CareCertificateTracker({ data, updateData }) {
     setShowStartModal(true);
   }
 
-  function handleStartSave() {
+  async function handleStartSave() {
     if (!startForm.staffId || !startForm.start_date) return;
-    const cc = JSON.parse(JSON.stringify(data.care_certificate || {}));
-    // Calculate expected completion: start + 12 weeks (84 days)
-    const startDate = new Date(startForm.start_date + 'T00:00:00');
-    startDate.setDate(startDate.getDate() + CC_COMPLETION_WEEKS * 7);
-    const expectedCompletion = formatDate(startDate);
-
-    // Build empty standards
-    const standards = {};
-    for (const std of CARE_CERTIFICATE_STANDARDS) {
-      standards[std.id] = { status: 'not_started', completion_date: null, assessor: '', notes: '' };
+    setSaving(true);
+    try {
+      await startCareCert(homeSlug, {
+        staffId: startForm.staffId,
+        start_date: startForm.start_date,
+        supervisor: startForm.supervisor,
+      });
+      await load();
+      setShowStartModal(false);
+    } catch (e) {
+      alert('Failed to start Care Certificate: ' + e.message);
+    } finally {
+      setSaving(false);
     }
-
-    cc[startForm.staffId] = {
-      start_date: startForm.start_date,
-      expected_completion: expectedCompletion,
-      supervisor: startForm.supervisor,
-      status: 'in_progress',
-      completion_date: null,
-      standards,
-    };
-    updateData({ ...data, care_certificate: cc });
-    setShowStartModal(false);
   }
 
-  // ── Detail Modal ──────────────────────────────────────────────────────
+  // ── Detail Modal ─────────────────────────────────────────────────────────
 
   function openDetailModal(staffId) {
     setSelectedStaffId(staffId);
     setExpandedStd(null);
     setEditSupervisor(careCertData[staffId]?.supervisor || '');
+    // Clone record for local edits without immediate save
+    setPendingUpdates(JSON.parse(JSON.stringify(careCertData[staffId] || {})));
     setShowModal(true);
   }
 
   function getSelectedRecord() {
     if (!selectedStaffId) return null;
-    return careCertData[selectedStaffId] || null;
+    return pendingUpdates || careCertData[selectedStaffId] || null;
   }
 
   function handleStandardUpdate(stdId, field, value) {
-    const cc = JSON.parse(JSON.stringify(data.care_certificate || {}));
-    if (!cc[selectedStaffId]) return;
-    if (!cc[selectedStaffId].standards) cc[selectedStaffId].standards = {};
-    if (!cc[selectedStaffId].standards[stdId]) {
-      cc[selectedStaffId].standards[stdId] = { status: 'not_started', completion_date: null, assessor: '', notes: '' };
+    const updated = JSON.parse(JSON.stringify(pendingUpdates || careCertData[selectedStaffId] || {}));
+    if (!updated.standards) updated.standards = {};
+    if (!updated.standards[stdId]) {
+      updated.standards[stdId] = { status: 'not_started', completion_date: null, assessor: '', notes: '' };
     }
-    cc[selectedStaffId].standards[stdId][field] = value;
+    updated.standards[stdId][field] = value;
 
-    // If status changed to passed and no completion_date, set today
-    if (field === 'status' && value === 'passed' && !cc[selectedStaffId].standards[stdId].completion_date) {
-      cc[selectedStaffId].standards[stdId].completion_date = todayStr;
+    // Auto-set completion date when passed
+    if (field === 'status' && value === 'passed' && !updated.standards[stdId].completion_date) {
+      updated.standards[stdId].completion_date = todayStr;
     }
 
-    // Auto-calculate overall status
-    const standards = cc[selectedStaffId].standards;
+    // Recalculate overall status
+    const standards = updated.standards;
     let passedCount = 0;
     let hasInProgress = false;
     for (const std of CARE_CERTIFICATE_STANDARDS) {
@@ -143,36 +152,66 @@ export default function CareCertificateTracker({ data, updateData }) {
       if (s?.status === 'in_progress') hasInProgress = true;
     }
     if (passedCount === TOTAL_STANDARDS) {
-      cc[selectedStaffId].status = 'completed';
-      if (!cc[selectedStaffId].completion_date) cc[selectedStaffId].completion_date = todayStr;
+      updated.status = 'completed';
+      if (!updated.completion_date) updated.completion_date = todayStr;
     } else if (passedCount > 0 || hasInProgress) {
-      cc[selectedStaffId].status = 'in_progress';
-      cc[selectedStaffId].completion_date = null;
+      updated.status = 'in_progress';
+      updated.completion_date = null;
     } else {
-      cc[selectedStaffId].status = 'not_started';
-      cc[selectedStaffId].completion_date = null;
+      updated.status = 'not_started';
+      updated.completion_date = null;
     }
 
-    updateData({ ...data, care_certificate: cc });
+    setPendingUpdates(updated);
   }
 
-  function handleSaveSupervisor() {
-    const cc = JSON.parse(JSON.stringify(data.care_certificate || {}));
-    if (!cc[selectedStaffId]) return;
-    cc[selectedStaffId].supervisor = editSupervisor;
-    updateData({ ...data, care_certificate: cc });
+  async function handleSaveChanges() {
+    if (!selectedStaffId || !pendingUpdates) return;
+    setSaving(true);
+    try {
+      await updateCareCert(homeSlug, selectedStaffId, pendingUpdates);
+      await load();
+      setShowModal(false);
+      setPendingUpdates(null);
+    } catch (e) {
+      alert('Failed to save changes: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleRemoveStaff() {
+  async function handleSaveSupervisor() {
+    if (!selectedStaffId) return;
+    setSaving(true);
+    try {
+      await updateCareCert(homeSlug, selectedStaffId, { supervisor: editSupervisor });
+      await load();
+      // Keep modal open, update pending state
+      if (pendingUpdates) setPendingUpdates({ ...pendingUpdates, supervisor: editSupervisor });
+    } catch (e) {
+      alert('Failed to save supervisor: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemoveStaff() {
     if (!confirm('Remove this staff member from Care Certificate tracking? All progress will be lost.')) return;
-    const cc = JSON.parse(JSON.stringify(data.care_certificate || {}));
-    delete cc[selectedStaffId];
-    updateData({ ...data, care_certificate: cc });
-    setShowModal(false);
-    setSelectedStaffId(null);
+    setSaving(true);
+    try {
+      await deleteCareCert(homeSlug, selectedStaffId);
+      await load();
+      setShowModal(false);
+      setSelectedStaffId(null);
+      setPendingUpdates(null);
+    } catch (e) {
+      alert('Failed to remove: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  // ── Excel Export ──────────────────────────────────────────────────────
+  // ── Excel Export ──────────────────────────────────────────────────────────
 
   function handleExport() {
     const stdHeaders = CARE_CERTIFICATE_STANDARDS.map(s => s.name);
@@ -199,7 +238,7 @@ export default function CareCertificateTracker({ data, updateData }) {
     downloadXLSX('care_certificate', [{ name: 'Care Certificate', headers, rows }]);
   }
 
-  // ── Progress Bar Component ────────────────────────────────────────────
+  // ── Progress Bar ─────────────────────────────────────────────────────────
 
   function ProgressBar({ completed, total }) {
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -214,11 +253,14 @@ export default function CareCertificateTracker({ data, updateData }) {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const selectedRecord = getSelectedRecord();
   const selectedStaff = selectedStaffId ? activeStaff.find(s => s.id === selectedStaffId) : null;
-  const selectedResult = selectedStaffId ? getCareCertStatus(selectedStaffId, careCertData, selectedRecord?.start_date, today) : null;
+  const selectedResult = selectedStaffId ? getCareCertStatus(selectedStaffId, { ...careCertData, [selectedStaffId]: selectedRecord }, selectedRecord?.start_date, today) : null;
 
   return (
     <div className={PAGE.container}>
@@ -229,7 +271,7 @@ export default function CareCertificateTracker({ data, updateData }) {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
-          <button onClick={openStartModal} className={BTN.primary}>Start New</button>
+          <button onClick={openStartModal} className={BTN.primary} disabled={eligibleStaff.length === 0}>Start New</button>
         </div>
       </div>
 
@@ -327,7 +369,6 @@ export default function CareCertificateTracker({ data, updateData }) {
         <div className={MODAL.overlay} onClick={() => setShowStartModal(false)}>
           <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
             <h2 className={MODAL.title}>Start Care Certificate</h2>
-
             <div className="space-y-4">
               <div>
                 <label className={INPUT.label}>Staff Member</label>
@@ -357,10 +398,12 @@ export default function CareCertificateTracker({ data, updateData }) {
                 </div>
               )}
             </div>
-
             <div className={MODAL.footer}>
               <button onClick={() => setShowStartModal(false)} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleStartSave} className={BTN.primary} disabled={!startForm.staffId || !startForm.start_date}>Start</button>
+              <button onClick={handleStartSave} className={BTN.primary}
+                disabled={!startForm.staffId || !startForm.start_date || saving}>
+                {saving ? 'Starting...' : 'Start'}
+              </button>
             </div>
           </div>
         </div>
@@ -368,7 +411,7 @@ export default function CareCertificateTracker({ data, updateData }) {
 
       {/* ── Detail Modal ────────────────────────────────────────────────── */}
       {showModal && selectedStaffId && selectedRecord && (
-        <div className={MODAL.overlay} onClick={() => setShowModal(false)}>
+        <div className={MODAL.overlay} onClick={() => { setShowModal(false); setPendingUpdates(null); }}>
           <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
@@ -407,8 +450,8 @@ export default function CareCertificateTracker({ data, updateData }) {
             <div className="flex items-center gap-2 mb-4">
               <label className="text-xs text-gray-500">Supervisor:</label>
               <input type="text" value={editSupervisor} onChange={e => setEditSupervisor(e.target.value)} className={`${INPUT.sm} w-48`} placeholder="Assessor name" />
-              {editSupervisor !== selectedRecord.supervisor && (
-                <button onClick={handleSaveSupervisor} className={`${BTN.primary} ${BTN.xs}`}>Save</button>
+              {editSupervisor !== (careCertData[selectedStaffId]?.supervisor || '') && (
+                <button onClick={handleSaveSupervisor} disabled={saving} className={`${BTN.primary} ${BTN.xs}`}>Save</button>
               )}
             </div>
 
@@ -418,7 +461,7 @@ export default function CareCertificateTracker({ data, updateData }) {
             </div>
 
             {/* Standards List */}
-            <div className="space-y-1">
+            <div className="space-y-1 max-h-[50vh] overflow-y-auto">
               <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Standards</div>
               {CARE_CERTIFICATE_STANDARDS.map(std => {
                 const stdRec = selectedRecord.standards?.[std.id] || { status: 'not_started', completion_date: null, assessor: '', notes: '' };
@@ -428,7 +471,6 @@ export default function CareCertificateTracker({ data, updateData }) {
                 const cat = CC_CATEGORIES.find(c => c.id === std.category);
                 return (
                   <div key={std.id} className="border border-gray-100 rounded-lg overflow-hidden">
-                    {/* Standard header row */}
                     <button
                       onClick={() => setExpandedStd(isExpanded ? null : std.id)}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors text-left"
@@ -444,8 +486,6 @@ export default function CareCertificateTracker({ data, updateData }) {
                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                       </div>
                     </button>
-
-                    {/* Expanded edit area */}
                     {isExpanded && (
                       <div className="px-3 py-3 bg-gray-50 border-t border-gray-100 space-y-3">
                         <div className="grid grid-cols-2 gap-3">
@@ -501,8 +541,13 @@ export default function CareCertificateTracker({ data, updateData }) {
 
             {/* Footer */}
             <div className="flex justify-between mt-6 pt-4 border-t border-gray-100">
-              <button onClick={handleRemoveStaff} className={`${BTN.danger} ${BTN.sm}`}>Remove from Tracking</button>
-              <button onClick={() => setShowModal(false)} className={BTN.secondary}>Close</button>
+              <button onClick={handleRemoveStaff} disabled={saving} className={`${BTN.danger} ${BTN.sm}`}>Remove from Tracking</button>
+              <div className="flex gap-2">
+                <button onClick={() => { setShowModal(false); setPendingUpdates(null); }} className={BTN.secondary}>Cancel</button>
+                <button onClick={handleSaveChanges} disabled={saving} className={BTN.primary}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

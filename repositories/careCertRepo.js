@@ -60,3 +60,29 @@ export async function sync(homeId, certObj, client) {
     await conn.query(`DELETE FROM care_certificates WHERE home_id = $1`, [homeId]);
   }
 }
+
+export async function upsertStaff(homeId, staffId, record) {
+  const { rows } = await pool.query(
+    `INSERT INTO care_certificates
+       (home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (home_id, staff_id) DO UPDATE SET
+       start_date=$3, expected_completion=$4, supervisor=$5,
+       status=$6, completion_date=$7, standards=$8
+     RETURNING *`,
+    [homeId, staffId,
+     record.start_date || null, record.expected_completion || null,
+     record.supervisor || null, record.status || null,
+     record.completion_date || null, JSON.stringify(record.standards || {})]
+  );
+  const { data } = shapeRow(rows[0]);
+  return data;
+}
+
+export async function removeStaff(homeId, staffId) {
+  const { rowCount } = await pool.query(
+    'DELETE FROM care_certificates WHERE home_id=$1 AND staff_id=$2',
+    [homeId, staffId]
+  );
+  return rowCount > 0;
+}

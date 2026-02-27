@@ -76,3 +76,31 @@ export async function sync(homeId, drillsArr, client) {
     await conn.query('DELETE FROM fire_drills WHERE home_id = $1', [homeId]);
   }
 }
+
+export async function upsertDrill(homeId, record) {
+  const { rows } = await pool.query(
+    `INSERT INTO fire_drills
+       (id, home_id, date, time, scenario, evacuation_time_seconds, staff_present,
+        residents_evacuated, issues, corrective_actions, conducted_by, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       date=$3, time=$4, scenario=$5, evacuation_time_seconds=$6, staff_present=$7,
+       residents_evacuated=$8, issues=$9, corrective_actions=$10,
+       conducted_by=$11, notes=$12
+     RETURNING *`,
+    [record.id, homeId, record.date, record.time || null, record.scenario || null,
+     record.evacuation_time_seconds || null,
+     JSON.stringify(record.staff_present || []),
+     record.residents_evacuated || null, record.issues || null,
+     record.corrective_actions || null, record.conducted_by || null, record.notes || null]
+  );
+  return shapeRow(rows[0]);
+}
+
+export async function removeDrill(homeId, id) {
+  const { rowCount } = await pool.query(
+    'DELETE FROM fire_drills WHERE home_id=$1 AND id=$2',
+    [homeId, id]
+  );
+  return rowCount > 0;
+}

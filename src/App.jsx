@@ -731,8 +731,8 @@ export default function App() {
           <Route path="/scenarios" element={<ScenarioModel data={data} />} />
           <Route path="/fatigue" element={<FatigueTracker data={data} />} />
           <Route path="/sick-trends" element={<SickTrends data={data} />} />
-          <Route path="/training" element={<TrainingMatrix data={data} updateData={safeUpdateData} />} />
-          <Route path="/onboarding" element={<OnboardingTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/training" element={<TrainingMatrix />} />
+          <Route path="/onboarding" element={<OnboardingTracker />} />
           <Route path="/cqc" element={<CQCEvidence data={data} />} />
           <Route path="/incidents" element={<IncidentTracker />} />
           <Route path="/complaints" element={<ComplaintsTracker />} />
@@ -742,7 +742,7 @@ export default function App() {
           <Route path="/policies" element={<PolicyReviewTracker />} />
           <Route path="/speak-up" element={<WhistleblowingTracker />} />
           <Route path="/dols" element={<DolsTracker />} />
-          <Route path="/care-cert" element={<CareCertificateTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/care-cert" element={<CareCertificateTracker />} />
           <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/payroll/rates"      element={<PayRatesConfig data={data} updateData={safeUpdateData} user={user} />} />
           <Route path="/payroll/timesheets" element={<TimesheetManager data={data} user={user} />} />

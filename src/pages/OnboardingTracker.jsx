@@ -1,19 +1,26 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatDate } from '../lib/rotation.js';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
-  ensureOnboardingDefaults, buildOnboardingMatrix, getOnboardingStats,
+  buildOnboardingMatrix, getOnboardingStats,
   getStaffOnboardingProgress,
   DBS_DISCLOSURE_LEVELS, DBS_STATUSES, ADULT_FIRST_STATUSES,
   CONTRACT_TYPES, ID_TYPES, ADDRESS_PROOF_TYPES, DOC_TYPES,
   DAY1_ITEMS, POLICY_ITEMS, DBS_RISK_DECISIONS,
 } from '../lib/onboarding.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import { getCurrentHome, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
-export default function OnboardingTracker({ data, updateData }) {
+export default function OnboardingTracker() {
+  const homeSlug = getCurrentHome();
+  const [state, setState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   const [search, setSearch] = useState('');
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -22,25 +29,28 @@ export default function OnboardingTracker({ data, updateData }) {
   const [modalSection, setModalSection] = useState(null);
   const [modalStaffId, setModalStaffId] = useState(null);
   const [modalForm, setModalForm] = useState({});
-  const initRef = useRef(false);
 
-  // Ensure defaults
-  useEffect(() => {
-    if (initRef.current) return;
-    const updated = ensureOnboardingDefaults(data);
-    if (updated) {
-      initRef.current = true;
-      updateData(updated);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getOnboardingData(homeSlug);
+      setState(data);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-  }, [data]);
+  }, [homeSlug]);
 
-  const activeStaff = useMemo(() => data.staff.filter(s => s.active !== false), [data.staff]);
-  const onboardingData = data.onboarding || {};
+  useEffect(() => { load(); }, [load]);
+
+  const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
+  const onboardingData = useMemo(() => state?.onboarding || {}, [state]);
 
   const matrix = useMemo(() => buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, onboardingData), [activeStaff, onboardingData]);
   const stats = useMemo(() => getOnboardingStats(matrix), [matrix]);
 
-  // Filtered staff
   const filteredStaff = useMemo(() => {
     let list = activeStaff;
     if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
@@ -49,20 +59,13 @@ export default function OnboardingTracker({ data, updateData }) {
       list = list.filter(s => s.name.toLowerCase().includes(q));
     }
     if (filterStatus === 'incomplete') {
-      list = list.filter(s => {
-        const p = getStaffOnboardingProgress(s.id, onboardingData);
-        return !p.isComplete;
-      });
+      list = list.filter(s => !getStaffOnboardingProgress(s.id, onboardingData).isComplete);
     } else if (filterStatus === 'complete') {
-      list = list.filter(s => {
-        const p = getStaffOnboardingProgress(s.id, onboardingData);
-        return p.isComplete;
-      });
+      list = list.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete);
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, filterTeam, search, filterStatus, onboardingData]);
 
-  // Count fully onboarded
   const fullyOnboarded = useMemo(() => {
     return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete).length;
   }, [activeStaff, onboardingData]);
@@ -89,7 +92,8 @@ export default function OnboardingTracker({ data, updateData }) {
     return count;
   }, [activeStaff, onboardingData]);
 
-  // Open modal for a section
+  // ── Modal ─────────────────────────────────────────────────────────────────
+
   function openModal(staffId, sectionId) {
     const existing = onboardingData?.[staffId]?.[sectionId] || {};
     setModalStaffId(staffId);
@@ -98,28 +102,40 @@ export default function OnboardingTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  // Save modal data
-  function handleSave() {
-    const newOnboarding = JSON.parse(JSON.stringify(onboardingData));
-    if (!newOnboarding[modalStaffId]) newOnboarding[modalStaffId] = {};
-    newOnboarding[modalStaffId][modalSection] = { ...modalForm };
-    updateData({ ...data, onboarding: newOnboarding });
-    setShowModal(false);
+  function setField(field, value) {
+    setModalForm(prev => ({ ...prev, [field]: value }));
   }
 
-  // Clear a section record
-  function handleClear() {
-    if (!confirm('Remove this onboarding record?')) return;
-    const newOnboarding = JSON.parse(JSON.stringify(onboardingData));
-    if (newOnboarding[modalStaffId]) {
-      delete newOnboarding[modalStaffId][modalSection];
-      if (Object.keys(newOnboarding[modalStaffId]).length === 0) delete newOnboarding[modalStaffId];
+  async function handleSave() {
+    if (!modalStaffId || !modalSection) return;
+    setSaving(true);
+    try {
+      await upsertOnboardingSection(homeSlug, modalStaffId, modalSection, modalForm);
+      await load();
+      setShowModal(false);
+    } catch (e) {
+      alert('Failed to save: ' + e.message);
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, onboarding: newOnboarding });
-    setShowModal(false);
   }
 
-  // Excel export
+  async function handleClear() {
+    if (!confirm('Remove this onboarding record?')) return;
+    setSaving(true);
+    try {
+      await clearOnboardingSection(homeSlug, modalStaffId, modalSection);
+      await load();
+      setShowModal(false);
+    } catch (e) {
+      alert('Failed to remove: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Excel Export ──────────────────────────────────────────────────────────
+
   function handleExport() {
     const headers = ['Name', 'Team', 'Role', 'Start Date', ...ONBOARDING_SECTIONS.map(s => s.name), 'Progress'];
     const rows = filteredStaff.map(s => {
@@ -137,12 +153,8 @@ export default function OnboardingTracker({ data, updateData }) {
     downloadXLSX('onboarding_tracker', [{ name: 'Onboarding', headers, rows }]);
   }
 
-  // Update helper for form
-  function setField(field, value) {
-    setModalForm(prev => ({ ...prev, [field]: value }));
-  }
+  // ── Modal Field Rendering ─────────────────────────────────────────────────
 
-  // Render section-specific modal content
   function renderModalFields() {
     if (!modalSection) return null;
 
@@ -208,8 +220,6 @@ export default function OnboardingTracker({ data, updateData }) {
               <label className={INPUT.label}>Verified By</label>
               <input type="text" value={modalForm.verified_by || ''} onChange={e => setField('verified_by', e.target.value)} className={INPUT.base} placeholder="Manager name" />
             </div>
-
-            {/* Risk assessment — required when DBS has content (CQC de facto requirement) */}
             {modalForm.full_dbs_status === 'content' && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-3">
                 <p className="text-xs font-semibold text-amber-800">DBS has content — risk assessment required (CQC FAQ)</p>
@@ -240,8 +250,6 @@ export default function OnboardingTracker({ data, updateData }) {
                 </div>
               </div>
             )}
-
-            {/* Overseas criminal record check (Skills for Care — staff living abroad 6+ months in last 5 years) */}
             <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-2">
               <p className="text-xs font-semibold text-gray-600">Overseas Criminal Record Check</p>
               <div className="flex items-center gap-2">
@@ -273,8 +281,6 @@ export default function OnboardingTracker({ data, updateData }) {
                 </div>
               )}
             </div>
-
-            {/* Criminal record self-declaration (Skills for Care best practice) */}
             <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-2">
               <p className="text-xs font-semibold text-gray-600">Criminal Record Self-Declaration</p>
               <p className="text-[10px] text-gray-400">Pre-DBS self-declaration at shortlisting — care roles are exempt from Rehabilitation of Offenders Act 1974</p>
@@ -348,99 +354,55 @@ export default function OnboardingTracker({ data, updateData }) {
               <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-600">Reference {i + 1}</span>
-                  <button onClick={() => {
-                    const arr = [...refEntries];
-                    arr.splice(i, 1);
-                    setField('entries', arr);
-                  }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  <button onClick={() => { const arr = [...refEntries]; arr.splice(i, 1); setField('entries', arr); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Referee Name</label>
-                    <input type="text" value={ref.referee_name || ''} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], referee_name: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="text" value={ref.referee_name || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], referee_name: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Organisation</label>
-                    <input type="text" value={ref.organisation || ''} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], organisation: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="text" value={ref.organisation || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], organisation: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Role / Relationship</label>
-                    <input type="text" value={ref.relationship || ''} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], relationship: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="text" value={ref.relationship || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], relationship: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Dates Covered</label>
-                    <input type="text" value={ref.dates_covered || ''} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], dates_covered: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} placeholder="e.g. 2022-2024" />
+                    <input type="text" value={ref.dates_covered || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], dates_covered: e.target.value }; setField('entries', arr); }} className={INPUT.base} placeholder="e.g. 2022-2024" />
                   </div>
                 </div>
                 <div>
                   <label className={INPUT.label}>Reason for Leaving (Schedule 3 para 5)</label>
-                  <input type="text" value={ref.reason_for_leaving || ''} onChange={e => {
-                    const arr = [...refEntries];
-                    arr[i] = { ...arr[i], reason_for_leaving: e.target.value };
-                    setField('entries', arr);
-                  }} className={INPUT.base} placeholder="Required where staff previously worked with vulnerable adults / children" />
+                  <input type="text" value={ref.reason_for_leaving || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], reason_for_leaving: e.target.value }; setField('entries', arr); }} className={INPUT.base} placeholder="Required where staff previously worked with vulnerable adults / children" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Received Date</label>
-                    <input type="date" value={ref.received_date || ''} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], received_date: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="date" value={ref.received_date || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], received_date: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                   <div className="flex items-center gap-2 pt-5">
-                    <input type="checkbox" checked={ref.satisfactory || false} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], satisfactory: e.target.checked };
-                      setField('entries', arr);
-                    }} id={`ref-sat-${i}`} />
+                    <input type="checkbox" checked={ref.satisfactory || false} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], satisfactory: e.target.checked }; setField('entries', arr); }} id={`ref-sat-${i}`} />
                     <label htmlFor={`ref-sat-${i}`} className="text-sm text-gray-700">Satisfactory</label>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={ref.is_health_social_care || false} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], is_health_social_care: e.target.checked };
-                      setField('entries', arr);
-                    }} id={`ref-hsc-${i}`} />
+                    <input type="checkbox" checked={ref.is_health_social_care || false} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], is_health_social_care: e.target.checked }; setField('entries', arr); }} id={`ref-hsc-${i}`} />
                     <label htmlFor={`ref-hsc-${i}`} className="text-sm text-gray-700">Health / Social Care employer</label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={ref.is_most_recent_hsc || false} onChange={e => {
-                      const arr = [...refEntries];
-                      arr[i] = { ...arr[i], is_most_recent_hsc: e.target.checked };
-                      setField('entries', arr);
-                    }} id={`ref-recent-${i}`} />
+                    <input type="checkbox" checked={ref.is_most_recent_hsc || false} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], is_most_recent_hsc: e.target.checked }; setField('entries', arr); }} id={`ref-recent-${i}`} />
                     <label htmlFor={`ref-recent-${i}`} className="text-sm text-gray-700">Most recent H&SC employer</label>
                   </div>
                 </div>
                 <div>
                   <label className={INPUT.label}>Verified By</label>
-                  <input type="text" value={ref.verified_by || ''} onChange={e => {
-                    const arr = [...refEntries];
-                    arr[i] = { ...arr[i], verified_by: e.target.value };
-                    setField('entries', arr);
-                  }} className={INPUT.base} />
+                  <input type="text" value={ref.verified_by || ''} onChange={e => { const arr = [...refEntries]; arr[i] = { ...arr[i], verified_by: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                 </div>
               </div>
             ))}
@@ -534,7 +496,8 @@ export default function OnboardingTracker({ data, updateData }) {
           </div>
         );
 
-      case 'qualifications':
+      case 'qualifications': {
+        const qualEntries = modalForm.entries || [];
         return (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -552,67 +515,44 @@ export default function OnboardingTracker({ data, updateData }) {
               <label htmlFor="cc_prev" className="text-sm text-gray-700">Care Certificate from Previous Employer</label>
             </div>
             <p className="text-xs text-gray-500 font-medium">Qualifications</p>
-            {(modalForm.entries || []).map((q, i) => (
+            {qualEntries.map((q, i) => (
               <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-600">Qualification {i + 1}</span>
-                  <button onClick={() => {
-                    const entries = [...(modalForm.entries || [])];
-                    entries.splice(i, 1);
-                    setField('entries', entries);
-                  }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  <button onClick={() => { const entries = [...qualEntries]; entries.splice(i, 1); setField('entries', entries); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Qualification Name</label>
-                    <input type="text" value={q.name || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], name: e.target.value };
-                      setField('entries', entries);
-                    }} className={INPUT.base} placeholder="e.g. NVQ Level 3" />
+                    <input type="text" value={q.name || ''} onChange={e => { const e2 = [...qualEntries]; e2[i] = { ...e2[i], name: e.target.value }; setField('entries', e2); }} className={INPUT.base} placeholder="e.g. NVQ Level 3" />
                   </div>
                   <div>
                     <label className={INPUT.label}>Level</label>
-                    <input type="text" value={q.level || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], level: e.target.value };
-                      setField('entries', entries);
-                    }} className={INPUT.base} placeholder="e.g. 3" />
+                    <input type="text" value={q.level || ''} onChange={e => { const e2 = [...qualEntries]; e2[i] = { ...e2[i], level: e.target.value }; setField('entries', e2); }} className={INPUT.base} placeholder="e.g. 3" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Awarding Body</label>
-                    <input type="text" value={q.awarding_body || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], awarding_body: e.target.value };
-                      setField('entries', entries);
-                    }} className={INPUT.base} />
+                    <input type="text" value={q.awarding_body || ''} onChange={e => { const e2 = [...qualEntries]; e2[i] = { ...e2[i], awarding_body: e.target.value }; setField('entries', e2); }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Date Achieved</label>
-                    <input type="date" value={q.date_achieved || ''} onChange={e => {
-                      const entries = [...(modalForm.entries || [])];
-                      entries[i] = { ...entries[i], date_achieved: e.target.value };
-                      setField('entries', entries);
-                    }} className={INPUT.base} />
+                    <input type="date" value={q.date_achieved || ''} onChange={e => { const e2 = [...qualEntries]; e2[i] = { ...e2[i], date_achieved: e.target.value }; setField('entries', e2); }} className={INPUT.base} />
                   </div>
                 </div>
                 <div>
                   <label className={INPUT.label}>Certificate Number</label>
-                  <input type="text" value={q.certificate_number || ''} onChange={e => {
-                    const entries = [...(modalForm.entries || [])];
-                    entries[i] = { ...entries[i], certificate_number: e.target.value };
-                    setField('entries', entries);
-                  }} className={INPUT.base} />
+                  <input type="text" value={q.certificate_number || ''} onChange={e => { const e2 = [...qualEntries]; e2[i] = { ...e2[i], certificate_number: e.target.value }; setField('entries', e2); }} className={INPUT.base} />
                 </div>
               </div>
             ))}
-            <button onClick={() => setField('entries', [...(modalForm.entries || []), {}])} className={`${BTN.secondary} ${BTN.sm}`}>
+            <button onClick={() => setField('entries', [...qualEntries, {}])} className={`${BTN.secondary} ${BTN.sm}`}>
               + Add Qualification
             </button>
           </div>
         );
+      }
 
       case 'contract':
         return (
@@ -672,7 +612,6 @@ export default function OnboardingTracker({ data, updateData }) {
         const empEntries = modalForm.entries || [];
         const gapExplanations = modalForm.gap_explanations || {};
 
-        // Detect gaps >28 days between sorted dated entries
         const sortedEntries = [...empEntries]
           .filter(e => e.start_date && e.end_date)
           .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
@@ -699,71 +638,39 @@ export default function OnboardingTracker({ data, updateData }) {
               <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-600">Employment {i + 1}</span>
-                  <button onClick={() => {
-                    const arr = [...empEntries];
-                    arr.splice(i, 1);
-                    setField('entries', arr);
-                  }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  <button onClick={() => { const arr = [...empEntries]; arr.splice(i, 1); setField('entries', arr); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Employer Name</label>
-                    <input type="text" value={entry.employer_name || ''} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], employer_name: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="text" value={entry.employer_name || ''} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], employer_name: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Job Title / Role</label>
-                    <input type="text" value={entry.role || ''} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], role: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="text" value={entry.role || ''} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], role: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={INPUT.label}>Start Date</label>
-                    <input type="date" value={entry.start_date || ''} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], start_date: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="date" value={entry.start_date || ''} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], start_date: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                   <div>
                     <label className={INPUT.label}>End Date (blank if current)</label>
-                    <input type="date" value={entry.end_date || ''} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], end_date: e.target.value };
-                      setField('entries', arr);
-                    }} className={INPUT.base} />
+                    <input type="date" value={entry.end_date || ''} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], end_date: e.target.value }; setField('entries', arr); }} className={INPUT.base} />
                   </div>
                 </div>
                 <div>
                   <label className={INPUT.label}>Reason for Leaving</label>
-                  <input type="text" value={entry.reason_for_leaving || ''} onChange={e => {
-                    const arr = [...empEntries];
-                    arr[i] = { ...arr[i], reason_for_leaving: e.target.value };
-                    setField('entries', arr);
-                  }} className={INPUT.base} placeholder="e.g. End of contract, relocated, career change" />
+                  <input type="text" value={entry.reason_for_leaving || ''} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], reason_for_leaving: e.target.value }; setField('entries', arr); }} className={INPUT.base} placeholder="e.g. End of contract, relocated, career change" />
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={entry.is_health_social_care || false} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], is_health_social_care: e.target.checked };
-                      setField('entries', arr);
-                    }} id={`emp-hsc-${i}`} />
+                    <input type="checkbox" checked={entry.is_health_social_care || false} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], is_health_social_care: e.target.checked }; setField('entries', arr); }} id={`emp-hsc-${i}`} />
                     <label htmlFor={`emp-hsc-${i}`} className="text-sm text-gray-700">Health / Social Care</label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={entry.reference_obtained || false} onChange={e => {
-                      const arr = [...empEntries];
-                      arr[i] = { ...arr[i], reference_obtained: e.target.checked };
-                      setField('entries', arr);
-                    }} id={`emp-ref-${i}`} />
+                    <input type="checkbox" checked={entry.reference_obtained || false} onChange={e => { const arr = [...empEntries]; arr[i] = { ...arr[i], reference_obtained: e.target.checked }; setField('entries', arr); }} id={`emp-ref-${i}`} />
                     <label htmlFor={`emp-ref-${i}`} className="text-sm text-gray-700">Reference obtained</label>
                   </div>
                 </div>
@@ -772,7 +679,6 @@ export default function OnboardingTracker({ data, updateData }) {
             <button onClick={() => setField('entries', [...empEntries, {}])} className={`${BTN.secondary} ${BTN.sm}`}>
               + Add Employment
             </button>
-
             {detectedGaps.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-amber-700">Gaps detected — written explanation required (Schedule 3 para 7)</p>
@@ -844,6 +750,11 @@ export default function OnboardingTracker({ data, updateData }) {
         return null;
     }
   }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';
   const staffName = activeStaff.find(s => s.id === modalStaffId)?.name || '';
@@ -1006,10 +917,12 @@ export default function OnboardingTracker({ data, updateData }) {
             </div>
             <div className={MODAL.footer}>
               {onboardingData?.[modalStaffId]?.[modalSection] && (
-                <button onClick={handleClear} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
+                <button onClick={handleClear} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary}>Save</button>
+              <button onClick={handleSave} disabled={saving} className={BTN.primary}>
+                {saving ? 'Saving...' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
