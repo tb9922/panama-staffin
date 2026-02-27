@@ -1059,11 +1059,11 @@ function shapeNote(row) {
   };
 }
 
-export async function findCaseNotes(caseType, caseId, client) {
+export async function findCaseNotes(homeId, caseType, caseId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_case_notes WHERE case_type = $1 AND case_id = $2 ORDER BY created_at DESC',
-    [caseType, caseId]
+    'SELECT * FROM hr_case_notes WHERE home_id = $1 AND case_type = $2 AND case_id = $3 ORDER BY created_at DESC',
+    [homeId, caseType, caseId]
   );
   return rows.map(shapeNote);
 }

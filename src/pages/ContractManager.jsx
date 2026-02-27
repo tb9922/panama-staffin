@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrContracts, createHrContract, updateHrContract } from '../lib/api.js';
 import { CONTRACT_TYPES, CONTRACT_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -18,6 +19,7 @@ export default function ContractManager() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  useDirtyGuard(showModal);
 
   // Filters
   const [filterStaff, setFilterStaff] = useState('');

@@ -1105,14 +1105,16 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res, next) => {
 
 // ── Case Notes ──────────────────────────────────────────────────────────────
 
-// GET /api/hr/case-notes/:caseType/:caseId
+// GET /api/hr/case-notes/:caseType/:caseId?home=X
 router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const caseTypeP = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseIdP = idSchema.safeParse(req.params.caseId);
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    res.json(await hrService.findCaseNotes(caseTypeP.data, caseIdP.data));
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    res.json(await hrService.findCaseNotes(home.id, caseTypeP.data, caseIdP.data));
   } catch (err) { next(err); }
 });
 

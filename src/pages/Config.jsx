@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function Config({ data, updateData }) {
   const [config, setConfig] = useState(JSON.parse(JSON.stringify(data.config)));
@@ -9,16 +10,7 @@ export default function Config({ data, updateData }) {
   const [dirty, setDirty] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
 
-  // Warn on navigation if unsaved
-  useEffect(() => {
-    if (!dirty) return;
-    const handleBeforeUnload = (e) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [dirty]);
+  useDirtyGuard(dirty);
 
   function handleChange(path, value) {
     const keys = path.split('.');

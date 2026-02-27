@@ -276,7 +276,7 @@ export async function updateRenewal(id, homeId, data) { return hrRepo.updateRene
 
 // ── Passthrough CRUD — Case Notes ───────────────────────────────────────────
 
-export async function findCaseNotes(caseType, caseId) { return hrRepo.findCaseNotes(caseType, caseId); }
+export async function findCaseNotes(homeId, caseType, caseId) { return hrRepo.findCaseNotes(homeId, caseType, caseId); }
 export async function createCaseNote(homeId, caseType, caseId, data) { return hrRepo.createCaseNote(homeId, caseType, caseId, data); }
 
 // ── Passthrough — Cross-cutting ─────────────────────────────────────────────

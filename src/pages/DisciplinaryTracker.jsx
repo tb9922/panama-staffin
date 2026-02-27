@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
@@ -33,6 +35,7 @@ export default function DisciplinaryTracker() {
   const [noteText, setNoteText] = useState('');
   const [filterStaff, setFilterStaff] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  useDirtyGuard(showModal);
   const home = getCurrentHome();
 
   const load = useCallback(async () => {
@@ -208,10 +211,7 @@ export default function DisciplinaryTracker() {
 
   function renderModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && closeModal()}>
-        <div className={MODAL.panelXl}>
-          <h3 className={MODAL.title}>{editing ? 'Edit Disciplinary Case' : 'New Disciplinary Case'}</h3>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Disciplinary Case' : 'New Disciplinary Case'} size="xl">
           {/* Modal tabs */}
           <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
             {MODAL_TABS.map(t => {
@@ -236,8 +236,7 @@ export default function DisciplinaryTracker() {
             <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
             <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
           </div>
-        </div>
-      </div>
+      </Modal>
     );
   }
 

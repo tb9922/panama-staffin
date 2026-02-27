@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getHrGrievance, createHrGrievance, updateHrGrievance,
   getGrievanceActions, createGrievanceAction, updateGrievanceAction,
@@ -48,6 +49,7 @@ export default function GrievanceTracker() {
   const [actionForm, setActionForm] = useState({});
   const [showActionForm, setShowActionForm] = useState(false);
   const [filterStaff, setFilterStaff] = useState('');
+  useDirtyGuard(showModal);
   const [filterStatus, setFilterStatus] = useState('');
   const home = getCurrentHome();
 

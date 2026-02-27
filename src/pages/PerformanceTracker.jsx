@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
 import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -26,6 +27,7 @@ export default function PerformanceTracker() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [modalTab, setModalTab] = useState(0);
+  useDirtyGuard(showModal);
 
   // Filters
   const [filterStaff, setFilterStaff] = useState('');

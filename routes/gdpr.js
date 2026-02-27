@@ -142,7 +142,7 @@ router.post('/requests/:id/gather', requireAuth, requireAdmin, async (req, res, 
     const home = await resolveHome(req, res);
     if (!home) return;
     const request = await gdprService.findRequestById(idP.data);
-    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request || request.home_id !== home.id) return res.status(404).json({ error: 'Request not found' });
     const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, home.id, null, request.subject_name);
     await auditService.log('sar_gather', home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
@@ -158,7 +158,7 @@ router.post('/requests/:id/execute', requireAuth, requireAdmin, async (req, res,
     const home = await resolveHome(req, res);
     if (!home) return;
     const request = await gdprService.findRequestById(idP.data);
-    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request || request.home_id !== home.id) return res.status(404).json({ error: 'Request not found' });
     if (request.request_type !== 'erasure') {
       return res.status(400).json({ error: 'Only erasure requests can be executed' });
     }
@@ -214,16 +214,16 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, async (req, res, 
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
+    const home = await resolveHome(req, res);
+    if (!home) return;
     const breach = await gdprService.findBreachById(idP.data);
-    if (!breach) return res.status(404).json({ error: 'Breach not found' });
+    if (!breach || breach.home_id !== home.id) return res.status(404).json({ error: 'Breach not found' });
     const assessment = gdprService.assessBreachRisk(breach);
     // Auto-update breach with assessment results + ICO notification deadline
     const updates = { ico_notifiable: assessment.icoNotifiable };
     if (assessment.icoNotifiable && assessment.icoDeadline) {
       updates.ico_notification_deadline = assessment.icoDeadline;
     }
-    const home = await resolveHome(req, res);
-    if (!home) return;
     await gdprService.updateBreach(idP.data, home.id, updates);
     res.json(assessment);
   } catch (err) { next(err); }

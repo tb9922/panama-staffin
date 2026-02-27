@@ -22,6 +22,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
       hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
       hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
+      onboarding, careCertificates, complaints,
     ] = await Promise.all([
       conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -85,6 +86,15 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
          WHERE cn.home_id = $1 AND cn.author = (
            SELECT name FROM staff WHERE home_id = $1 AND id = $2
          )`, [homeId, subjectId]),
+      // Onboarding data (DBS, RTW, references, etc.)
+      conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // Care Certificate progress
+      conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      // Complaints where staff is the complainant (name-based match)
+      conn.query(
+        `SELECT * FROM complaints WHERE home_id = $1 AND deleted_at IS NULL AND raised_by_name = (
+           SELECT name FROM staff WHERE home_id = $1 AND id = $2
+         )`, [homeId, subjectId]),
     ]);
 
     return {
@@ -121,6 +131,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hr_tupe_transfers: hrTupe.rows,
         hr_rtw_dbs_renewals: hrRenewals.rows,
         hr_case_notes: hrCaseNotes.rows,
+        onboarding: onboarding.rows,
+        care_certificates: careCertificates.rows,
+        complaints: complaints.rows,
       },
     };
   }
@@ -299,6 +312,26 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       await client.query(
         `UPDATE hr_case_notes SET author = $1, content = '[REDACTED]'
          WHERE home_id = $2 AND author = $3`,
+        [anon, homeId, originalName]
+      );
+    }
+
+    // Remove onboarding data (pre-employment checks — not needed after erasure)
+    await client.query(
+      `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    // Clear care certificate progress (supervisor name and assessment notes)
+    await client.query(
+      `UPDATE care_certificates SET supervisor = $1, standards = '{}'::jsonb
+       WHERE home_id = $2 AND staff_id = $3`,
+      [anon, homeId, staffId]
+    );
+    // Anonymise complaints where this staff member was the complainant
+    if (originalName) {
+      await client.query(
+        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
+         WHERE home_id = $2 AND raised_by_name = $3 AND deleted_at IS NULL`,
         [anon, homeId, originalName]
       );
     }

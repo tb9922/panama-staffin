@@ -38,11 +38,11 @@ export async function findByHome(homeId) {
   return rows.map(shapeRun);
 }
 
-export async function findById(runId, client) {
+export async function findById(runId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM payroll_runs WHERE id = $1`,
-    [runId],
+    `SELECT * FROM payroll_runs WHERE id = $1 AND home_id = $2`,
+    [runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }
@@ -83,15 +83,15 @@ export async function updateStatus(runId, homeId, status, extra, client) {
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }
 
-export async function updateTotals(runId, totals, client) {
+export async function updateTotals(runId, homeId, totals, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE payroll_runs
      SET total_gross = $1, total_enhancements = $2, total_sleep_ins = $3,
          staff_count = $4, calculated_at = NOW(), status = 'calculated', updated_at = NOW()
-     WHERE id = $5
+     WHERE id = $5 AND home_id = $6
      RETURNING *`,
-    [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId],
+    [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
@@ -33,6 +34,7 @@ export default function StaffRegister({ data, updateData }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newStaff, setNewStaff] = useState({ ...EMPTY_STAFF });
   const [search, setSearch] = useState('');
+  useDirtyGuard(!!editing || showAdd);
 
   const staff = useMemo(() => {
     let list = [...data.staff];

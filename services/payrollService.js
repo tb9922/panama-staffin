@@ -99,7 +99,7 @@ export async function seedDefaultRulesIfNeeded(homeId, client) {
  */
 export async function calculateRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, client);
+    const run = await payrollRunRepo.findById(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (!['draft', 'calculated'].includes(run.status)) {
       throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
@@ -364,7 +364,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       totalSleepIns     += acc.sleep_in_pay;
     }
 
-    await payrollRunRepo.updateTotals(runId, {
+    await payrollRunRepo.updateTotals(runId, homeId, {
       total_gross:        round2(totalGross),
       total_enhancements: round2(totalEnhancements),
       total_sleep_ins:    round2(totalSleepIns),
@@ -383,7 +383,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
  */
 export async function approveRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, client);
+    const run = await payrollRunRepo.findById(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'calculated') {
       throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
@@ -459,7 +459,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
  */
 export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, client);
+    const run = await payrollRunRepo.findById(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (!['approved', 'exported', 'locked'].includes(run.status)) {
       throw new ValidationError('Payroll run must be approved before exporting');
@@ -549,7 +549,7 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
  * Returns array of payslip objects (one per staff).
  */
 export async function assemblePayslipData(runId, homeId, staffId) {
-  const run   = await payrollRunRepo.findById(runId);
+  const run   = await payrollRunRepo.findById(runId, homeId);
   if (!run) throw new NotFoundError('Payroll run not found');
 
   const home  = await homeRepo.findById(homeId);

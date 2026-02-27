@@ -318,8 +318,8 @@ router.get('/runs/:runId', requireAuth, async (req, res, next) => {
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     const home = await resolveHome(req, res);
     if (!home) return;
-    const run   = await payrollRunRepo.findById(runIdP.data);
-    if (!run || run.home_id !== home.id) return res.status(404).json({ error: 'Run not found' });
+    const run   = await payrollRunRepo.findById(runIdP.data, home.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
     const lines = await payrollRunRepo.findLinesByRun(runIdP.data);
     res.json({ run, lines });
   } catch (err) { next(err); }
@@ -333,7 +333,7 @@ router.post('/runs/:runId/calculate', requireAuth, requireAdmin, async (req, res
     const home = await resolveHome(req, res);
     if (!home) return;
     await payrollService.calculateRun(runIdP.data, home.id, home.slug, req.user.username);
-    const run   = await payrollRunRepo.findById(runIdP.data);
+    const run   = await payrollRunRepo.findById(runIdP.data, home.id);
     const lines = await payrollRunRepo.findLinesByRun(runIdP.data);
     res.json({ run, lines });
   } catch (err) { next(err); }
@@ -347,7 +347,7 @@ router.post('/runs/:runId/approve', requireAuth, requireAdmin, async (req, res, 
     const home = await resolveHome(req, res);
     if (!home) return;
     await payrollService.approveRun(runIdP.data, home.id, home.slug, req.user.username);
-    const run = await payrollRunRepo.findById(runIdP.data);
+    const run = await payrollRunRepo.findById(runIdP.data, home.id);
     res.json(run);
   } catch (err) { next(err); }
 });
@@ -690,8 +690,8 @@ router.get('/runs/:runId/summary-pdf', requireAuth, requireAdmin, async (req, re
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     const home = await resolveHome(req, res);
     if (!home) return;
-    const run = await payrollRunRepo.findById(runIdP.data);
-    if (!run || run.home_id !== home.id) return res.status(404).json({ error: 'Run not found' });
+    const run = await payrollRunRepo.findById(runIdP.data, home.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
     if (!['approved', 'exported', 'locked'].includes(run.status)) {
       return res.status(400).json({ error: 'Summary PDF only available for approved runs' });
     }

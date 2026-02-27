@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import ModalWrapper from '../components/Modal.jsx';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -38,6 +40,7 @@ export default function IncidentTracker({ data, updateData }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
+  useDirtyGuard(showModal);
   const [filterType, setFilterType] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -318,11 +321,7 @@ export default function IncidentTracker({ data, updateData }) {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[90vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit Incident' : 'New Incident'}</h2>
-
+      <ModalWrapper isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Incident' : 'New Incident'} size="xl">
             {/* Tabs */}
             <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
               {TABS.map(tab => (
@@ -720,9 +719,7 @@ export default function IncidentTracker({ data, updateData }) {
                 {editingId ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </ModalWrapper>
     </div>
   );
 }
