@@ -713,3 +713,138 @@ export async function updateHrMeeting(id, data) {
     body: JSON.stringify(data),
   });
 }
+
+// ── Finance ──────────────────────────────────────────────────────────────────
+
+// Residents
+export async function getFinanceResidents(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.funding_type) params.set('funding_type', filters.funding_type);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/finance/residents?${params}`, { headers: authHeaders() });
+}
+export async function createFinanceResident(homeSlug, data) {
+  return apiFetch(`${API_BASE}/finance/residents?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getFinanceResident(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/residents/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateFinanceResident(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/finance/residents/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getFinanceFeeHistory(homeSlug, residentId) {
+  return apiFetch(`${API_BASE}/finance/residents/${residentId}/fee-history?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// Invoices
+export async function getFinanceInvoices(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.payer_type) params.set('payer_type', filters.payer_type);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/finance/invoices?${params}`, { headers: authHeaders() });
+}
+export async function createFinanceInvoice(homeSlug, data) {
+  return apiFetch(`${API_BASE}/finance/invoices?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getFinanceInvoice(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/invoices/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateFinanceInvoice(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/finance/invoices/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function recordFinancePayment(homeSlug, invoiceId, data) {
+  return apiFetch(`${API_BASE}/finance/invoices/${invoiceId}/payment?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Expenses
+export async function getFinanceExpenses(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.category) params.set('category', filters.category);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/finance/expenses?${params}`, { headers: authHeaders() });
+}
+export async function createFinanceExpense(homeSlug, data) {
+  return apiFetch(`${API_BASE}/finance/expenses?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getFinanceExpense(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/expenses/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function updateFinanceExpense(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/finance/expenses/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function approveFinanceExpense(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/expenses/${id}/approve?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(),
+  });
+}
+
+// Dashboard & Alerts
+export async function getFinanceDashboard(homeSlug, from, to) {
+  return apiFetch(`${API_BASE}/finance/dashboard?home=${h(homeSlug)}&from=${from}&to=${to}`, { headers: authHeaders() });
+}
+export async function getFinanceAlerts(homeSlug) {
+  return apiFetch(`${API_BASE}/finance/alerts?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// Chase log
+export async function getInvoiceChases(homeSlug, invoiceId) {
+  return apiFetch(`${API_BASE}/finance/invoices/${invoiceId}/chases?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createInvoiceChase(homeSlug, invoiceId, data) {
+  return apiFetch(`${API_BASE}/finance/invoices/${invoiceId}/chases?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+// Receivables detail
+export async function getReceivablesDetail(homeSlug) {
+  return apiFetch(`${API_BASE}/finance/receivables?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+// Payment schedules
+export async function getPaymentSchedules(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.on_hold !== undefined) params.set('on_hold', filters.on_hold);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/finance/payment-schedules?${params}`, { headers: authHeaders() });
+}
+export async function createPaymentSchedule(homeSlug, data) {
+  return apiFetch(`${API_BASE}/finance/payment-schedules?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updatePaymentSchedule(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/finance/payment-schedules/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function processPaymentSchedule(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/payment-schedules/${id}/process?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}

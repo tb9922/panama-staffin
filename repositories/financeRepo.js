@@ -1,0 +1,659 @@
+import { pool } from '../db.js';
+
+function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
+function ts(v) { return v instanceof Date ? v.toISOString() : v; }
+const f = v => v != null ? parseFloat(v) : null;
+
+// ── Finance Residents ─────────────────────────────────────────────────────────
+
+function shapeResident(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id,
+    resident_name: row.resident_name, room_number: row.room_number,
+    admission_date: d(row.admission_date), discharge_date: d(row.discharge_date),
+    care_type: row.care_type, funding_type: row.funding_type,
+    funding_authority: row.funding_authority, funding_reference: row.funding_reference,
+    weekly_fee: f(row.weekly_fee),
+    la_contribution: f(row.la_contribution), chc_contribution: f(row.chc_contribution),
+    fnc_amount: f(row.fnc_amount),
+    top_up_amount: f(row.top_up_amount), top_up_payer: row.top_up_payer, top_up_contact: row.top_up_contact,
+    last_fee_review: d(row.last_fee_review), next_fee_review: d(row.next_fee_review),
+    status: row.status, notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+  };
+}
+
+export async function findResidents(homeId, { status, fundingType, limit = 100, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_residents WHERE home_id = $1 AND deleted_at IS NULL';
+  const params = [homeId];
+  if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  if (fundingType) { params.push(fundingType); sql += ` AND funding_type = $${params.length}`; }
+  sql += ' ORDER BY room_number ASC, resident_name ASC';
+  params.push(Math.min(limit, 500)); sql += ` LIMIT $${params.length}`;
+  params.push(offset); sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total) : 0;
+  return { rows: rows.map(shapeResident), total };
+}
+
+export async function findResidentById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+  return shapeResident(rows[0]);
+}
+
+export async function createResident(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_residents
+       (home_id, resident_name, room_number, admission_date, discharge_date, care_type,
+        funding_type, funding_authority, funding_reference,
+        weekly_fee, la_contribution, chc_contribution, fnc_amount,
+        top_up_amount, top_up_payer, top_up_contact,
+        last_fee_review, next_fee_review, status, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+     RETURNING *`,
+    [homeId, data.resident_name, data.room_number || null,
+     data.admission_date || null, data.discharge_date || null,
+     data.care_type || 'residential',
+     data.funding_type || 'self_funded', data.funding_authority || null, data.funding_reference || null,
+     data.weekly_fee || 0, data.la_contribution || 0, data.chc_contribution || 0, data.fnc_amount || 0,
+     data.top_up_amount || 0, data.top_up_payer || null, data.top_up_contact || null,
+     data.last_fee_review || null, data.next_fee_review || null,
+     data.status || 'active', data.notes || null, data.created_by]
+  );
+  return shapeResident(rows[0]);
+}
+
+export async function updateResident(id, homeId, data, client) {
+  const conn = client || pool;
+  const fields = [];
+  const params = [id, homeId];
+  const settable = [
+    'resident_name', 'room_number', 'admission_date', 'discharge_date', 'care_type',
+    'funding_type', 'funding_authority', 'funding_reference',
+    'weekly_fee', 'la_contribution', 'chc_contribution', 'fnc_amount',
+    'top_up_amount', 'top_up_payer', 'top_up_contact',
+    'last_fee_review', 'next_fee_review', 'status', 'notes',
+  ];
+  for (const key of settable) {
+    if (key in data) {
+      params.push(data[key] ?? null);
+      fields.push(`${key} = $${params.length}`);
+    }
+  }
+  if (fields.length === 0) return findResidentById(id, homeId, client);
+  const { rows } = await conn.query(
+    `UPDATE finance_residents SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    params);
+  return shapeResident(rows[0]);
+}
+
+export async function countActiveResidents(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    "SELECT COUNT(*)::int AS count FROM finance_residents WHERE home_id = $1 AND status = 'active' AND deleted_at IS NULL",
+    [homeId]);
+  return rows[0].count;
+}
+
+// ── Fee Changes ───────────────────────────────────────────────────────────────
+
+function shapeFeeChange(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id, resident_id: row.resident_id,
+    effective_date: d(row.effective_date),
+    previous_weekly: f(row.previous_weekly), new_weekly: f(row.new_weekly),
+    reason: row.reason, approved_by: row.approved_by, notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at),
+  };
+}
+
+export async function findFeeChanges(residentId, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_fee_changes WHERE resident_id = $1 AND home_id = $2 ORDER BY effective_date DESC',
+    [residentId, homeId]);
+  return rows.map(shapeFeeChange);
+}
+
+export async function createFeeChange(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_fee_changes
+       (home_id, resident_id, effective_date, previous_weekly, new_weekly, reason, approved_by, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [homeId, data.resident_id, data.effective_date,
+     data.previous_weekly ?? null, data.new_weekly,
+     data.reason || null, data.approved_by || null, data.notes || null, data.created_by]
+  );
+  return shapeFeeChange(rows[0]);
+}
+
+// ── Invoices ──────────────────────────────────────────────────────────────────
+
+function shapeInvoice(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id, invoice_number: row.invoice_number,
+    resident_id: row.resident_id,
+    payer_type: row.payer_type, payer_name: row.payer_name, payer_reference: row.payer_reference,
+    period_start: d(row.period_start), period_end: d(row.period_end),
+    subtotal: f(row.subtotal), adjustments: f(row.adjustments),
+    total_amount: f(row.total_amount), amount_paid: f(row.amount_paid), balance_due: f(row.balance_due),
+    status: row.status, issue_date: d(row.issue_date), due_date: d(row.due_date),
+    paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
+    notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+  };
+}
+
+function shapeInvoiceLine(row) {
+  if (!row) return null;
+  return {
+    id: row.id, invoice_id: row.invoice_id, home_id: row.home_id,
+    description: row.description, quantity: f(row.quantity),
+    unit_price: f(row.unit_price), amount: f(row.amount), line_type: row.line_type,
+    created_at: ts(row.created_at),
+  };
+}
+
+export async function findInvoices(homeId, { status, payerType, from, to, residentId, limit = 100, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_invoices WHERE home_id = $1 AND deleted_at IS NULL';
+  const params = [homeId];
+  if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  if (payerType) { params.push(payerType); sql += ` AND payer_type = $${params.length}`; }
+  if (residentId) { params.push(residentId); sql += ` AND resident_id = $${params.length}`; }
+  if (from) { params.push(from); sql += ` AND COALESCE(issue_date, created_at::date) >= $${params.length}`; }
+  if (to) { params.push(to); sql += ` AND COALESCE(issue_date, created_at::date) <= $${params.length}`; }
+  sql += ' ORDER BY COALESCE(issue_date, created_at::date) DESC, id DESC';
+  params.push(Math.min(limit, 500)); sql += ` LIMIT $${params.length}`;
+  params.push(offset); sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total) : 0;
+  return { rows: rows.map(shapeInvoice), total };
+}
+
+export async function findInvoiceById(id, homeId, client, { forUpdate } = {}) {
+  const conn = client || pool;
+  const sql = `SELECT * FROM finance_invoices WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
+  const { rows } = await conn.query(sql, [id, homeId]);
+  return shapeInvoice(rows[0]);
+}
+
+export async function getNextInvoiceNumber(homeId, prefix, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT invoice_number FROM finance_invoices
+     WHERE home_id = $1 AND invoice_number LIKE $2 AND deleted_at IS NULL
+     ORDER BY invoice_number DESC LIMIT 1 FOR UPDATE`,
+    [homeId, `${prefix}%`]);
+  if (rows.length === 0) return `${prefix}-001`;
+  const last = rows[0].invoice_number;
+  const seq = parseInt(last.split('-').pop()) + 1;
+  return `${prefix}-${String(seq).padStart(3, '0')}`;
+}
+
+export async function createInvoice(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_invoices
+       (home_id, invoice_number, resident_id, payer_type, payer_name, payer_reference,
+        period_start, period_end, subtotal, adjustments, total_amount, amount_paid, balance_due,
+        status, issue_date, due_date, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     RETURNING *`,
+    [homeId, data.invoice_number, data.resident_id || null,
+     data.payer_type, data.payer_name, data.payer_reference || null,
+     data.period_start || null, data.period_end || null,
+     data.subtotal || 0, data.adjustments || 0, data.total_amount || 0,
+     data.amount_paid || 0, data.balance_due || 0,
+     data.status || 'draft', data.issue_date || null, data.due_date || null,
+     data.notes || null, data.created_by]
+  );
+  return shapeInvoice(rows[0]);
+}
+
+export async function updateInvoice(id, homeId, data, client) {
+  const conn = client || pool;
+  const fields = [];
+  const params = [id, homeId];
+  const settable = [
+    'resident_id', 'payer_type', 'payer_name', 'payer_reference',
+    'period_start', 'period_end', 'subtotal', 'adjustments', 'total_amount',
+    'amount_paid', 'balance_due',
+    'status', 'issue_date', 'due_date', 'paid_date',
+    'payment_method', 'payment_reference', 'notes',
+  ];
+  for (const key of settable) {
+    if (key in data) {
+      params.push(data[key] ?? null);
+      fields.push(`${key} = $${params.length}`);
+    }
+  }
+  if (fields.length === 0) return findInvoiceById(id, homeId, client);
+  const { rows } = await conn.query(
+    `UPDATE finance_invoices SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    params);
+  return shapeInvoice(rows[0]);
+}
+
+// ── Invoice Lines ─────────────────────────────────────────────────────────────
+
+export async function findInvoiceLines(invoiceId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND deleted_at IS NULL ORDER BY id', [invoiceId]);
+  return rows.map(shapeInvoiceLine);
+}
+
+export async function createInvoiceLine(invoiceId, homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_invoice_lines (invoice_id, home_id, description, quantity, unit_price, amount, line_type)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [invoiceId, homeId, data.description, data.quantity || 1, data.unit_price, data.amount, data.line_type || 'fee']);
+  return shapeInvoiceLine(rows[0]);
+}
+
+export async function deleteInvoiceLines(invoiceId, client) {
+  const conn = client || pool;
+  await conn.query('UPDATE finance_invoice_lines SET deleted_at = NOW() WHERE invoice_id = $1 AND deleted_at IS NULL', [invoiceId]);
+}
+
+// ── Expenses ──────────────────────────────────────────────────────────────────
+
+function shapeExpense(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id,
+    expense_date: d(row.expense_date), category: row.category, subcategory: row.subcategory,
+    description: row.description, supplier: row.supplier, invoice_ref: row.invoice_ref,
+    net_amount: f(row.net_amount), vat_amount: f(row.vat_amount), gross_amount: f(row.gross_amount),
+    status: row.status,
+    approved_by: row.approved_by, approved_date: d(row.approved_date),
+    rejected_by: row.rejected_by, rejected_date: d(row.rejected_date),
+    paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
+    recurring: row.recurring, recurrence_frequency: row.recurrence_frequency,
+    notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+  };
+}
+
+export async function findExpenses(homeId, { category, status, from, to, limit = 100, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_expenses WHERE home_id = $1 AND deleted_at IS NULL';
+  const params = [homeId];
+  if (category) { params.push(category); sql += ` AND category = $${params.length}`; }
+  if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  if (from) { params.push(from); sql += ` AND expense_date >= $${params.length}`; }
+  if (to) { params.push(to); sql += ` AND expense_date <= $${params.length}`; }
+  sql += ' ORDER BY expense_date DESC, id DESC';
+  params.push(Math.min(limit, 500)); sql += ` LIMIT $${params.length}`;
+  params.push(offset); sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total) : 0;
+  return { rows: rows.map(shapeExpense), total };
+}
+
+export async function findExpenseById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_expenses WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+  return shapeExpense(rows[0]);
+}
+
+export async function createExpense(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_expenses
+       (home_id, expense_date, category, subcategory, description, supplier, invoice_ref,
+        net_amount, vat_amount, gross_amount, status,
+        approved_by, approved_date, paid_date, payment_method, payment_reference,
+        recurring, recurrence_frequency, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+     RETURNING *`,
+    [homeId, data.expense_date, data.category, data.subcategory || null,
+     data.description, data.supplier || null, data.invoice_ref || null,
+     data.net_amount, data.vat_amount || 0, data.gross_amount,
+     data.status || 'pending',
+     data.approved_by || null, data.approved_date || null,
+     data.paid_date || null, data.payment_method || null, data.payment_reference || null,
+     data.recurring || false, data.recurrence_frequency || null,
+     data.notes || null, data.created_by]
+  );
+  return shapeExpense(rows[0]);
+}
+
+export async function updateExpense(id, homeId, data, client) {
+  const conn = client || pool;
+  const fields = [];
+  const params = [id, homeId];
+  const settable = [
+    'expense_date', 'category', 'subcategory', 'description', 'supplier', 'invoice_ref',
+    'net_amount', 'vat_amount', 'gross_amount',
+    'status', 'approved_by', 'approved_date', 'rejected_by', 'rejected_date',
+    'paid_date', 'payment_method', 'payment_reference',
+    'recurring', 'recurrence_frequency', 'notes',
+  ];
+  for (const key of settable) {
+    if (key in data) {
+      params.push(data[key] ?? null);
+      fields.push(`${key} = $${params.length}`);
+    }
+  }
+  if (fields.length === 0) return findExpenseById(id, homeId, client);
+  const { rows } = await conn.query(
+    `UPDATE finance_expenses SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    params);
+  return shapeExpense(rows[0]);
+}
+
+// ── Summary Queries ───────────────────────────────────────────────────────────
+
+export async function getIncomeSummary(homeId, from, to, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT
+       COALESCE(SUM(total_amount), 0)  AS total_invoiced,
+       COALESCE(SUM(amount_paid), 0)   AS total_received,
+       COALESCE(SUM(balance_due), 0)   AS total_outstanding,
+       COUNT(*)::int                    AS invoice_count
+     FROM finance_invoices
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND COALESCE(issue_date, created_at::date) >= $2
+       AND COALESCE(issue_date, created_at::date) <= $3`,
+    [homeId, from, to]);
+  const r = rows[0];
+  return { total_invoiced: f(r.total_invoiced), total_received: f(r.total_received), total_outstanding: f(r.total_outstanding), invoice_count: r.invoice_count };
+}
+
+export async function getExpenseSummary(homeId, from, to, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT
+       COALESCE(SUM(gross_amount), 0) AS total_expenses,
+       COUNT(*)::int                   AS expense_count
+     FROM finance_expenses
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND expense_date >= $2 AND expense_date <= $3
+       AND status != 'void'`,
+    [homeId, from, to]);
+  const r = rows[0];
+  return { total_expenses: f(r.total_expenses), expense_count: r.expense_count };
+}
+
+export async function getExpensesByCategory(homeId, from, to, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT category, COALESCE(SUM(gross_amount), 0) AS total, COUNT(*)::int AS count
+     FROM finance_expenses
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND expense_date >= $2 AND expense_date <= $3
+       AND status != 'void'
+     GROUP BY category ORDER BY total DESC`,
+    [homeId, from, to]);
+  return rows.map(r => ({ category: r.category, total: f(r.total), count: r.count }));
+}
+
+export async function getReceivablesAgeing(homeId, asOfDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT
+       id, invoice_number, payer_type, payer_name, total_amount, amount_paid, balance_due, due_date, status
+     FROM finance_invoices
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND status NOT IN ('paid','void','credited','draft')
+       AND balance_due > 0 AND due_date IS NOT NULL`,
+    [homeId]);
+  const buckets = { current: 0, days_1_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0 };
+  const items = [];
+  const asOf = new Date(asOfDate);
+  for (const row of rows) {
+    const outstanding = f(row.balance_due);
+    const due = new Date(row.due_date);
+    const daysOverdue = Math.floor((asOf - due) / 86400000);
+    if (daysOverdue <= 0) buckets.current += outstanding;
+    else if (daysOverdue <= 30) buckets.days_1_30 += outstanding;
+    else if (daysOverdue <= 60) buckets.days_31_60 += outstanding;
+    else if (daysOverdue <= 90) buckets.days_61_90 += outstanding;
+    else buckets.days_90_plus += outstanding;
+    if (daysOverdue > 0) {
+      items.push({
+        id: row.id, invoice_number: row.invoice_number,
+        payer_type: row.payer_type, payer_name: row.payer_name,
+        total_amount: f(row.total_amount), amount_paid: f(row.amount_paid),
+        outstanding, due_date: d(row.due_date), days_overdue: daysOverdue,
+      });
+    }
+  }
+  items.sort((a, b) => b.days_overdue - a.days_overdue);
+  return { buckets, total_outstanding: Object.values(buckets).reduce((s, v) => s + v, 0), overdue_items: items };
+}
+
+export async function getOverdueInvoiceCount(homeId, asOfDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT COUNT(*)::int AS count FROM finance_invoices
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND status NOT IN ('paid','void','credited','draft')
+       AND due_date < $2 AND balance_due > 0`,
+    [homeId, asOfDate]);
+  return rows[0].count;
+}
+
+export async function getPendingExpenseCount(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    "SELECT COUNT(*)::int AS count FROM finance_expenses WHERE home_id = $1 AND deleted_at IS NULL AND status = 'pending'",
+    [homeId]);
+  return rows[0].count;
+}
+
+export async function getFeeReviewsDue(homeId, withinDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT id, resident_name, room_number, next_fee_review FROM finance_residents
+     WHERE home_id = $1 AND deleted_at IS NULL AND status = 'active'
+       AND next_fee_review IS NOT NULL AND next_fee_review <= $2
+     ORDER BY next_fee_review ASC`,
+    [homeId, withinDate]);
+  return rows.map(r => ({ id: r.id, resident_name: r.resident_name, room_number: r.room_number, next_fee_review: d(r.next_fee_review) }));
+}
+
+// ── Monthly Trend ─────────────────────────────────────────────────────────────
+
+export async function getMonthlyIncomeTrend(homeId, months, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT TO_CHAR(COALESCE(issue_date, created_at::date), 'YYYY-MM') AS month,
+            COALESCE(SUM(total_amount), 0) AS invoiced,
+            COALESCE(SUM(amount_paid), 0) AS received
+     FROM finance_invoices
+     WHERE home_id = $1 AND deleted_at IS NULL
+       AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - ($2 || ' months')::interval)
+     GROUP BY month ORDER BY month`,
+    [homeId, months]);
+  return rows.map(r => ({ month: r.month, invoiced: f(r.invoiced), received: f(r.received) }));
+}
+
+export async function getMonthlyExpenseTrend(homeId, months, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT TO_CHAR(expense_date, 'YYYY-MM') AS month,
+            COALESCE(SUM(gross_amount), 0) AS total
+     FROM finance_expenses
+     WHERE home_id = $1 AND deleted_at IS NULL AND status != 'void'
+       AND expense_date >= (CURRENT_DATE - ($2 || ' months')::interval)
+     GROUP BY month ORDER BY month`,
+    [homeId, months]);
+  return rows.map(r => ({ month: r.month, total: f(r.total) }));
+}
+
+// ── Invoice Chase Log ────────────────────────────────────────────────────────
+
+function shapeChase(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id, invoice_id: row.invoice_id,
+    chase_date: d(row.chase_date), method: row.method,
+    contact_name: row.contact_name, outcome: row.outcome,
+    next_action_date: d(row.next_action_date), notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at),
+  };
+}
+
+export async function findChasesByInvoice(invoiceId, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM finance_invoice_chase
+     WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL
+     ORDER BY chase_date DESC, id DESC`,
+    [invoiceId, homeId]);
+  return rows.map(shapeChase);
+}
+
+export async function createChase(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_invoice_chase
+       (home_id, invoice_id, chase_date, method, contact_name, outcome,
+        next_action_date, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [homeId, data.invoice_id, data.chase_date, data.method,
+     data.contact_name || null, data.outcome || null,
+     data.next_action_date || null, data.notes || null, data.created_by]);
+  return shapeChase(rows[0]);
+}
+
+export async function getChasesDueForAction(homeId, beforeDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT c.*, i.invoice_number, i.payer_name, i.balance_due
+     FROM finance_invoice_chase c
+     JOIN finance_invoices i ON i.id = c.invoice_id AND i.deleted_at IS NULL
+     WHERE c.home_id = $1 AND c.deleted_at IS NULL
+       AND c.next_action_date IS NOT NULL AND c.next_action_date <= $2
+       AND i.status NOT IN ('paid','void','credited')
+     ORDER BY c.next_action_date ASC`,
+    [homeId, beforeDate]);
+  return rows.map(r => ({
+    ...shapeChase(r),
+    invoice_number: r.invoice_number, payer_name: r.payer_name,
+    balance_due: f(r.balance_due),
+  }));
+}
+
+export async function getLastChasePerInvoice(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT DISTINCT ON (invoice_id) *
+     FROM finance_invoice_chase
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY invoice_id, chase_date DESC, id DESC`,
+    [homeId]);
+  return rows.map(shapeChase);
+}
+
+// ── Payment Schedule ─────────────────────────────────────────────────────────
+
+function shapeSchedule(row) {
+  if (!row) return null;
+  return {
+    id: row.id, home_id: row.home_id,
+    supplier: row.supplier, category: row.category, description: row.description,
+    frequency: row.frequency, amount: f(row.amount),
+    next_due: d(row.next_due),
+    auto_approve: row.auto_approve, on_hold: row.on_hold, hold_reason: row.hold_reason,
+    notes: row.notes,
+    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+  };
+}
+
+export async function findPaymentSchedules(homeId, { onHold, dueBefore, limit = 100, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_payment_schedule WHERE home_id = $1 AND deleted_at IS NULL';
+  const params = [homeId];
+  if (onHold !== undefined) { params.push(onHold); sql += ` AND on_hold = $${params.length}`; }
+  if (dueBefore) { params.push(dueBefore); sql += ` AND next_due <= $${params.length}`; }
+  sql += ' ORDER BY next_due ASC, supplier ASC';
+  params.push(Math.min(limit, 500)); sql += ` LIMIT $${params.length}`;
+  params.push(offset); sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total) : 0;
+  return { rows: rows.map(shapeSchedule), total };
+}
+
+export async function findPaymentScheduleById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_payment_schedule WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+  return shapeSchedule(rows[0]);
+}
+
+export async function createPaymentSchedule(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO finance_payment_schedule
+       (home_id, supplier, category, description, frequency, amount, next_due,
+        auto_approve, on_hold, hold_reason, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    [homeId, data.supplier, data.category, data.description || null,
+     data.frequency, data.amount, data.next_due,
+     data.auto_approve || false, data.on_hold || false, data.hold_reason || null,
+     data.notes || null, data.created_by]);
+  return shapeSchedule(rows[0]);
+}
+
+export async function updatePaymentSchedule(id, homeId, data, client) {
+  const conn = client || pool;
+  const fields = [];
+  const params = [id, homeId];
+  const settable = ['supplier', 'category', 'description', 'frequency', 'amount', 'next_due',
+    'auto_approve', 'on_hold', 'hold_reason', 'notes'];
+  for (const key of settable) {
+    if (key in data) {
+      params.push(data[key] ?? null);
+      fields.push(`${key} = $${params.length}`);
+    }
+  }
+  if (fields.length === 0) return findPaymentScheduleById(id, homeId, client);
+  const { rows } = await conn.query(
+    `UPDATE finance_payment_schedule SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    params);
+  return shapeSchedule(rows[0]);
+}
+
+export async function getUpcomingPayments(homeId, withinDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM finance_payment_schedule
+     WHERE home_id = $1 AND deleted_at IS NULL AND on_hold = false AND next_due <= $2
+     ORDER BY next_due ASC`,
+    [homeId, withinDate]);
+  return rows.map(shapeSchedule);
+}
+
+// ── Soft Delete ─────────────────────────────────────────────────────────────
+
+const SOFT_DELETE_TABLES = {
+  resident: 'finance_residents',
+  invoice: 'finance_invoices',
+  expense: 'finance_expenses',
+  schedule: 'finance_payment_schedule',
+};
+
+export async function softDelete(entity, id, homeId, client) {
+  const table = SOFT_DELETE_TABLES[entity];
+  if (!table) throw new Error(`Unknown entity: ${entity}`);
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING id`,
+    [id, homeId]);
+  return rows.length > 0;
+}

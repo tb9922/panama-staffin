@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome } from '../lib/api.js';
+import StaffPicker from '../components/StaffPicker.jsx';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
@@ -188,17 +189,8 @@ export default function SickPayTracker({ data, user }) {
             </span>
           )}
         </div>
-        <div className="ml-auto">
-          <select
-            className={INPUT.select + ' w-48'}
-            value={staffFilter}
-            onChange={e => setStaffFilter(e.target.value)}
-          >
-            <option value="">All staff</option>
-            {activeStaff.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+        <div className="ml-auto w-56">
+          <StaffPicker value={staffFilter} onChange={setStaffFilter} showAll small />
         </div>
       </div>
 
@@ -299,19 +291,12 @@ export default function SickPayTracker({ data, user }) {
             <h2 className={MODAL.title}>Record Sick Period</h2>
 
             <div className="space-y-4">
-              <div>
-                <label className={INPUT.label}>Staff Member</label>
-                <select
-                  className={INPUT.select}
-                  value={createForm.staff_id}
-                  onChange={e => cfield('staff_id', e.target.value)}
-                >
-                  <option value="">Select staff member...</option>
-                  {activeStaff.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                  ))}
-                </select>
-              </div>
+              <StaffPicker
+                label="Staff Member"
+                value={createForm.staff_id}
+                onChange={v => cfield('staff_id', v)}
+                required
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -369,7 +369,7 @@ export default function CareCertificateTracker({ data, updateData }) {
       {/* ── Detail Modal ────────────────────────────────────────────────── */}
       {showModal && selectedStaffId && selectedRecord && (
         <div className={MODAL.overlay} onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
               <div>

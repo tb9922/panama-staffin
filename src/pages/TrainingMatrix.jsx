@@ -1330,7 +1330,7 @@ export default function TrainingMatrix({ data, updateData }) {
       {/* Fire Drill Modal */}
       {showDrillModal && (
         <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowDrillModal(false); }}>
-          <div className={`bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto`}>
+          <div className={MODAL.panelXl}>
             <h2 className={MODAL.title}>{drillModalData.existing ? 'Edit' : 'Record'} Fire Drill</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">

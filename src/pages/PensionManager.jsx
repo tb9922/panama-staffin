@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome } from '../lib/api.js';
+import StaffPicker from '../components/StaffPicker.jsx';
 
 const STATUS_BADGE = {
   eligible_enrolled:       BADGE.green,
@@ -353,16 +354,11 @@ export default function PensionManager({ data, user }) {
                     {staffMap[editStaffId]?.name || editStaffId}
                   </div>
                 ) : (
-                  <select
-                    className={INPUT.select}
+                  <StaffPicker
                     value={form.staff_id}
-                    onChange={e => field('staff_id', e.target.value)}
-                  >
-                    <option value="">Select staff member...</option>
-                    {activeStaff.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                    ))}
-                  </select>
+                    onChange={v => field('staff_id', v)}
+                    required
+                  />
                 )}
               </div>
 

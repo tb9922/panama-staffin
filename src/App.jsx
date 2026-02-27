@@ -33,6 +33,7 @@ const Config = lazy(() => import('./pages/Config.jsx'));
 const HandoverNotes = lazy(() => import('./pages/HandoverNotes.jsx'));
 const PayRatesConfig = lazy(() => import('./pages/PayRatesConfig.jsx'));
 const TimesheetManager = lazy(() => import('./pages/TimesheetManager.jsx'));
+const MonthlyTimesheet = lazy(() => import('./pages/MonthlyTimesheet.jsx'));
 const PayrollDashboard = lazy(() => import('./pages/PayrollDashboard.jsx'));
 const PayrollDetail = lazy(() => import('./pages/PayrollDetail.jsx'));
 const AgencyTracker = lazy(() => import('./pages/AgencyTracker.jsx'));
@@ -41,6 +42,22 @@ const PensionManager = lazy(() => import('./pages/PensionManager.jsx'));
 const SickPayTracker = lazy(() => import('./pages/SickPayTracker.jsx'));
 const HMRCDashboard = lazy(() => import('./pages/HMRCDashboard.jsx'));
 const GdprDashboard = lazy(() => import('./pages/GdprDashboard.jsx'));
+const HrDashboard = lazy(() => import('./pages/HrDashboard.jsx'));
+const DisciplinaryTracker = lazy(() => import('./pages/DisciplinaryTracker.jsx'));
+const GrievanceTracker = lazy(() => import('./pages/GrievanceTracker.jsx'));
+const PerformanceTracker = lazy(() => import('./pages/PerformanceTracker.jsx'));
+const AbsenceManager = lazy(() => import('./pages/AbsenceManager.jsx'));
+const ContractManager = lazy(() => import('./pages/ContractManager.jsx'));
+const FamilyLeaveTracker = lazy(() => import('./pages/FamilyLeaveTracker.jsx'));
+const FlexWorkingTracker = lazy(() => import('./pages/FlexWorkingTracker.jsx'));
+const EdiTracker = lazy(() => import('./pages/EdiTracker.jsx'));
+const TupeManager = lazy(() => import('./pages/TupeManager.jsx'));
+const RtwDbsRenewals = lazy(() => import('./pages/RtwDbsRenewals.jsx'));
+const FinanceDashboard = lazy(() => import('./pages/FinanceDashboard.jsx'));
+const IncomeTracker = lazy(() => import('./pages/IncomeTracker.jsx'));
+const ExpenseTracker = lazy(() => import('./pages/ExpenseTracker.jsx'));
+const ReceivablesManager = lazy(() => import('./pages/ReceivablesManager.jsx'));
+const PayablesManager = lazy(() => import('./pages/PayablesManager.jsx'));
 
 // Top-level items (always visible)
 const NAV_TOP = [
@@ -73,6 +90,23 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    id: 'hr', label: 'HR & People', adminOnly: true,
+    icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+    items: [
+      { path: '/hr', label: 'HR Dashboard' },
+      { path: '/hr/disciplinary', label: 'Disciplinary' },
+      { path: '/hr/grievance', label: 'Grievances' },
+      { path: '/hr/performance', label: 'Performance' },
+      { path: '/hr/absence', label: 'Absence' },
+      { path: '/hr/contracts', label: 'Contracts' },
+      { path: '/hr/family-leave', label: 'Family Leave' },
+      { path: '/hr/flex-working', label: 'Flex Working' },
+      { path: '/hr/edi', label: 'EDI' },
+      { path: '/hr/tupe', label: 'TUPE' },
+      { path: '/hr/renewals', label: 'DBS & RTW' },
+    ],
+  },
+  {
     id: 'compliance', label: 'Compliance',
     icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
     items: [
@@ -94,9 +128,14 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    id: 'finance', label: 'Finance',
+    id: 'finance', label: 'Finance', adminOnly: true,
     icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     items: [
+      { path: '/finance', label: 'Finance Dashboard' },
+      { path: '/finance/income', label: 'Income & Billing' },
+      { path: '/finance/expenses', label: 'Expenses' },
+      { path: '/finance/receivables', label: 'Receivables' },
+      { path: '/finance/payables', label: 'Payables' },
       { path: '/costs', label: 'Costs', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
       { path: '/budget', label: 'Budget', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
     ],
@@ -107,6 +146,7 @@ const NAV_SECTIONS = [
     items: [
       { path: '/payroll/rates',      label: 'Pay Rates',     icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
       { path: '/payroll/timesheets', label: 'Timesheets',    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { path: '/payroll/monthly-timesheet', label: 'Monthly View', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
       { path: '/payroll',            label: 'Payroll Runs',  icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
       { path: '/payroll/agency',     label: 'Agency Costs',  icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
       { path: '/payroll/tax-codes',  label: 'Tax Codes',     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -540,15 +580,17 @@ export default function App() {
                 }`
               }
             >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
-              </svg>
-              {sidebarOpen && <span className="ml-2.5 font-medium">{item.label}</span>}
+              {item.icon && (
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                </svg>
+              )}
+              {sidebarOpen && <span className={item.icon ? 'ml-2.5 font-medium' : 'font-medium'}>{item.label}</span>}
             </NavLink>
           ))}
 
           {/* Grouped sections */}
-          {NAV_SECTIONS.map(section => {
+          {NAV_SECTIONS.filter(s => !s.adminOnly || !isViewer).map(section => {
             const isOpen = expandedSections[section.id];
             return (
               <div key={section.id}>
@@ -585,10 +627,12 @@ export default function App() {
                           }`
                         }
                       >
-                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
-                        </svg>
-                        <span className="ml-2 font-medium">{item.label}</span>
+                        {item.icon && (
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                          </svg>
+                        )}
+                        <span className={item.icon ? 'ml-2 font-medium' : 'font-medium'}>{item.label}</span>
                       </NavLink>
                     ))}
                   </div>
@@ -671,6 +715,7 @@ export default function App() {
           <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/payroll/rates"      element={<PayRatesConfig data={data} updateData={safeUpdateData} user={user} />} />
           <Route path="/payroll/timesheets" element={<TimesheetManager data={data} user={user} />} />
+          <Route path="/payroll/monthly-timesheet/:staffId?" element={<MonthlyTimesheet data={data} user={user} />} />
           <Route path="/payroll/agency"     element={<AgencyTracker data={data} user={user} />} />
           <Route path="/payroll/tax-codes"  element={<TaxCodeManager data={data} user={user} />} />
           <Route path="/payroll/pensions"   element={<PensionManager data={data} user={user} />} />
@@ -679,6 +724,22 @@ export default function App() {
           <Route path="/payroll/:runId"     element={<PayrollDetail data={data} user={user} />} />
           <Route path="/payroll"            element={<PayrollDashboard data={data} user={user} />} />
           <Route path="/gdpr"              element={<GdprDashboard />} />
+          <Route path="/hr"                element={<HrDashboard />} />
+          <Route path="/hr/disciplinary"   element={<DisciplinaryTracker />} />
+          <Route path="/hr/grievance"      element={<GrievanceTracker />} />
+          <Route path="/hr/performance"    element={<PerformanceTracker />} />
+          <Route path="/hr/absence"        element={<AbsenceManager />} />
+          <Route path="/hr/contracts"      element={<ContractManager />} />
+          <Route path="/hr/family-leave"   element={<FamilyLeaveTracker />} />
+          <Route path="/hr/flex-working"   element={<FlexWorkingTracker />} />
+          <Route path="/hr/edi"            element={<EdiTracker />} />
+          <Route path="/hr/tupe"           element={<TupeManager />} />
+          <Route path="/hr/renewals"       element={<RtwDbsRenewals />} />
+          <Route path="/finance"             element={<FinanceDashboard />} />
+          <Route path="/finance/income"      element={<IncomeTracker />} />
+          <Route path="/finance/expenses"    element={<ExpenseTracker />} />
+          <Route path="/finance/receivables" element={<ReceivablesManager />} />
+          <Route path="/finance/payables"    element={<PayablesManager />} />
           <Route path="/reports" element={<Reports data={data} />} />
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/settings" element={<Config data={data} updateData={safeUpdateData} />} />

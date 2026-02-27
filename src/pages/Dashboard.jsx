@@ -13,6 +13,9 @@ import { getPolicyAlerts } from '../lib/policyReview.js';
 import { getWhistleblowingAlerts } from '../lib/whistleblowing.js';
 import { getDolsAlerts } from '../lib/dols.js';
 import { getCareCertAlerts } from '../lib/careCertificate.js';
+import { getHrAlerts } from '../lib/hr.js';
+import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts } from '../lib/api.js';
+import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
 export default function Dashboard({ data }) {
@@ -28,7 +31,23 @@ export default function Dashboard({ data }) {
     return () => clearTimeout(timer);
   }, [today]);
 
-  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date]);
+  // Fetch HR stats + warnings from API (HR data lives in separate tables)
+  const [hrData, setHrData] = useState({ stats: null, warnings: [] });
+  const [financeAlerts, setFinanceAlerts] = useState([]);
+  useEffect(() => {
+    const home = getCurrentHome();
+    if (!home) return;
+    Promise.all([
+      getHrStats(home).catch(() => null),
+      getHrWarnings(home).catch(() => []),
+      getFinanceAlerts(home).catch(() => []),
+    ]).then(([stats, warnings, finAlerts]) => {
+      setHrData({ stats, warnings: warnings || [] });
+      setFinanceAlerts(Array.isArray(finAlerts) ? finAlerts : []);
+    });
+  }, [data.config?.home_name]);
+
+  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date, today]);
 
   const cycleData = useMemo(() => {
     return cycleDates.map(date => {
@@ -135,8 +154,16 @@ export default function Dashboard({ data }) {
     getAppraisalAlerts(activeStaff, data.appraisals || {}, today).forEach(a => list.push(a));
     getFireDrillAlerts(data.fire_drills || [], today).forEach(a => list.push(a));
 
+    // HR module alerts (fetched from API — separate tables)
+    getHrAlerts(hrData.stats, hrData.warnings).forEach(a => {
+      list.push({ type: a.severity === 'red' ? 'error' : 'warning', msg: `HR: ${a.label}` });
+    });
+
+    // Finance alerts (fetched from API — separate tables)
+    getFinanceAlertsForDashboard(financeAlerts).forEach(a => list.push(a));
+
     return list.slice(0, 24);
-  }, [cycleData, data]);
+  }, [cycleData, data, hrData, financeAlerts]);
 
   // Coverage gauge helper
   const CoverageGauge = ({ period, cov }) => {
@@ -364,10 +391,11 @@ export default function Dashboard({ data }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {alerts.map((alert, i) => (
-                <div key={i} className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg border ${
+              {alerts.map((alert, i) => {
+                const cls = `flex items-start gap-2 text-xs px-3 py-2 rounded-lg border ${
                   alert.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
+                }`;
+                const icon = (
                   <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
                       alert.type === 'error'
@@ -375,9 +403,21 @@ export default function Dashboard({ data }) {
                         : 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
                     } />
                   </svg>
-                  <span>{alert.msg}</span>
-                </div>
-              ))}
+                );
+                return alert.link ? (
+                  <div key={i} className={`${cls} cursor-pointer hover:brightness-95 transition-all`}
+                    onClick={() => navigate(alert.link)} role="link" tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter') navigate(alert.link); }}>
+                    {icon}
+                    <span>{alert.msg}</span>
+                  </div>
+                ) : (
+                  <div key={i} className={cls}>
+                    {icon}
+                    <span>{alert.msg}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

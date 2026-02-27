@@ -18,6 +18,7 @@ dist-ssr
 # Runtime data
 homes/
 backups/
+uploads/
 audit_log.json
 
 # Editor directories and files

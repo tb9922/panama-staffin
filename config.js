@@ -81,4 +81,18 @@ export const config = {
     idleTimeoutMs: 30000,
     connectionTimeoutMs: 2000,
   },
+
+  // ── File uploads ───────────────────────────────────────────────────────────
+  upload: {
+    dir: path.join(__dirname, 'uploads'),
+    maxFileSize: 20 * 1024 * 1024, // 20MB
+    allowedMimeTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'text/plain',
+    ],
+  },
 };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import { getTaxCodes, upsertTaxCode, getCurrentHome } from '../lib/api.js';
+import StaffPicker from '../components/StaffPicker.jsx';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
@@ -280,16 +281,11 @@ export default function TaxCodeManager({ data, user }) {
                     {staffMap[editStaffId]?.name || editStaffId}
                   </div>
                 ) : (
-                  <select
-                    className={INPUT.select}
+                  <StaffPicker
                     value={form.staff_id}
-                    onChange={e => field('staff_id', e.target.value)}
-                  >
-                    <option value="">Select staff member...</option>
-                    {activeStaff.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                    ))}
-                  </select>
+                    onChange={v => field('staff_id', v)}
+                    required
+                  />
                 )}
               </div>
 

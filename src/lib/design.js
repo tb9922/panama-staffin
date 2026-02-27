@@ -59,6 +59,8 @@ export const MODAL = {
   panel:    'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-modal-in',
   panelLg:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 animate-modal-in',
   panelSm:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-modal-in',
+  panelXl:   'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
+  panelWide: 'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
   title:    'text-lg font-semibold text-gray-900 mb-4',
   footer:   'flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100',
 };
