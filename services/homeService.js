@@ -104,7 +104,8 @@ export async function saveData(homeSlug, body, username) {
   const home = await homeRepo.findBySlug(homeSlug);
   if (!home) throw new NotFoundError(`Home not found: ${homeSlug}`);
 
-  return withTransaction(async (client) => {
+  // await (not return) so the code below runs after the transaction commits
+  await withTransaction(async (client) => {
     await homeRepo.updateConfig(home.id, body.config, client);
     await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
     await staffRepo.sync(home.id, body.staff || [], client);
@@ -130,7 +131,8 @@ export async function saveData(homeSlug, body, username) {
     await auditRepo.log('save', homeSlug, username, null, client);
   });
 
-  // Return the new updated_at so the client can track the server's timestamp
+  // Return the new updated_at so the client keeps serverUpdatedAt.current in sync.
+  // Without this, every second save from the same tab would get a false 409.
   const fresh = await homeRepo.findBySlug(homeSlug);
   return { updatedAt: fresh?.updated_at?.toISOString() || null };
 }
