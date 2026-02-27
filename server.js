@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,6 +7,11 @@ import { config } from './config.js';
 import { AppError } from './errors.js';
 import { pool } from './db.js';
 import logger from './logger.js';
+
+if (config.sentryDsn) {
+  Sentry.init({ dsn: config.sentryDsn, environment: config.nodeEnv });
+  logger.info('Sentry error tracking enabled');
+}
 import authRouter from './routes/auth.js';
 import homesRouter from './routes/homes.js';
 import dataRouter from './routes/data.js';
@@ -70,6 +76,9 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// Sentry error handler — must be after routes, before custom error handler
+if (config.sentryDsn) Sentry.setupExpressErrorHandler(app);
+
 // ── Global error handler ──────────────────────────────────────────────────────
 // Must be registered after all routes. Express identifies it by the 4-arg signature.
 // AppError subclasses map to their own status codes. Unexpected errors become 500.
@@ -93,6 +102,7 @@ app.use((err, req, res, next) => {
   }
 
   logger.error({ reqId: req.id, err: err?.message, stack: err?.stack }, 'unhandled error');
+  if (config.sentryDsn) Sentry.captureException(err);
   res.status(500).json({ error: 'An unexpected error occurred' });
 });
 
@@ -127,8 +137,10 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 // Catch unhandled promise rejections — without this, Node silently crashes
 process.on('unhandledRejection', (reason, promise) => {
   logger.error({ err: reason }, 'Unhandled promise rejection');
+  if (config.sentryDsn) Sentry.captureException(reason);
 });
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Uncaught exception — shutting down');
+  if (config.sentryDsn) Sentry.captureException(err);
   shutdown('uncaughtException');
 });

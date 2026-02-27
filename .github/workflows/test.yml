@@ -79,3 +79,32 @@ jobs:
           JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
           ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+
+  # ── Auto-deploy to production on push to main ────────────────────────────────
+  # Requires three GitHub repository secrets:
+  #   SERVER_HOST  — IP or hostname of your production server
+  #   SERVER_USER  — SSH user (e.g. ubuntu or deploy)
+  #   SERVER_SSH_KEY — private SSH key (the public key must be in ~/.ssh/authorized_keys on server)
+  #
+  # To activate: add the secrets in GitHub → Settings → Secrets and variables → Actions
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd /var/www/panama-staffing
+            git pull origin main
+            npm ci --omit=dev
+            npm run build
+            node scripts/migrate.js
+            pm2 restart panama --update-env
+            echo "Deploy complete: $(date)"

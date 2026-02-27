@@ -50,6 +50,7 @@ if (process.env.ALLOWED_ORIGIN === '*') {
 export const config = {
   // ── Server ──────────────────────────────────────────────────────────────────
   port: parseInt(process.env.PORT || '3001', 10),
+  sentryDsn: process.env.SENTRY_DSN || null,  // optional — monitoring only
   allowedOrigin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
   nodeEnv: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
