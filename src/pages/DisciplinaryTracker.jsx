@@ -413,7 +413,7 @@ export default function DisciplinaryTracker() {
           {caseNotes.length === 0 && <p className="text-sm text-gray-400">No case notes yet</p>}
           {caseNotes.map(n => (
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
-              <p className="text-sm text-gray-800">{n.note}</p>
+              <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
                 {n.created_by || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
               </p>

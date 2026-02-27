@@ -425,7 +425,7 @@ export default function GrievanceTracker() {
         </div>
         <div>
           <label className={INPUT.label}>Outcome Notes</label>
-          <textarea className={INPUT.base} rows={3} value={form.outcome_notes || ''} onChange={e => f('outcome_notes', e.target.value)} />
+          <textarea className={INPUT.base} rows={3} value={form.outcome_reason || ''} onChange={e => f('outcome_reason', e.target.value)} />
         </div>
         <div className="flex items-center">
           <input type="checkbox" id="grv-mediation" checked={form.mediation_offered || false} onChange={e => f('mediation_offered', e.target.checked)} className="mr-2" />
@@ -522,7 +522,7 @@ export default function GrievanceTracker() {
           {caseNotes.length === 0 && <p className="text-sm text-gray-400">No case notes yet</p>}
           {caseNotes.map(n => (
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
-              <p className="text-sm text-gray-800">{n.note}</p>
+              <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
                 {n.created_by || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
               </p>
