@@ -116,3 +116,12 @@ function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 // SIGINT (Ctrl+C) only in interactive terminals — piped stdin on Windows fires it spuriously
 if (process.stdin.isTTY) process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Catch unhandled promise rejections — without this, Node silently crashes
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection');
+});
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception — shutting down');
+  shutdown('uncaughtException');
+});
