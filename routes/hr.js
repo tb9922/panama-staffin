@@ -121,21 +121,65 @@ const grievanceBodySchema = z.object({
 });
 
 const grievanceUpdateSchema = z.object({
+  // Submission
   date_raised:          dateSchema.optional(),
+  raised_by_method:     z.enum(['verbal','written','email']).optional(),
   category:             z.enum(['bullying','harassment','discrimination','pay','working_conditions','management','health_safety','other']).optional(),
+  protected_characteristic: z.enum(['age','disability','gender_reassignment','marriage','pregnancy','race','religion','sex','sexual_orientation']).nullable().optional(),
   description:          z.string().max(5000).nullable().optional(),
-  status:               z.enum(['open','acknowledged','investigating','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
-  severity:             z.string().max(50).optional(),
-  formal:               z.boolean().optional(),
-  investigating_manager: z.string().max(200).nullable().optional(),
-  meeting_date:         dateSchema.nullable().optional(),
+  subject_detail:       z.string().max(5000).nullable().optional(),
+  desired_outcome:      z.string().max(5000).nullable().optional(),
+  // Acknowledgement
+  acknowledged_date:    dateSchema.nullable().optional(),
+  acknowledge_deadline: dateSchema.nullable().optional(),
+  acknowledged_by:      z.string().max(200).nullable().optional(),
+  // Investigation
+  investigation_status: z.enum(['not_started','in_progress','complete']).optional(),
+  investigation_officer: z.string().max(200).nullable().optional(),
+  investigation_start_date: dateSchema.nullable().optional(),
+  investigation_notes:  z.string().max(5000).nullable().optional(),
+  witnesses:            z.array(z.any()).optional(),
+  evidence_items:       z.array(z.any()).optional(),
+  investigation_completed_date: dateSchema.nullable().optional(),
+  investigation_findings: z.string().max(5000).nullable().optional(),
+  // Hearing
+  hearing_status:       z.enum(['not_scheduled','scheduled','held','adjourned','cancelled']).optional(),
+  hearing_date:         dateSchema.nullable().optional(),
+  hearing_time:         z.string().max(10).nullable().optional(),
+  hearing_location:     z.string().max(200).nullable().optional(),
+  hearing_chair:        z.string().max(200).nullable().optional(),
+  hearing_letter_sent_date: dateSchema.nullable().optional(),
+  hearing_companion_name: z.string().max(200).nullable().optional(),
+  hearing_companion_role: z.enum(['colleague','trade_union_rep']).nullable().optional(),
+  hearing_notes:        z.string().max(5000).nullable().optional(),
+  employee_statement_at_hearing: z.string().max(5000).nullable().optional(),
+  // Outcome
   outcome:              z.enum(['upheld','partially_upheld','not_upheld']).nullable().optional(),
   outcome_date:         dateSchema.nullable().optional(),
-  appeal_date:          dateSchema.nullable().optional(),
-  appeal_outcome:       z.string().max(100).nullable().optional(),
+  outcome_reason:       z.string().max(5000).nullable().optional(),
+  outcome_letter_sent_date: dateSchema.nullable().optional(),
+  mediation_offered:    z.boolean().optional(),
+  mediation_accepted:   z.boolean().optional(),
+  mediator_name:        z.string().max(200).nullable().optional(),
+  // Appeal
+  appeal_status:        z.enum(['none','requested','scheduled','held','decided']).optional(),
+  appeal_received_date: dateSchema.nullable().optional(),
+  appeal_deadline:      dateSchema.nullable().optional(),
+  appeal_grounds:       z.string().max(5000).nullable().optional(),
+  appeal_hearing_date:  dateSchema.nullable().optional(),
+  appeal_hearing_chair: z.string().max(200).nullable().optional(),
+  appeal_outcome:       z.enum(['upheld','partially_upheld','overturned']).nullable().optional(),
   appeal_outcome_date:  dateSchema.nullable().optional(),
-  acas_code_followed:   z.boolean().optional(),
-  notes:                z.string().max(5000).nullable().optional(),
+  appeal_outcome_reason: z.string().max(5000).nullable().optional(),
+  appeal_outcome_letter_sent_date: dateSchema.nullable().optional(),
+  // Linked
+  linked_disciplinary_id: z.number().int().nullable().optional(),
+  triggers_disciplinary: z.boolean().optional(),
+  // Meta
+  status:               z.enum(['open','acknowledged','investigating','hearing_scheduled','outcome_issued','appeal_pending','appeal_complete','closed','withdrawn']).optional(),
+  confidential:         z.boolean().optional(),
+  closed_date:          dateSchema.nullable().optional(),
+  closed_reason:        z.string().max(50).nullable().optional(),
 });
 
 const grievanceActionBodySchema = z.object({
@@ -545,7 +589,12 @@ router.put('/cases/grievance/:id', requireAuth, requireAdmin, async (req, res, n
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const result = await hrService.updateGrievance(idP.data, home.id, parsed.data);
+    const updateData = { ...parsed.data };
+    if ('description' in updateData) {
+      updateData.subject_summary = updateData.description;
+      delete updateData.description;
+    }
+    const result = await hrService.updateGrievance(idP.data, home.id, updateData);
     if (!result) return res.status(404).json({ error: 'Grievance case not found' });
     await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
     res.json(result);

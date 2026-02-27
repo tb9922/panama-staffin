@@ -125,7 +125,8 @@ function shapeGrv(row) {
     id: row.id, home_id: row.home_id, staff_id: row.staff_id,
     date_raised: d(row.date_raised), raised_by_method: row.raised_by_method,
     category: row.category, protected_characteristic: row.protected_characteristic,
-    subject_summary: row.subject_summary, subject_detail: row.subject_detail,
+    subject_summary: row.subject_summary, description: row.subject_summary,
+    subject_detail: row.subject_detail,
     desired_outcome: row.desired_outcome,
     acknowledged_date: d(row.acknowledged_date), acknowledge_deadline: d(row.acknowledge_deadline),
     acknowledged_by: row.acknowledged_by,
@@ -194,6 +195,8 @@ export async function updateGrievance(id, homeId, data, client) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'date_raised', 'raised_by_method', 'category', 'protected_characteristic',
+    'subject_summary', 'subject_detail', 'desired_outcome',
     'acknowledged_date', 'acknowledge_deadline', 'acknowledged_by',
     'investigation_status', 'investigation_officer', 'investigation_start_date',
     'investigation_notes', 'witnesses', 'evidence_items', 'investigation_completed_date',

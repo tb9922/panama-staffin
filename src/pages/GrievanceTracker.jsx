@@ -19,7 +19,7 @@ const PROTECTED_CHARACTERISTICS = [
   { id: 'marriage', name: 'Marriage & Civil Partnership' },
   { id: 'pregnancy', name: 'Pregnancy & Maternity' },
   { id: 'race', name: 'Race' },
-  { id: 'religion_belief', name: 'Religion or Belief' },
+  { id: 'religion', name: 'Religion or Belief' },
   { id: 'sex', name: 'Sex' },
   { id: 'sexual_orientation', name: 'Sexual Orientation' },
 ];
