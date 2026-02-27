@@ -9,17 +9,7 @@ import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
-import * as incidentRepo from '../repositories/incidentRepo.js';
-import * as complaintRepo from '../repositories/complaintRepo.js';
-import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
-import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
-import * as ipcRepo from '../repositories/ipcRepo.js';
-import * as riskRepo from '../repositories/riskRepo.js';
-import * as policyRepo from '../repositories/policyRepo.js';
-import * as whistleblowingRepo from '../repositories/whistleblowingRepo.js';
-import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
-import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 
 export async function listHomes() {
@@ -34,11 +24,7 @@ export async function assembleData(homeSlug, userRole) {
 
   const [
     staff, overrides, training, supervisions, appraisals,
-    fireDrills, dayNotes, onboarding,
-    incidents, complaints, complaintSurveys,
-    maintenance, ipcAudits, risks, policies,
-    whistleblowing, dols, mca,
-    careCert, cqcEvidence,
+    fireDrills, dayNotes, onboarding, careCert,
   ] = await Promise.all([
     staffRepo.findByHome(home.id),
     overrideRepo.findByHome(home.id),
@@ -48,18 +34,7 @@ export async function assembleData(homeSlug, userRole) {
     fireDrillRepo.findByHome(home.id),
     dayNoteRepo.findByHome(home.id),
     onboardingRepo.findByHome(home.id),
-    incidentRepo.findByHome(home.id),
-    complaintRepo.findByHome(home.id),
-    complaintSurveyRepo.findByHome(home.id),
-    maintenanceRepo.findByHome(home.id),
-    ipcRepo.findByHome(home.id),
-    riskRepo.findByHome(home.id),
-    policyRepo.findByHome(home.id),
-    whistleblowingRepo.findByHome(home.id),
-    dolsRepo.findByHome(home.id),
-    dolsRepo.findMcaByHome(home.id),
     careCertRepo.findByHome(home.id),
-    cqcEvidenceRepo.findByHome(home.id),
   ]);
 
   const payload = {
@@ -74,24 +49,11 @@ export async function assembleData(homeSlug, userRole) {
     fire_drills: fireDrills,
     day_notes: dayNotes,
     onboarding,
-    incidents,
-    complaints,
-    complaint_surveys: complaintSurveys,
-    maintenance,
-    ipc_audits: ipcAudits,
-    risk_register: risks,
-    policy_reviews: policies,
-    whistleblowing_concerns: whistleblowing,
     care_certificate: careCert,
-    cqc_evidence: cqcEvidence,
   };
 
-  // Viewer role: strip GDPR special category data
-  if (userRole === 'admin') {
-    payload.dols = dols;
-    payload.mca_assessments = mca;
-  } else {
-    // Strip staff PII (NI numbers, dates of birth) from non-admin responses
+  // Viewer role: strip staff PII
+  if (userRole !== 'admin') {
     payload.staff = staff.map(s => ({ ...s, date_of_birth: null, ni_number: null }));
   }
 
@@ -116,18 +78,7 @@ export async function saveData(homeSlug, body, username) {
     await fireDrillRepo.sync(home.id, body.fire_drills || [], client);
     await dayNoteRepo.replace(home.id, body.day_notes || {}, client);
     await onboardingRepo.sync(home.id, body.onboarding || {}, client);
-    await incidentRepo.sync(home.id, body.incidents || [], client);
-    await complaintRepo.sync(home.id, body.complaints || [], client);
-    await complaintSurveyRepo.sync(home.id, body.complaint_surveys || [], client);
-    await maintenanceRepo.sync(home.id, body.maintenance || [], client);
-    await ipcRepo.sync(home.id, body.ipc_audits || [], client);
-    await riskRepo.sync(home.id, body.risk_register || [], client);
-    await policyRepo.sync(home.id, body.policy_reviews || [], client);
-    await whistleblowingRepo.sync(home.id, body.whistleblowing_concerns || [], client);
-    await dolsRepo.syncDols(home.id, body.dols || [], client);
-    await dolsRepo.syncMca(home.id, body.mca_assessments || [], client);
     await careCertRepo.sync(home.id, body.care_certificate || {}, client);
-    await cqcEvidenceRepo.sync(home.id, body.cqc_evidence || [], client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });
 

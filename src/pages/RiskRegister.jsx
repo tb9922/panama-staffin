@@ -1,9 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  ensureRiskRegisterDefaults, getRiskScore, getRiskBand, getRiskStats,
+  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk,
+} from '../lib/api.js';
+import {
+  getRiskScore, getRiskBand, getRiskStats,
   RISK_CATEGORIES, LIKELIHOOD_LABELS, IMPACT_LABELS,
   RISK_SCORE_BANDS, RISK_STATUSES,
 } from '../lib/riskRegister.js';
@@ -30,7 +33,10 @@ const HEATMAP_COLORS = {
   critical: { bg: 'bg-purple-100',  text: 'text-purple-800',  border: 'border-purple-300' },
 };
 
-export default function RiskRegister({ data, updateData }) {
+export default function RiskRegister() {
+  const [risks, setRisks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -38,20 +44,31 @@ export default function RiskRegister({ data, updateData }) {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterBand, setFilterBand] = useState('');
 
-  useEffect(() => {
-    const updated = ensureRiskRegisterDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  const home = getCurrentHome();
+
+  const load = useCallback(async () => {
+    if (!home) return;
+    setLoading(true);
+    try {
+      const result = await getRisks(home);
+      setRisks(Array.isArray(result.risks) ? result.risks : []);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [home]);
+
+  useEffect(() => { load(); }, [load]);
 
   const today = useMemo(() => formatDate(new Date()), []);
 
-  const stats = useMemo(() =>
-    getRiskStats(data.risk_register || [], today),
-    [data.risk_register, today]);
+  const stats = useMemo(() => getRiskStats(risks, today), [risks, today]);
 
   // Sorted by risk_score descending (highest risk first), filtered
   const filtered = useMemo(() => {
-    let list = [...(data.risk_register || [])].sort((a, b) => {
+    let list = [...risks].sort((a, b) => {
       const sa = a.risk_score || getRiskScore(a.likelihood, a.impact);
       const sb = b.risk_score || getRiskScore(b.likelihood, b.impact);
       return sb - sa;
@@ -65,18 +82,18 @@ export default function RiskRegister({ data, updateData }) {
       });
     }
     return list;
-  }, [data.risk_register, filterCategory, filterBand]);
+  }, [risks, filterCategory, filterBand]);
 
   // Build heatmap counts: key = "L-I" -> count of open risks at that likelihood x impact
   const heatmapCounts = useMemo(() => {
     const counts = {};
-    for (const risk of (data.risk_register || [])) {
+    for (const risk of risks) {
       if (risk.status === 'closed') continue;
       const key = `${risk.likelihood}-${risk.impact}`;
       counts[key] = (counts[key] || 0) + 1;
     }
     return counts;
-  }, [data.risk_register]);
+  }, [risks]);
 
   // Auto-calc scores in the form
   const formInherentScore = getRiskScore(form.likelihood, form.impact);
@@ -105,33 +122,35 @@ export default function RiskRegister({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.title || !form.category) return;
-    const now = new Date().toISOString();
-    const risks = JSON.parse(JSON.stringify(data.risk_register || []));
-
     const record = {
       ...form,
       risk_score: getRiskScore(form.likelihood, form.impact),
       residual_score: getRiskScore(form.residual_likelihood, form.residual_impact),
-      updated_at: now,
     };
-
-    if (editingId) {
-      const idx = risks.findIndex(r => r.id === editingId);
-      if (idx >= 0) risks[idx] = { ...risks[idx], ...record };
-    } else {
-      risks.push({ id: 'risk-' + Date.now(), ...record, created_at: now });
+    try {
+      if (editingId) {
+        await updateRisk(home, editingId, record);
+      } else {
+        await createRisk(home, record);
+      }
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      setError(e.message);
     }
-    updateData({ ...data, risk_register: risks });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this risk?')) return;
-    const risks = (data.risk_register || []).filter(r => r.id !== editingId);
-    updateData({ ...data, risk_register: risks });
-    setShowModal(false);
+    try {
+      await deleteRisk(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   function handleExport() {
@@ -173,6 +192,22 @@ export default function RiskRegister({ data, updateData }) {
     const def = RISK_STATUSES.find(s => s.id === status);
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-sm text-gray-500 py-12 text-center">Loading risk register...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-sm text-red-600 py-12 text-center">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>

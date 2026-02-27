@@ -1,11 +1,15 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  ensureDolsDefaults, getDolsStatus, getMcaStatus, getDolsStats,
+  getCurrentHome, getDols, createDols, updateDols, deleteDols,
+  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment,
+} from '../lib/api.js';
+import {
+  getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
 } from '../lib/dols.js';
 
@@ -25,7 +29,11 @@ const EMPTY_MCA_FORM = {
   next_review_date: '', notes: '',
 };
 
-export default function DolsTracker({ data, updateData }) {
+export default function DolsTracker() {
+  const [dols, setDols] = useState([]);
+  const [mcaAssessments, setMcaAssessments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_DOLS_FORM });
@@ -35,20 +43,31 @@ export default function DolsTracker({ data, updateData }) {
 
   useDirtyGuard(showModal);
 
-  useEffect(() => {
-    const updated = ensureDolsDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
-
   const today = useMemo(() => formatDate(new Date()), []);
 
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const home = getCurrentHome();
+      const result = await getDols(home);
+      setDols(result.dols || []);
+      setMcaAssessments(result.mcaAssessments || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
   const stats = useMemo(() =>
-    getDolsStats(data.dols || [], data.mca_assessments || [], today),
-    [data.dols, data.mca_assessments, today]);
+    getDolsStats(dols, mcaAssessments, today),
+    [dols, mcaAssessments, today]);
 
   // DoLS/LPS list — sorted by expiry (soonest first), nulls last
   const filteredDols = useMemo(() => {
-    let list = [...(data.dols || [])];
+    let list = [...dols];
     if (filterType) list = list.filter(d => d.application_type === filterType);
     if (filterStatus) {
       list = list.filter(d => getDolsStatus(d, today).status === filterStatus);
@@ -59,18 +78,18 @@ export default function DolsTracker({ data, updateData }) {
       return ea.localeCompare(eb);
     });
     return list;
-  }, [data.dols, filterType, filterStatus, today]);
+  }, [dols, filterType, filterStatus, today]);
 
   // MCA list — sorted by next_review_date (soonest first), nulls last
   const filteredMca = useMemo(() => {
-    let list = [...(data.mca_assessments || [])];
+    let list = [...mcaAssessments];
     list.sort((a, b) => {
       const ra = a.next_review_date || '9999-12-31';
       const rb = b.next_review_date || '9999-12-31';
       return ra.localeCompare(rb);
     });
     return list;
-  }, [data.mca_assessments]);
+  }, [mcaAssessments]);
 
   // ── DoLS CRUD ──────────────────────────────────────────────────────────────
 
@@ -102,26 +121,32 @@ export default function DolsTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSaveDols() {
+  async function handleSaveDols() {
     if (!form.resident_name || !form.application_date) return;
-    const now = new Date().toISOString();
-    const dols = JSON.parse(JSON.stringify(data.dols || []));
-
-    if (editingId) {
-      const idx = dols.findIndex(d => d.id === editingId);
-      if (idx >= 0) dols[idx] = { ...dols[idx], ...form, updated_at: now };
-    } else {
-      dols.push({ id: 'dol-' + Date.now(), ...form, updated_at: now });
+    const home = getCurrentHome();
+    try {
+      if (editingId) {
+        await updateDols(home, editingId, form);
+      } else {
+        await createDols(home, form);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to save: ' + err.message);
     }
-    updateData({ ...data, dols });
-    setShowModal(false);
   }
 
-  function handleDeleteDols() {
+  async function handleDeleteDols() {
     if (!editingId || !confirm('Delete this DoLS/LPS record?')) return;
-    const dols = JSON.parse(JSON.stringify((data.dols || []).filter(d => d.id !== editingId)));
-    updateData({ ...data, dols });
-    setShowModal(false);
+    const home = getCurrentHome();
+    try {
+      await deleteDols(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    }
   }
 
   // ── MCA CRUD ───────────────────────────────────────────────────────────────
@@ -147,32 +172,38 @@ export default function DolsTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSaveMca() {
+  async function handleSaveMca() {
     if (!form.resident_name || !form.assessment_date) return;
-    const now = new Date().toISOString();
-    const mcas = JSON.parse(JSON.stringify(data.mca_assessments || []));
-
-    if (editingId) {
-      const idx = mcas.findIndex(m => m.id === editingId);
-      if (idx >= 0) mcas[idx] = { ...mcas[idx], ...form, updated_at: now };
-    } else {
-      mcas.push({ id: 'mca-' + Date.now(), ...form, updated_at: now });
+    const home = getCurrentHome();
+    try {
+      if (editingId) {
+        await updateMcaAssessment(home, editingId, form);
+      } else {
+        await createMcaAssessment(home, form);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to save: ' + err.message);
     }
-    updateData({ ...data, mca_assessments: mcas });
-    setShowModal(false);
   }
 
-  function handleDeleteMca() {
+  async function handleDeleteMca() {
     if (!editingId || !confirm('Delete this MCA assessment?')) return;
-    const mcas = JSON.parse(JSON.stringify((data.mca_assessments || []).filter(m => m.id !== editingId)));
-    updateData({ ...data, mca_assessments: mcas });
-    setShowModal(false);
+    const home = getCurrentHome();
+    try {
+      await deleteMcaAssessment(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    }
   }
 
   // ── Excel Export ───────────────────────────────────────────────────────────
 
   function handleExport() {
-    const dolsRows = (data.dols || []).map(dol => {
+    const dolsRows = dols.map(dol => {
       const st = getDolsStatus(dol, today);
       const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
       const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
@@ -187,7 +218,7 @@ export default function DolsTracker({ data, updateData }) {
       ];
     });
 
-    const mcaRows = (data.mca_assessments || []).map(mca => {
+    const mcaRows = mcaAssessments.map(mca => {
       const st = getMcaStatus(mca, today);
       const statusDef = MCA_STATUSES.find(s => s.id === st.status);
       return [
@@ -227,6 +258,13 @@ export default function DolsTracker({ data, updateData }) {
   };
   const typeBadge = (type) => type === 'lps' ? BADGE.purple : BADGE.blue;
 
+  if (loading) {
+    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+  }
+  if (error) {
+    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+  }
+
   return (
     <div className={PAGE.container}>
       {/* Header */}
@@ -245,7 +283,7 @@ export default function DolsTracker({ data, updateData }) {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <div className={`${CARD.padded} ${stats.activeCount === 0 && (data.dols || []).length > 0 ? 'border-red-200 bg-red-50' : ''}`}>
+        <div className={`${CARD.padded} ${stats.activeCount === 0 && dols.length > 0 ? 'border-red-200 bg-red-50' : ''}`}>
           <div className="text-xs font-medium text-gray-500">Active DoLS/LPS</div>
           <div className="text-2xl font-bold text-gray-900 mt-0.5">{stats.activeCount}</div>
           <div className="text-[10px] text-gray-400">Authorised & current</div>

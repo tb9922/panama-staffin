@@ -4,9 +4,13 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, freezeIncident, getIncidentAddenda, addIncidentAddendum } from '../lib/api.js';
 import {
-  ensureIncidentDefaults, getIncidentTypes, getIncidentStats,
+  getCurrentHome, getLoggedInUser,
+  getIncidents, createIncident, updateIncident, deleteIncident,
+  freezeIncident, getIncidentAddenda, addIncidentAddendum,
+} from '../lib/api.js';
+import {
+  DEFAULT_INCIDENT_TYPES, getIncidentStats,
   SEVERITY_LEVELS, INVESTIGATION_STATUSES, LOCATIONS,
   CQC_NOTIFICATION_TYPES, RIDDOR_CATEGORIES, PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES, isCqcNotificationOverdue, isRiddorOverdue,
@@ -37,7 +41,13 @@ const EMPTY_FORM = {
   lessons_learned: '', investigation_closed_date: '',
 };
 
-export default function IncidentTracker({ data, updateData }) {
+export default function IncidentTracker() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [incidents, setIncidents] = useState([]);
+  const [incidentTypes, setIncidentTypes] = useState([]);
+  const [staff, setStaff] = useState([]);
+
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -52,14 +62,30 @@ export default function IncidentTracker({ data, updateData }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    const updated = ensureIncidentDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  async function load() {
+    const home = getCurrentHome();
+    if (!home) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getIncidents(home);
+      setIncidents(result.incidents || []);
+      const types = result.incidentTypes && result.incidentTypes.length > 0
+        ? result.incidentTypes
+        : DEFAULT_INCIDENT_TYPES;
+      setIncidentTypes(types.filter(t => t.active !== false));
+      setStaff(result.staff || []);
+    } catch (err) {
+      setError(err.message || 'Failed to load incidents');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   const today = useMemo(() => formatDate(new Date()), []);
-  const incidentTypes = useMemo(() => getIncidentTypes(data.config).filter(t => t.active), [data.config]);
-  const activeStaff = useMemo(() => (data.staff || []).filter(s => s.active !== false), [data.staff]);
+  const activeStaff = useMemo(() => staff.filter(s => s.active !== false), [staff]);
 
   // Date range for stats: last 90 days
   const statsRange = useMemo(() => {
@@ -69,11 +95,11 @@ export default function IncidentTracker({ data, updateData }) {
   }, []);
 
   const stats = useMemo(() =>
-    getIncidentStats(data.incidents || [], data.config, statsRange.from, statsRange.to),
-    [data.incidents, data.config, statsRange]);
+    getIncidentStats(incidents, {}, statsRange.from, statsRange.to),
+    [incidents, statsRange]);
 
   const filtered = useMemo(() => {
-    let list = [...(data.incidents || [])].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+    let list = [...incidents].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
     if (filterType) list = list.filter(i => i.type === filterType);
     if (filterSeverity) list = list.filter(i => i.severity === filterSeverity);
     if (filterStatus) list = list.filter(i => i.investigation_status === filterStatus);
@@ -86,7 +112,7 @@ export default function IncidentTracker({ data, updateData }) {
       );
     }
     return list;
-  }, [data.incidents, filterType, filterSeverity, filterStatus, search]);
+  }, [incidents, filterType, filterSeverity, filterStatus, search]);
 
   function openAdd() {
     setEditingId(null);
@@ -152,11 +178,7 @@ export default function IncidentTracker({ data, updateData }) {
       const home = getCurrentHome();
       await freezeIncident(home, editingId);
       setIsFrozen(true);
-      // Update the local data so the frozen_at flag persists
-      const incidents = (data.incidents || []).map(i =>
-        i.id === editingId ? { ...i, frozen_at: new Date().toISOString() } : i
-      );
-      updateData({ ...data, incidents });
+      await load();
     } catch (err) {
       alert(err.message || 'Failed to freeze incident');
     } finally {
@@ -176,28 +198,35 @@ export default function IncidentTracker({ data, updateData }) {
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (isFrozen) return;
     if (!form.date || !form.type || !form.severity) return;
-    const now = new Date().toISOString();
-    const incidents = JSON.parse(JSON.stringify(data.incidents || []));
-
-    if (editingId) {
-      const idx = incidents.findIndex(i => i.id === editingId);
-      if (idx >= 0) incidents[idx] = { ...incidents[idx], ...form, updated_at: now };
-    } else {
-      incidents.push({ id: 'inc-' + Date.now(), ...form, reported_by: 'admin', reported_at: now, updated_at: now });
+    const home = getCurrentHome();
+    const username = getLoggedInUser()?.username || 'admin';
+    try {
+      if (editingId) {
+        await updateIncident(home, editingId, form);
+      } else {
+        await createIncident(home, { ...form, reported_by: username });
+      }
+      await load();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to save incident');
     }
-    updateData({ ...data, incidents });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (isFrozen) return;
     if (!editingId || !confirm('Delete this incident record?')) return;
-    const incidents = JSON.parse(JSON.stringify((data.incidents || []).filter(i => i.id !== editingId)));
-    updateData({ ...data, incidents });
-    setShowModal(false);
+    const home = getCurrentHome();
+    try {
+      await deleteIncident(home, editingId);
+      await load();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to delete incident');
+    }
   }
 
   function toggleStaff(staffId) {
@@ -250,6 +279,8 @@ export default function IncidentTracker({ data, updateData }) {
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
 
+  if (loading) return <div className="p-6 text-gray-400">Loading...</div>;
+
   return (
     <div className={PAGE.container}>
       {/* Header */}
@@ -263,6 +294,8 @@ export default function IncidentTracker({ data, updateData }) {
           <button onClick={openAdd} className={BTN.primary}>+ New Incident</button>
         </div>
       </div>
+
+      {error && <div className="mb-4 text-red-600 text-sm">{error}</div>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">

@@ -59,3 +59,53 @@ export async function sync(homeId, arr, client) {
     await conn.query(`UPDATE complaints SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
   }
 }
+
+// ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
+
+import { randomUUID } from 'crypto';
+
+export async function findById(id, homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM complaints WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function upsert(homeId, data) {
+  const id = data.id || `cmp-${randomUUID()}`;
+  const now = new Date().toISOString();
+  const { rows } = await pool.query(
+    `INSERT INTO complaints (
+       id, home_id, date, raised_by, raised_by_name, category, title, description,
+       acknowledged_date, response_deadline, status, investigator, investigation_notes,
+       resolution, resolution_date, outcome_shared, root_cause, improvements,
+       lessons_learned, reported_by, reported_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       date=$3,raised_by=$4,raised_by_name=$5,category=$6,title=$7,description=$8,
+       acknowledged_date=$9,response_deadline=$10,status=$11,investigator=$12,
+       investigation_notes=$13,resolution=$14,resolution_date=$15,outcome_shared=$16,
+       root_cause=$17,improvements=$18,lessons_learned=$19,reported_by=$20,
+       reported_at=$21,updated_at=$22,deleted_at=NULL
+     RETURNING *`,
+    [
+      id, homeId, data.date || null, data.raised_by || null, data.raised_by_name || null,
+      data.category || null, data.title || null, data.description || null,
+      data.acknowledged_date || null, data.response_deadline || null, data.status || null,
+      data.investigator || null, data.investigation_notes || null, data.resolution || null,
+      data.resolution_date || null, data.outcome_shared || null, data.root_cause || null,
+      data.improvements || null, data.lessons_learned || null,
+      data.reported_by || null, data.reported_at || now, now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function softDelete(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE complaints SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}

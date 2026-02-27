@@ -58,3 +58,51 @@ export async function sync(homeId, arr, client) {
     await conn.query(`UPDATE policy_reviews SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
   }
 }
+
+// ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
+
+import { randomUUID } from 'crypto';
+
+export async function findById(id, homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM policy_reviews WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function upsert(homeId, data) {
+  const id = data.id || `pol-${randomUUID()}`;
+  const now = new Date().toISOString();
+  const { rows } = await pool.query(
+    `INSERT INTO policy_reviews (
+       id, home_id, policy_name, policy_ref, category, version,
+       last_reviewed, next_review_due, review_frequency_months,
+       status, reviewed_by, approved_by, changes, notes, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       policy_name=$3,policy_ref=$4,category=$5,version=$6,
+       last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
+       status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
+       updated_at=$15,deleted_at=NULL
+     RETURNING *`,
+    [
+      id, homeId, data.policy_name || null, data.policy_ref || null,
+      data.category || null, data.version || null,
+      data.last_reviewed || null, data.next_review_due || null,
+      data.review_frequency_months || null, data.status || null,
+      data.reviewed_by || null, data.approved_by || null,
+      JSON.stringify(data.changes || []), data.notes || null,
+      now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function softDelete(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE policy_reviews SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}

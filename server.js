@@ -23,6 +23,15 @@ import payrollRouter  from './routes/payroll.js';
 import gdprRouter     from './routes/gdpr.js';
 import hrRouter       from './routes/hr.js';
 import financeRouter  from './routes/finance.js';
+import incidentsRouter from './routes/incidents.js';
+import complaintsRouter from './routes/complaints.js';
+import maintenanceRouter from './routes/maintenance.js';
+import ipcRouter from './routes/ipc.js';
+import riskRegisterRouter from './routes/riskRegister.js';
+import policiesRouter from './routes/policies.js';
+import whistleblowingRouter from './routes/whistleblowing.js';
+import dolsRouter from './routes/dols.js';
+import cqcEvidenceRouter from './routes/cqcEvidence.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 
@@ -63,6 +72,15 @@ app.use('/api/payroll',  payrollRouter);
 app.use('/api/gdpr',     gdprRouter);
 app.use('/api/hr',       hrRouter);
 app.use('/api/finance',  financeRouter);
+app.use('/api/incidents', incidentsRouter);
+app.use('/api/complaints', complaintsRouter);
+app.use('/api/maintenance', maintenanceRouter);
+app.use('/api/ipc', ipcRouter);
+app.use('/api/risk-register', riskRegisterRouter);
+app.use('/api/policies', policiesRouter);
+app.use('/api/whistleblowing', whistleblowingRouter);
+app.use('/api/dols', dolsRouter);
+app.use('/api/cqc-evidence', cqcEvidenceRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

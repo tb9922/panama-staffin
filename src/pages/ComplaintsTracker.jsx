@@ -5,9 +5,13 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  ensureComplaintDefaults, getComplaintCategories, getComplaintStats, getSurveyStats,
+  DEFAULT_COMPLAINT_CATEGORIES, getComplaintStats, getSurveyStats,
   getComplaintStatus, COMPLAINT_STATUSES, RAISED_BY_TYPES, SURVEY_TYPES,
 } from '../lib/complaints.js';
+import {
+  getCurrentHome, getComplaints, createComplaint, updateComplaint, deleteComplaint,
+  createComplaintSurvey, updateComplaintSurvey, deleteComplaintSurvey, getLoggedInUser,
+} from '../lib/api.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -31,7 +35,13 @@ const EMPTY_SURVEY = {
   conducted_by: '',
 };
 
-export default function ComplaintsTracker({ data, updateData }) {
+export default function ComplaintsTracker() {
+  const [complaints, setComplaints] = useState([]);
+  const [surveys, setSurveys] = useState([]);
+  const [complaintCategories, setComplaintCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -46,13 +56,32 @@ export default function ComplaintsTracker({ data, updateData }) {
 
   useDirtyGuard(showModal || showSurveyModal);
 
-  useEffect(() => {
-    const updated = ensureComplaintDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  const home = getCurrentHome();
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getComplaints(home);
+      setComplaints(result.complaints || []);
+      setSurveys(result.surveys || []);
+      setComplaintCategories(
+        result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
+      );
+    } catch (err) {
+      setError(err.message || 'Failed to load complaints');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   const today = useMemo(() => formatDate(new Date()), []);
-  const categories = useMemo(() => getComplaintCategories(data.config), [data.config]);
+
+  // Minimal config object for functions that need complaint_response_days.
+  // The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).
+  const complaintConfig = { complaint_response_days: 28 };
 
   const statsRange = useMemo(() => {
     const to = new Date(); to.setHours(0, 0, 0, 0);
@@ -61,15 +90,15 @@ export default function ComplaintsTracker({ data, updateData }) {
   }, []);
 
   const stats = useMemo(() =>
-    getComplaintStats(data.complaints || [], data.config, statsRange.from, statsRange.to),
-    [data.complaints, data.config, statsRange]);
+    getComplaintStats(complaints, complaintConfig, statsRange.from, statsRange.to),
+    [complaints, statsRange]);
 
   const surveyStats = useMemo(() =>
-    getSurveyStats(data.complaint_surveys || [], statsRange.from, statsRange.to),
-    [data.complaint_surveys, statsRange]);
+    getSurveyStats(surveys, statsRange.from, statsRange.to),
+    [surveys, statsRange]);
 
   const filtered = useMemo(() => {
-    let list = [...(data.complaints || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    let list = [...complaints].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (filterCategory) list = list.filter(c => c.category === filterCategory);
     if (filterStatus) list = list.filter(c => c.status === filterStatus);
     if (search) {
@@ -81,11 +110,11 @@ export default function ComplaintsTracker({ data, updateData }) {
       );
     }
     return list;
-  }, [data.complaints, filterCategory, filterStatus, search]);
+  }, [complaints, filterCategory, filterStatus, search]);
 
   function openAdd() {
     setEditingId(null);
-    const deadline = formatDate(new Date(Date.now() + (data.config?.complaint_response_days || 28) * 86400000));
+    const deadline = formatDate(new Date(Date.now() + (complaintConfig.complaint_response_days) * 86400000));
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
     setShowModal(true);
@@ -98,24 +127,30 @@ export default function ComplaintsTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.date || !form.title) return;
-    const complaints = JSON.parse(JSON.stringify(data.complaints || []));
-    if (editingId) {
-      const idx = complaints.findIndex(c => c.id === editingId);
-      if (idx >= 0) complaints[idx] = { ...form, id: editingId, updated_at: new Date().toISOString() };
-    } else {
-      complaints.push({ ...form, id: 'cmp-' + Date.now(), reported_at: new Date().toISOString() });
+    try {
+      if (editingId) {
+        await updateComplaint(home, editingId, form);
+      } else {
+        await createComplaint(home, { ...form, reported_by: getLoggedInUser()?.username || 'admin' });
+      }
+      setShowModal(false);
+      load();
+    } catch (err) {
+      alert(err.message || 'Failed to save complaint');
     }
-    updateData({ ...data, complaints });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this complaint?')) return;
-    const complaints = (data.complaints || []).filter(c => c.id !== editingId);
-    updateData({ ...data, complaints });
-    setShowModal(false);
+    try {
+      await deleteComplaint(home, editingId);
+      setShowModal(false);
+      load();
+    } catch (err) {
+      alert(err.message || 'Failed to delete complaint');
+    }
   }
 
   function openAddSurvey() {
@@ -130,30 +165,36 @@ export default function ComplaintsTracker({ data, updateData }) {
     setShowSurveyModal(true);
   }
 
-  function handleSaveSurvey() {
+  async function handleSaveSurvey() {
     if (!surveyForm.date || !surveyForm.type) return;
-    const surveys = JSON.parse(JSON.stringify(data.complaint_surveys || []));
-    if (editingSurveyId) {
-      const idx = surveys.findIndex(s => s.id === editingSurveyId);
-      if (idx >= 0) surveys[idx] = { ...surveyForm, id: editingSurveyId };
-    } else {
-      surveys.push({ ...surveyForm, id: 'srv-' + Date.now(), reported_at: new Date().toISOString() });
+    try {
+      if (editingSurveyId) {
+        await updateComplaintSurvey(home, editingSurveyId, surveyForm);
+      } else {
+        await createComplaintSurvey(home, surveyForm);
+      }
+      setShowSurveyModal(false);
+      load();
+    } catch (err) {
+      alert(err.message || 'Failed to save survey');
     }
-    updateData({ ...data, complaint_surveys: surveys });
-    setShowSurveyModal(false);
   }
 
-  function handleDeleteSurvey() {
+  async function handleDeleteSurvey() {
     if (!editingSurveyId || !confirm('Delete this survey?')) return;
-    const surveys = (data.complaint_surveys || []).filter(s => s.id !== editingSurveyId);
-    updateData({ ...data, complaint_surveys: surveys });
-    setShowSurveyModal(false);
+    try {
+      await deleteComplaintSurvey(home, editingSurveyId);
+      setShowSurveyModal(false);
+      load();
+    } catch (err) {
+      alert(err.message || 'Failed to delete survey');
+    }
   }
 
   function handleExport() {
     const rows = filtered.map(c => {
-      const cat = categories.find(cat => cat.id === c.category);
-      const st = getComplaintStatus(c, data.config);
+      const cat = complaintCategories.find(cat => cat.id === c.category);
+      const st = getComplaintStatus(c, complaintConfig);
       return [
         c.date, c.raised_by, c.raised_by_name, cat?.name || c.category,
         c.title, c.description, c.acknowledged_date || '',
@@ -174,6 +215,25 @@ export default function ComplaintsTracker({ data, updateData }) {
     const s = COMPLAINT_STATUSES.find(st => st.id === status);
     return s ? <span className={BADGE[s.badgeKey]}>{s.name}</span> : status;
   };
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-gray-400">Loading complaints...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-red-500">{error}</div>
+        <div className="text-center">
+          <button onClick={load} className={BTN.secondary}>Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -205,7 +265,7 @@ export default function ComplaintsTracker({ data, updateData }) {
         <div className={CARD.padded}>
           <div className="text-xs text-gray-500 mb-1">Avg Response</div>
           <div className="text-2xl font-bold text-gray-900">{stats.avgResponseDays !== null ? `${stats.avgResponseDays}d` : '--'}</div>
-          <div className="text-xs text-gray-400">target {data.config?.complaint_response_days || 28}d</div>
+          <div className="text-xs text-gray-400">target {complaintConfig.complaint_response_days}d</div>
         </div>
         <div className={CARD.padded}>
           <div className="text-xs text-gray-500 mb-1">Resolution Rate</div>
@@ -225,7 +285,7 @@ export default function ComplaintsTracker({ data, updateData }) {
           <div className="flex flex-wrap gap-2 mb-4">
             <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
               <option value="">All Categories</option>
-              {categories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {complaintCategories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
               <option value="">All Statuses</option>
@@ -255,8 +315,8 @@ export default function ComplaintsTracker({ data, updateData }) {
                     <tr><td colSpan="7" className={`${TABLE.td} text-center text-gray-400`}>No complaints recorded</td></tr>
                   )}
                   {filtered.map(c => {
-                    const cat = categories.find(cat => cat.id === c.category);
-                    const st = getComplaintStatus(c, data.config);
+                    const cat = complaintCategories.find(cat => cat.id === c.category);
+                    const st = getComplaintStatus(c, complaintConfig);
                     return (
                       <tr key={c.id} className={TABLE.tr}>
                         <td className={TABLE.tdMono}>{c.date}</td>
@@ -303,10 +363,10 @@ export default function ComplaintsTracker({ data, updateData }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data.complaint_surveys || []).length === 0 && (
+                  {surveys.length === 0 && (
                     <tr><td colSpan="6" className={`${TABLE.td} text-center text-gray-400`}>No surveys recorded</td></tr>
                   )}
-                  {[...(data.complaint_surveys || [])].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => (
+                  {[...surveys].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => (
                     <tr key={s.id} className={TABLE.tr}>
                       <td className={TABLE.tdMono}>{s.date}</td>
                       <td className={TABLE.td}>{SURVEY_TYPES.find(t => t.id === s.type)?.name || s.type}</td>
@@ -358,7 +418,7 @@ export default function ComplaintsTracker({ data, updateData }) {
                       <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
                         className={INPUT.select}>
                         <option value="">Select...</option>
-                        {categories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {complaintCategories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                   </div>

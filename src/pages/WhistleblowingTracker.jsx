@@ -1,9 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  ensureWhistleblowingDefaults, getWhistleblowingStats,
+  getCurrentHome, getWhistleblowingConcerns, createWhistleblowingConcern,
+  updateWhistleblowingConcern, deleteWhistleblowingConcern,
+} from '../lib/api.js';
+import {
+  getWhistleblowingStats,
   CONCERN_CATEGORIES, CONCERN_SEVERITIES, CONCERN_STATUSES,
   CONCERN_OUTCOMES, REPORTER_ROLES,
 } from '../lib/whistleblowing.js';
@@ -24,7 +28,10 @@ const EMPTY_FORM = {
   resolution_date: '', lessons_learned: '',
 };
 
-export default function WhistleblowingTracker({ data, updateData }) {
+export default function WhistleblowingTracker() {
+  const [concerns, setConcerns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -33,12 +40,22 @@ export default function WhistleblowingTracker({ data, updateData }) {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
-  useEffect(() => {
-    const updated = ensureWhistleblowingDefaults(data);
-    if (updated) updateData(updated);
+  const today = useMemo(() => formatDate(new Date()), []);
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const home = getCurrentHome();
+      const result = await getWhistleblowingConcerns(home);
+      setConcerns(result.concerns || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  useEffect(() => { load(); }, [load]);
 
   // Date range for stats: last 90 days
   const statsRange = useMemo(() => {
@@ -48,16 +65,16 @@ export default function WhistleblowingTracker({ data, updateData }) {
   }, []);
 
   const stats = useMemo(() =>
-    getWhistleblowingStats(data.whistleblowing_concerns || [], statsRange.from, statsRange.to),
-    [data.whistleblowing_concerns, statsRange]);
+    getWhistleblowingStats(concerns, statsRange.from, statsRange.to),
+    [concerns, statsRange]);
 
   const filtered = useMemo(() => {
-    let list = [...(data.whistleblowing_concerns || [])].sort((a, b) => (b.date_raised || '').localeCompare(a.date_raised || ''));
+    let list = [...concerns].sort((a, b) => (b.date_raised || '').localeCompare(a.date_raised || ''));
     if (filterCategory) list = list.filter(c => c.category === filterCategory);
     if (filterSeverity) list = list.filter(c => c.severity === filterSeverity);
     if (filterStatus) list = list.filter(c => c.status === filterStatus);
     return list;
-  }, [data.whistleblowing_concerns, filterCategory, filterSeverity, filterStatus]);
+  }, [concerns, filterCategory, filterSeverity, filterStatus]);
 
   function openAdd() {
     setEditingId(null);
@@ -93,26 +110,32 @@ export default function WhistleblowingTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.date_raised || !form.category || !form.severity) return;
-    const now = new Date().toISOString();
-    const concerns = JSON.parse(JSON.stringify(data.whistleblowing_concerns || []));
-
-    if (editingId) {
-      const idx = concerns.findIndex(c => c.id === editingId);
-      if (idx >= 0) concerns[idx] = { ...concerns[idx], ...form, updated_at: now };
-    } else {
-      concerns.push({ id: 'wbc-' + Date.now(), ...form, reported_at: now, updated_at: now });
+    const home = getCurrentHome();
+    try {
+      if (editingId) {
+        await updateWhistleblowingConcern(home, editingId, form);
+      } else {
+        await createWhistleblowingConcern(home, form);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to save: ' + err.message);
     }
-    updateData({ ...data, whistleblowing_concerns: concerns });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this whistleblowing concern?')) return;
-    const concerns = JSON.parse(JSON.stringify((data.whistleblowing_concerns || []).filter(c => c.id !== editingId)));
-    updateData({ ...data, whistleblowing_concerns: concerns });
-    setShowModal(false);
+    const home = getCurrentHome();
+    try {
+      await deleteWhistleblowingConcern(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    }
   }
 
   function handleExport() {
@@ -160,6 +183,13 @@ export default function WhistleblowingTracker({ data, updateData }) {
     const def = CONCERN_STATUSES.find(s => s.id === status);
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
+
+  if (loading) {
+    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+  }
+  if (error) {
+    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+  }
 
   return (
     <div className={PAGE.container}>

@@ -71,3 +71,62 @@ export async function sync(homeId, arr, client) {
     await conn.query(`UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
   }
 }
+
+// ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
+
+import { randomUUID } from 'crypto';
+
+export async function findById(id, homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM whistleblowing_concerns WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function upsert(homeId, data) {
+  const id = data.id || `wbl-${randomUUID()}`;
+  const now = new Date().toISOString();
+  const { rows } = await pool.query(
+    `INSERT INTO whistleblowing_concerns (
+       id, home_id, date_raised, raised_by_role, anonymous,
+       category, description, severity, status,
+       acknowledgement_date, investigator, investigation_start_date,
+       findings, outcome, outcome_details,
+       reporter_protected, protection_details,
+       follow_up_date, follow_up_completed, resolution_date,
+       lessons_learned, reported_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       date_raised=$3,raised_by_role=$4,anonymous=$5,
+       category=$6,description=$7,severity=$8,status=$9,
+       acknowledgement_date=$10,investigator=$11,investigation_start_date=$12,
+       findings=$13,outcome=$14,outcome_details=$15,
+       reporter_protected=$16,protection_details=$17,
+       follow_up_date=$18,follow_up_completed=$19,resolution_date=$20,
+       lessons_learned=$21,reported_at=$22,updated_at=$23,deleted_at=NULL
+     RETURNING *`,
+    [
+      id, homeId, data.date_raised || null, data.raised_by_role || null,
+      data.anonymous ?? false,
+      data.category || null, data.description || null, data.severity || null,
+      data.status || null,
+      data.acknowledgement_date || null, data.investigator || null,
+      data.investigation_start_date || null,
+      data.findings || null, data.outcome || null, data.outcome_details || null,
+      data.reporter_protected ?? false, data.protection_details || null,
+      data.follow_up_date || null, data.follow_up_completed ?? false,
+      data.resolution_date || null,
+      data.lessons_learned || null, data.reported_at || now, now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function softDelete(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}

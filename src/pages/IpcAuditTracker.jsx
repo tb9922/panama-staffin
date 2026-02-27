@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
-import { formatDate, addDays, parseDate } from '../lib/rotation.js';
+import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  ensureIpcDefaults, getIpcAuditTypes, getIpcStats,
-  DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES, IPC_AUDIT_STATUSES,
+  getIpcStats,
+  DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
 } from '../lib/ipc.js';
+import {
+  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit,
+} from '../lib/api.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -24,28 +27,43 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function IpcAuditTracker({ data, updateData }) {
+export default function IpcAuditTracker() {
+  const [audits, setAudits] = useState([]);
+  const [auditTypes, setAuditTypes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
   const [filterType, setFilterType] = useState('');
 
-  useEffect(() => {
-    const updated = ensureIpcDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  const home = getCurrentHome();
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const result = await getIpcAudits(home);
+      setAudits(result.audits || []);
+      setAuditTypes((result.auditTypes || DEFAULT_IPC_AUDIT_TYPES).filter(t => t.active));
+    } catch (err) {
+      setError(err.message || 'Failed to load IPC audits');
+    } finally {
+      setLoading(false);
+    }
+  }, [home]);
+
+  useEffect(() => { load(); }, [load]);
 
   const today = useMemo(() => formatDate(new Date()), []);
-  const auditTypes = useMemo(() => getIpcAuditTypes(data.config).filter(t => t.active), [data.config]);
 
-  const stats = useMemo(() => getIpcStats(data.ipc_audits || [], today), [data.ipc_audits, today]);
+  const stats = useMemo(() => getIpcStats(audits, today), [audits, today]);
 
   const filtered = useMemo(() => {
-    let list = [...(data.ipc_audits || [])].sort((a, b) => (b.audit_date || '').localeCompare(a.audit_date || ''));
+    let list = [...audits].sort((a, b) => (b.audit_date || '').localeCompare(a.audit_date || ''));
     if (filterType) list = list.filter(a => a.audit_type === filterType);
     return list;
-  }, [data.ipc_audits, filterType]);
+  }, [audits, filterType]);
 
   function openAdd() {
     setEditingId(null);
@@ -77,10 +95,8 @@ export default function IpcAuditTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.audit_date || !form.audit_type) return;
-    const now = new Date().toISOString();
-    const audits = JSON.parse(JSON.stringify(data.ipc_audits || []));
 
     const record = {
       ...form,
@@ -89,21 +105,28 @@ export default function IpcAuditTracker({ data, updateData }) {
       outbreak: form.outbreak.suspected ? form.outbreak : null,
     };
 
-    if (editingId) {
-      const idx = audits.findIndex(a => a.id === editingId);
-      if (idx >= 0) audits[idx] = { ...audits[idx], ...record, updated_at: now };
-    } else {
-      audits.push({ id: 'ipc-' + Date.now(), ...record, reported_at: now, updated_at: now });
+    try {
+      if (editingId) {
+        await updateIpcAudit(home, editingId, record);
+      } else {
+        await createIpcAudit(home, record);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert(err.message || 'Failed to save IPC audit');
     }
-    updateData({ ...data, ipc_audits: audits });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this IPC audit record?')) return;
-    const audits = JSON.parse(JSON.stringify((data.ipc_audits || []).filter(a => a.id !== editingId)));
-    updateData({ ...data, ipc_audits: audits });
-    setShowModal(false);
+    try {
+      await deleteIpcAudit(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert(err.message || 'Failed to delete IPC audit');
+    }
   }
 
   function handleExport() {
@@ -145,6 +168,25 @@ export default function IpcAuditTracker({ data, updateData }) {
     const def = OUTBREAK_STATUSES.find(s => s.id === status);
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-gray-400">Loading IPC audits...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-red-500">{error}</div>
+        <div className="text-center">
+          <button onClick={load} className={BTN.primary}>Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>

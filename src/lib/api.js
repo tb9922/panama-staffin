@@ -127,23 +127,273 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
   });
 }
 
-// ── Incident Freeze & Addenda ────────────────────────────────────────────────
+// ── Incidents ────────────────────────────────────────────────────────────────
+
+export async function getIncidents(homeSlug) {
+  return apiFetch(`${API_BASE}/incidents?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createIncident(homeSlug, data) {
+  return apiFetch(`${API_BASE}/incidents?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateIncident(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/incidents/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteIncident(homeSlug, id) {
+  return apiFetch(`${API_BASE}/incidents/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
 
 export async function freezeIncident(homeSlug, incidentId) {
-  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/freeze?home=${h(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/freeze?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(),
   });
 }
 
 export async function getIncidentAddenda(homeSlug, incidentId) {
-  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
     headers: authHeaders(),
   });
 }
 
 export async function addIncidentAddendum(homeSlug, incidentId, content) {
-  return apiFetch(`${API_BASE}/data/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/addenda?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ content }),
+  });
+}
+
+// ── Complaints ───────────────────────────────────────────────────────────────
+
+export async function getComplaints(homeSlug) {
+  return apiFetch(`${API_BASE}/complaints?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createComplaint(homeSlug, data) {
+  return apiFetch(`${API_BASE}/complaints?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateComplaint(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/complaints/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteComplaint(homeSlug, id) {
+  return apiFetch(`${API_BASE}/complaints/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function createComplaintSurvey(homeSlug, data) {
+  return apiFetch(`${API_BASE}/complaints/surveys?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateComplaintSurvey(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/complaints/surveys/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteComplaintSurvey(homeSlug, id) {
+  return apiFetch(`${API_BASE}/complaints/surveys/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── Maintenance ──────────────────────────────────────────────────────────────
+
+export async function getMaintenance(homeSlug) {
+  return apiFetch(`${API_BASE}/maintenance?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createMaintenanceCheck(homeSlug, data) {
+  return apiFetch(`${API_BASE}/maintenance?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateMaintenanceCheck(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/maintenance/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMaintenanceCheck(homeSlug, id) {
+  return apiFetch(`${API_BASE}/maintenance/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── IPC Audits ───────────────────────────────────────────────────────────────
+
+export async function getIpcAudits(homeSlug) {
+  return apiFetch(`${API_BASE}/ipc?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createIpcAudit(homeSlug, data) {
+  return apiFetch(`${API_BASE}/ipc?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateIpcAudit(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/ipc/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteIpcAudit(homeSlug, id) {
+  return apiFetch(`${API_BASE}/ipc/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── Risk Register ─────────────────────────────────────────────────────────────
+
+export async function getRisks(homeSlug) {
+  return apiFetch(`${API_BASE}/risk-register?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createRisk(homeSlug, data) {
+  return apiFetch(`${API_BASE}/risk-register?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateRisk(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/risk-register/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRisk(homeSlug, id) {
+  return apiFetch(`${API_BASE}/risk-register/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── Policies ─────────────────────────────────────────────────────────────────
+
+export async function getPolicies(homeSlug) {
+  return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createPolicy(homeSlug, data) {
+  return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updatePolicy(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/policies/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deletePolicy(homeSlug, id) {
+  return apiFetch(`${API_BASE}/policies/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── Whistleblowing ───────────────────────────────────────────────────────────
+
+export async function getWhistleblowingConcerns(homeSlug) {
+  return apiFetch(`${API_BASE}/whistleblowing?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createWhistleblowingConcern(homeSlug, data) {
+  return apiFetch(`${API_BASE}/whistleblowing?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateWhistleblowingConcern(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/whistleblowing/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWhistleblowingConcern(homeSlug, id) {
+  return apiFetch(`${API_BASE}/whistleblowing/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── DoLS & MCA ───────────────────────────────────────────────────────────────
+
+export async function getDols(homeSlug) {
+  return apiFetch(`${API_BASE}/dols?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createDols(homeSlug, data) {
+  return apiFetch(`${API_BASE}/dols?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateDols(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/dols/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteDols(homeSlug, id) {
+  return apiFetch(`${API_BASE}/dols/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function createMcaAssessment(homeSlug, data) {
+  return apiFetch(`${API_BASE}/dols/mca?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateMcaAssessment(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/dols/mca/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMcaAssessment(homeSlug, id) {
+  return apiFetch(`${API_BASE}/dols/mca/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── CQC Evidence ─────────────────────────────────────────────────────────────
+
+export async function getCqcEvidence(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc-evidence?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createCqcEvidence(homeSlug, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateCqcEvidence(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCqcEvidence(homeSlug, id) {
+  return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
   });
 }
 

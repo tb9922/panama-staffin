@@ -733,15 +733,15 @@ export default function App() {
           <Route path="/sick-trends" element={<SickTrends data={data} />} />
           <Route path="/training" element={<TrainingMatrix data={data} updateData={safeUpdateData} />} />
           <Route path="/onboarding" element={<OnboardingTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/cqc" element={<CQCEvidence data={data} updateData={safeUpdateData} />} />
-          <Route path="/incidents" element={<IncidentTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/complaints" element={<ComplaintsTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/maintenance" element={<MaintenanceTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/ipc" element={<IpcAuditTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/risks" element={<RiskRegister data={data} updateData={safeUpdateData} />} />
-          <Route path="/policies" element={<PolicyReviewTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/speak-up" element={<WhistleblowingTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/dols" element={<DolsTracker data={data} updateData={safeUpdateData} />} />
+          <Route path="/cqc" element={<CQCEvidence data={data} />} />
+          <Route path="/incidents" element={<IncidentTracker />} />
+          <Route path="/complaints" element={<ComplaintsTracker />} />
+          <Route path="/maintenance" element={<MaintenanceTracker />} />
+          <Route path="/ipc" element={<IpcAuditTracker />} />
+          <Route path="/risks" element={<RiskRegister />} />
+          <Route path="/policies" element={<PolicyReviewTracker />} />
+          <Route path="/speak-up" element={<WhistleblowingTracker />} />
+          <Route path="/dols" element={<DolsTracker />} />
           <Route path="/care-cert" element={<CareCertificateTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/payroll/rates"      element={<PayRatesConfig data={data} updateData={safeUpdateData} user={user} />} />

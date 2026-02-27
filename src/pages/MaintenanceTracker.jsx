@@ -1,13 +1,16 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, addDays, parseDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  ensureMaintenanceDefaults, getMaintenanceCategories, getMaintenanceStats,
+  getMaintenanceStats,
   getMaintenanceStatus, MAINTENANCE_STATUSES, FREQUENCY_OPTIONS, DEFAULT_MAINTENANCE_CATEGORIES,
 } from '../lib/maintenance.js';
+import {
+  getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
+} from '../lib/api.js';
 
 const EMPTY_FORM = {
   category: '', category_name: '', description: '', frequency: 'annual',
@@ -16,7 +19,11 @@ const EMPTY_FORM = {
   certificate_ref: '', certificate_expiry: '', notes: '',
 };
 
-export default function MaintenanceTracker({ data, updateData }) {
+export default function MaintenanceTracker() {
+  const [checks, setChecks] = useState([]);
+  const [maintenanceCategories, setMaintenanceCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -25,20 +32,31 @@ export default function MaintenanceTracker({ data, updateData }) {
 
   useDirtyGuard(showModal);
 
-  useEffect(() => {
-    const updated = ensureMaintenanceDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  const home = getCurrentHome();
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const result = await getMaintenance(home);
+      setChecks(result.checks || []);
+      setMaintenanceCategories(result.maintenanceCategories || DEFAULT_MAINTENANCE_CATEGORIES);
+    } catch (err) {
+      setError(err.message || 'Failed to load maintenance checks');
+    } finally {
+      setLoading(false);
+    }
+  }, [home]);
+
+  useEffect(() => { load(); }, [load]);
 
   const today = useMemo(() => formatDate(new Date()), []);
-  const categories = useMemo(() => getMaintenanceCategories(data.config), [data.config]);
 
   const stats = useMemo(() =>
-    getMaintenanceStats(data.maintenance || [], today),
-    [data.maintenance, today]);
+    getMaintenanceStats(checks, today),
+    [checks, today]);
 
   const items = useMemo(() => {
-    let list = [...(data.maintenance || [])];
+    let list = [...checks];
     // Add status to each
     list = list.map(m => ({ ...m, _status: getMaintenanceStatus(m, today) }));
     // Sort: overdue first, then due_soon, then compliant
@@ -48,7 +66,7 @@ export default function MaintenanceTracker({ data, updateData }) {
     if (filterCategory) list = list.filter(m => m.category === filterCategory);
     if (filterStatus) list = list.filter(m => m._status.status === filterStatus);
     return list;
-  }, [data.maintenance, filterCategory, filterStatus, today]);
+  }, [checks, filterCategory, filterStatus, today]);
 
   function openAdd() {
     setEditingId(null);
@@ -62,10 +80,9 @@ export default function MaintenanceTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.category) return;
-    const maintenance = JSON.parse(JSON.stringify(data.maintenance || []));
-    const catDef = categories.find(c => c.id === form.category);
+    const catDef = maintenanceCategories.find(c => c.id === form.category);
     const saveItem = {
       ...form,
       category_name: catDef?.name || form.category_name || form.category,
@@ -76,21 +93,28 @@ export default function MaintenanceTracker({ data, updateData }) {
       saveItem.next_due = formatDate(addDays(parseDate(saveItem.last_completed), freqDays));
     }
 
-    if (editingId) {
-      const idx = maintenance.findIndex(m => m.id === editingId);
-      if (idx >= 0) maintenance[idx] = { ...saveItem, id: editingId, updated_at: new Date().toISOString() };
-    } else {
-      maintenance.push({ ...saveItem, id: 'mnt-' + Date.now() });
+    try {
+      if (editingId) {
+        await updateMaintenanceCheck(home, editingId, saveItem);
+      } else {
+        await createMaintenanceCheck(home, saveItem);
+      }
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert(err.message || 'Failed to save maintenance check');
     }
-    updateData({ ...data, maintenance });
-    setShowModal(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this maintenance record?')) return;
-    const maintenance = (data.maintenance || []).filter(m => m.id !== editingId);
-    updateData({ ...data, maintenance });
-    setShowModal(false);
+    try {
+      await deleteMaintenanceCheck(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert(err.message || 'Failed to delete maintenance check');
+    }
   }
 
   function handleExport() {
@@ -121,6 +145,25 @@ export default function MaintenanceTracker({ data, updateData }) {
     const s = MAINTENANCE_STATUSES.find(st => st.id === status);
     return s ? <span className={BADGE[s.badgeKey]}>{s.name}</span> : status;
   };
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-gray-400">Loading maintenance checks...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-center py-12 text-red-500">{error}</div>
+        <div className="text-center">
+          <button onClick={load} className={BTN.primary}>Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -162,7 +205,7 @@ export default function MaintenanceTracker({ data, updateData }) {
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
           <option value="">All Categories</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {maintenanceCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} ${INPUT.sm}`}>
           <option value="">All Statuses</option>
@@ -221,11 +264,11 @@ export default function MaintenanceTracker({ data, updateData }) {
                 <div>
                   <label className={INPUT.label}>Category</label>
                   <select value={form.category} onChange={e => {
-                    const cat = categories.find(c => c.id === e.target.value);
+                    const cat = maintenanceCategories.find(c => c.id === e.target.value);
                     setForm({ ...form, category: e.target.value, category_name: cat?.name || '', frequency: cat?.frequency || form.frequency });
                   }} className={INPUT.select}>
                     <option value="">Select...</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {maintenanceCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -308,7 +351,7 @@ export default function MaintenanceTracker({ data, updateData }) {
 
               {/* Regulation info */}
               {form.category && (() => {
-                const cat = categories.find(c => c.id === form.category);
+                const cat = maintenanceCategories.find(c => c.id === form.category);
                 return cat?.regulation ? (
                   <div className="text-xs text-gray-400 bg-gray-50 p-2 rounded">
                     Regulation: {cat.regulation}

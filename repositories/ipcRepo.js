@@ -55,3 +55,48 @@ export async function sync(homeId, arr, client) {
     await conn.query(`UPDATE ipc_audits SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
   }
 }
+
+// ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────
+
+import { randomUUID } from 'crypto';
+
+export async function findById(id, homeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM ipc_audits WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function upsert(homeId, data) {
+  const id = data.id || `ipc-${randomUUID()}`;
+  const now = new Date().toISOString();
+  const { rows } = await pool.query(
+    `INSERT INTO ipc_audits (
+       id, home_id, audit_date, audit_type, auditor, overall_score, compliance_pct,
+       risk_areas, corrective_actions, outbreak, notes, reported_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       audit_date=$3,audit_type=$4,auditor=$5,overall_score=$6,compliance_pct=$7,
+       risk_areas=$8,corrective_actions=$9,outbreak=$10,notes=$11,
+       reported_at=$12,updated_at=$13,deleted_at=NULL
+     RETURNING *`,
+    [
+      id, homeId, data.audit_date || null, data.audit_type || null, data.auditor || null,
+      data.overall_score != null ? data.overall_score : null,
+      data.compliance_pct != null ? data.compliance_pct : null,
+      JSON.stringify(data.risk_areas || []), JSON.stringify(data.corrective_actions || []),
+      JSON.stringify(data.outbreak || {}), data.notes || null,
+      data.reported_at || now, now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function softDelete(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE ipc_audits SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}

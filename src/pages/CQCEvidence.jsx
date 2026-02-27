@@ -1,12 +1,16 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  QUALITY_STATEMENTS, METRIC_DEFINITIONS, ensureCqcDefaults,
-  calculateComplianceScore, getDateRange, getEvidenceForStatement, getScoreBand,
+  getCurrentHome, getCqcEvidence, createCqcEvidence, updateCqcEvidence,
+  deleteCqcEvidence, getLoggedInUser,
+} from '../lib/api.js';
+import {
+  QUALITY_STATEMENTS, METRIC_DEFINITIONS,
+  calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
@@ -35,7 +39,10 @@ function metricColor(value, lowerIsBetter) {
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
 }
 
-export default function CQCEvidence({ data, updateData }) {
+// Hybrid: keeps data prop for score computation; evidence CRUD goes through API
+export default function CQCEvidence({ data }) {
+  const [evidence, setEvidence] = useState([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
@@ -44,28 +51,43 @@ export default function CQCEvidence({ data, updateData }) {
 
   useDirtyGuard(showAddEvidence);
 
-  // Ensure cqc_evidence exists in data
-  useEffect(() => {
-    const updated = ensureCqcDefaults(data);
-    if (updated) updateData(updated);
+  const loadEvidence = useCallback(async () => {
+    try {
+      const home = getCurrentHome();
+      const result = await getCqcEvidence(home);
+      setEvidence(result.evidence || []);
+    } catch (err) {
+      // Non-fatal: evidence list stays empty rather than breaking the whole page
+      console.error('Failed to load CQC evidence:', err);
+    } finally {
+      setEvidenceLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadEvidence(); }, [loadEvidence]);
 
   const today = useMemo(() => formatDate(new Date()), []);
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
 
+  // Merge live evidence state into data for score computation and evidence-for-statement calls
+  const dataWithEvidence = useMemo(() => {
+    if (!data) return null;
+    return { ...data, cqc_evidence: evidence };
+  }, [data, evidence]);
+
   const score = useMemo(() => {
-    if (!data?.config) return null;
-    return calculateComplianceScore(data, dateRange, today);
-  }, [data, dateRange, today]);
+    if (!dataWithEvidence?.config) return null;
+    return calculateComplianceScore(dataWithEvidence, dateRange, today);
+  }, [dataWithEvidence, dateRange, today]);
 
   const evidenceByStatement = useMemo(() => {
-    if (!data?.config) return {};
+    if (!dataWithEvidence?.config) return {};
     const map = {};
     for (const qs of QUALITY_STATEMENTS) {
-      map[qs.id] = getEvidenceForStatement(qs.id, data, dateRange, today);
+      map[qs.id] = getEvidenceForStatement(qs.id, dataWithEvidence, dateRange, today);
     }
     return map;
-  }, [data, dateRange, today]);
+  }, [dataWithEvidence, dateRange, today]);
 
   if (!data?.config || !score) {
     return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
@@ -79,26 +101,33 @@ export default function CQCEvidence({ data, updateData }) {
     setShowAddEvidence(true);
   }
 
-  function handleSaveEvidence() {
+  async function handleSaveEvidence() {
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) return;
-    const newItem = {
-      id: 'ev-' + Date.now(),
-      ...evidenceForm,
-      title: evidenceForm.title.trim(),
-      description: evidenceForm.description.trim(),
-      date_to: evidenceForm.date_to || null,
-      added_by: 'admin',
-      added_at: new Date().toISOString(),
-    };
-    const newEvidence = [...(data.cqc_evidence || []), newItem];
-    updateData({ ...data, cqc_evidence: newEvidence });
-    setShowAddEvidence(false);
+    const home = getCurrentHome();
+    try {
+      await createCqcEvidence(home, {
+        ...evidenceForm,
+        title: evidenceForm.title.trim(),
+        description: evidenceForm.description.trim(),
+        date_to: evidenceForm.date_to || null,
+        added_by: getLoggedInUser()?.username || 'admin',
+      });
+      setShowAddEvidence(false);
+      await loadEvidence();
+    } catch (err) {
+      alert('Failed to save evidence: ' + err.message);
+    }
   }
 
-  function handleDeleteEvidence(evId) {
+  async function handleDeleteEvidence(evId) {
     if (!confirm('Remove this evidence item?')) return;
-    const newEvidence = (data.cqc_evidence || []).filter(e => e.id !== evId);
-    updateData({ ...data, cqc_evidence: newEvidence });
+    const home = getCurrentHome();
+    try {
+      await deleteCqcEvidence(home, evId);
+      await loadEvidence();
+    } catch (err) {
+      alert('Failed to delete evidence: ' + err.message);
+    }
   }
 
   async function handleGeneratePDF() {
@@ -106,7 +135,7 @@ export default function CQCEvidence({ data, updateData }) {
     try {
       await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
-      generateEvidencePackPDF(data, dateRangeDays);
+      generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
     } catch (err) {
       alert('Failed to generate PDF: ' + err.message);
     } finally {
@@ -287,10 +316,14 @@ export default function CQCEvidence({ data, updateData }) {
                         </div>
                       )}
 
-                      <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
-                        className={`${BTN.secondary} ${BTN.xs}`}>
-                        + Add Evidence
-                      </button>
+                      {evidenceLoading ? (
+                        <span className="text-xs text-gray-400">Loading evidence...</span>
+                      ) : (
+                        <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
+                          className={`${BTN.secondary} ${BTN.xs}`}>
+                          + Add Evidence
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

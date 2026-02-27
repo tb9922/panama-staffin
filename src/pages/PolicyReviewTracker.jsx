@@ -1,11 +1,14 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
-import { formatDate, addDays, parseDate } from '../lib/rotation.js';
+import { formatDate, parseDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  ensurePolicyDefaults, getPolicyStatus, getPolicyStats, getPolicyAlerts,
+  getCurrentHome, getPolicies, createPolicy, updatePolicy, deletePolicy,
+} from '../lib/api.js';
+import {
+  getPolicyStatus, getPolicyStats,
   POLICY_STATUSES,
 } from '../lib/policyReview.js';
 
@@ -23,7 +26,10 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export default function PolicyReviewTracker({ data, updateData }) {
+export default function PolicyReviewTracker() {
+  const [policies, setPolicies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -31,22 +37,33 @@ export default function PolicyReviewTracker({ data, updateData }) {
 
   useDirtyGuard(showModal);
 
-  useEffect(() => {
-    const updated = ensurePolicyDefaults(data);
-    if (updated) updateData(updated);
-  }, []);
+  const home = getCurrentHome();
+
+  const load = useCallback(async () => {
+    if (!home) return;
+    setLoading(true);
+    try {
+      const result = await getPolicies(home);
+      setPolicies(Array.isArray(result.policies) ? result.policies : []);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [home]);
+
+  useEffect(() => { load(); }, [load]);
 
   const today = useMemo(() => formatDate(new Date()), []);
 
-  const stats = useMemo(() =>
-    getPolicyStats(data.policy_reviews || [], today),
-    [data.policy_reviews, today]);
+  const stats = useMemo(() => getPolicyStats(policies, today), [policies, today]);
 
   // Sort: overdue first, then due, then current
   const statusOrder = { overdue: 0, due: 1, current: 2 };
 
   const filtered = useMemo(() => {
-    let list = [...(data.policy_reviews || [])];
+    let list = [...policies];
 
     // Sort by status priority
     list.sort((a, b) => {
@@ -60,7 +77,7 @@ export default function PolicyReviewTracker({ data, updateData }) {
     }
 
     return list;
-  }, [data.policy_reviews, filterStatus, today]);
+  }, [policies, filterStatus, today]);
 
   function calculateNextReviewDue(lastReviewed, frequencyMonths) {
     if (!lastReviewed) return '';
@@ -93,48 +110,40 @@ export default function PolicyReviewTracker({ data, updateData }) {
     setShowModal(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.policy_name) return;
-    const now = new Date().toISOString();
-    const policies = JSON.parse(JSON.stringify(data.policy_reviews || []));
 
     // Auto-calculate next_review_due from last_reviewed + frequency
     const nextDue = form.last_reviewed
       ? calculateNextReviewDue(form.last_reviewed, form.review_frequency_months)
       : form.next_review_due;
 
-    if (editingId) {
-      const idx = policies.findIndex(p => p.id === editingId);
-      if (idx >= 0) {
-        policies[idx] = {
-          ...policies[idx],
-          ...form,
-          next_review_due: nextDue,
-          updated_at: now,
-        };
-      }
-    } else {
-      policies.push({
-        id: 'pol-' + Date.now(),
-        ...form,
-        next_review_due: nextDue,
-        status: form.last_reviewed ? 'current' : 'not_reviewed',
-        updated_at: now,
-      });
-    }
+    const record = {
+      ...form,
+      next_review_due: nextDue,
+    };
 
-    updateData({ ...data, policy_reviews: policies });
-    setShowModal(false);
+    try {
+      if (editingId) {
+        await updatePolicy(home, editingId, record);
+      } else {
+        await createPolicy(home, {
+          ...record,
+          status: form.last_reviewed ? 'current' : 'not_reviewed',
+        });
+      }
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
-  function handleMarkReviewed() {
+  async function handleMarkReviewed() {
     if (!editingId) return;
-    const now = new Date().toISOString();
-    const policies = JSON.parse(JSON.stringify(data.policy_reviews || []));
-    const idx = policies.findIndex(p => p.id === editingId);
-    if (idx < 0) return;
+    const policy = policies.find(p => p.id === editingId);
+    if (!policy) return;
 
-    const policy = policies[idx];
     const oldVersion = policy.version || '1.0';
 
     // Bump version: "1.0" -> "1.1", "2.3" -> "2.4"
@@ -150,25 +159,32 @@ export default function PolicyReviewTracker({ data, updateData }) {
 
     const nextDue = calculateNextReviewDue(today, form.review_frequency_months);
 
-    policies[idx] = {
-      ...policy,
+    const record = {
       ...form,
       last_reviewed: today,
       next_review_due: nextDue,
       version: newVersion,
       changes: [...(policy.changes || []), newChange],
-      updated_at: now,
     };
 
-    updateData({ ...data, policy_reviews: policies });
-    setShowModal(false);
+    try {
+      await updatePolicy(home, editingId, record);
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!editingId || !confirm('Delete this policy record?')) return;
-    const policies = JSON.parse(JSON.stringify((data.policy_reviews || []).filter(p => p.id !== editingId)));
-    updateData({ ...data, policy_reviews: policies });
-    setShowModal(false);
+    try {
+      await deletePolicy(home, editingId);
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   function handleExport() {
@@ -217,6 +233,22 @@ export default function PolicyReviewTracker({ data, updateData }) {
     const def = POLICY_STATUSES.find(s => s.id === status);
     return def ? def.name : 'Not Reviewed';
   };
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-sm text-gray-500 py-12 text-center">Loading policy reviews...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <div className="text-sm text-red-600 py-12 text-center">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
