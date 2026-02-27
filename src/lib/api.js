@@ -1266,3 +1266,31 @@ export async function clearOnboardingSection(homeSlug, staffId, section) {
     method: 'DELETE', headers: authHeaders(),
   });
 }
+
+// ─── Staff CRUD ───────────────────────────────────────────────────────────────
+
+export async function createStaff(homeSlug, staffData) {
+  return apiFetch(`${API_BASE}/staff?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(staffData),
+  });
+}
+
+export async function updateStaffMember(homeSlug, staffId, staffData) {
+  return apiFetch(`${API_BASE}/staff/${encodeURIComponent(staffId)}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(staffData),
+  });
+}
+
+export async function deleteStaffMember(homeSlug, staffId) {
+  return apiFetch(`${API_BASE}/staff/${encodeURIComponent(staffId)}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+export async function saveConfig(homeSlug, config) {
+  return apiFetch(`${API_BASE}/homes/config?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ config }),
+  });
+}

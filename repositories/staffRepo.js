@@ -86,3 +86,52 @@ export async function sync(homeId, staffArr, client) {
     [homeId, incomingIds]
   );
 }
+
+/**
+ * Upsert a single staff member. Used by Mode 2 staff endpoints.
+ * @param {number} homeId
+ * @param {object} staff — staff object with all fields including id
+ */
+export async function upsertOne(homeId, staff) {
+  const { rows } = await pool.query(
+    `INSERT INTO staff
+       (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
+        start_date, leaving_date, date_of_birth, ni_number, contract_hours,
+        al_entitlement, al_carryover, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+     ON CONFLICT (home_id, id) DO UPDATE SET
+       name=$3, role=$4, team=$5, pref=$6, skill=$7, hourly_rate=$8,
+       active=$9, wtr_opt_out=$10, start_date=$11, leaving_date=$12,
+       date_of_birth=$13, ni_number=$14, contract_hours=$15,
+       al_entitlement=$16, al_carryover=$17, updated_at=NOW()
+     RETURNING *`,
+    [
+      staff.id, homeId, staff.name, staff.role || null, staff.team || null,
+      staff.pref || null,
+      staff.skill != null ? staff.skill : null,
+      staff.hourly_rate != null ? staff.hourly_rate : null,
+      staff.active !== false,
+      staff.wtr_opt_out === true,
+      staff.start_date || null, staff.leaving_date || null,
+      staff.date_of_birth || null, staff.ni_number || null,
+      staff.contract_hours != null ? staff.contract_hours : null,
+      staff.al_entitlement != null ? staff.al_entitlement : null,
+      staff.al_carryover != null ? staff.al_carryover : 0,
+    ]
+  );
+  return shapeRow(rows[0]);
+}
+
+/**
+ * Soft-delete a single staff member.
+ * @param {number} homeId
+ * @param {string} staffId
+ */
+export async function softDeleteOne(homeId, staffId) {
+  const { rowCount } = await pool.query(
+    `UPDATE staff SET deleted_at = NOW(), active = false, leaving_date = CURRENT_DATE
+     WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    [homeId, staffId]
+  );
+  return rowCount > 0;
+}

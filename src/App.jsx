@@ -725,7 +725,7 @@ export default function App() {
           <Route path="/day/:date" element={<DailyStatus data={data} updateData={safeUpdateData} user={user} />} />
           <Route path="/handover" element={<HandoverNotes data={data} user={user} />} />
           <Route path="/rotation" element={<RotationGrid data={data} updateData={safeUpdateData} />} />
-          <Route path="/staff" element={<StaffRegister data={data} updateData={safeUpdateData} />} />
+          <Route path="/staff" element={<StaffRegister />} />
           <Route path="/costs" element={<CostTracker data={data} updateData={safeUpdateData} />} />
           <Route path="/leave" element={<AnnualLeave data={data} updateData={safeUpdateData} />} />
           <Route path="/scenarios" element={<ScenarioModel data={data} />} />
@@ -773,7 +773,7 @@ export default function App() {
           <Route path="/finance/payables"    element={<PayablesManager />} />
           <Route path="/reports" element={<Reports data={data} />} />
           <Route path="/audit" element={<AuditLog />} />
-          <Route path="/settings" element={<Config data={data} updateData={safeUpdateData} />} />
+          <Route path="/settings" element={<Config />} />
         </Routes>
         </Suspense>
       </main>

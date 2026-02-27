@@ -1,16 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { getCurrentHome, loadData, saveConfig } from '../lib/api.js';
 
-export default function Config({ data, updateData }) {
-  const [config, setConfig] = useState(JSON.parse(JSON.stringify(data.config)));
+export default function Config() {
+  const homeSlug = getCurrentHome();
+  const [config, setConfig] = useState(null);
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
 
   useDirtyGuard(dirty);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const d = await loadData(homeSlug);
+      setConfig(JSON.parse(JSON.stringify(d.config || {})));
+      setStaff(d.staff || []);
+    } catch (e) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [homeSlug]);
+
+  useEffect(() => { load(); }, [load]);
 
   function handleChange(path, value) {
     const keys = path.split('.');
@@ -20,14 +42,20 @@ export default function Config({ data, updateData }) {
     obj[keys[keys.length - 1]] = value;
     setConfig(newConfig);
     setSaved(false);
+    setSaveError(null);
     setDirty(true);
   }
 
-  function handleSave() {
-    updateData({ ...data, config });
-    setSaved(true);
-    setDirty(false);
-    setTimeout(() => setSaved(false), 2000);
+  async function handleSave() {
+    setSaveError(null);
+    try {
+      await saveConfig(homeSlug, config);
+      setSaved(true);
+      setDirty(false);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveError(e.message);
+    }
   }
 
   function getVal(path) {
@@ -55,12 +83,38 @@ export default function Config({ data, updateData }) {
     </div>
   );
 
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <p className="text-gray-500 text-sm">Loading settings...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+          {loadError}
+          <button onClick={load} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!config) return null;
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {dirty && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
           <button onClick={handleSave} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>Save Now</button>
+        </div>
+      )}
+      {saveError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 mb-4 text-red-700 text-sm">
+          Save failed: {saveError}
         </div>
       )}
       <div className="flex items-center justify-between mb-6">
@@ -105,7 +159,7 @@ export default function Config({ data, updateData }) {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(config.shifts).map(([code, shift]) => (
+              {Object.entries(config.shifts || {}).map(([code, shift]) => (
                 <tr key={code} className={TABLE.tr}>
                   <td className={TABLE.tdMono}><span className="font-bold">{code}</span></td>
                   <td className={TABLE.td}>
@@ -256,7 +310,7 @@ export default function Config({ data, updateData }) {
             <Field label="NLW Rate" path="nlw_rate" step={0.01} unit="/hr" />
             {(() => {
               const nlw = config.nlw_rate || 12.21;
-              const below = data.staff.filter(s => s.active !== false && isCareRole(s.role) && s.hourly_rate < nlw);
+              const below = staff.filter(s => s.active !== false && isCareRole(s.role) && s.hourly_rate < nlw);
               return below.length > 0 ? (
                 <p className="text-xs text-red-600 mt-1">{below.length} staff below this rate</p>
               ) : null;

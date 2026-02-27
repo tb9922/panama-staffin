@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getCurrentHome, loadData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -25,19 +26,49 @@ const EMPTY_STAFF = {
   al_entitlement: null, al_carryover: 0,
 };
 
-export default function StaffRegister({ data, updateData }) {
+export default function StaffRegister() {
+  const homeSlug = getCurrentHome();
+  const [allStaff, setAllStaff] = useState([]);
+  const [config, setConfig] = useState(null);
+  const [overrides, setOverrides] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [rowError, setRowError] = useState(null); // { id, msg }
+
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterActive, setFilterActive] = useState('active');
   const [sortCol, setSortCol] = useState('name');
   const [sortDir, setSortDir] = useState(1);
   const [editing, setEditing] = useState(null); // staffId or null
+  const [editingRow, setEditingRow] = useState(null); // local copy of the row being edited
   const [showAdd, setShowAdd] = useState(false);
   const [newStaff, setNewStaff] = useState({ ...EMPTY_STAFF });
   const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+
   useDirtyGuard(!!editing || showAdd);
 
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const d = await loadData(homeSlug);
+      setAllStaff(d.staff || []);
+      setConfig(d.config || {});
+      setOverrides(d.overrides || {});
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [homeSlug]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const nlwRate = config?.nlw_rate || 12.21;
+
   const staff = useMemo(() => {
-    let list = [...data.staff];
+    let list = [...allStaff];
     if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
     if (filterActive === 'active') list = list.filter(s => s.active !== false);
     else if (filterActive === 'inactive') list = list.filter(s => s.active === false);
@@ -52,29 +83,39 @@ export default function StaffRegister({ data, updateData }) {
       return (av - bv) * sortDir;
     });
     return list;
-  }, [data.staff, filterTeam, filterActive, sortCol, sortDir, search]);
+  }, [allStaff, filterTeam, filterActive, sortCol, sortDir, search]);
 
   // Calculate 28-day stats for each staff member
-  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, new Date(), 28), [data.config.cycle_start_date]);
+  const cycleDates = useMemo(() => {
+    if (!config?.cycle_start_date) return [];
+    return getCycleDates(config.cycle_start_date, new Date(), 28);
+  }, [config?.cycle_start_date]);
+
   const staffStats = useMemo(() => {
+    if (!config) return {};
     const map = {};
-    data.staff.filter(s => s.active !== false).forEach(s => {
-      map[s.id] = calculateStaffPeriodHours(s, cycleDates, data.overrides, data.config);
+    allStaff.filter(s => s.active !== false).forEach(s => {
+      map[s.id] = calculateStaffPeriodHours(s, cycleDates, overrides, config);
     });
     return map;
-  }, [data.staff, cycleDates, data.overrides, data.config]);
+  }, [allStaff, cycleDates, overrides, config]);
 
   function toggleSort(col) {
     if (sortCol === col) setSortDir(-sortDir);
     else { setSortCol(col); setSortDir(1); }
   }
 
-  function updateStaff(id, field, value) {
-    updateData({ ...data, staff: data.staff.map(s => {
-      if (s.id !== id) return s;
-      const updated = { ...s, [field]: value };
+  function startEditing(s) {
+    setEditing(s.id);
+    setEditingRow({ ...s });
+    setRowError(null);
+  }
+
+  function updateEditingRow(field, value) {
+    setEditingRow(prev => {
+      const updated = { ...prev, [field]: value };
       // Auto-set leaving_date when deactivating
-      if (field === 'active' && value === false && !s.leaving_date) {
+      if (field === 'active' && value === false && !prev.leaving_date) {
         updated.leaving_date = formatDate(new Date());
       }
       // Clear leaving_date when reactivating
@@ -82,39 +123,74 @@ export default function StaffRegister({ data, updateData }) {
         updated.leaving_date = '';
       }
       return updated;
-    }) });
+    });
   }
 
-  function addStaff() {
-    const maxId = data.staff.reduce((max, s) => {
+  async function commitEdit() {
+    if (!editingRow) { setEditing(null); return; }
+    setSaving(true);
+    setRowError(null);
+    try {
+      await updateStaffMember(homeSlug, editingRow.id, editingRow);
+      setEditing(null);
+      setEditingRow(null);
+      await load();
+    } catch (e) {
+      setRowError({ id: editingRow.id, msg: e.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setEditingRow(null);
+    setRowError(null);
+  }
+
+  async function addStaff() {
+    const maxId = allStaff.reduce((max, s) => {
       const num = parseInt(s.id.replace('S', ''));
       return num > max ? num : max;
     }, 0);
     const id = 'S' + String(maxId + 1).padStart(3, '0');
     const staffEntry = { ...newStaff, id };
-    updateData({ ...data, staff: [...data.staff, staffEntry] });
-    setNewStaff({ ...EMPTY_STAFF });
-    setShowAdd(false);
+    setSaving(true);
+    setRowError(null);
+    try {
+      await createStaff(homeSlug, staffEntry);
+      setNewStaff({ ...EMPTY_STAFF });
+      setShowAdd(false);
+      await load();
+    } catch (e) {
+      setRowError({ id: 'add', msg: e.message });
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function removeStaff(id) {
-    const s = data.staff.find(x => x.id === id);
+  async function removeStaff(id) {
+    const s = allStaff.find(x => x.id === id);
     if (!s || !confirm(`Remove ${s.name} (${id})? This will also remove all their overrides.`)) return;
-    const newOverrides = JSON.parse(JSON.stringify(data.overrides));
-    for (const dateKey of Object.keys(newOverrides)) {
-      delete newOverrides[dateKey][id];
-      if (Object.keys(newOverrides[dateKey]).length === 0) delete newOverrides[dateKey];
+    setSaving(true);
+    setRowError(null);
+    try {
+      await deleteStaffMember(homeSlug, id);
+      if (editing === id) { setEditing(null); setEditingRow(null); }
+      await load();
+    } catch (e) {
+      setRowError({ id, msg: e.message });
+    } finally {
+      setSaving(false);
     }
-    updateData({ ...data, staff: data.staff.filter(x => x.id !== id), overrides: newOverrides });
-    if (editing === id) setEditing(null);
   }
 
   const teamCounts = useMemo(() => {
     const counts = {};
-    TEAMS.forEach(t => { counts[t] = data.staff.filter(s => s.team === t && s.active !== false).length; });
-    counts.total = data.staff.filter(s => s.active !== false).length;
+    TEAMS.forEach(t => { counts[t] = allStaff.filter(s => s.team === t && s.active !== false).length; });
+    counts.total = allStaff.filter(s => s.active !== false).length;
     return counts;
-  }, [data.staff]);
+  }, [allStaff]);
 
   const SortHeader = ({ col, children, className = '' }) => (
     <th className={`${TABLE.th} cursor-pointer select-none hover:text-blue-600 text-xs ${className}`} onClick={() => toggleSort(col)}>
@@ -126,8 +202,27 @@ export default function StaffRegister({ data, updateData }) {
     window.print();
   }
 
-  const nlwRate = data.config.nlw_rate || 12.21;
   const isEd = (id) => editing === id;
+  const row = (id) => (editing === id ? editingRow : allStaff.find(s => s.id === id)) || {};
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <p className="text-gray-500 text-sm">Loading staff...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+          {error}
+          <button onClick={load} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -188,6 +283,11 @@ export default function StaffRegister({ data, updateData }) {
         <div className={MODAL.overlay}>
           <div className={MODAL.panel}>
             <h2 className={MODAL.title}>Add New Staff</h2>
+            {rowError?.id === 'add' && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3">
+                {rowError.msg}
+              </div>
+            )}
             <div className="space-y-3">
               <div>
                 <label className={INPUT.label}>Name</label>
@@ -258,10 +358,10 @@ export default function StaffRegister({ data, updateData }) {
                 <div>
                   <label className={INPUT.label}>AL Entitlement Override</label>
                   <input type="number" min="0" max="60" value={newStaff.al_entitlement ?? ''}
-                    placeholder={String(data.config.al_entitlement_days || 28)}
+                    placeholder={String(config?.al_entitlement_days || 28)}
                     onChange={e => setNewStaff({ ...newStaff, al_entitlement: e.target.value ? parseInt(e.target.value) : null })}
                     className={INPUT.base} />
-                  <p className="text-xs text-gray-400 mt-0.5">Blank = default ({data.config.al_entitlement_days || 28}d)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Blank = default ({config?.al_entitlement_days || 28}d)</p>
                 </div>
                 <div>
                   <label className={INPUT.label}>Carryover (days)</label>
@@ -273,9 +373,9 @@ export default function StaffRegister({ data, updateData }) {
               </div>
             </div>
             <div className={MODAL.footer}>
-              <button onClick={() => setShowAdd(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={addStaff} disabled={!newStaff.name}
-                className={`${BTN.primary} disabled:opacity-50`}>Add</button>
+              <button onClick={() => { setShowAdd(false); setRowError(null); }} className={BTN.ghost}>Cancel</button>
+              <button onClick={addStaff} disabled={!newStaff.name || saving}
+                className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Add'}</button>
             </div>
           </div>
         </div>
@@ -305,180 +405,198 @@ export default function StaffRegister({ data, updateData }) {
           </thead>
           <tbody>
             {staff.map(s => {
+              const r = isEd(s.id) ? editingRow : s;
+              if (!r) return null;
               const stats = staffStats[s.id];
+              const rErr = rowError?.id === s.id ? rowError.msg : null;
               return (
-                <tr key={s.id} className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
-                  <td className={`${TABLE.td} font-mono text-xs text-gray-400`}>{s.id}</td>
+                <>
+                  <tr key={s.id} className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
+                    <td className={`${TABLE.td} font-mono text-xs text-gray-400`}>{s.id}</td>
 
-                  {/* Name — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <input type="text" value={s.name} onChange={e => updateStaff(s.id, 'name', e.target.value)}
-                        className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-sm w-32 font-medium focus:border-blue-500 focus:outline-none" autoFocus />
-                    ) : (
-                      <span className="font-medium cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.name}</span>
-                    )}
-                  </td>
-
-                  {/* Role — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <select value={s.role} onChange={e => updateStaff(s.id, 'role', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-28">
-                        {ROLES.map(r => <option key={r}>{r}</option>)}
-                      </select>
-                    ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.role}</span>}
-                  </td>
-
-                  {/* Team — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <select value={s.team} onChange={e => updateStaff(s.id, 'team', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-20">
-                        {TEAMS.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.team}</span>}
-                  </td>
-
-                  {/* Pref — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <select value={s.pref} onChange={e => updateStaff(s.id, 'pref', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16">
-                        {PREFS.map(p => <option key={p}>{p}</option>)}
-                      </select>
-                    ) : <span className="font-mono text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.pref}</span>}
-                  </td>
-
-                  {/* Skill — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <input type="number" step="0.5" min="0" max="2" value={s.skill}
-                        onChange={e => updateStaff(s.id, 'skill', parseFloat(e.target.value) || 0)}
-                        className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
-                    ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.skill}</span>}
-                  </td>
-
-                  {/* Rate — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <div>
-                        <div className="flex items-center gap-0.5">
-                          <span className="text-xs text-gray-400">£</span>
-                          <input type="number" step="0.25" min={nlwRate} value={s.hourly_rate}
-                            onChange={e => updateStaff(s.id, 'hourly_rate', parseFloat(e.target.value) || 0)}
-                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16" />
-                        </div>
-                        {s.hourly_rate < nlwRate && (
-                          <p className="text-[10px] text-red-600 mt-0.5">Below NLW</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setEditing(s.id)}>
-                        <span className="hover:text-blue-600 transition-colors">£{s.hourly_rate?.toFixed(2)}</span>
-                        {isCareRole(s.role) && s.hourly_rate < nlwRate && (
-                          <span className={BADGE.red}>Below NLW</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-
-                  {/* Start Date — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <input type="date" value={s.start_date || ''} onChange={e => updateStaff(s.id, 'start_date', e.target.value)}
-                        className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs" />
-                    ) : <span className="text-xs text-gray-500 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>{s.start_date || '-'}</span>}
-                  </td>
-
-                  {/* WTR Opt-Out — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <input type="checkbox" checked={!!s.wtr_opt_out}
-                        onChange={e => updateStaff(s.id, 'wtr_opt_out', e.target.checked)} />
-                    ) : (
-                      <span className={`text-xs cursor-pointer hover:text-blue-600 transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'}`}
-                        onClick={() => setEditing(s.id)}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
-                    )}
-                  </td>
-
-                  {/* Notes — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <input type="text" value={s.notes || ''} onChange={e => updateStaff(s.id, 'notes', e.target.value)}
-                        className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-xs w-40" placeholder="Notes..." />
-                    ) : <span className="text-xs text-gray-500 max-w-[150px] truncate block cursor-pointer hover:text-blue-600 transition-colors"
-                      title={s.notes} onClick={() => setEditing(s.id)}>{s.notes || '-'}</span>}
-                  </td>
-
-                  {/* AL entitlement / carryover — editable */}
-                  <td className={TABLE.td}>
-                    {isEd(s.id) ? (
-                      <div className="flex flex-col gap-1">
-                        <input type="number" min="0" max="60" value={s.al_entitlement ?? ''}
-                          placeholder={String(data.config.al_entitlement_days || 28)}
-                          title="Entitlement override (blank = default)"
-                          onChange={e => updateStaff(s.id, 'al_entitlement', e.target.value ? parseInt(e.target.value) : null)}
-                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
-                        <input type="number" min="0" max="28" value={s.al_carryover || 0}
-                          title="Carryover from previous year"
-                          onChange={e => updateStaff(s.id, 'al_carryover', parseInt(e.target.value) || 0)}
-                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
-                      </div>
-                    ) : (
-                      <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => setEditing(s.id)}>
-                        {s.al_entitlement != null ? (
-                          <span className="font-medium text-blue-700">{s.al_entitlement}d</span>
-                        ) : (
-                          <span className="text-gray-400">{data.config.al_entitlement_days || 28}d</span>
-                        )}
-                        {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}c</span>}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Active — editable */}
-                  <td className={`${TABLE.td} text-center`}>
-                    {isEd(s.id) ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <select value={s.active === false ? 'N' : 'Y'} onChange={e => updateStaff(s.id, 'active', e.target.value === 'Y')}
-                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs">
-                          <option value="Y">Y</option>
-                          <option value="N">N</option>
-                        </select>
-                        {s.active === false && (
-                          <input type="date" value={s.leaving_date || ''} onChange={e => updateStaff(s.id, 'leaving_date', e.target.value)}
-                            title="Leaving date" className="border border-gray-300 rounded-lg px-1 py-0.5 text-[10px] w-28" />
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className={s.active !== false ? BADGE.green : BADGE.gray}
-                          onClick={() => setEditing(s.id)} style={{ cursor: 'pointer' }}>{s.active !== false ? 'Y' : 'N'}</span>
-                        {s.active === false && s.leaving_date && (
-                          <span className="text-[10px] text-gray-400">{s.leaving_date}</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-
-                  {/* 28d Hours & Pay (read-only, computed) */}
-                  <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
-                    {stats ? stats.totalHours.toFixed(1) : '-'}
-                  </td>
-                  <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
-                    {stats ? `£${stats.totalPay.toFixed(0)}` : '-'}
-                  </td>
-
-                  {/* Actions */}
-                  <td className={`${TABLE.td} print:hidden`}>
-                    <div className="flex gap-2 justify-end">
+                    {/* Name — editable */}
+                    <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <button onClick={() => setEditing(null)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">Done</button>
+                        <input type="text" value={r.name} onChange={e => updateEditingRow('name', e.target.value)}
+                          className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-sm w-32 font-medium focus:border-blue-500 focus:outline-none" autoFocus />
                       ) : (
-                        <button onClick={() => setEditing(s.id)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
+                        <span className="font-medium cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.name}</span>
                       )}
-                      <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+
+                    {/* Role — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <select value={r.role} onChange={e => updateEditingRow('role', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-28">
+                          {ROLES.map(ro => <option key={ro}>{ro}</option>)}
+                        </select>
+                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.role}</span>}
+                    </td>
+
+                    {/* Team — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <select value={r.team} onChange={e => updateEditingRow('team', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-20">
+                          {TEAMS.map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.team}</span>}
+                    </td>
+
+                    {/* Pref — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16">
+                          {PREFS.map(p => <option key={p}>{p}</option>)}
+                        </select>
+                      ) : <span className="font-mono text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.pref}</span>}
+                    </td>
+
+                    {/* Skill — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <input type="number" step="0.5" min="0" max="2" value={r.skill}
+                          onChange={e => updateEditingRow('skill', parseFloat(e.target.value) || 0)}
+                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.skill}</span>}
+                    </td>
+
+                    {/* Rate — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <div>
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-xs text-gray-400">£</span>
+                            <input type="number" step="0.25" min={nlwRate} value={r.hourly_rate}
+                              onChange={e => updateEditingRow('hourly_rate', parseFloat(e.target.value) || 0)}
+                              className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16" />
+                          </div>
+                          {r.hourly_rate < nlwRate && (
+                            <p className="text-[10px] text-red-600 mt-0.5">Below NLW</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => startEditing(s)}>
+                          <span className="hover:text-blue-600 transition-colors">£{s.hourly_rate?.toFixed(2)}</span>
+                          {isCareRole(s.role) && s.hourly_rate < nlwRate && (
+                            <span className={BADGE.red}>Below NLW</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Start Date — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <input type="date" value={r.start_date || ''} onChange={e => updateEditingRow('start_date', e.target.value)}
+                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs" />
+                      ) : <span className="text-xs text-gray-500 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.start_date || '-'}</span>}
+                    </td>
+
+                    {/* WTR Opt-Out — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <input type="checkbox" checked={!!r.wtr_opt_out}
+                          onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
+                      ) : (
+                        <span className={`text-xs cursor-pointer hover:text-blue-600 transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'}`}
+                          onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
+                      )}
+                    </td>
+
+                    {/* Notes — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
+                          className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-xs w-40" placeholder="Notes..." />
+                      ) : <span className="text-xs text-gray-500 max-w-[150px] truncate block cursor-pointer hover:text-blue-600 transition-colors"
+                        title={s.notes} onClick={() => startEditing(s)}>{s.notes || '-'}</span>}
+                    </td>
+
+                    {/* AL entitlement / carryover — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <div className="flex flex-col gap-1">
+                          <input type="number" min="0" max="60" value={r.al_entitlement ?? ''}
+                            placeholder={String(config?.al_entitlement_days || 28)}
+                            title="Entitlement override (blank = default)"
+                            onChange={e => updateEditingRow('al_entitlement', e.target.value ? parseInt(e.target.value) : null)}
+                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                          <input type="number" min="0" max="28" value={r.al_carryover || 0}
+                            title="Carryover from previous year"
+                            onChange={e => updateEditingRow('al_carryover', parseInt(e.target.value) || 0)}
+                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                        </div>
+                      ) : (
+                        <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>
+                          {s.al_entitlement != null ? (
+                            <span className="font-medium text-blue-700">{s.al_entitlement}d</span>
+                          ) : (
+                            <span className="text-gray-400">{config?.al_entitlement_days || 28}d</span>
+                          )}
+                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}c</span>}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Active — editable */}
+                    <td className={`${TABLE.td} text-center`}>
+                      {isEd(s.id) ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <select value={r.active === false ? 'N' : 'Y'} onChange={e => updateEditingRow('active', e.target.value === 'Y')}
+                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs">
+                            <option value="Y">Y</option>
+                            <option value="N">N</option>
+                          </select>
+                          {r.active === false && (
+                            <input type="date" value={r.leaving_date || ''} onChange={e => updateEditingRow('leaving_date', e.target.value)}
+                              title="Leaving date" className="border border-gray-300 rounded-lg px-1 py-0.5 text-[10px] w-28" />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={s.active !== false ? BADGE.green : BADGE.gray}
+                            onClick={() => startEditing(s)} style={{ cursor: 'pointer' }}>{s.active !== false ? 'Y' : 'N'}</span>
+                          {s.active === false && s.leaving_date && (
+                            <span className="text-[10px] text-gray-400">{s.leaving_date}</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 28d Hours & Pay (read-only, computed) */}
+                    <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
+                      {stats ? stats.totalHours.toFixed(1) : '-'}
+                    </td>
+                    <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
+                      {stats ? `£${stats.totalPay.toFixed(0)}` : '-'}
+                    </td>
+
+                    {/* Actions */}
+                    <td className={`${TABLE.td} print:hidden`}>
+                      <div className="flex gap-2 justify-end">
+                        {isEd(s.id) ? (
+                          <>
+                            <button onClick={commitEdit} disabled={saving}
+                              className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors disabled:opacity-50">
+                              {saving ? '...' : 'Save'}
+                            </button>
+                            <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 text-xs transition-colors">Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => startEditing(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
+                        )}
+                        <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {rErr && (
+                    <tr key={`${s.id}-err`}>
+                      <td colSpan={15} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
+                        {rErr}
+                      </td>
+                    </tr>
+                  )}
+                </>
               );
             })}
           </tbody>
@@ -487,7 +605,7 @@ export default function StaffRegister({ data, updateData }) {
 
       {/* Financial impact note */}
       <div className="mt-3 text-xs text-gray-400 print:hidden">
-        Click any field to edit. Changes to pay rates and skills affect all cost and coverage calculations across the app.
+        Click any field to edit inline, then click Save to persist. Changes to pay rates and skills affect all cost and coverage calculations across the app.
       </div>
     </div>
   );

@@ -64,3 +64,18 @@ export async function replace(homeId, overridesObj, client) {
     );
   }
 }
+
+/**
+ * Delete all overrides for a specific staff member.
+ * Called when a staff member is removed from the register.
+ * @param {number} homeId
+ * @param {string} staffId
+ * @param {object} [client]
+ */
+export async function deleteForStaff(homeId, staffId, client) {
+  const conn = client || pool;
+  await conn.query(
+    'DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2',
+    [homeId, staffId]
+  );
+}
