@@ -28,14 +28,14 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 - No tests = the code is broken, you just haven't found the bug yet
 
 **Known blocking issues (from full codebase review — fix before second-home deployment):**
-1. Non-atomic file writes in server.js — use `writeFileSync` to tmp then `renameSync` (atomic)
-2. Race condition on concurrent saves — add per-home write serialisation/debounce
-3. Viewer role receives entire data object including resident DoLS/MCA/DoB — must filter
-4. `xlsx` prototype pollution CVE — replace with `exceljs`
-5. Audit log contains named staff PII without retention/deletion mechanism
-6. RIDDOR `over_7_day` deadline is off by one (adds deadlineDays+1, should be deadlineDays)
-7. `formatDate` in rotation.js uses local time — cycle math uses UTC — inconsistency causes wrong date at midnight during BST
-8. Dashboard `today` not reactive — stale across midnight at shift handover
+1. ~~Non-atomic file writes~~ — FIXED: migrated to PostgreSQL with ACID transactions
+2. Race condition on concurrent saves — optimistic locking via `_clientUpdatedAt` exists but no per-home mutex; two concurrent loads with same timestamp can still overwrite each other
+3. ~~Viewer role receives entire data object~~ — FIXED: `assembleData()` allowlists fields for viewers; DoLS strips resident DoB
+4. ~~`xlsx` prototype pollution CVE~~ — FIXED: replaced with `exceljs` 4.4.0
+5. Audit log PII — retention policy (7yr) and `purgeOlderThan()` exist but no automated scheduled purge; relies on admin manually calling `DELETE /api/audit/purge`
+6. ~~RIDDOR `over_7_day` deadline off by one~~ — FIXED: consolidated via `RIDDOR_CATEGORIES` import
+7. ~~`formatDate` local time vs UTC~~ — FIXED: formatDate/parseDate/addDays all use UTC
+8. ~~Dashboard `today` not reactive~~ — FIXED: Dashboard uses midnight timer; CoverageAlertBanner uses `useLiveDate` hook
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
