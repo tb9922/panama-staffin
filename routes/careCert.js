@@ -1,14 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -46,7 +45,7 @@ const careCertUpdateSchema = z.object({
 });
 
 // GET /api/care-cert?home=X
-router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const [careCert, staffResult] = await Promise.all([
       careCertRepo.findByHome(req.home.id),
@@ -58,7 +57,7 @@ router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, n
 });
 
 // POST /api/care-cert?home=X — start new CC for a staff member
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = careCertCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
@@ -82,7 +81,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/care-cert/:staffId?home=X — update CC record (standard, supervisor, status)
-router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
@@ -108,7 +107,7 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
 });
 
 // DELETE /api/care-cert/:staffId?home=X — remove from tracking
-router.delete('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });

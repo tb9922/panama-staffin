@@ -3,7 +3,10 @@ import { pool } from '../db.js';
 function shapeRow(row) {
   const shaped = {};
   for (const col of ['start_date', 'expected_completion', 'completion_date']) {
-    shaped[col] = row[col] instanceof Date ? row[col].toISOString().slice(0, 10) : row[col];
+    const v = row[col];
+    shaped[col] = v instanceof Date
+      ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`
+      : v;
   }
   shaped.supervisor = row.supervisor;
   shaped.status = row.status;

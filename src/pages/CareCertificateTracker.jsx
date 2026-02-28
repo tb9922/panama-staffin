@@ -410,7 +410,8 @@ export default function CareCertificateTracker() {
       </Modal>
 
       {/* ── Detail Modal ────────────────────────────────────────────────── */}
-      <Modal isOpen={!!(showModal && selectedStaffId && selectedRecord)} onClose={() => { setShowModal(false); setPendingUpdates(null); setError(null); }} title={selectedStaff?.name || 'Staff Detail'} size="xl">
+      {showModal && selectedStaffId && selectedRecord && (
+      <Modal isOpen onClose={() => { setShowModal(false); setPendingUpdates(null); setError(null); }} title={selectedStaff?.name || 'Staff Detail'} size="xl">
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -549,6 +550,7 @@ export default function CareCertificateTracker() {
               </div>
             </div>
       </Modal>
+      )}
     </div>
   );
 }
