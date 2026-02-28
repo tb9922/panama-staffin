@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
+import { hasAccess } from '../repositories/userHomeRepo.js';
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 
@@ -208,6 +209,8 @@ router.get('/retention', requireAuth, requireAdmin, async (req, res, next) => {
       if (!req.query.home) return res.status(400).json({ error: 'home parameter required for scan' });
       const home = await homeRepo.findBySlug(req.query.home);
       if (!home) return res.status(404).json({ error: 'Home not found' });
+      const allowed = await hasAccess(req.user.username, home.id);
+      if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
       res.json(await gdprService.scanRetention(home.id));
     } else {
       res.json(await gdprService.getRetentionSchedule());
@@ -293,6 +296,8 @@ router.get('/access-log', requireAuth, requireAdmin, async (req, res, next) => {
     if (homeP.data) {
       const home = await homeRepo.findBySlug(homeP.data);
       if (!home) return res.status(404).json({ error: 'Home not found' });
+      const allowed = await hasAccess(req.user.username, home.id);
+      if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
       homeSlug = home.slug;
     }
     res.json(await gdprService.getAccessLog({ limit, offset, homeSlug }));

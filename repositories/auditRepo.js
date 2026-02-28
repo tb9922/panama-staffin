@@ -22,20 +22,26 @@ export async function getRecent(limit = 100) {
   }));
 }
 
-export async function countOlderThan(days) {
-  const { rows } = await pool.query(
-    `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
-    [days]
-  );
+export async function countOlderThan(days, homeSlug) {
+  const { rows } = homeSlug
+    ? await pool.query(
+        `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1 AND home_slug = $2`,
+        [days, homeSlug])
+    : await pool.query(
+        `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
+        [days]);
   return parseInt(rows[0].count, 10);
 }
 
-export async function purgeOlderThan(days, client) {
+export async function purgeOlderThan(days, homeSlug, client) {
   const conn = client || pool;
-  const { rowCount } = await conn.query(
-    `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
-    [days]
-  );
+  const { rowCount } = homeSlug
+    ? await conn.query(
+        `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1 AND home_slug = $2`,
+        [days, homeSlug])
+    : await conn.query(
+        `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
+        [days]);
   return rowCount;
 }
 

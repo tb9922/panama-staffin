@@ -34,7 +34,15 @@ const concernUpdateSchema = concernBodySchema.partial();
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const concerns = await whistleblowingRepo.findByHome(req.home.id);
-    res.json({ concerns });
+    // Strip raised_by_role from anonymous concerns to prevent de-anonymisation
+    const safe = concerns.map(c => {
+      if (c.anonymous) {
+        const { raised_by_role, ...rest } = c;
+        return rest;
+      }
+      return c;
+    });
+    res.json({ concerns: safe });
   } catch (err) { next(err); }
 });
 

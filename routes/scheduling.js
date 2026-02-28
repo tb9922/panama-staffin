@@ -29,10 +29,16 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
       onboardingRepo.findByHome(req.home.id),
     ]);
 
-    // Strip PII for viewer role
-    const staffOut = req.user.role !== 'admin'
-      ? staff.map(s => ({ ...s, date_of_birth: null, ni_number: null }))
-      : staff;
+    // Strip PII for non-admin users — only expose scheduling-relevant fields
+    let staffOut, onboardingOut;
+    if (req.user.role !== 'admin') {
+      staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
+        ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
+      onboardingOut = undefined;
+    } else {
+      staffOut = staff;
+      onboardingOut = onboarding;
+    }
 
     res.json({
       config: req.home.config,
@@ -40,7 +46,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
       overrides,
       day_notes: dayNotes,
       training,
-      onboarding,
+      ...(onboardingOut !== undefined && { onboarding: onboardingOut }),
     });
   } catch (err) {
     next(err);

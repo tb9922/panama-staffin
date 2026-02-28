@@ -17,7 +17,7 @@ const complaintBodySchema = z.object({
   description:         z.string().max(10000).nullable().optional(),
   acknowledged_date:   dateSchema.optional(),
   response_deadline:   dateSchema.optional(),
-  status:              z.enum(['open', 'acknowledged', 'investigating', 'resolved', 'closed']).optional(),
+  status:              z.enum(['open', 'acknowledged', 'investigating', 'resolved', 'closed']),
   investigator:        z.string().max(200).nullable().optional(),
   investigation_notes: z.string().max(10000).nullable().optional(),
   resolution:          z.string().max(10000).nullable().optional(),
@@ -72,7 +72,12 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = complaintUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    // Only send fields that were actually provided in the request body
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    const complaint = await complaintRepo.update(idParsed.data, req.home.id, updates);
     if (!complaint) return res.status(404).json({ error: 'Not found' });
     res.json(complaint);
   } catch (err) { next(err); }

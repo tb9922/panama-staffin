@@ -17,14 +17,14 @@ const ipcBodySchema = z.object({
     area:     z.string().max(500),
     severity: z.string().max(50),
     details:  z.string().max(5000).nullable().optional(),
-  })).optional(),
+  })).max(50).optional(),
   corrective_actions: z.array(z.object({
     description:    z.string().max(2000),
     assigned_to:    z.string().max(200).nullable().optional(),
     due_date:       dateSchema.optional(),
     completed_date: dateSchema.optional(),
     status:         z.string().max(50).nullable().optional(),
-  })).optional(),
+  })).max(100).optional(),
   outbreak:           z.object({
     suspected:          z.boolean().optional(),
     type:               z.string().max(200).nullable().optional(),
@@ -65,7 +65,12 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = ipcUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const audit = await ipcRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    // Only send fields that were actually provided in the request body
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    const audit = await ipcRepo.update(idParsed.data, req.home.id, updates);
     if (!audit) return res.status(404).json({ error: 'Not found' });
     res.json(audit);
   } catch (err) { next(err); }

@@ -93,6 +93,40 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+export async function update(id, homeId, data) {
+  const now = new Date().toISOString();
+  // Only update fields that were actually provided — COALESCE preserves existing values for omitted fields
+  const { rows } = await pool.query(
+    `UPDATE ipc_audits SET
+       audit_date = COALESCE($3, audit_date),
+       audit_type = COALESCE($4, audit_type),
+       auditor = COALESCE($5, auditor),
+       overall_score = COALESCE($6, overall_score),
+       compliance_pct = COALESCE($7, compliance_pct),
+       risk_areas = COALESCE($8, risk_areas),
+       corrective_actions = COALESCE($9, corrective_actions),
+       outbreak = COALESCE($10, outbreak),
+       notes = COALESCE($11, notes),
+       updated_at = $12
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+     RETURNING *`,
+    [
+      id, homeId,
+      data.audit_date !== undefined ? data.audit_date : null,
+      data.audit_type !== undefined ? data.audit_type : null,
+      data.auditor !== undefined ? data.auditor : null,
+      data.overall_score !== undefined ? data.overall_score : null,
+      data.compliance_pct !== undefined ? data.compliance_pct : null,
+      data.risk_areas !== undefined ? JSON.stringify(data.risk_areas) : null,
+      data.corrective_actions !== undefined ? JSON.stringify(data.corrective_actions) : null,
+      data.outbreak !== undefined ? JSON.stringify(data.outbreak) : null,
+      data.notes !== undefined ? data.notes : null,
+      now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
 export async function softDelete(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE ipc_audits SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',

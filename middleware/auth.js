@@ -3,7 +3,7 @@ import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess } from '../repositories/userHomeRepo.js';
 import { z } from 'zod';
 
-const homeSlugSchema = z.string().min(1).max(200);
+const homeSlugSchema = z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/i, 'Invalid home slug');
 
 export function requireAuth(req, res, next) {
   const auth = req.headers.authorization;

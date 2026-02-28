@@ -50,7 +50,12 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = maintenanceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const check = await maintenanceRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    // Only send fields that were actually provided in the request body
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    const check = await maintenanceRepo.update(idParsed.data, req.home.id, updates);
     if (!check) return res.status(404).json({ error: 'Not found' });
     res.json(check);
   } catch (err) { next(err); }

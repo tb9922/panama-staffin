@@ -102,6 +102,56 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+export async function update(id, homeId, data) {
+  const now = new Date().toISOString();
+  // Only update fields that were actually provided — COALESCE preserves existing values for omitted fields
+  const { rows } = await pool.query(
+    `UPDATE complaints SET
+       date = COALESCE($3, date),
+       raised_by = COALESCE($4, raised_by),
+       raised_by_name = COALESCE($5, raised_by_name),
+       category = COALESCE($6, category),
+       title = COALESCE($7, title),
+       description = COALESCE($8, description),
+       acknowledged_date = COALESCE($9, acknowledged_date),
+       response_deadline = COALESCE($10, response_deadline),
+       status = COALESCE($11, status),
+       investigator = COALESCE($12, investigator),
+       investigation_notes = COALESCE($13, investigation_notes),
+       resolution = COALESCE($14, resolution),
+       resolution_date = COALESCE($15, resolution_date),
+       outcome_shared = COALESCE($16, outcome_shared),
+       root_cause = COALESCE($17, root_cause),
+       improvements = COALESCE($18, improvements),
+       lessons_learned = COALESCE($19, lessons_learned),
+       updated_at = $20
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+     RETURNING *`,
+    [
+      id, homeId,
+      data.date !== undefined ? data.date : null,
+      data.raised_by !== undefined ? data.raised_by : null,
+      data.raised_by_name !== undefined ? data.raised_by_name : null,
+      data.category !== undefined ? data.category : null,
+      data.title !== undefined ? data.title : null,
+      data.description !== undefined ? data.description : null,
+      data.acknowledged_date !== undefined ? data.acknowledged_date : null,
+      data.response_deadline !== undefined ? data.response_deadline : null,
+      data.status !== undefined ? data.status : null,
+      data.investigator !== undefined ? data.investigator : null,
+      data.investigation_notes !== undefined ? data.investigation_notes : null,
+      data.resolution !== undefined ? data.resolution : null,
+      data.resolution_date !== undefined ? data.resolution_date : null,
+      data.outcome_shared !== undefined ? data.outcome_shared : null,
+      data.root_cause !== undefined ? data.root_cause : null,
+      data.improvements !== undefined ? data.improvements : null,
+      data.lessons_learned !== undefined ? data.lessons_learned : null,
+      now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
 export async function softDelete(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE complaints SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',

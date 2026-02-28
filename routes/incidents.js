@@ -19,18 +19,18 @@ const incidentBodySchema = z.object({
   description:                z.string().max(10000).nullable().optional(),
   person_affected:            z.string().max(100).nullable().optional(),
   person_affected_name:       z.string().max(200).nullable().optional(),
-  staff_involved:             z.array(z.string().max(20)).optional(),
+  staff_involved:             z.array(z.string().max(20)).max(100).optional(),
   immediate_action:           z.string().max(5000).nullable().optional(),
   medical_attention:          z.boolean().optional(),
   hospital_attendance:        z.boolean().optional(),
   cqc_notifiable:             z.boolean().optional(),
-  cqc_notification_type:      z.string().max(200).nullable().optional(),
+  cqc_notification_type:      z.enum(['death', 'serious_injury', 'abuse_allegation', 'police', 'deprivation_of_liberty', 'seclusion_restraint', 'other']).nullable().optional(),
   cqc_notification_deadline:  dateSchema.optional(),
   cqc_notified:               z.boolean().optional(),
   cqc_notified_date:          dateSchema.optional(),
   cqc_reference:              z.string().max(200).nullable().optional(),
   riddor_reportable:          z.boolean().optional(),
-  riddor_category:            z.string().max(200).nullable().optional(),
+  riddor_category:            z.enum(['death', 'specified_injury', 'over_7_day', 'dangerous_occurrence']).nullable().optional(),
   riddor_reported:            z.boolean().optional(),
   riddor_reported_date:       dateSchema.optional(),
   riddor_reference:           z.string().max(200).nullable().optional(),
@@ -42,7 +42,7 @@ const incidentBodySchema = z.object({
     name:              z.string().max(200),
     role:              z.string().max(100).nullable().optional(),
     statement_summary: z.string().max(5000).nullable().optional(),
-  })).optional(),
+  })).max(50).optional(),
   duty_of_candour_applies:    z.boolean().optional(),
   candour_notification_date:  dateSchema.optional(),
   candour_letter_sent_date:   dateSchema.optional(),
@@ -66,7 +66,7 @@ const incidentBodySchema = z.object({
     due_date:       dateSchema.optional(),
     completed_date: dateSchema.optional(),
     status:         z.string().max(50).nullable().optional(),
-  })).optional(),
+  })).max(100).optional(),
 });
 const incidentUpdateSchema = incidentBodySchema.partial();
 
@@ -101,7 +101,12 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
     const parsed = incidentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    // Only send fields that were actually provided in the request body
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    const incident = await incidentRepo.update(idParsed.data, req.home.id, updates);
     if (!incident) return res.status(404).json({ error: 'Incident not found or frozen' });
     res.json(incident);
   } catch (err) { next(err); }

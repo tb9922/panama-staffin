@@ -38,8 +38,8 @@ const mcaBodySchema = z.object({
 });
 const mcaUpdateSchema = mcaBodySchema.partial();
 
-// GET /api/dols?home=X
-router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+// GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
+router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const [dols, mcaAssessments] = await Promise.all([
       dolsRepo.findByHome(req.home.id),

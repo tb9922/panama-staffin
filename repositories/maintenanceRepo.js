@@ -92,6 +92,48 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+export async function update(id, homeId, data) {
+  const now = new Date().toISOString();
+  // Only update fields that were actually provided — COALESCE preserves existing values for omitted fields
+  const { rows } = await pool.query(
+    `UPDATE maintenance SET
+       category = COALESCE($3, category),
+       description = COALESCE($4, description),
+       frequency = COALESCE($5, frequency),
+       last_completed = COALESCE($6, last_completed),
+       next_due = COALESCE($7, next_due),
+       completed_by = COALESCE($8, completed_by),
+       contractor = COALESCE($9, contractor),
+       items_checked = COALESCE($10, items_checked),
+       items_passed = COALESCE($11, items_passed),
+       items_failed = COALESCE($12, items_failed),
+       certificate_ref = COALESCE($13, certificate_ref),
+       certificate_expiry = COALESCE($14, certificate_expiry),
+       notes = COALESCE($15, notes),
+       updated_at = $16
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+     RETURNING *`,
+    [
+      id, homeId,
+      data.category !== undefined ? data.category : null,
+      data.description !== undefined ? data.description : null,
+      data.frequency !== undefined ? data.frequency : null,
+      data.last_completed !== undefined ? data.last_completed : null,
+      data.next_due !== undefined ? data.next_due : null,
+      data.completed_by !== undefined ? data.completed_by : null,
+      data.contractor !== undefined ? data.contractor : null,
+      data.items_checked !== undefined ? data.items_checked : null,
+      data.items_passed !== undefined ? data.items_passed : null,
+      data.items_failed !== undefined ? data.items_failed : null,
+      data.certificate_ref !== undefined ? data.certificate_ref : null,
+      data.certificate_expiry !== undefined ? data.certificate_expiry : null,
+      data.notes !== undefined ? data.notes : null,
+      now,
+    ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
 export async function softDelete(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE maintenance SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',

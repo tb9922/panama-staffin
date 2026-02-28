@@ -245,19 +245,17 @@ const grievanceUpdateSchema = z.object({
 
 const grievanceActionBodySchema = z.object({
   description:  z.string().min(1).max(2000),
-  assigned_to:  z.string().max(200).optional(),
+  responsible:  z.string().max(200).optional(),
   due_date:     dateSchema.optional(),
   status:       z.string().max(50).optional(),
-  notes:        z.string().max(2000).nullable().optional(),
 });
 
 const grievanceActionUpdateSchema = z.object({
   description:    z.string().min(1).max(2000).optional(),
-  assigned_to:    z.string().max(200).nullable().optional(),
+  responsible:    z.string().max(200).nullable().optional(),
   due_date:       dateSchema.nullable().optional(),
   completed_date: dateSchema.nullable().optional(),
   status:         z.string().max(50).optional(),
-  notes:          z.string().max(2000).nullable().optional(),
 });
 
 // ── Performance Schemas ─────────────────────────────────────────────────────
@@ -1079,8 +1077,8 @@ router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess
     // Also purge audit log entries beyond retention period
     const retentionDays = retentionYears * 365;
     counts.audit_log = dryRun
-      ? await auditRepo.countOlderThan(retentionDays)
-      : await auditRepo.purgeOlderThan(retentionDays);
+      ? await auditRepo.countOlderThan(retentionDays, req.home.slug)
+      : await auditRepo.purgeOlderThan(retentionDays, req.home.slug);
     await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', req.home.slug, req.user.username, { retentionYears, counts });
     res.json({ dry_run: dryRun, retention_years: retentionYears, counts });
   } catch (err) { next(err); }
