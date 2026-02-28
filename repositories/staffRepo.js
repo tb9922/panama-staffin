@@ -72,9 +72,9 @@ export async function sync(homeId, staffArr, client) {
          deleted_at     = NULL`,
       [
         s.id, homeId, s.name, s.role, s.team, s.pref || null,
-        s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out || false,
+        s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out ?? false,
         s.start_date || null, s.date_of_birth || null, s.ni_number || null,
-        s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover || 0, s.leaving_date || null,
+        s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover ?? 0, s.leaving_date || null,
       ]
     );
   }

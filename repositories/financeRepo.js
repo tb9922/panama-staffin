@@ -58,12 +58,12 @@ export async function createResident(homeId, data, client) {
      RETURNING *`,
     [homeId, data.resident_name, data.room_number || null,
      data.admission_date || null, data.discharge_date || null,
-     data.care_type || 'residential',
-     data.funding_type || 'self_funded', data.funding_authority || null, data.funding_reference || null,
-     data.weekly_fee || 0, data.la_contribution || 0, data.chc_contribution || 0, data.fnc_amount || 0,
-     data.top_up_amount || 0, data.top_up_payer || null, data.top_up_contact || null,
+     data.care_type ?? 'residential',
+     data.funding_type ?? 'self_funded', data.funding_authority || null, data.funding_reference || null,
+     data.weekly_fee ?? 0, data.la_contribution ?? 0, data.chc_contribution ?? 0, data.fnc_amount ?? 0,
+     data.top_up_amount ?? 0, data.top_up_payer || null, data.top_up_contact || null,
      data.last_fee_review || null, data.next_fee_review || null,
-     data.status || 'active', data.notes || null, data.created_by]
+     data.status ?? 'active', data.notes || null, data.created_by]
   );
   return shapeResident(rows[0]);
 }
@@ -211,9 +211,9 @@ export async function createInvoice(homeId, data, client) {
     [homeId, data.invoice_number, data.resident_id || null,
      data.payer_type, data.payer_name, data.payer_reference || null,
      data.period_start || null, data.period_end || null,
-     data.subtotal || 0, data.adjustments || 0, data.total_amount || 0,
-     data.amount_paid || 0, data.balance_due || 0,
-     data.status || 'draft', data.issue_date || null, data.due_date || null,
+     data.subtotal ?? 0, data.adjustments ?? 0, data.total_amount ?? 0,
+     data.amount_paid ?? 0, data.balance_due ?? 0,
+     data.status ?? 'draft', data.issue_date || null, data.due_date || null,
      data.notes || null, data.created_by]
   );
   return shapeInvoice(rows[0]);
@@ -257,7 +257,7 @@ export async function createInvoiceLine(invoiceId, homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO finance_invoice_lines (invoice_id, home_id, description, quantity, unit_price, amount, line_type)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [invoiceId, homeId, data.description, data.quantity || 1, data.unit_price, data.amount, data.line_type || 'fee']);
+    [invoiceId, homeId, data.description, data.quantity ?? 1, data.unit_price, data.amount, data.line_type ?? 'fee']);
   return shapeInvoiceLine(rows[0]);
 }
 
@@ -322,11 +322,11 @@ export async function createExpense(homeId, data, client) {
      RETURNING *`,
     [homeId, data.expense_date, data.category, data.subcategory || null,
      data.description, data.supplier || null, data.invoice_ref || null,
-     data.net_amount, data.vat_amount || 0, data.gross_amount,
-     data.status || 'pending',
+     data.net_amount, data.vat_amount ?? 0, data.gross_amount,
+     data.status ?? 'pending',
      data.approved_by || null, data.approved_date || null,
      data.paid_date || null, data.payment_method || null, data.payment_reference || null,
-     data.recurring || false, data.recurrence_frequency || null,
+     data.recurring ?? false, data.recurrence_frequency || null,
      data.notes || null, data.created_by]
   );
   return shapeExpense(rows[0]);
@@ -607,7 +607,7 @@ export async function createPaymentSchedule(homeId, data, client) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [homeId, data.supplier, data.category, data.description || null,
      data.frequency, data.amount, data.next_due,
-     data.auto_approve || false, data.on_hold || false, data.hold_reason || null,
+     data.auto_approve ?? false, data.on_hold ?? false, data.hold_reason || null,
      data.notes || null, data.created_by]);
   return shapeSchedule(rows[0]);
 }

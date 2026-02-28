@@ -67,8 +67,8 @@ export async function createSickPeriod(homeId, data, client) {
     [
       homeId, data.staff_id, data.start_date, data.end_date || null,
       data.qualifying_days_per_week || 5,
-      data.waiting_days_served || 0, data.ssp_weeks_paid || 0,
-      data.fit_note_received || false, data.fit_note_date || null,
+      data.waiting_days_served ?? 0, data.ssp_weeks_paid ?? 0,
+      data.fit_note_received ?? false, data.fit_note_date || null,
       data.linked_to_period_id || null, data.notes || null,
     ]
   );

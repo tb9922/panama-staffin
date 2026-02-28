@@ -64,7 +64,7 @@ async function validateALOverride(homeId, config, date, staffId) {
   if (staffRows.length === 0) return null; // agency/unknown staff — skip entitlement check
   const staff = staffRows[0];
   const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days || 28);
-  const entitlement = base + (staff.al_carryover || 0);
+  const entitlement = base + (staff.al_carryover ?? 0);
 
   if (alUsed >= entitlement) {
     return `Staff has used ${alUsed} of ${entitlement} AL days — no entitlement remaining`;

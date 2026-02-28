@@ -52,11 +52,11 @@ export async function upsertTaxCode(homeId, data, client) {
      RETURNING *`,
     [
       homeId, data.staff_id, data.tax_code || '1257L',
-      data.basis || 'cumulative', data.ni_category || 'A',
+      data.basis ?? 'cumulative', data.ni_category ?? 'A',
       data.effective_from || new Date().toISOString().slice(0, 10),
-      data.previous_pay || 0, data.previous_tax || 0,
+      data.previous_pay ?? 0, data.previous_tax ?? 0,
       data.student_loan_plan || null,
-      data.source || 'manual', data.notes || null,
+      data.source ?? 'manual', data.notes || null,
     ]
   );
   return shapeCode(rows[0]);

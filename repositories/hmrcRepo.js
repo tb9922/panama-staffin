@@ -51,9 +51,9 @@ export async function upsertLiability(homeId, taxYear, taxMonth, data, client) {
       homeId, taxYear, taxMonth,
       data.period_start, data.period_end,
       data.total_paye, data.total_employee_ni, data.total_employer_ni,
-      data.employment_allowance_offset || 0,
+      data.employment_allowance_offset ?? 0,
       data.total_due, data.payment_due_date,
-      data.status || 'unpaid',
+      data.status ?? 'unpaid',
     ]
   );
   return shapeRow(rows[0]);

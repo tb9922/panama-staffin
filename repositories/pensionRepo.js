@@ -68,7 +68,7 @@ export async function upsertEnrolment(homeId, data, client) {
        updated_at        = NOW()
      RETURNING *`,
     [
-      homeId, data.staff_id, data.status || 'pending_assessment',
+      homeId, data.staff_id, data.status ?? 'pending_assessment',
       data.enrolled_date || null, data.opted_out_date || null,
       data.postponed_until || null, data.reassessment_date || null,
       data.notes || null,

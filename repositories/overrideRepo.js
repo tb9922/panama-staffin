@@ -42,7 +42,7 @@ export async function replace(homeId, overridesObj, client) {
   const rows = [];
   for (const [date, dayOverrides] of Object.entries(overridesObj)) {
     for (const [staffId, override] of Object.entries(dayOverrides)) {
-      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null, override.sleep_in || false]);
+      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null, override.sleep_in ?? false]);
     }
   }
 

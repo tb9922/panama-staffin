@@ -87,7 +87,7 @@ export async function createRequest(homeId, data, client) {
        (home_id, request_type, subject_type, subject_id, subject_name, date_received, deadline, identity_verified, status, notes)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [homeId, data.request_type, data.subject_type, data.subject_id, data.subject_name || null,
-     data.date_received, data.deadline, data.identity_verified || false, data.status || 'received', data.notes || null]
+     data.date_received, data.deadline, data.identity_verified ?? false, data.status ?? 'received', data.notes || null]
   );
   return shapeRequest(rows[0]);
 }
@@ -167,10 +167,10 @@ export async function createBreach(homeId, data, client) {
         ico_notification_deadline, containment_actions, status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [homeId, data.title, data.description || null, data.discovered_date,
-     data.data_categories || [], data.individuals_affected || 0,
-     data.severity || 'low', data.risk_to_rights || 'unlikely',
-     data.ico_notifiable || false, data.ico_notification_deadline || null,
-     data.containment_actions || null, data.status || 'open']
+     data.data_categories || [], data.individuals_affected ?? 0,
+     data.severity ?? 'low', data.risk_to_rights ?? 'unlikely',
+     data.ico_notifiable ?? false, data.ico_notification_deadline || null,
+     data.containment_actions || null, data.status ?? 'open']
   );
   return shapeBreach(rows[0]);
 }
@@ -326,7 +326,7 @@ export async function createDPComplaint(homeId, data, client) {
        (home_id, date_received, complainant_name, category, description, severity, ico_involved, status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [homeId, data.date_received, data.complainant_name || null, data.category,
-     data.description, data.severity || 'low', data.ico_involved || false, data.status || 'open']
+     data.description, data.severity ?? 'low', data.ico_involved ?? false, data.status ?? 'open']
   );
   return shapeDPComplaint(rows[0]);
 }

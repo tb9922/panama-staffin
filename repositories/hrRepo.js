@@ -121,9 +121,9 @@ export async function createDisciplinary(homeId, data, client) {
         allegation_summary, allegation_detail, status, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [homeId, data.staff_id, data.date_raised, data.raised_by,
-     data.source || 'other', data.source_ref || null, data.category,
+     data.source ?? 'other', data.source_ref || null, data.category,
      data.allegation_summary, data.allegation_detail || null,
-     data.status || 'open', data.created_by]
+     data.status ?? 'open', data.created_by]
   );
   return shapeDisc(rows[0]);
 }
@@ -229,10 +229,10 @@ export async function createGrievance(homeId, data, client) {
        (home_id, staff_id, date_raised, raised_by_method, category, protected_characteristic,
         subject_summary, subject_detail, desired_outcome, status, confidential, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-    [homeId, data.staff_id, data.date_raised, data.raised_by_method || 'written', data.category,
+    [homeId, data.staff_id, data.date_raised, data.raised_by_method ?? 'written', data.category,
      data.protected_characteristic || null, data.subject_summary || data.description,
      data.subject_detail || null, data.desired_outcome || null,
-     data.status || 'open', data.confidential ?? false, data.created_by]
+     data.status ?? 'open', data.confidential ?? false, data.created_by]
   );
   return shapeGrv(rows[0]);
 }
@@ -301,7 +301,7 @@ export async function createGrievanceAction(grievanceId, homeId, data, client) {
     `INSERT INTO hr_grievance_actions (grievance_id, home_id, description, responsible, due_date, status)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
     [grievanceId, homeId, data.description, data.responsible || null,
-     data.due_date || null, data.status || 'pending']
+     data.due_date || null, data.status ?? 'pending']
   );
   return shapeGrvAction(rows[0]);
 }
@@ -378,7 +378,7 @@ export async function createPerformance(homeId, data, client) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [homeId, data.staff_id, data.type, data.date_raised, data.raised_by,
      data.concern_summary, data.concern_detail || null, data.performance_area,
-     data.status || 'open', data.created_by]
+     data.status ?? 'open', data.created_by]
   );
   return shapePerf(rows[0]);
 }
@@ -549,7 +549,7 @@ export async function createOhReferral(homeId, data, client) {
     [homeId, data.staff_id, data.referral_date, data.referred_by,
      data.reason, JSON.stringify(data.questions_for_oh || []),
      data.employee_consent_obtained ?? false, data.consent_date || null,
-     data.status || 'pending', data.created_by || null]
+     data.status ?? 'pending', data.created_by || null]
   );
   return shapeOh(rows[0]);
 }
@@ -646,7 +646,7 @@ export async function createContract(homeId, data, client) {
      data.hourly_rate ?? null, data.pay_frequency || null, data.annual_leave_days ?? 28,
      data.notice_period_employer || null, data.notice_period_employee || null,
      data.probation_period_months || null, data.probation_start_date || null,
-     data.probation_end_date || null, data.status || 'active']
+     data.probation_end_date || null, data.status ?? 'active']
   );
   return shapeContract(rows[0]);
 }
@@ -754,7 +754,7 @@ export async function createFamilyLeave(homeId, data, client) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [homeId, data.staff_id, data.type, data.request_date || null,
      data.leave_start_date || null, data.leave_end_date || null,
-     data.expected_return_date || null, data.status || 'requested',
+     data.expected_return_date || null, data.status ?? 'requested',
      data.notes || null, data.created_by || null]
   );
   return shapeFamilyLeave(rows[0]);
@@ -844,7 +844,7 @@ export async function createFlexWorking(homeId, data, client) {
     [homeId, data.staff_id, data.request_date, data.effective_date_requested || null,
      data.current_pattern || null, data.requested_change, data.reason || null,
      data.employee_assessment_of_impact || null, data.decision_deadline,
-     data.status || 'pending', data.created_by || null]
+     data.status ?? 'pending', data.created_by || null]
   );
   return shapeFlex(rows[0]);
 }
@@ -926,7 +926,7 @@ export async function createEdi(homeId, data, client) {
      data.respondent_staff_id || null, data.respondent_name || null,
      data.handling_route || null, data.condition_description || null,
      JSON.stringify(data.adjustments || []), data.description || null,
-     data.status || 'open']
+     data.status ?? 'open']
   );
   return shapeEdi(rows[0]);
 }
@@ -1010,7 +1010,7 @@ export async function createTupe(homeId, data, client) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [homeId, data.transfer_type, data.transfer_date,
      data.transferor_name, data.transferee_name,
-     JSON.stringify(data.employees || []), data.status || 'planned',
+     JSON.stringify(data.employees || []), data.status ?? 'planned',
      data.notes || null, data.created_by || null]
   );
   return shapeTupe(rows[0]);
@@ -1099,7 +1099,7 @@ export async function createRenewal(homeId, data, client) {
      data.dbs_update_service_registered ?? false, data.dbs_barred_list_check ?? true,
      data.rtw_document_type || null, data.rtw_check_date || null,
      data.rtw_document_expiry || null, data.rtw_next_check_due || null,
-     data.status || 'current', data.checked_by || null, data.notes || null]
+     data.status ?? 'current', data.checked_by || null, data.notes || null]
   );
   return shapeRenewal(rows[0]);
 }
@@ -1150,7 +1150,7 @@ export async function createCaseNote(homeId, caseType, caseId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_case_notes (home_id, case_type, case_id, note_type, content, author)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [homeId, caseType, caseId, data.note_type || 'note', data.content, data.author]
+    [homeId, caseType, caseId, data.note_type ?? 'note', data.content, data.author]
   );
   return shapeNote(rows[0]);
 }
@@ -1335,7 +1335,7 @@ export async function createMeeting(homeId, caseType, caseId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_investigation_meetings (home_id, case_type, case_id, meeting_date, meeting_time, meeting_type, location, attendees, summary, key_points, outcome, recorded_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-    [homeId, caseType, caseId, data.meeting_date, data.meeting_time || null, data.meeting_type || 'interview', data.location || null,
+    [homeId, caseType, caseId, data.meeting_date, data.meeting_time || null, data.meeting_type ?? 'interview', data.location || null,
      JSON.stringify(data.attendees || []), data.summary || null, data.key_points || null, data.outcome || null, data.recorded_by]
   );
   return shapeMeeting(rows[0]);
