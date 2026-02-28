@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import { useState, useEffect, useRef } from 'react';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getHrGrievance, createHrGrievance, updateHrGrievance,
   getGrievanceActions, createGrievanceAction, updateGrievanceAction,
@@ -51,30 +52,27 @@ export default function GrievanceTracker() {
   const [filterStaff, setFilterStaff] = useState('');
   useDirtyGuard(showModal);
   const [filterStatus, setFilterStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const home = getCurrentHome();
-
-  const load = useCallback(async () => {
-    if (!home) return;
-    setLoading(true);
-    try {
-      const filters = {};
-      if (filterStaff) filters.staffId = filterStaff;
-      if (filterStatus) filters.status = filterStatus;
-      const data = await getHrGrievance(home, filters);
-      setCases(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }, [home, filterStaff, filterStatus]);
-
-  useEffect(() => { load(); }, [load]);
+  const editReqRef = useRef(0);
 
   useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
+    let stale = false;
+    (async () => {
+      if (!home) return;
+      setLoading(true);
+      try {
+        const filters = {};
+        if (filterStaff) filters.staffId = filterStaff;
+        if (filterStatus) filters.status = filterStatus;
+        const res = await getHrGrievance(home, filters);
+        if (!stale) { setCases(res?.rows || []); setError(null); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [home, filterStaff, filterStatus, refreshKey]);
 
   function openCreate() {
     setEditing(null);
@@ -89,21 +87,25 @@ export default function GrievanceTracker() {
   }
 
   async function openEdit(c) {
+    const reqId = ++editReqRef.current;
     setEditing(c);
     setForm({ ...c });
     setModalTab('details');
     setNoteText('');
     setShowActionForm(false);
     setActionForm({});
-    const loadPromises = [];
-    if (c.id) {
-      loadPromises.push(
-        getHrCaseNotes('grievance', c.id).then(setCaseNotes).catch(() => setCaseNotes([])),
-        getGrievanceActions(c.id).then(a => setActions(Array.isArray(a) ? a : [])).catch(() => setActions([])),
-      );
-    }
-    await Promise.all(loadPromises);
+    setCaseNotes([]);
+    setActions([]);
     setShowModal(true);
+    if (c.id) {
+      const [notes, acts] = await Promise.all([
+        getHrCaseNotes(home, 'grievance', c.id).catch(() => []),
+        getGrievanceActions(c.id).catch(() => []),
+      ]);
+      if (editReqRef.current !== reqId) return; // stale
+      setCaseNotes(notes);
+      setActions(Array.isArray(acts) ? acts : []);
+    }
   }
 
   function closeModal() {
@@ -115,6 +117,7 @@ export default function GrievanceTracker() {
     setNoteText('');
     setShowActionForm(false);
     setActionForm({});
+    setError(null);
   }
 
   async function handleSave() {
@@ -125,41 +128,55 @@ export default function GrievanceTracker() {
     if (!form.category) missing.push('Category');
     if (!form.description?.trim()) missing.push('Description');
     if (missing.length) { setError(`Required: ${missing.join(', ')}`); return; }
+    setSaving(true);
     try {
       if (editing?.id) {
-        await updateHrGrievance(editing.id, form);
+        await updateHrGrievance(editing.id, { ...form, _version: editing.version });
       } else {
         await createHrGrievance(home, form);
       }
       closeModal();
-      load();
-    } catch (e) { setError(e.message); }
+      setRefreshKey(k => k + 1);
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setRefreshKey(k => k + 1);
+      } else { setError(e.message); }
+    }
+    finally { setSaving(false); }
   }
 
   async function handleAddNote() {
-    if (!noteText.trim() || !editing?.id) return;
+    if (!noteText.trim() || !editing?.id || saving) return;
+    setSaving(true);
     try {
       await createHrCaseNote(home, 'grievance', editing.id, { note: noteText.trim() });
-      setCaseNotes(await getHrCaseNotes('grievance', editing.id));
+      setCaseNotes(await getHrCaseNotes(home, 'grievance', editing.id));
       setNoteText('');
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleAddAction() {
-    if (!actionForm.description || !editing?.id) return;
+    if (!actionForm.description || !editing?.id || saving) return;
+    setSaving(true);
     try {
       await createGrievanceAction(editing.id, actionForm);
       setActions(await getGrievanceActions(editing.id));
       setActionForm({});
       setShowActionForm(false);
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleCompleteAction(action) {
+    if (saving) return;
+    setSaving(true);
     try {
       await updateGrievanceAction(action.id, { ...action, status: 'completed', completed_date: new Date().toISOString().slice(0, 10) });
       setActions(await getGrievanceActions(editing.id));
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleExport() {
@@ -198,8 +215,6 @@ export default function GrievanceTracker() {
           <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>
         </div>
       </div>
-
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -260,19 +275,14 @@ export default function GrievanceTracker() {
 
   function renderModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && closeModal()}>
-        <div className={MODAL.panelXl}>
-          <h3 className={MODAL.title}>{editing ? 'Edit Grievance Case' : 'New Grievance Case'}</h3>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Grievance Case' : 'New Grievance Case'} size="xl">
           {/* Modal tabs */}
-          <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
+          <div className={TAB.bar}>
             {MODAL_TABS.map(t => {
               if ((t.id === 'notes' || t.id === 'actions') && !editing) return null;
               return (
                 <button key={t.id} onClick={() => setModalTab(t.id)}
-                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                    modalTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}>{t.label}</button>
+                  className={`${TAB.button} ${modalTab === t.id ? TAB.active : TAB.inactive}`}>{t.label}</button>
               );
             })}
           </div>
@@ -288,11 +298,10 @@ export default function GrievanceTracker() {
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">{error}</div>}
           <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
-            <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+            <button className={BTN.secondary} onClick={closeModal} disabled={saving}>Cancel</button>
+            <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
           </div>
-        </div>
-      </div>
+      </Modal>
     );
   }
 
@@ -485,7 +494,7 @@ export default function GrievanceTracker() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className={BTN.primary + ' ' + BTN.xs} onClick={handleAddAction}>Save</button>
+              <button className={BTN.primary + ' ' + BTN.xs} onClick={handleAddAction} disabled={saving}>Save</button>
               <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => setShowActionForm(false)}>Cancel</button>
             </div>
           </div>
@@ -505,7 +514,7 @@ export default function GrievanceTracker() {
               <div className="flex items-center gap-2 ml-3 shrink-0">
                 {a.status === 'completed' || a.completed_date
                   ? <span className={BADGE.green}>Done</span>
-                  : <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleCompleteAction(a)}>Complete</button>
+                  : <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleCompleteAction(a)} disabled={saving}>Complete</button>
                 }
               </div>
             </div>
@@ -524,7 +533,7 @@ export default function GrievanceTracker() {
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
               <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {n.created_by || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                {n.author || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
               </p>
             </div>
           ))}
@@ -533,7 +542,7 @@ export default function GrievanceTracker() {
           <label className={INPUT.label}>Add Note</label>
           <textarea className={INPUT.base} rows={2} value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Type a case note..." />
         </div>
-        <button className={BTN.primary + ' ' + BTN.sm} onClick={handleAddNote} disabled={!noteText.trim()}>Add Note</button>
+        <button className={BTN.primary + ' ' + BTN.sm} onClick={handleAddNote} disabled={!noteText.trim() || saving}>{saving ? 'Adding...' : 'Add Note'}</button>
         <FileAttachments caseType="grievance" caseId={editing?.id} />
       </div>
     );

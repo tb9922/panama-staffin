@@ -1,0 +1,29 @@
+-- UP
+-- Add optimistic locking version column to all HR case tables + meetings
+
+ALTER TABLE hr_disciplinary_cases ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_grievance_cases ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_performance_cases ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_rtw_interviews ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_oh_referrals ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_contracts ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_family_leave ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_flexible_working ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_edi_records ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_tupe_transfers ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_rtw_dbs_renewals ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hr_investigation_meetings ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+
+-- DOWN
+ALTER TABLE hr_disciplinary_cases DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_grievance_cases DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_performance_cases DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_rtw_interviews DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_oh_referrals DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_contracts DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_family_leave DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_flexible_working DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_edi_records DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_tupe_transfers DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_rtw_dbs_renewals DROP COLUMN IF EXISTS version;
+ALTER TABLE hr_investigation_meetings DROP COLUMN IF EXISTS version;

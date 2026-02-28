@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
 import { EDI_RECORD_TYPES, EDI_STATUSES, HARASSMENT_CATEGORIES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -34,12 +35,15 @@ export default function EdiTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Filters
   const [filterType, setFilterType] = useState('');
   const [filterStaff, setFilterStaff] = useState('');
 
   const home = getCurrentHome();
+  useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -48,7 +52,8 @@ export default function EdiTracker() {
       const filters = {};
       if (filterType) filters.recordType = filterType;
       if (filterStaff) filters.staffId = filterStaff;
-      setItems(await getHrEdi(home, filters));
+      const res = await getHrEdi(home, filters);
+      setItems(res?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -68,11 +73,13 @@ export default function EdiTracker() {
   function openNew() {
     setEditing(null);
     setForm(blankForm());
+    setFormError('');
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditing(item);
+    setFormError('');
     setForm({
       record_type: item.record_type || 'harassment_complaint',
       staff_id: item.staff_id || '',
@@ -90,8 +97,12 @@ export default function EdiTracker() {
   }
 
   async function handleSave() {
+    setFormError('');
     setError(null);
-    if (!form.staff_id || !form.record_type || !form.date_recorded) return;
+    if (!form.staff_id) { setFormError('Staff member is required'); return; }
+    if (!form.record_type) { setFormError('Record type is required'); return; }
+    if (!form.date_recorded) { setFormError('Date recorded is required'); return; }
+    setSaving(true);
     try {
       const payload = { ...form };
       // Strip fields not relevant to selected record type
@@ -105,7 +116,7 @@ export default function EdiTracker() {
         delete payload.adjustments;
       }
       if (editing) {
-        await updateHrEdi(editing.id, payload);
+        await updateHrEdi(editing.id, { ...payload, _version: editing.version });
       } else {
         await createHrEdi(home, payload);
       }
@@ -113,7 +124,14 @@ export default function EdiTracker() {
       setForm(blankForm());
       setEditing(null);
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleExport() {
@@ -277,9 +295,10 @@ export default function EdiTracker() {
               </div>
             </div>
             <FileAttachments caseType="edi" caseId={editing?.id} />
+            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} disabled={saving} onClick={() => setShowModal(false)}>Cancel</button>
+              <button className={BTN.primary} disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
           </div>
         </div>

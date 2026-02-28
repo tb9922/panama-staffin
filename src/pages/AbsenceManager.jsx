@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getAbsenceSummary, getStaffAbsence,
   getHrRtwInterviews, createHrRtwInterview, updateHrRtwInterview,
@@ -33,6 +34,8 @@ export default function AbsenceManager() {
   const [tab, setTab] = useState('bradford');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Bradford
   const [summary, setSummary] = useState([]);
@@ -52,19 +55,20 @@ export default function AbsenceManager() {
   const [ohForm, setOhForm] = useState(emptyOh());
 
   const home = getCurrentHome();
+  useDirtyGuard(showRtwModal || showOhModal);
 
   const load = useCallback(async () => {
     if (!home) return;
     setLoading(true);
     try {
-      const [sum, rtw, oh] = await Promise.all([
+      const [sum, rtwRes, ohRes] = await Promise.all([
         getAbsenceSummary(home),
         getHrRtwInterviews(home),
         getHrOhReferrals(home),
       ]);
       setSummary((sum || []).sort((a, b) => (b.score || 0) - (a.score || 0)));
-      setRtwList(rtw || []);
-      setOhList(oh || []);
+      setRtwList(rtwRes?.rows || []);
+      setOhList(ohRes?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -100,7 +104,7 @@ export default function AbsenceManager() {
   }
 
   // RTW handlers
-  function openNewRtw() { setEditingRtw(null); setRtwForm(emptyRtw()); setShowRtwModal(true); }
+  function openNewRtw() { setEditingRtw(null); setRtwForm(emptyRtw()); setFormError(''); setShowRtwModal(true); }
   function openEditRtw(item) {
     setEditingRtw(item);
     setRtwForm({
@@ -110,20 +114,29 @@ export default function AbsenceManager() {
       fit_for_work: item.fit_for_work ?? true, adjustments: item.adjustments || '',
       referral_needed: item.referral_needed ?? false, notes: item.notes || '',
     });
+    setFormError('');
     setShowRtwModal(true);
   }
   async function handleSaveRtw() {
+    setFormError('');
     setError(null);
-    if (!rtwForm.staff_id || !rtwForm.rtw_date) return;
+    if (!rtwForm.staff_id) { setFormError('Staff member is required'); return; }
+    if (!rtwForm.rtw_date) { setFormError('RTW date is required'); return; }
+    setSaving(true);
     try {
-      if (editingRtw) await updateHrRtwInterview(editingRtw.id, rtwForm);
+      if (editingRtw) await updateHrRtwInterview(editingRtw.id, { ...rtwForm, _version: editingRtw.version });
       else await createHrRtwInterview(home, rtwForm);
       setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally { setSaving(false); }
   }
 
   // OH handlers
-  function openNewOh() { setEditingOh(null); setOhForm(emptyOh()); setShowOhModal(true); }
+  function openNewOh() { setEditingOh(null); setOhForm(emptyOh()); setFormError(''); setShowOhModal(true); }
   function openEditOh(item) {
     setEditingOh(item);
     setOhForm({
@@ -134,16 +147,25 @@ export default function AbsenceManager() {
       recommendations: item.recommendations || '', follow_up_date: item.follow_up_date || '',
       notes: item.notes || '',
     });
+    setFormError('');
     setShowOhModal(true);
   }
   async function handleSaveOh() {
+    setFormError('');
     setError(null);
-    if (!ohForm.staff_id || !ohForm.referral_date) return;
+    if (!ohForm.staff_id) { setFormError('Staff member is required'); return; }
+    if (!ohForm.referral_date) { setFormError('Referral date is required'); return; }
+    setSaving(true);
     try {
-      if (editingOh) await updateHrOhReferral(editingOh.id, ohForm);
+      if (editingOh) await updateHrOhReferral(editingOh.id, { ...ohForm, _version: editingOh.version });
       else await createHrOhReferral(home, ohForm);
       setShowOhModal(false); setEditingOh(null); setOhForm(emptyOh()); load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally { setSaving(false); }
   }
 
   // Export
@@ -432,9 +454,10 @@ export default function AbsenceManager() {
             </div>
           </div>
           <FileAttachments caseType="rtw_interview" caseId={editingRtw?.id} />
+          {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
           <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowRtwModal(false)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleSaveRtw}>{editingRtw ? 'Update' : 'Create'}</button>
+            <button className={BTN.secondary} disabled={saving} onClick={() => setShowRtwModal(false)}>Cancel</button>
+            <button className={BTN.primary} disabled={saving} onClick={handleSaveRtw}>{saving ? 'Saving...' : editingRtw ? 'Update' : 'Create'}</button>
           </div>
         </div>
       </div>
@@ -494,9 +517,10 @@ export default function AbsenceManager() {
             </div>
           </div>
           <FileAttachments caseType="oh_referral" caseId={editingOh?.id} />
+          {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
           <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowOhModal(false)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleSaveOh}>{editingOh ? 'Update' : 'Create'}</button>
+            <button className={BTN.secondary} disabled={saving} onClick={() => setShowOhModal(false)}>Cancel</button>
+            <button className={BTN.primary} disabled={saving} onClick={handleSaveOh}>{saving ? 'Saving...' : editingOh ? 'Update' : 'Create'}</button>
           </div>
         </div>
       </div>

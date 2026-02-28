@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrTupe, createHrTupe, updateHrTupe } from '../lib/api.js';
 import { TUPE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import FileAttachments from '../components/FileAttachments.jsx';
@@ -22,14 +23,18 @@ export default function TupeManager() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const home = getCurrentHome();
+  useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
     if (!home) return;
     setLoading(true);
     try {
-      setItems(await getHrTupe(home));
+      const res = await getHrTupe(home);
+      setItems(res?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -71,17 +76,25 @@ export default function TupeManager() {
   }
 
   async function handleSave() {
+    setFormError('');
     setError(null);
-    if (!form.transfer_date || !form.transferor_name) return;
+    if (!form.transfer_date) { setFormError('Transfer date is required'); return; }
+    if (!form.transferor_name) { setFormError('Transferor name is required'); return; }
+    setSaving(true);
     try {
       const payload = {
         ...form,
         staff_affected: form.staff_affected !== '' ? parseInt(form.staff_affected, 10) : null,
       };
-      if (editing) await updateHrTupe(editing.id, payload);
+      if (editing) await updateHrTupe(editing.id, { ...payload, _version: editing.version });
       else await createHrTupe(home, payload);
       setShowModal(false); setEditing(null); setForm(emptyForm()); load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally { setSaving(false); }
   }
 
   async function handleExport() {
@@ -225,9 +238,10 @@ export default function TupeManager() {
               </div>
             </div>
             <FileAttachments caseType="tupe" caseId={editing?.id} />
+            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
 import { FLEX_WORKING_STATUSES, FLEX_REFUSAL_REASONS, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -26,7 +27,7 @@ function isOverdue(item) {
 const blankForm = () => ({
   staff_id: '', request_date: new Date().toISOString().slice(0, 10),
   requested_change: '', decision_deadline: '', status: 'pending',
-  reason: '', current_pattern: '', proposed_pattern: '',
+  reason: '', current_pattern: '',
   decision: '', decision_date: '', decision_reason: '',
   trial_period_end: '', appeal_date: '', appeal_outcome: '', notes: '',
 });
@@ -38,12 +39,15 @@ export default function FlexWorkingTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Filters
   const [filterStaff, setFilterStaff] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
   const home = getCurrentHome();
+  useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -52,7 +56,8 @@ export default function FlexWorkingTracker() {
       const filters = {};
       if (filterStaff) filters.staffId = filterStaff;
       if (filterStatus) filters.status = filterStatus;
-      setItems(await getHrFlexWorking(home, filters));
+      const res = await getHrFlexWorking(home, filters);
+      setItems(res?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -73,8 +78,13 @@ export default function FlexWorkingTracker() {
     setEditing(null);
     const today = new Date().toISOString().slice(0, 10);
     // ERA 2025: employer must decide within 2 months
-    const deadline = new Date();
-    deadline.setMonth(deadline.getMonth() + 2);
+    // Clamp day to avoid month overflow (e.g. Dec 31 + 2 months → Feb 28, not Mar 3)
+    const deadline = new Date(today);
+    const targetMonth = deadline.getMonth() + 2;
+    deadline.setDate(1);
+    deadline.setMonth(targetMonth);
+    const lastDay = new Date(deadline.getFullYear(), deadline.getMonth() + 1, 0).getDate();
+    deadline.setDate(Math.min(new Date(today).getDate(), lastDay));
     setForm({ ...blankForm(), request_date: today, decision_deadline: deadline.toISOString().slice(0, 10) });
     setShowModal(true);
   }
@@ -89,7 +99,6 @@ export default function FlexWorkingTracker() {
       status: item.status || 'pending',
       reason: item.reason || '',
       current_pattern: item.current_pattern || '',
-      proposed_pattern: item.proposed_pattern || '',
       decision: item.decision || '',
       decision_date: item.decision_date || '',
       decision_reason: item.decision_reason || '',
@@ -102,11 +111,15 @@ export default function FlexWorkingTracker() {
   }
 
   async function handleSave() {
+    setFormError('');
     setError(null);
-    if (!form.staff_id || !form.request_date || !form.requested_change) return;
+    if (!form.staff_id) { setFormError('Staff member is required'); return; }
+    if (!form.request_date) { setFormError('Request date is required'); return; }
+    if (!form.requested_change) { setFormError('Requested change is required'); return; }
+    setSaving(true);
     try {
       if (editing) {
-        await updateHrFlexWorking(editing.id, form);
+        await updateHrFlexWorking(editing.id, { ...form, _version: editing.version });
       } else {
         await createHrFlexWorking(home, form);
       }
@@ -114,7 +127,14 @@ export default function FlexWorkingTracker() {
       setForm(blankForm());
       setEditing(null);
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleExport() {
@@ -221,15 +241,9 @@ export default function FlexWorkingTracker() {
                 <label className={INPUT.label}>Reason for Request</label>
                 <textarea className={INPUT.base} rows={2} value={form.reason} onChange={e => set('reason', e.target.value)} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Current Pattern</label>
-                  <input className={INPUT.base} value={form.current_pattern} onChange={e => set('current_pattern', e.target.value)} placeholder="e.g. Mon-Fri 9-5" />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Proposed Pattern</label>
-                  <input className={INPUT.base} value={form.proposed_pattern} onChange={e => set('proposed_pattern', e.target.value)} placeholder="e.g. Mon-Thu 8-6" />
-                </div>
+              <div>
+                <label className={INPUT.label}>Current Pattern</label>
+                <input className={INPUT.base} value={form.current_pattern} onChange={e => set('current_pattern', e.target.value)} placeholder="e.g. Mon-Fri 9-5" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -299,9 +313,10 @@ export default function FlexWorkingTracker() {
               </div>
             </div>
             <FileAttachments caseType="flexible_working" caseId={editing?.id} />
+            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
           </div>
         </div>

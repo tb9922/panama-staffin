@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import { useState, useEffect } from 'react';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import ModalWrapper from '../components/Modal.jsx';
 import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
 import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -11,9 +12,9 @@ const MODAL_TABS = ['Concern', 'Informal', 'PIP', 'Hearing', 'Outcome', 'Appeal'
 
 const emptyForm = () => ({
   staff_id: '', date_raised: new Date().toISOString().slice(0, 10), type: 'capability',
-  description: '', manager: '', status: 'open',
+  description: '', status: 'open',
   informal_notes: '', informal_targets: '',
-  pip_objectives: '', pip_start_date: '', pip_end_date: '', pip_review_dates: '',
+  pip_objectives: '', pip_start_date: '', pip_end_date: '',
   hearing_date: '', hearing_chair: '',
   outcome: '', outcome_date: '', warning_expiry_date: '',
   appeal_date: '', appeal_outcome: '',
@@ -27,6 +28,7 @@ export default function PerformanceTracker() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [modalTab, setModalTab] = useState(0);
+  const [saving, setSaving] = useState(false);
   useDirtyGuard(showModal);
 
   // Filters
@@ -34,32 +36,26 @@ export default function PerformanceTracker() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
 
+  const [refreshKey, setRefreshKey] = useState(0);
   const home = getCurrentHome();
 
-  const load = useCallback(async () => {
-    if (!home) return;
-    setLoading(true);
-    try {
-      const filters = {};
-      if (filterStaff) filters.staffId = filterStaff;
-      if (filterStatus) filters.status = filterStatus;
-      if (filterType) filters.type = filterType;
-      setItems(await getHrPerformance(home, filters));
-      setError(null);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }, [home, filterStaff, filterStatus, filterType]);
-
-  useEffect(() => { load(); }, [load]);
-
   useEffect(() => {
-    if (!showModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowModal(false); setForm(emptyForm()); setEditing(null); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
+    let stale = false;
+    (async () => {
+      if (!home) return;
+      setLoading(true);
+      try {
+        const filters = {};
+        if (filterStaff) filters.staffId = filterStaff;
+        if (filterStatus) filters.status = filterStatus;
+        if (filterType) filters.type = filterType;
+        const res = await getHrPerformance(home, filters);
+        if (!stale) { setItems(res?.rows || []); setError(null); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [home, filterStaff, filterStatus, filterType, refreshKey]);
 
   function openNew() {
     setEditing(null);
@@ -75,14 +71,12 @@ export default function PerformanceTracker() {
       date_raised: item.date_raised || '',
       type: item.type || 'capability',
       description: item.description || '',
-      manager: item.manager || '',
       status: item.status || 'open',
       informal_notes: item.informal_notes || '',
       informal_targets: item.informal_targets || '',
       pip_objectives: item.pip_objectives || '',
       pip_start_date: item.pip_start_date || '',
       pip_end_date: item.pip_end_date || '',
-      pip_review_dates: item.pip_review_dates || '',
       hearing_date: item.hearing_date || '',
       hearing_chair: item.hearing_chair || '',
       outcome: item.outcome || '',
@@ -97,30 +91,40 @@ export default function PerformanceTracker() {
 
   async function handleSave() {
     setError(null);
-    if (!form.staff_id || !form.date_raised) return;
+    const missing = [];
+    if (!form.staff_id) missing.push('Staff member');
+    if (!form.date_raised) missing.push('Date raised');
+    if (missing.length) { setError(`Required fields missing: ${missing.join(', ')}`); return; }
+    setSaving(true);
     try {
       if (editing) {
-        await updateHrPerformance(editing.id, form);
+        await updateHrPerformance(editing.id, { ...form, _version: editing.version });
       } else {
         await createHrPerformance(home, form);
       }
       setShowModal(false);
       setForm(emptyForm());
       setEditing(null);
-      load();
-    } catch (e) { setError(e.message); }
+      setRefreshKey(k => k + 1);
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setRefreshKey(k => k + 1);
+      } else { setError(e.message); }
+    }
+    finally { setSaving(false); }
   }
 
   async function handleExport() {
     const { downloadXLSX } = await import('../lib/excel.js');
     downloadXLSX('performance_cases', [{
       name: 'Performance',
-      headers: ['Staff ID', 'Date Raised', 'Type', 'Status', 'Manager', 'Outcome', 'Outcome Date'],
+      headers: ['Staff ID', 'Date Raised', 'Type', 'Status', 'Outcome', 'Outcome Date'],
       rows: items.map(i => [
         i.staff_id, i.date_raised,
         PERFORMANCE_TYPES.find(t => t.id === i.type)?.name || i.type,
         PERFORMANCE_STATUSES.find(s => s.id === i.status)?.name || i.status,
-        i.manager || '', i.outcome || '', i.outcome_date || '',
+        i.outcome || '', i.outcome_date || '',
       ]),
     }]);
   }
@@ -141,8 +145,6 @@ export default function PerformanceTracker() {
           <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Case</button>
         </div>
       </div>
-
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
@@ -167,12 +169,11 @@ export default function PerformanceTracker() {
                 <th className={TABLE.th}>Date Raised</th>
                 <th className={TABLE.th}>Type</th>
                 <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Manager</th>
                 <th className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No performance cases</td></tr>}
+              {items.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No performance cases</td></tr>}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>
@@ -187,7 +188,6 @@ export default function PerformanceTracker() {
                       {PERFORMANCE_STATUSES.find(s => s.id === item.status)?.name || item.status}
                     </span>
                   </td>
-                  <td className={TABLE.td}>{item.manager || '—'}</td>
                   <td className={TABLE.td}>
                     <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                   </td>
@@ -200,17 +200,13 @@ export default function PerformanceTracker() {
 
       {/* Modal */}
       {showModal && (
-        <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className={MODAL.panelXl}>
-            <h3 className={MODAL.title}>{editing ? 'Edit Performance Case' : 'New Performance Case'}</h3>
-
+        <ModalWrapper isOpen={showModal} onClose={() => { setShowModal(false); setForm(emptyForm()); setEditing(null); setError(null); }} title={editing ? 'Edit Performance Case' : 'New Performance Case'} size="xl">
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
             {/* Modal tab bar */}
-            <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
+            <div className={TAB.bar}>
               {MODAL_TABS.map((t, i) => (
                 <button key={t} onClick={() => setModalTab(i)}
-                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                    modalTab === i ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}>{t}</button>
+                  className={`${TAB.button} ${modalTab === i ? TAB.active : TAB.inactive}`}>{t}</button>
               ))}
             </div>
 
@@ -223,17 +219,11 @@ export default function PerformanceTracker() {
                     <input type="date" className={INPUT.base} value={form.date_raised} onChange={e => f('date_raised', e.target.value)} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={INPUT.label}>Type</label>
-                    <select className={INPUT.select} value={form.type} onChange={e => f('type', e.target.value)}>
-                      {PERFORMANCE_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={INPUT.label}>Manager</label>
-                    <input className={INPUT.base} value={form.manager} onChange={e => f('manager', e.target.value)} />
-                  </div>
+                <div>
+                  <label className={INPUT.label}>Type</label>
+                  <select className={INPUT.select} value={form.type} onChange={e => f('type', e.target.value)}>
+                    {PERFORMANCE_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
                 </div>
                 {editing && (
                   <div>
@@ -274,10 +264,6 @@ export default function PerformanceTracker() {
                     <label className={INPUT.label}>PIP End Date</label>
                     <input type="date" className={INPUT.base} value={form.pip_end_date} onChange={e => f('pip_end_date', e.target.value)} />
                   </div>
-                </div>
-                <div>
-                  <label className={INPUT.label}>PIP Review Dates</label>
-                  <input className={INPUT.base} value={form.pip_review_dates} onChange={e => f('pip_review_dates', e.target.value)} placeholder="e.g. 2026-03-15, 2026-04-15" />
                 </div>
                 <InvestigationMeetings caseType="performance" caseId={editing?.id} />
               </>}
@@ -331,11 +317,10 @@ export default function PerformanceTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} onClick={() => { setShowModal(false); setError(null); }} disabled={saving}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
-          </div>
-        </div>
+        </ModalWrapper>
       )}
     </div>
   );

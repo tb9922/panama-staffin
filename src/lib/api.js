@@ -691,6 +691,8 @@ export async function getHrDisciplinary(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/cases/disciplinary?${params}`, { headers: authHeaders() });
 }
 export async function createHrDisciplinary(homeSlug, data) {
@@ -712,6 +714,8 @@ export async function getHrGrievance(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/cases/grievance?${params}`, { headers: authHeaders() });
 }
 export async function createHrGrievance(homeSlug, data) {
@@ -747,6 +751,8 @@ export async function getHrPerformance(homeSlug, filters = {}) {
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.type) params.set('type', filters.type);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/cases/performance?${params}`, { headers: authHeaders() });
 }
 export async function createHrPerformance(homeSlug, data) {
@@ -775,6 +781,8 @@ export async function getStaffAbsence(homeSlug, staffId) {
 export async function getHrRtwInterviews(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/rtw-interviews?${params}`, { headers: authHeaders() });
 }
 export async function createHrRtwInterview(homeSlug, data) {
@@ -792,6 +800,8 @@ export async function updateHrRtwInterview(id, data) {
 export async function getHrOhReferrals(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/oh-referrals?${params}`, { headers: authHeaders() });
 }
 export async function createHrOhReferral(homeSlug, data) {
@@ -810,6 +820,8 @@ export async function getHrContracts(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/contracts?${params}`, { headers: authHeaders() });
 }
 export async function createHrContract(homeSlug, data) {
@@ -828,6 +840,8 @@ export async function getHrFamilyLeave(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.type) params.set('type', filters.type);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/family-leave?${params}`, { headers: authHeaders() });
 }
 export async function createHrFamilyLeave(homeSlug, data) {
@@ -846,6 +860,8 @@ export async function getHrFlexWorking(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/flexible-working?${params}`, { headers: authHeaders() });
 }
 export async function createHrFlexWorking(homeSlug, data) {
@@ -864,6 +880,8 @@ export async function getHrEdi(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
   if (filters.recordType) params.set('record_type', filters.recordType);
   if (filters.staffId) params.set('staff_id', filters.staffId);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/edi?${params}`, { headers: authHeaders() });
 }
 export async function createHrEdi(homeSlug, data) {
@@ -878,8 +896,11 @@ export async function updateHrEdi(id, data) {
 }
 
 // TUPE
-export async function getHrTupe(homeSlug) {
-  return apiFetch(`${API_BASE}/hr/tupe?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getHrTupe(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/hr/tupe?${params}`, { headers: authHeaders() });
 }
 export async function createHrTupe(homeSlug, data) {
   return apiFetch(`${API_BASE}/hr/tupe?home=${h(homeSlug)}`, {
@@ -898,6 +919,8 @@ export async function getHrRenewals(homeSlug, filters = {}) {
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.checkType) params.set('check_type', filters.checkType);
   if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/renewals?${params}`, { headers: authHeaders() });
 }
 export async function createHrRenewal(homeSlug, data) {
@@ -918,8 +941,8 @@ export async function getHrWarnings(homeSlug) {
 export async function getHrStats(homeSlug) {
   return apiFetch(`${API_BASE}/hr/stats?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
-export async function getHrCaseNotes(caseType, caseId) {
-  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(getCurrentHome())}`, { headers: authHeaders() });
+export async function getHrCaseNotes(homeSlug, caseType, caseId) {
+  return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
   return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(homeSlug)}`, {

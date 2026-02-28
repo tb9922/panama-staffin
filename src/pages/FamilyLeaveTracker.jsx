@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrFamilyLeave, createHrFamilyLeave, updateHrFamilyLeave } from '../lib/api.js';
 import { FAMILY_LEAVE_TYPES, FAMILY_LEAVE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -28,12 +29,15 @@ export default function FamilyLeaveTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Filters
   const [filterStaff, setFilterStaff] = useState('');
   const [filterType, setFilterType] = useState('');
 
   const home = getCurrentHome();
+  useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -42,7 +46,8 @@ export default function FamilyLeaveTracker() {
       const filters = {};
       if (filterStaff) filters.staffId = filterStaff;
       if (filterType) filters.type = filterType;
-      setItems(await getHrFamilyLeave(home, filters));
+      const res = await getHrFamilyLeave(home, filters);
+      setItems(res?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -84,14 +89,18 @@ export default function FamilyLeaveTracker() {
 
   async function handleSave() {
     setError(null);
-    if (!form.staff_id || !form.leave_type || !form.start_date) return;
+    setFormError('');
+    if (!form.staff_id) { setFormError('Staff member is required'); return; }
+    if (!form.leave_type) { setFormError('Leave type is required'); return; }
+    if (!form.start_date) { setFormError('Start date is required'); return; }
+    setSaving(true);
     try {
       const payload = {
         ...form,
         kit_days_used: parseInt(form.kit_days_used, 10) || 0,
       };
       if (editing) {
-        await updateHrFamilyLeave(editing.id, payload);
+        await updateHrFamilyLeave(editing.id, { ...payload, _version: editing.version });
       } else {
         await createHrFamilyLeave(home, payload);
       }
@@ -99,7 +108,14 @@ export default function FamilyLeaveTracker() {
       setForm(blankForm());
       setEditing(null);
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleExport() {
@@ -247,9 +263,10 @@ export default function FamilyLeaveTracker() {
               </div>
             </div>
             <FileAttachments caseType="family_leave" caseId={editing?.id} />
+            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
           </div>
         </div>

@@ -5,12 +5,21 @@ import { createReadStream, mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
+import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { config } from '../config.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as hrService from '../services/hrService.js';
+import * as hrRepo from '../repositories/hrRepo.js';
 import * as auditService from '../services/auditService.js';
+import { pool } from '../db.js';
+import {
+  mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
+  mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
+  mapFlexFields, mapEdiFields, mapTupeFields, mapRenewalFields,
+  diffFields,
+} from '../lib/hrFieldMappers.js';
 
 const router = Router();
 
@@ -57,11 +66,14 @@ const caseTypeSchema = z.enum([
   'edi', 'tupe', 'renewal',
 ]);
 
+// ── Query filter helpers ──────────────────────────────────────────────────
+}
+
 // ── Disciplinary Schemas ────────────────────────────────────────────────────
 
 const jsonOrArray = z.preprocess(
   v => { if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } } return v; },
-  z.array(z.any())
+  z.array(z.object({}).passthrough())
 );
 
 const disciplinaryBodySchema = z.object({
@@ -182,8 +194,8 @@ const grievanceUpdateSchema = z.object({
   investigation_officer: z.string().max(200).nullable().optional(),
   investigation_start_date: dateSchema.nullable().optional(),
   investigation_notes:  z.string().max(5000).nullable().optional(),
-  witnesses:            z.array(z.any()).optional(),
-  evidence_items:       z.array(z.any()).optional(),
+  witnesses:            z.array(z.object({ name: z.string().max(200).optional(), role: z.string().max(200).optional(), statement_summary: z.string().max(5000).optional() }).passthrough()).optional(),
+  evidence_items:       z.array(z.object({ description: z.string().max(5000).optional(), date: dateSchema.optional(), type: z.string().max(100).optional() }).passthrough()).optional(),
   investigation_completed_date: dateSchema.nullable().optional(),
   investigation_findings: z.string().max(5000).nullable().optional(),
   // Hearing
@@ -248,11 +260,12 @@ const grievanceActionUpdateSchema = z.object({
 const performanceBodySchema = z.object({
   staff_id:         staffIdSchema,
   date_raised:      dateSchema,
+  raised_by:        z.string().min(1).max(200),
   type:             z.enum(['capability','pip','probation_concern']),
   description:      z.string().max(5000).nullable().optional(),  // Frontend alias → concern_summary
   concern_summary:  z.string().max(5000).nullable().optional(),
   concern_detail:   z.string().max(10000).nullable().optional(),
-  performance_area: z.string().max(200).nullable().optional(),
+  performance_area: z.enum(['clinical_competence','communication','attendance','teamwork','documentation','compliance','other']),
   manager:          z.string().max(200).optional(),  // Ghost — ignored
   status:           z.enum(['open','informal','pip_active','pip_review','hearing_scheduled','outcome_issued','appeal_pending','closed']).optional(),
 });
@@ -270,13 +283,13 @@ const performanceUpdateSchema = z.object({
   informal_discussion_date: dateSchema.nullable().optional(),
   informal_discussion_notes: z.string().max(5000).nullable().optional(),
   informal_notes:   z.string().max(5000).nullable().optional(),  // Frontend alias → informal_discussion_notes
-  informal_targets: z.array(z.any()).optional(),
+  informal_targets: z.union([z.array(z.object({}).passthrough()), z.string().max(10000)]).nullable().optional(),
   informal_review_date: dateSchema.nullable().optional(),
   informal_outcome: z.string().max(500).nullable().optional(),
   // PIP
   pip_start_date:   dateSchema.nullable().optional(),
   pip_end_date:     dateSchema.nullable().optional(),
-  pip_objectives:   z.array(z.any()).optional(),
+  pip_objectives:   z.union([z.array(z.object({}).passthrough()), z.string().max(10000)]).nullable().optional(),
   pip_overall_outcome: z.string().max(500).nullable().optional(),
   pip_extended_to:  dateSchema.nullable().optional(),
   pip_review_dates: z.string().max(2000).nullable().optional(),  // Ghost — ignored
@@ -323,7 +336,7 @@ const rtwInterviewBodySchema = z.object({
   rtw_date:           dateSchema,
   absence_end_date:   dateSchema.optional(),
   absence_reason:     z.string().max(200).optional(),
-  conducted_by:       z.string().max(200).optional(),
+  conducted_by:       z.string().min(1).max(200),
   fit_for_work:       z.boolean().optional(),
   adjustments:        z.string().max(2000).nullable().optional(),
   referral_needed:    z.boolean().optional(),
@@ -347,6 +360,7 @@ const rtwInterviewUpdateSchema = z.object({
 const ohReferralBodySchema = z.object({
   staff_id:         staffIdSchema,
   referral_date:    dateSchema,
+  referred_by:      z.string().min(1).max(200),
   reason:           z.string().min(1).max(2000),
   status:           z.enum(['pending', 'in_progress', 'completed', 'cancelled']).optional(),
   provider:         z.string().max(200).optional(),
@@ -612,117 +626,80 @@ const caseNoteBodySchema = z.object({
   note: z.string().min(1).max(5000),
 });
 
-// ── Field Mapping Functions (frontend → DB column names) ────────────────────
-// Each function renames frontend aliases to their actual DB column names.
-// The repo layer uses DB column names; the frontend may use shorter/different names.
+// Field mappers and diffFields imported from lib/hrFieldMappers.js
 
-function mapDisciplinaryFields(data) {
-  const m = { ...data };
-  if ('outcome_notes' in m && !('outcome_reason' in m)) { m.outcome_reason = m.outcome_notes; delete m.outcome_notes; }
-  if ('appeal_date' in m && !('appeal_received_date' in m)) { m.appeal_received_date = m.appeal_date; delete m.appeal_date; }
-  return m;
-}
+// ── Case Route Factory ──────────────────────────────────────────────────────
 
-function mapPerformanceFields(data) {
-  const m = { ...data };
-  if ('description' in m && !('concern_summary' in m)) { m.concern_summary = m.description; delete m.description; }
-  if ('informal_notes' in m && !('informal_discussion_notes' in m)) { m.informal_discussion_notes = m.informal_notes; delete m.informal_notes; }
-  if ('appeal_date' in m && !('appeal_received_date' in m)) { m.appeal_received_date = m.appeal_date; delete m.appeal_date; }
-  delete m.manager;          // Ghost field — no DB column
-  delete m.pip_review_dates; // Ghost field — no DB column
-  return m;
-}
+function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapFields, filters, hasGetById = true, repoFind, repoFindById, repoCreate, repoUpdate, auditPrefix }) {
+  const prefix = auditPrefix || type;
 
-function mapRtwFields(data) {
-  const m = { ...data };
-  if ('conducted_by' in m && !('rtw_conducted_by' in m)) { m.rtw_conducted_by = m.conducted_by; delete m.conducted_by; }
-  if ('fit_for_work' in m && !('fit_to_return' in m)) { m.fit_to_return = m.fit_for_work; delete m.fit_for_work; }
-  if ('adjustments' in m && !('adjustments_needed' in m)) { m.adjustments_needed = !!m.adjustments; m.adjustments_detail = m.adjustments; delete m.adjustments; }
-  if ('referral_needed' in m && !('oh_referral_recommended' in m)) { m.oh_referral_recommended = m.referral_needed; delete m.referral_needed; }
-  return m;
-}
+  // GET list
+  router.get(path, requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const home = await resolveHome(req, res);
+      if (!home) return;
+      const f = {};
+      for (const [queryParam, filterKey] of Object.entries(filters || {})) {
+        if (req.query[queryParam]) f[filterKey] = req.query[queryParam];
+      }
+      const pag = { limit: req.query.limit, offset: req.query.offset };
+      const result = await repoFind(home.id, f, null, pag);
+      res.json(result);
+    } catch (err) { next(err); }
+  });
 
-function mapOhFields(data) {
-  const m = { ...data };
-  if ('provider' in m && !('oh_provider' in m)) { m.oh_provider = m.provider; delete m.provider; }
-  if ('report_date' in m && !('report_received_date' in m)) { m.report_received_date = m.report_date; delete m.report_date; }
-  if ('recommendations' in m && !('adjustments_recommended' in m)) { m.adjustments_recommended = m.recommendations; delete m.recommendations; }
-  delete m.report_received;  // Ghost field — DB uses report_received_date
-  return m;
-}
+  // POST create
+  router.post(path, requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const home = await resolveHome(req, res);
+      if (!home) return;
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
+      const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
+      const result = await repoCreate(home.id, { ...mapped, created_by: req.user.username });
+      await auditService.log(`hr_${prefix}_create`, home.slug, req.user.username, { id: result.id });
+      res.status(201).json(result);
+    } catch (err) { next(err); }
+  });
 
-function mapContractFields(data) {
-  const m = { ...data };
-  if ('start_date' in m && !('contract_start_date' in m)) { m.contract_start_date = m.start_date; delete m.start_date; }
-  if ('end_date' in m && !('contract_end_date' in m)) { m.contract_end_date = m.end_date; delete m.end_date; }
-  delete m.salary;              // Ghost — no DB column
-  delete m.notice_period_weeks; // Ghost — DB has notice_period_employer/employee
-  delete m.signed_date;         // Ghost — no DB column
-  return m;
-}
-
-function mapFamilyLeaveFields(data) {
-  const m = { ...data };
-  if ('leave_type' in m && !('type' in m)) { m.type = m.leave_type; delete m.leave_type; }
-  if ('start_date' in m && !('leave_start_date' in m)) { m.leave_start_date = m.start_date; delete m.start_date; }
-  if ('end_date' in m && !('leave_end_date' in m)) { m.leave_end_date = m.end_date; delete m.end_date; }
-  if ('expected_return' in m && !('expected_return_date' in m)) { m.expected_return_date = m.expected_return; delete m.expected_return; }
-  if ('actual_return' in m && !('actual_return_date' in m)) { m.actual_return_date = m.actual_return; delete m.actual_return; }
-  if ('kit_days_used' in m && !('kit_days' in m)) { m.kit_days = m.kit_days_used; delete m.kit_days_used; }
-  if ('pay_type' in m && !('statutory_pay_type' in m)) { m.statutory_pay_type = m.pay_type; delete m.pay_type; }
-  return m;
-}
-
-function mapFlexFields(data) {
-  const m = { ...data };
-  if ('decision_reason' in m && !('refusal_reason' in m)) { m.refusal_reason = m.decision_reason; delete m.decision_reason; }
-  delete m.proposed_pattern; // Ghost — DB has approved_pattern (different meaning)
-  return m;
-}
-
-function mapEdiFields(data) {
-  const m = { ...data };
-  if ('date_recorded' in m && !('complaint_date' in m)) { m.complaint_date = m.date_recorded; delete m.date_recorded; }
-  if ('category' in m && !('harassment_category' in m)) { m.harassment_category = m.category; delete m.category; }
-  if ('respondent_role' in m && !('respondent_type' in m)) { m.respondent_type = m.respondent_role; delete m.respondent_role; }
-  delete m.data;  // Remove catch-all — individual fields are mapped instead
-  return m;
-}
-
-function mapTupeFields(data) {
-  const m = { ...data };
-  if ('staff_affected' in m && !('employees' in m)) { m.employees = m.staff_affected != null ? { count: m.staff_affected } : null; delete m.staff_affected; }
-  if ('consultation_start' in m && !('consultation_start_date' in m)) { m.consultation_start_date = m.consultation_start; delete m.consultation_start; }
-  if ('consultation_end' in m && !('consultation_end_date' in m)) { m.consultation_end_date = m.consultation_end; delete m.consultation_end; }
-  if ('eli_sent_date' in m && !('eli_received_date' in m)) { m.eli_received_date = m.eli_sent_date; delete m.eli_sent_date; }
-  if ('measures_proposed' in m && !('measures_description' in m)) { m.measures_description = m.measures_proposed; delete m.measures_proposed; }
-  return m;
-}
-
-function mapRenewalFields(data) {
-  const m = { ...data };
-  const isDbs = m.check_type === 'dbs';
-  if ('last_checked' in m) {
-    m[isDbs ? 'dbs_check_date' : 'rtw_check_date'] = m.last_checked;
-    delete m.last_checked;
+  // GET by ID
+  if (hasGetById) {
+    router.get(`${path}/:id`, requireAuth, requireAdmin, async (req, res, next) => {
+      try {
+        const home = await resolveHome(req, res);
+        if (!home) return;
+        const parsed = idSchema.safeParse(req.params.id);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid case ID' });
+        const row = await repoFindById(parsed.data, home.id);
+        if (!row) return res.status(404).json({ error: `${type} case not found` });
+        res.json(row);
+      } catch (err) { next(err); }
+    });
   }
-  if ('expiry_date' in m) {
-    m[isDbs ? 'dbs_next_renewal_due' : 'rtw_document_expiry'] = m.expiry_date;
-    delete m.expiry_date;
-  }
-  if ('reference' in m) {
-    if (isDbs) m.dbs_certificate_number = m.reference;
-    delete m.reference;
-  }
-  if ('certificate_number' in m && !('dbs_certificate_number' in m)) {
-    m.dbs_certificate_number = m.certificate_number;
-    delete m.certificate_number;
-  }
-  if ('document_type' in m && !('rtw_document_type' in m)) {
-    m.rtw_document_type = m.document_type;
-    delete m.document_type;
-  }
-  return m;
+
+  // PUT update — with optimistic locking + field-diff audit
+  router.put(`${path}/:id`, requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const home = await resolveHome(req, res);
+      if (!home) return;
+      const idParsed = idSchema.safeParse(req.params.id);
+      if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
+
+      const version = req.body._version != null ? parseInt(req.body._version) : null;
+      const existing = repoFindById ? await repoFindById(idParsed.data, home.id) : null;
+      if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
+
+      const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
+      const result = await repoUpdate(idParsed.data, home.id, mapped, null, version);
+      if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+
+      const changes = existing ? diffFields(existing, result) : [];
+      await auditService.log(`hr_${prefix}_update`, home.slug, req.user.username, { id: result.id, changes });
+      res.json(result);
+    } catch (err) { next(err); }
+  });
 }
 
 // ── Helper ──────────────────────────────────────────────────────────────────
@@ -746,128 +723,27 @@ router.get('/staff', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Disciplinary Cases ──────────────────────────────────────────────────────
+// ── Case Type Registrations ─────────────────────────────────────────────────
 
-// GET /api/hr/cases/disciplinary?home=X&staff_id=&status=
-router.get('/cases/disciplinary', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    res.json(await hrService.findDisciplinary(home.id, filters));
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'disciplinary', path: '/cases/disciplinary',
+  bodySchema: disciplinaryBodySchema, updateSchema: disciplinaryUpdateSchema,
+  mapFields: mapDisciplinaryFields,
+  filters: { staff_id: 'staffId', status: 'status' },
+  repoFind: hrRepo.findDisciplinary, repoFindById: hrRepo.findDisciplinaryById,
+  repoCreate: hrRepo.createDisciplinary, repoUpdate: hrRepo.updateDisciplinary,
 });
 
-// POST /api/hr/cases/disciplinary?home=X
-router.post('/cases/disciplinary', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = disciplinaryBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createDisciplinary(home.id, {
-      ...mapDisciplinaryFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_disciplinary_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'grievance', path: '/cases/grievance',
+  bodySchema: grievanceBodySchema, updateSchema: grievanceUpdateSchema,
+  mapFields: mapGrievanceFields,
+  filters: { staff_id: 'staffId', status: 'status' },
+  repoFind: hrRepo.findGrievance, repoFindById: hrRepo.findGrievanceById,
+  repoCreate: hrRepo.createGrievance, repoUpdate: hrRepo.updateGrievance,
 });
 
-// GET /api/hr/cases/disciplinary/:id?home=X
-router.get('/cases/disciplinary/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const result = await hrService.findDisciplinaryById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Disciplinary case not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/cases/disciplinary/:id?home=X
-router.put('/cases/disciplinary/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const parsed = disciplinaryUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateDisciplinary(idP.data, home.id, mapDisciplinaryFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Disciplinary case not found' });
-    await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── Grievance Cases ─────────────────────────────────────────────────────────
-
-// GET /api/hr/cases/grievance?home=X&staff_id=&status=
-router.get('/cases/grievance', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    res.json(await hrService.findGrievance(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/cases/grievance?home=X
-router.post('/cases/grievance', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = grievanceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createGrievance(home.id, {
-      ...parsed.data,
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_grievance_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/cases/grievance/:id?home=X
-router.get('/cases/grievance/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const result = await hrService.findGrievanceById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Grievance case not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/cases/grievance/:id?home=X
-router.put('/cases/grievance/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const parsed = grievanceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const updateData = { ...parsed.data };
-    if ('description' in updateData) {
-      updateData.subject_summary = updateData.description;
-      delete updateData.description;
-    }
-    const result = await hrService.updateGrievance(idP.data, home.id, updateData);
-    if (!result) return res.status(404).json({ error: 'Grievance case not found' });
-    await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
+// ── Grievance Actions ───────────────────────────────────────────────────────
 
 // GET /api/hr/cases/grievance/:id/actions?home=X
 router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (req, res, next) => {
@@ -876,7 +752,7 @@ router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (req
     if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    res.json(await hrService.findGrievanceActions(idP.data, home.id));
+    res.json(await hrRepo.findGrievanceActions(idP.data, home.id));
   } catch (err) { next(err); }
 });
 
@@ -889,8 +765,8 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (re
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceActionBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createGrievanceAction(idP.data, home.id, parsed.data);
-    await auditService.log('hr_grievance_create', home.slug, req.user.username, { id: result.id });
+    const result = await hrRepo.createGrievanceAction(idP.data, home.id, parsed.data);
+    await auditService.log('hr_grievance_action_create', home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -904,71 +780,20 @@ router.put('/grievance-actions/:id', requireAuth, requireAdmin, async (req, res,
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
     const parsed = grievanceActionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateGrievanceAction(idP.data, home.id, parsed.data);
+    const result = await hrRepo.updateGrievanceAction(idP.data, home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
-    await auditService.log('hr_grievance_update', home.slug, req.user.username, { id: result.id });
+    await auditService.log('hr_grievance_action_update', home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
 
-// ── Performance Cases ───────────────────────────────────────────────────────
-
-// GET /api/hr/cases/performance?home=X&staff_id=&status=&type=
-router.get('/cases/performance', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    if (req.query.type)     filters.type = req.query.type;
-    res.json(await hrService.findPerformance(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/cases/performance?home=X
-router.post('/cases/performance', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = performanceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createPerformance(home.id, {
-      ...mapPerformanceFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_performance_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/cases/performance/:id?home=X
-router.get('/cases/performance/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const result = await hrService.findPerformanceById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Performance case not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/cases/performance/:id?home=X
-router.put('/cases/performance/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const parsed = performanceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updatePerformance(idP.data, home.id, mapPerformanceFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Performance case not found' });
-    await auditService.log('hr_performance_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'performance', path: '/cases/performance',
+  bodySchema: performanceBodySchema, updateSchema: performanceUpdateSchema,
+  mapFields: mapPerformanceFields,
+  filters: { staff_id: 'staffId', status: 'status', type: 'type' },
+  repoFind: hrRepo.findPerformance, repoFindById: hrRepo.findPerformanceById,
+  repoCreate: hrRepo.createPerformance, repoUpdate: hrRepo.updatePerformance,
 });
 
 // ── Absence ─────────────────────────────────────────────────────────────────
@@ -993,447 +818,81 @@ router.get('/absence/staff/:staffId', requireAuth, requireAdmin, async (req, res
   } catch (err) { next(err); }
 });
 
-// ── RTW Interviews ──────────────────────────────────────────────────────────
-
-// GET /api/hr/rtw-interviews?home=X&staff_id=
-router.get('/rtw-interviews', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    res.json(await hrService.findRtwInterviews(home.id, filters));
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'rtw_interview', path: '/rtw-interviews',
+  bodySchema: rtwInterviewBodySchema, updateSchema: rtwInterviewUpdateSchema,
+  mapFields: mapRtwFields,
+  filters: { staff_id: 'staffId' },
+  repoFind: hrRepo.findRtwInterviews, repoFindById: hrRepo.findRtwInterviewById,
+  repoCreate: hrRepo.createRtwInterview, repoUpdate: hrRepo.updateRtwInterview,
+  auditPrefix: 'rtw',
 });
 
-// POST /api/hr/rtw-interviews?home=X
-router.post('/rtw-interviews', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = rtwInterviewBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createRtwInterview(home.id, {
-      ...mapRtwFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_rtw_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'oh_referral', path: '/oh-referrals',
+  bodySchema: ohReferralBodySchema, updateSchema: ohReferralUpdateSchema,
+  mapFields: mapOhFields,
+  filters: { staff_id: 'staffId', status: 'status' },
+  repoFind: hrRepo.findOhReferrals, repoFindById: hrRepo.findOhReferralById,
+  repoCreate: hrRepo.createOhReferral, repoUpdate: hrRepo.updateOhReferral,
+  auditPrefix: 'oh_referral',
 });
 
-// PUT /api/hr/rtw-interviews/:id
-router.put('/rtw-interviews/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid interview ID' });
-    const parsed = rtwInterviewUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateRtwInterview(idP.data, home.id, mapRtwFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'RTW interview not found' });
-    await auditService.log('hr_rtw_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'contract', path: '/contracts',
+  bodySchema: contractBodySchema, updateSchema: contractUpdateSchema,
+  mapFields: mapContractFields,
+  filters: { staff_id: 'staffId', status: 'status' },
+  repoFind: hrRepo.findContracts, repoFindById: hrRepo.findContractById,
+  repoCreate: hrRepo.createContract, repoUpdate: hrRepo.updateContract,
 });
 
-// ── OH Referrals ────────────────────────────────────────────────────────────
-
-// GET /api/hr/oh-referrals?home=X&staff_id=&status=
-router.get('/oh-referrals', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    res.json(await hrService.findOhReferrals(home.id, filters));
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'family_leave', path: '/family-leave',
+  bodySchema: familyLeaveBodySchema, updateSchema: familyLeaveUpdateSchema,
+  mapFields: mapFamilyLeaveFields,
+  filters: { staff_id: 'staffId', type: 'type' },
+  repoFind: hrRepo.findFamilyLeave, repoFindById: hrRepo.findFamilyLeaveById,
+  repoCreate: hrRepo.createFamilyLeave, repoUpdate: hrRepo.updateFamilyLeave,
 });
 
-// POST /api/hr/oh-referrals?home=X
-router.post('/oh-referrals', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = ohReferralBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createOhReferral(home.id, {
-      ...mapOhFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_oh_referral_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'flexible_working', path: '/flexible-working',
+  bodySchema: flexWorkingBodySchema, updateSchema: flexWorkingUpdateSchema,
+  mapFields: mapFlexFields,
+  filters: { staff_id: 'staffId', status: 'status' },
+  repoFind: hrRepo.findFlexWorking, repoFindById: hrRepo.findFlexWorkingById,
+  repoCreate: hrRepo.createFlexWorking, repoUpdate: hrRepo.updateFlexWorking,
+  auditPrefix: 'flex_working',
 });
 
-// PUT /api/hr/oh-referrals/:id
-router.put('/oh-referrals/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid referral ID' });
-    const parsed = ohReferralUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateOhReferral(idP.data, home.id, mapOhFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'OH referral not found' });
-    await auditService.log('hr_oh_referral_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'edi', path: '/edi',
+  bodySchema: ediBodySchema, updateSchema: ediUpdateSchema,
+  mapFields: mapEdiFields,
+  filters: { record_type: 'recordType', staff_id: 'staffId' },
+  repoFind: hrRepo.findEdi, repoFindById: hrRepo.findEdiById,
+  repoCreate: hrRepo.createEdi, repoUpdate: hrRepo.updateEdi,
 });
 
-// ── Contracts ───────────────────────────────────────────────────────────────
-
-// GET /api/hr/contracts?home=X&staff_id=&status=
-router.get('/contracts', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    res.json(await hrService.findContracts(home.id, filters));
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'tupe', path: '/tupe',
+  bodySchema: tupeBodySchema, updateSchema: tupeUpdateSchema,
+  mapFields: mapTupeFields,
+  filters: {},
+  repoFind: (homeId, _f, client, pag) => hrRepo.findTupe(homeId, client, pag),
+  repoFindById: hrRepo.findTupeById,
+  repoCreate: hrRepo.createTupe, repoUpdate: hrRepo.updateTupe,
 });
 
-// POST /api/hr/contracts?home=X
-router.post('/contracts', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = contractBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createContract(home.id, {
-      ...mapContractFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_contract_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/contracts/:id?home=X
-router.get('/contracts/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid contract ID' });
-    const result = await hrService.findContractById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Contract not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/contracts/:id?home=X
-router.put('/contracts/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid contract ID' });
-    const parsed = contractUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateContract(idP.data, home.id, mapContractFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Contract not found' });
-    await auditService.log('hr_contract_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── Family Leave ────────────────────────────────────────────────────────────
-
-// GET /api/hr/family-leave?home=X&staff_id=&type=
-router.get('/family-leave', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.type)     filters.type = req.query.type;
-    res.json(await hrService.findFamilyLeave(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/family-leave?home=X
-router.post('/family-leave', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = familyLeaveBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createFamilyLeave(home.id, {
-      ...mapFamilyLeaveFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_family_leave_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/family-leave/:id?home=X
-router.get('/family-leave/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid family leave ID' });
-    const result = await hrService.findFamilyLeaveById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Family leave record not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/family-leave/:id?home=X
-router.put('/family-leave/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid family leave ID' });
-    const parsed = familyLeaveUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateFamilyLeave(idP.data, home.id, mapFamilyLeaveFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Family leave record not found' });
-    await auditService.log('hr_family_leave_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── Flexible Working ────────────────────────────────────────────────────────
-
-// GET /api/hr/flexible-working?home=X&staff_id=&status=
-router.get('/flexible-working', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id) filters.staffId = req.query.staff_id;
-    if (req.query.status)   filters.status = req.query.status;
-    res.json(await hrService.findFlexWorking(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/flexible-working?home=X
-router.post('/flexible-working', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = flexWorkingBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createFlexWorking(home.id, {
-      ...mapFlexFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_flex_working_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/flexible-working/:id?home=X
-router.get('/flexible-working/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const result = await hrService.findFlexWorkingById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Flexible working request not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/flexible-working/:id?home=X
-router.put('/flexible-working/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const parsed = flexWorkingUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateFlexWorking(idP.data, home.id, mapFlexFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Flexible working request not found' });
-    await auditService.log('hr_flex_working_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── EDI ─────────────────────────────────────────────────────────────────────
-
-// GET /api/hr/edi?home=X&record_type=&staff_id=
-router.get('/edi', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.record_type) filters.recordType = req.query.record_type;
-    if (req.query.staff_id)    filters.staffId = req.query.staff_id;
-    res.json(await hrService.findEdi(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/edi?home=X
-router.post('/edi', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = ediBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createEdi(home.id, {
-      ...mapEdiFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_edi_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/edi/:id?home=X
-router.get('/edi/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid EDI record ID' });
-    const result = await hrService.findEdiById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'EDI record not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/edi/:id?home=X
-router.put('/edi/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid EDI record ID' });
-    const parsed = ediUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateEdi(idP.data, home.id, mapEdiFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'EDI record not found' });
-    await auditService.log('hr_edi_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── TUPE ────────────────────────────────────────────────────────────────────
-
-// GET /api/hr/tupe?home=X
-router.get('/tupe', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await hrService.findTupe(home.id));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/tupe?home=X
-router.post('/tupe', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = tupeBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createTupe(home.id, {
-      ...mapTupeFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_tupe_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/tupe/:id?home=X
-router.get('/tupe/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid TUPE record ID' });
-    const result = await hrService.findTupeById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'TUPE record not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/tupe/:id?home=X
-router.put('/tupe/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid TUPE record ID' });
-    const parsed = tupeUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateTupe(idP.data, home.id, mapTupeFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'TUPE record not found' });
-    await auditService.log('hr_tupe_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// ── Renewals (RTW/DBS) ─────────────────────────────────────────────────────
-
-// GET /api/hr/renewals?home=X&staff_id=&check_type=&status=
-router.get('/renewals', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const filters = {};
-    if (req.query.staff_id)    filters.staffId = req.query.staff_id;
-    if (req.query.check_type)  filters.checkType = req.query.check_type;
-    if (req.query.status)      filters.status = req.query.status;
-    res.json(await hrService.findRenewals(home.id, filters));
-  } catch (err) { next(err); }
-});
-
-// POST /api/hr/renewals?home=X
-router.post('/renewals', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const parsed = renewalBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createRenewal(home.id, {
-      ...mapRenewalFields(parsed.data),
-      created_by: req.user.username,
-    });
-    await auditService.log('hr_dbs_renewal_create', home.slug, req.user.username, { id: result.id });
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/renewals/:id?home=X
-router.get('/renewals/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid renewal ID' });
-    const result = await hrService.findRenewalById(idP.data, home.id);
-    if (!result) return res.status(404).json({ error: 'Renewal record not found' });
-    res.json(result);
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hr/renewals/:id?home=X
-router.put('/renewals/:id', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const idP = idSchema.safeParse(req.params.id);
-    if (!idP.success) return res.status(400).json({ error: 'Invalid renewal ID' });
-    const parsed = renewalUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.updateRenewal(idP.data, home.id, mapRenewalFields(parsed.data));
-    if (!result) return res.status(404).json({ error: 'Renewal record not found' });
-    await auditService.log('hr_dbs_renewal_update', home.slug, req.user.username, { id: result.id });
-    res.json(result);
-  } catch (err) { next(err); }
+registerCaseRoutes(router, {
+  type: 'renewal', path: '/renewals',
+  bodySchema: renewalBodySchema, updateSchema: renewalUpdateSchema,
+  mapFields: mapRenewalFields,
+  filters: { staff_id: 'staffId', check_type: 'checkType', status: 'status' },
+  repoFind: hrRepo.findRenewals, repoFindById: hrRepo.findRenewalById,
+  repoCreate: hrRepo.createRenewal, repoUpdate: hrRepo.updateRenewal,
+  auditPrefix: 'dbs_renewal',
 });
 
 // ── Cross-cutting: Warnings & Stats ─────────────────────────────────────────
@@ -1467,7 +926,7 @@ router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (re
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const home = await resolveHome(req, res);
     if (!home) return;
-    res.json(await hrService.findCaseNotes(home.id, caseTypeP.data, caseIdP.data));
+    res.json(await hrRepo.findCaseNotes(home.id, caseTypeP.data, caseIdP.data));
   } catch (err) { next(err); }
 });
 
@@ -1482,7 +941,7 @@ router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (r
     if (!home) return;
     const parsed = caseNoteBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrService.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
+    const result = await hrRepo.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
       author: req.user.username,
       content: parsed.data.note,
     });
@@ -1502,7 +961,7 @@ router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (r
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-    const files = await hrService.findAttachments(parsed.data, caseId, home.id);
+    const files = await hrRepo.findAttachments(parsed.data, caseId, home.id);
     res.json(files);
   } catch (err) { next(err); }
 });
@@ -1525,12 +984,21 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (
       }
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       try {
-        const attachment = await hrService.createAttachment(home.id, caseTypeParsed.data, caseId, {
+        // Verify file magic bytes match declared MIME type
+        const filePath = req.file.path;
+        const detected = await fileTypeFromFile(filePath);
+        if (detected && detected.mime !== req.file.mimetype) {
+          await unlink(filePath).catch(() => {});
+          return res.status(400).json({ error: 'File content does not match declared type' });
+        }
+        const descParsed = z.string().max(500).optional().safeParse(req.body.description);
+        const description = descParsed.success ? (descParsed.data || null) : null;
+        const attachment = await hrRepo.createAttachment(home.id, caseTypeParsed.data, caseId, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,
           mime_type: req.file.mimetype,
           size_bytes: req.file.size,
-          description: req.body.description || null,
+          description: description,
           uploaded_by: req.user.username,
         });
         await auditService.log('hr_attachment_upload', home.slug, req.user.username, { id: attachment.id });
@@ -1547,7 +1015,7 @@ router.get('/attachments/download/:id', requireAuth, requireAdmin, async (req, r
     if (!home) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrService.findAttachmentById(id, home.id);
+    const att = await hrRepo.findAttachmentById(id, home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     const filePath = path.join(config.upload.dir, String(home.id), att.case_type, String(att.case_id), att.stored_name);
     res.setHeader('Content-Type', att.mime_type);
@@ -1565,11 +1033,12 @@ router.delete('/attachments/:id', requireAuth, requireAdmin, async (req, res, ne
     if (!home) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrService.deleteAttachment(id, home.id);
+    const att = await hrRepo.deleteAttachment(id, home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     // Delete file from disk (best effort)
     const filePath = path.join(config.upload.dir, String(home.id), att.case_type, String(att.case_id), att.stored_name);
     await unlink(filePath).catch(() => {});
+    await auditService.log('hr_attachment_delete', home.slug, req.user.username, { id, caseType: att.case_type, caseId: att.case_id });
     res.json({ deleted: true });
   } catch (err) { next(err); }
 });
@@ -1602,7 +1071,7 @@ router.get('/meetings/:caseType/:caseId', requireAuth, requireAdmin, async (req,
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-    const meetings = await hrService.findMeetings(parsed.data, caseId, home.id);
+    const meetings = await hrRepo.findMeetings(parsed.data, caseId, home.id);
     res.json(meetings);
   } catch (err) { next(err); }
 });
@@ -1618,11 +1087,11 @@ router.post('/meetings/:caseType/:caseId', requireAuth, requireAdmin, async (req
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = meetingBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const meeting = await hrService.createMeeting(home.id, ctParsed.data, caseId, {
+    const meeting = await hrRepo.createMeeting(home.id, ctParsed.data, caseId, {
       ...parsed.data,
       recorded_by: req.user.username,
     });
-    await auditService.log(`hr_${ctParsed.data}_create`, home.slug, req.user.username, { id: meeting.id });
+    await auditService.log(`hr_${ctParsed.data}_meeting_create`, home.slug, req.user.username, { id: meeting.id });
     res.status(201).json(meeting);
   } catch (err) { next(err); }
 });
@@ -1636,10 +1105,39 @@ router.put('/meetings/:id', requireAuth, requireAdmin, async (req, res, next) =>
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
     const parsed = meetingBodySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const meeting = await hrService.updateMeeting(id, home.id, parsed.data);
+    const meeting = await hrRepo.updateMeeting(id, home.id, parsed.data);
     if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
-    await auditService.log('hr_disciplinary_update', home.slug, req.user.username, { id: meeting.id });
+    await auditService.log(`hr_${meeting.case_type}_meeting_update`, home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);
+  } catch (err) { next(err); }
+});
+
+// ── GDPR Retention ──────────────────────────────────────────────────────────
+
+router.post('/admin/purge-expired', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const retentionYears = parseInt(req.body.retention_years) || 6;
+    const dryRun = req.body.dry_run !== false;
+    const counts = await hrRepo.purgeExpiredRecords(home.id, retentionYears, dryRun);
+    await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', home.slug, req.user.username, { retentionYears, counts });
+    res.json({ dry_run: dryRun, retention_years: retentionYears, counts });
+  } catch (err) { next(err); }
+});
+
+router.get('/admin/audit-export', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const home = await resolveHome(req, res);
+    if (!home) return;
+    const from = req.query.from || '1970-01-01';
+    const to = req.query.to || '9999-12-31';
+    const { rows } = await pool.query(
+      `SELECT * FROM audit_log WHERE home_slug = $1 AND action LIKE 'hr_%' AND ts >= $2 AND ts <= $3 ORDER BY ts DESC`,
+      [home.slug, from, to]
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${home.slug}-${from}-${to}.json"`);
+    res.json(rows);
   } catch (err) { next(err); }
 });
 

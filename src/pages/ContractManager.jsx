@@ -8,8 +8,8 @@ import FileAttachments from '../components/FileAttachments.jsx';
 
 const emptyForm = () => ({
   staff_id: '', contract_type: 'permanent', start_date: '', end_date: '',
-  status: 'active', hours_per_week: '', salary: '', hourly_rate: '',
-  probation_end_date: '', notice_period_weeks: '', signed_date: '', notes: '',
+  status: 'active', hours_per_week: '', hourly_rate: '',
+  probation_end_date: '', notes: '',
 });
 
 export default function ContractManager() {
@@ -19,6 +19,8 @@ export default function ContractManager() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   useDirtyGuard(showModal);
 
   // Filters
@@ -35,7 +37,8 @@ export default function ContractManager() {
       const filters = {};
       if (filterStaff) filters.staffId = filterStaff;
       if (filterStatus) filters.status = filterStatus;
-      setItems(await getHrContracts(home, filters));
+      const res = await getHrContracts(home, filters);
+      setItems(res?.rows || []);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -67,44 +70,47 @@ export default function ContractManager() {
       end_date: item.end_date || '',
       status: item.status || 'active',
       hours_per_week: item.hours_per_week ?? '',
-      salary: item.salary ?? '',
       hourly_rate: item.hourly_rate ?? '',
       probation_end_date: item.probation_end_date || '',
-      notice_period_weeks: item.notice_period_weeks ?? '',
-      signed_date: item.signed_date || '',
       notes: item.notes || '',
     });
     setShowModal(true);
   }
 
   async function handleSave() {
+    setFormError('');
     setError(null);
-    if (!form.staff_id || !form.start_date) return;
+    if (!form.staff_id) { setFormError('Staff member is required'); return; }
+    if (!form.start_date) { setFormError('Start date is required'); return; }
+    setSaving(true);
     try {
       const payload = {
         ...form,
         hours_per_week: form.hours_per_week !== '' ? parseFloat(form.hours_per_week) : null,
-        salary: form.salary !== '' ? parseFloat(form.salary) : null,
         hourly_rate: form.hourly_rate !== '' ? parseFloat(form.hourly_rate) : null,
-        notice_period_weeks: form.notice_period_weeks !== '' ? parseInt(form.notice_period_weeks, 10) : null,
       };
-      if (editing) await updateHrContract(editing.id, payload);
+      if (editing) await updateHrContract(editing.id, { ...payload, _version: editing.version });
       else await createHrContract(home, payload);
       setShowModal(false); setEditing(null); setForm(emptyForm()); load();
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (e.message?.includes('modified by another user')) {
+        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        load();
+      } else { setError(e.message); }
+    } finally { setSaving(false); }
   }
 
   async function handleExport() {
     const { downloadXLSX } = await import('../lib/excel.js');
     downloadXLSX('contracts', [{
       name: 'Contracts',
-      headers: ['Staff ID', 'Contract Type', 'Start Date', 'End Date', 'Status', 'Hours/Week', 'Probation End', 'Signed'],
+      headers: ['Staff ID', 'Contract Type', 'Start Date', 'End Date', 'Status', 'Hours/Week', 'Probation End'],
       rows: items.map(i => [
         i.staff_id,
         CONTRACT_TYPES.find(t => t.id === i.contract_type)?.name || i.contract_type,
         i.start_date || '', i.end_date || '',
         CONTRACT_STATUSES.find(s => s.id === i.status)?.name || i.status,
-        i.hours_per_week ?? '', i.probation_end_date || '', i.signed_date || '',
+        i.hours_per_week ?? '', i.probation_end_date || '',
       ]),
     }]);
   }
@@ -255,28 +261,14 @@ export default function ContractManager() {
                   <input type="date" className={INPUT.base} value={form.probation_end_date} onChange={e => f('probation_end_date', e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={INPUT.label}>Hours/Week</label>
                   <input type="number" step="0.5" className={INPUT.base} value={form.hours_per_week} onChange={e => f('hours_per_week', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Salary</label>
-                  <input type="number" step="0.01" className={INPUT.base} value={form.salary} onChange={e => f('salary', e.target.value)} />
-                </div>
-                <div>
                   <label className={INPUT.label}>Hourly Rate</label>
                   <input type="number" step="0.01" className={INPUT.base} value={form.hourly_rate} onChange={e => f('hourly_rate', e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Notice Period (weeks)</label>
-                  <input type="number" className={INPUT.base} value={form.notice_period_weeks} onChange={e => f('notice_period_weeks', e.target.value)} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Signed Date</label>
-                  <input type="date" className={INPUT.base} value={form.signed_date} onChange={e => f('signed_date', e.target.value)} />
                 </div>
               </div>
               <div>
@@ -285,9 +277,10 @@ export default function ContractManager() {
               </div>
             </div>
             <FileAttachments caseType="contract" caseId={editing?.id} />
+            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
           </div>
         </div>

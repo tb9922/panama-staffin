@@ -3,6 +3,18 @@ import { pool } from '../db.js';
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 
+async function paginate(conn, sql, params, orderBy, shaper, pag = {}) {
+  const limit = Math.min(Math.max(parseInt(pag.limit) || 200, 1), 500);
+  const offset = Math.max(parseInt(pag.offset) || 0, 0);
+  const countSql = `SELECT COUNT(*) FROM (${sql}) _c`;
+  const dataSql = `${sql} ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+  const [dataRes, countRes] = await Promise.all([
+    conn.query(dataSql, [...params, limit, offset]),
+    conn.query(countSql, params),
+  ]);
+  return { rows: dataRes.rows.map(shaper), total: parseInt(countRes.rows[0].count, 10) };
+}
+
 // ── Disciplinary Cases ──────────────────────────────────────────────────────
 
 function shapeDisc(row) {
@@ -29,7 +41,7 @@ function shapeDisc(row) {
     outcome_letter_sent_date: d(row.outcome_letter_sent_date), outcome_letter_method: row.outcome_letter_method,
     warning_expiry_date: d(row.warning_expiry_date),
     notice_period_start: d(row.notice_period_start), notice_period_end: d(row.notice_period_end),
-    pay_in_lieu_of_notice: row.pay_in_lieu_of_notice != null ? parseFloat(row.pay_in_lieu_of_notice) : null, dismissal_effective_date: d(row.dismissal_effective_date),
+    pay_in_lieu_of_notice: row.pay_in_lieu_of_notice, dismissal_effective_date: d(row.dismissal_effective_date),
     appeal_status: row.appeal_status, appeal_received_date: d(row.appeal_received_date),
     appeal_deadline: d(row.appeal_deadline), appeal_grounds: row.appeal_grounds,
     appeal_hearing_date: d(row.appeal_hearing_date), appeal_hearing_chair: row.appeal_hearing_chair,
@@ -41,21 +53,20 @@ function shapeDisc(row) {
     disciplinary_paused_for_grievance: row.disciplinary_paused_for_grievance,
     status: row.status, closed_date: d(row.closed_date), closed_reason: row.closed_reason,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     outcome_notes: row.outcome_reason,
     appeal_date: d(row.appeal_received_date),
   };
 }
 
-export async function findDisciplinary(homeId, { staffId, status } = {}, client) {
+export async function findDisciplinary(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY date_raised DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeDisc);
+  return paginate(conn, sql, params, 'date_raised DESC', shapeDisc, pag);
 }
 
 export async function findDisciplinaryById(id, homeId, client) {
@@ -80,7 +91,7 @@ export async function createDisciplinary(homeId, data, client) {
   return shapeDisc(rows[0]);
 }
 
-export async function updateDisciplinary(id, homeId, data, client) {
+export async function updateDisciplinary(id, homeId, data, client, version) {
   const conn = client || pool;
   // Build dynamic SET clause from provided fields
   const fields = [];
@@ -112,11 +123,15 @@ export async function updateDisciplinary(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findDisciplinaryById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_disciplinary_cases SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findDisciplinaryById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_disciplinary_cases SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeDisc(rows[0]);
 }
 
@@ -157,18 +172,17 @@ function shapeGrv(row) {
     status: row.status, confidential: row.confidential,
     closed_date: d(row.closed_date), closed_reason: row.closed_reason,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
   };
 }
 
-export async function findGrievance(homeId, { staffId, status } = {}, client) {
+export async function findGrievance(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY date_raised DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeGrv);
+  return paginate(conn, sql, params, 'date_raised DESC', shapeGrv, pag);
 }
 
 export async function findGrievanceById(id, homeId, client) {
@@ -193,7 +207,7 @@ export async function createGrievance(homeId, data, client) {
   return shapeGrv(rows[0]);
 }
 
-export async function updateGrievance(id, homeId, data, client) {
+export async function updateGrievance(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -223,11 +237,15 @@ export async function updateGrievance(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findGrievanceById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_grievance_cases SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findGrievanceById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_grievance_cases SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeGrv(rows[0]);
 }
 
@@ -265,14 +283,16 @@ export async function createGrievanceAction(grievanceId, homeId, data, client) {
 
 export async function updateGrievanceAction(id, homeId, data, client) {
   const conn = client || pool;
+  const params = [id, homeId];
+  const fields = [];
+  const settable = ['status', 'completed_date', 'description', 'responsible', 'due_date'];
+  for (const key of settable) {
+    if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
+  }
+  if (fields.length === 0) return shapeGrvAction((await conn.query('SELECT * FROM hr_grievance_actions WHERE id = $1 AND home_id = $2', [id, homeId])).rows[0]);
   const { rows } = await conn.query(
-    `UPDATE hr_grievance_actions SET
-       status = COALESCE($2, status), completed_date = COALESCE($3, completed_date),
-       description = COALESCE($4, description), responsible = COALESCE($5, responsible),
-       due_date = COALESCE($6, due_date)
-     WHERE id = $1 AND home_id = $7 RETURNING *`,
-    [id, data.status ?? null, data.completed_date ?? null,
-     data.description ?? null, data.responsible ?? null, data.due_date ?? null, homeId]
+    `UPDATE hr_grievance_actions SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    params
   );
   return shapeGrvAction(rows[0]);
 }
@@ -309,6 +329,7 @@ function shapePerf(row) {
     appeal_outcome_reason: row.appeal_outcome_reason,
     status: row.status, closed_date: d(row.closed_date),
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     description: row.concern_summary,
     informal_notes: row.informal_discussion_notes,
@@ -316,15 +337,14 @@ function shapePerf(row) {
   };
 }
 
-export async function findPerformance(homeId, { staffId, status } = {}, client) {
+export async function findPerformance(homeId, { staffId, status, type } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_performance_cases WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY date_raised DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapePerf);
+  if (type) { params.push(type); sql += ` AND type = $${params.length}`; }
+  return paginate(conn, sql, params, 'date_raised DESC', shapePerf, pag);
 }
 
 export async function findPerformanceById(id, homeId, client) {
@@ -348,11 +368,12 @@ export async function createPerformance(homeId, data, client) {
   return shapePerf(rows[0]);
 }
 
-export async function updatePerformance(id, homeId, data, client) {
+export async function updatePerformance(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'concern_summary', 'concern_detail', 'performance_area', 'date_raised', 'raised_by', 'type',
     'informal_discussion_date', 'informal_discussion_notes', 'informal_targets',
     'informal_review_date', 'informal_outcome',
     'pip_start_date', 'pip_end_date', 'pip_objectives', 'pip_overall_outcome', 'pip_extended_to',
@@ -372,11 +393,15 @@ export async function updatePerformance(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findPerformanceById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_performance_cases SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findPerformanceById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_performance_cases SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapePerf(rows[0]);
 }
 
@@ -399,6 +424,7 @@ function shapeRtw(row) {
     bradford_score_after: row.bradford_score_after != null ? parseFloat(row.bradford_score_after) : null, trigger_reached: row.trigger_reached,
     action_taken: row.action_taken, linked_case_id: row.linked_case_id,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     conducted_by: row.rtw_conducted_by,
     fit_for_work: row.fit_to_return,
@@ -407,14 +433,19 @@ function shapeRtw(row) {
   };
 }
 
-export async function findRtwInterviews(homeId, { staffId } = {}, client) {
+export async function findRtwInterviewById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM hr_rtw_interviews WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+  return shapeRtw(rows[0]);
+}
+
+export async function findRtwInterviews(homeId, { staffId } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
-  sql += ' ORDER BY rtw_date DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeRtw);
+  return paginate(conn, sql, params, 'rtw_date DESC', shapeRtw, pag);
 }
 
 export async function createRtwInterview(homeId, data, client) {
@@ -428,23 +459,24 @@ export async function createRtwInterview(homeId, data, client) {
         bradford_score_after, trigger_reached, action_taken, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
     [homeId, data.staff_id, data.absence_start_date, data.absence_end_date || null,
-     data.absence_days || null, data.absence_reason || null,
+     data.absence_days ?? null, data.absence_reason || null,
      data.rtw_date, data.rtw_conducted_by, data.fit_to_return ?? true,
      data.adjustments_needed ?? false, data.adjustments_detail || null,
      data.underlying_condition ?? false, data.oh_referral_recommended ?? false,
      data.notes || null, data.fit_note_received ?? false, data.fit_note_date || null,
      data.fit_note_type || null, data.fit_note_adjustments || null,
-     data.bradford_score_after || null, data.trigger_reached || null, data.action_taken || null,
+     data.bradford_score_after ?? null, data.trigger_reached || null, data.action_taken || null,
      data.created_by || null]
   );
   return shapeRtw(rows[0]);
 }
 
-export async function updateRtwInterview(id, homeId, data, client) {
+export async function updateRtwInterview(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'rtw_date', 'rtw_conducted_by',
     'absence_end_date', 'absence_days', 'absence_reason', 'fit_to_return',
     'adjustments_needed', 'adjustments_detail', 'underlying_condition',
     'oh_referral_recommended', 'follow_up_date', 'notes',
@@ -455,11 +487,15 @@ export async function updateRtwInterview(id, homeId, data, client) {
   for (const key of settable) {
     if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
-  if (fields.length === 0) return null;
-  const { rows } = await conn.query(
-    `UPDATE hr_rtw_interviews SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findRtwInterviewById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_rtw_interviews SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeRtw(rows[0]);
 }
 
@@ -479,6 +515,7 @@ function shapeOh(row) {
     follow_up_date: d(row.follow_up_date), adjustments_implemented: row.adjustments_implemented || [],
     status: row.status,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     provider: row.oh_provider,
     report_date: d(row.report_received_date),
@@ -486,15 +523,20 @@ function shapeOh(row) {
   };
 }
 
-export async function findOhReferrals(homeId, { staffId, status } = {}, client) {
+export async function findOhReferralById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM hr_oh_referrals WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+  return shapeOh(rows[0]);
+}
+
+export async function findOhReferrals(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY referral_date DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeOh);
+  return paginate(conn, sql, params, 'referral_date DESC', shapeOh, pag);
 }
 
 export async function createOhReferral(homeId, data, client) {
@@ -512,11 +554,12 @@ export async function createOhReferral(homeId, data, client) {
   return shapeOh(rows[0]);
 }
 
-export async function updateOhReferral(id, homeId, data, client) {
+export async function updateOhReferral(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'reason', 'referred_by',
     'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date', 'status',
     'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
     'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
@@ -529,11 +572,15 @@ export async function updateOhReferral(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return null;
-  const { rows } = await conn.query(
-    `UPDATE hr_oh_referrals SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findOhReferralById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_oh_referrals SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeOh(rows[0]);
 }
 
@@ -568,21 +615,20 @@ function shapeContract(row) {
     exit_interview_date: d(row.exit_interview_date), exit_interview_notes: row.exit_interview_notes,
     references_agreed: row.references_agreed,
     status: row.status, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     start_date: d(row.contract_start_date),
     end_date: d(row.contract_end_date),
   };
 }
 
-export async function findContracts(homeId, { staffId, status } = {}, client) {
+export async function findContracts(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_contracts WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY contract_start_date DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeContract);
+  return paginate(conn, sql, params, 'contract_start_date DESC', shapeContract, pag);
 }
 
 export async function findContractById(id, homeId, client) {
@@ -606,8 +652,8 @@ export async function createContract(homeId, data, client) {
      data.statement_issued_date || null, data.contract_type,
      data.contract_start_date, data.contract_end_date || null,
      data.job_title || null, data.reporting_to || null, data.place_of_work || null,
-     data.hours_per_week || null, data.working_pattern || null,
-     data.hourly_rate || null, data.pay_frequency || null, data.annual_leave_days || 28,
+     data.hours_per_week ?? null, data.working_pattern || null,
+     data.hourly_rate ?? null, data.pay_frequency || null, data.annual_leave_days ?? 28,
      data.notice_period_employer || null, data.notice_period_employee || null,
      data.probation_period_months || null, data.probation_start_date || null,
      data.probation_end_date || null, data.status || 'active']
@@ -615,7 +661,7 @@ export async function createContract(homeId, data, client) {
   return shapeContract(rows[0]);
 }
 
-export async function updateContract(id, homeId, data, client) {
+export async function updateContract(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -639,11 +685,15 @@ export async function updateContract(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findContractById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_contracts SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findContractById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_contracts SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeContract(rows[0]);
 }
 
@@ -678,6 +728,7 @@ function shapeFamilyLeave(row) {
     protected_period_start: d(row.protected_period_start), protected_period_end: d(row.protected_period_end),
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     leave_type: row.type,
     start_date: d(row.leave_start_date),
@@ -689,15 +740,13 @@ function shapeFamilyLeave(row) {
   };
 }
 
-export async function findFamilyLeave(homeId, { staffId, type } = {}, client) {
+export async function findFamilyLeave(homeId, { staffId, type } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_family_leave WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (type) { params.push(type); sql += ` AND type = $${params.length}`; }
-  sql += ' ORDER BY request_date DESC NULLS LAST';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeFamilyLeave);
+  return paginate(conn, sql, params, 'request_date DESC NULLS LAST', shapeFamilyLeave, pag);
 }
 
 export async function findFamilyLeaveById(id, homeId, client) {
@@ -722,7 +771,7 @@ export async function createFamilyLeave(homeId, data, client) {
   return shapeFamilyLeave(rows[0]);
 }
 
-export async function updateFamilyLeave(id, homeId, data, client) {
+export async function updateFamilyLeave(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -747,11 +796,15 @@ export async function updateFamilyLeave(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findFamilyLeaveById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_family_leave SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findFamilyLeaveById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_family_leave SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeFamilyLeave(rows[0]);
 }
 
@@ -775,20 +828,19 @@ function shapeFlex(row) {
     appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     decision_reason: row.refusal_reason,
   };
 }
 
-export async function findFlexWorking(homeId, { staffId, status } = {}, client) {
+export async function findFlexWorking(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_flexible_working WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
-  sql += ' ORDER BY request_date DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeFlex);
+  return paginate(conn, sql, params, 'request_date DESC', shapeFlex, pag);
 }
 
 export async function findFlexWorkingById(id, homeId, client) {
@@ -813,7 +865,7 @@ export async function createFlexWorking(homeId, data, client) {
   return shapeFlex(rows[0]);
 }
 
-export async function updateFlexWorking(id, homeId, data, client) {
+export async function updateFlexWorking(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -828,11 +880,15 @@ export async function updateFlexWorking(id, homeId, data, client) {
   for (const key of settable) {
     if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
-  if (fields.length === 0) return findFlexWorkingById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_flexible_working SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findFlexWorkingById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_flexible_working SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeFlex(rows[0]);
 }
 
@@ -856,6 +912,7 @@ function shapeEdi(row) {
     access_to_work_amount: f(row.access_to_work_amount),
     description: row.description, status: row.status, outcome: row.outcome, notes: row.notes,
     created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     date_recorded: d(row.complaint_date),
     category: row.harassment_category,
@@ -863,15 +920,13 @@ function shapeEdi(row) {
   };
 }
 
-export async function findEdi(homeId, { recordType, staffId } = {}, client) {
+export async function findEdi(homeId, { recordType, staffId } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_edi_records WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (recordType) { params.push(recordType); sql += ` AND record_type = $${params.length}`; }
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
-  sql += ' ORDER BY created_at DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeEdi);
+  return paginate(conn, sql, params, 'created_at DESC', shapeEdi, pag);
 }
 
 export async function findEdiById(id, homeId, client) {
@@ -900,7 +955,7 @@ export async function createEdi(homeId, data, client) {
   return shapeEdi(rows[0]);
 }
 
-export async function updateEdi(id, homeId, data, client) {
+export async function updateEdi(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -919,11 +974,15 @@ export async function updateEdi(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findEdiById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_edi_records SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findEdiById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_edi_records SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeEdi(rows[0]);
 }
 
@@ -946,6 +1005,7 @@ function shapeTupe(row) {
     outstanding_tribunal_claims: row.outstanding_tribunal_claims,
     status: row.status, notes: row.notes,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases
     staff_affected: Array.isArray(row.employees) ? row.employees.length : (row.employees?.count ?? null),
     consultation_start: d(row.consultation_start_date),
@@ -955,13 +1015,11 @@ function shapeTupe(row) {
   };
 }
 
-export async function findTupe(homeId, client) {
+export async function findTupe(homeId, client, pag) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    'SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL ORDER BY transfer_date DESC',
-    [homeId]
-  );
-  return rows.map(shapeTupe);
+  const sql = 'SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL';
+  const params = [homeId];
+  return paginate(conn, sql, params, 'transfer_date DESC', shapeTupe, pag);
 }
 
 export async function findTupeById(id, homeId, client) {
@@ -986,7 +1044,7 @@ export async function createTupe(homeId, data, client) {
   return shapeTupe(rows[0]);
 }
 
-export async function updateTupe(id, homeId, data, client) {
+export async function updateTupe(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -1004,11 +1062,15 @@ export async function updateTupe(id, homeId, data, client) {
       fields.push(`${key} = $${params.length}`);
     }
   }
-  if (fields.length === 0) return findTupeById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_tupe_transfers SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findTupeById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_tupe_transfers SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeTupe(rows[0]);
 }
 
@@ -1027,6 +1089,7 @@ function shapeRenewal(row) {
     rtw_document_expiry: d(row.rtw_document_expiry), rtw_next_check_due: d(row.rtw_next_check_due),
     status: row.status, checked_by: row.checked_by, notes: row.notes,
     created_at: ts(row.created_at), updated_at: ts(row.updated_at),
+    version: row.version,
     // Frontend aliases (type-aware)
     last_checked: d(row.check_type === 'dbs' ? row.dbs_check_date : row.rtw_check_date),
     expiry_date: d(row.check_type === 'dbs' ? row.dbs_next_renewal_due : row.rtw_document_expiry),
@@ -1036,15 +1099,14 @@ function shapeRenewal(row) {
   };
 }
 
-export async function findRenewals(homeId, { staffId, checkType } = {}, client) {
+export async function findRenewals(homeId, { staffId, checkType, status } = {}, client, pag) {
   const conn = client || pool;
   let sql = 'SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND deleted_at IS NULL';
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (checkType) { params.push(checkType); sql += ` AND check_type = $${params.length}`; }
-  sql += ' ORDER BY created_at DESC';
-  const { rows } = await conn.query(sql, params);
-  return rows.map(shapeRenewal);
+  if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  return paginate(conn, sql, params, 'created_at DESC', shapeRenewal, pag);
 }
 
 export async function findRenewalById(id, homeId, client) {
@@ -1075,7 +1137,7 @@ export async function createRenewal(homeId, data, client) {
   return shapeRenewal(rows[0]);
 }
 
-export async function updateRenewal(id, homeId, data, client) {
+export async function updateRenewal(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -1088,11 +1150,15 @@ export async function updateRenewal(id, homeId, data, client) {
   for (const key of settable) {
     if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
-  if (fields.length === 0) return findRenewalById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE hr_rtw_dbs_renewals SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+  fields.push('version = version + 1');
+  if (fields.length === 1) return findRenewalById(id, homeId, client);
+  let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_rtw_dbs_renewals SET ${fields.join(', ')} ${where} RETURNING *`,
     params
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeRenewal(rows[0]);
 }
 
@@ -1267,6 +1333,7 @@ function shapeMeeting(row) {
     recorded_by: row.recorded_by,
     created_at: ts(row.created_at),
     updated_at: ts(row.updated_at),
+    version: row.version,
   };
 }
 
@@ -1290,7 +1357,7 @@ export async function createMeeting(homeId, caseType, caseId, data, client) {
   return shapeMeeting(rows[0]);
 }
 
-export async function updateMeeting(id, homeId, data, client) {
+export async function updateMeeting(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const vals = [];
@@ -1299,11 +1366,96 @@ export async function updateMeeting(id, homeId, data, client) {
     if (data[key] !== undefined) { fields.push(`${key} = $${n}`); vals.push(data[key]); n++; }
   }
   if (data.attendees !== undefined) { fields.push(`attendees = $${n}`); vals.push(JSON.stringify(data.attendees)); n++; }
-  if (fields.length === 0) return null;
+  fields.push('version = version + 1');
+  if (fields.length === 1) {
+    const { rows } = await conn.query('SELECT * FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2', [id, homeId]);
+    return shapeMeeting(rows[0]);
+  }
   vals.push(id, homeId);
-  const { rows } = await conn.query(
-    `UPDATE hr_investigation_meetings SET ${fields.join(', ')} WHERE id = $${n} AND home_id = $${n + 1} RETURNING *`,
+  let where = `WHERE id = $${n} AND home_id = $${n + 1}`;
+  n += 2;
+  if (version != null) { vals.push(version); where += ` AND version = $${n}`; n++; }
+  const { rows, rowCount } = await conn.query(
+    `UPDATE hr_investigation_meetings SET ${fields.join(', ')} ${where} RETURNING *`,
     vals
   );
+  if (rowCount === 0 && version != null) return null;
   return shapeMeeting(rows[0]);
+}
+
+// ── GDPR Purge ──────────────────────────────────────────────────────────────
+
+export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = true) {
+  const caseTables = [
+    'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
+    'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts',
+    'hr_family_leave', 'hr_flexible_working', 'hr_edi_records',
+    'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
+  ];
+  // Map case_type values to their parent tables for child record purging
+  const caseTypeMap = {
+    disciplinary: 'hr_disciplinary_cases', grievance: 'hr_grievance_cases',
+    performance: 'hr_performance_cases', rtw_interview: 'hr_rtw_interviews',
+    oh_referral: 'hr_oh_referrals', contract: 'hr_contracts',
+    family_leave: 'hr_family_leave', flexible_working: 'hr_flexible_working',
+    edi: 'hr_edi_records', tupe: 'hr_tupe_transfers', renewal: 'hr_rtw_dbs_renewals',
+  };
+  const cutoff = `NOW() - INTERVAL '${parseInt(retentionYears)} years'`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const counts = {};
+
+    // 1. Purge child records whose parent cases are expired (no deleted_at on child tables)
+    const childTables = ['hr_case_notes', 'hr_file_attachments', 'hr_investigation_meetings'];
+    for (const child of childTables) {
+      let total = 0;
+      for (const [caseType, parentTable] of Object.entries(caseTypeMap)) {
+        const subquery = `SELECT id FROM ${parentTable} WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoff}`;
+        const sql = dryRun
+          ? `SELECT COUNT(*) FROM ${child} WHERE home_id = $1 AND case_type = '${caseType}' AND case_id IN (${subquery})`
+          : `DELETE FROM ${child} WHERE home_id = $1 AND case_type = '${caseType}' AND case_id IN (${subquery})`;
+        const result = await client.query(sql, [homeId]);
+        total += dryRun ? parseInt(result.rows[0].count, 10) : result.rowCount;
+      }
+      counts[child] = total;
+    }
+
+    // 2. Purge grievance actions (FK to hr_grievance_cases, not case_type pattern)
+    const grvSub = `SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoff}`;
+    if (dryRun) {
+      const { rows } = await client.query(
+        `SELECT COUNT(*) FROM hr_grievance_actions WHERE grievance_id IN (${grvSub})`, [homeId]);
+      counts.hr_grievance_actions = parseInt(rows[0].count, 10);
+    } else {
+      const { rowCount } = await client.query(
+        `DELETE FROM hr_grievance_actions WHERE grievance_id IN (${grvSub})`, [homeId]);
+      counts.hr_grievance_actions = rowCount;
+    }
+
+    // 3. Purge main case tables (have deleted_at column)
+    for (const table of caseTables) {
+      if (dryRun) {
+        const { rows } = await client.query(
+          `SELECT COUNT(*) FROM ${table} WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoff}`,
+          [homeId]
+        );
+        counts[table] = parseInt(rows[0].count, 10);
+      } else {
+        const { rowCount } = await client.query(
+          `DELETE FROM ${table} WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoff}`,
+          [homeId]
+        );
+        counts[table] = rowCount;
+      }
+    }
+
+    await client.query('COMMIT');
+    return counts;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
