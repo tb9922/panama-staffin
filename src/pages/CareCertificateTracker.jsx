@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { formatDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
   CARE_CERTIFICATE_STANDARDS, CC_CATEGORIES, CC_STATUSES, CC_STANDARD_STATUSES,
   TOTAL_STANDARDS, CC_COMPLETION_WEEKS,
@@ -47,8 +48,7 @@ export default function CareCertificateTracker() {
   const [refreshKey, setRefreshKey] = useState(0);
   useDirtyGuard(showModal || showStartModal);
 
-  const today = new Date();
-  const todayStr = formatDate(today);
+  const today = useLiveDate();
 
   useEffect(() => {
     let stale = false;
@@ -66,7 +66,7 @@ export default function CareCertificateTracker() {
   const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
   const careCertData = useMemo(() => state?.careCert || {}, [state]);
 
-  const stats = useMemo(() => getCareCertStats(careCertData, activeStaff, today), [careCertData, activeStaff]);
+  const stats = useMemo(() => getCareCertStats(careCertData, activeStaff, today), [careCertData, activeStaff, today]);
 
   const trackedStaff = useMemo(() => {
     let list = activeStaff.filter(s => careCertData[s.id]);
@@ -92,7 +92,7 @@ export default function CareCertificateTracker() {
   function openStartModal() {
     setStartForm({
       staffId: eligibleStaff.length > 0 ? eligibleStaff[0].id : '',
-      start_date: todayStr,
+      start_date: today,
       supervisor: '',
     });
     setShowStartModal(true);
@@ -142,7 +142,7 @@ export default function CareCertificateTracker() {
 
     // Auto-set completion date when passed
     if (field === 'status' && value === 'passed' && !updated.standards[stdId].completion_date) {
-      updated.standards[stdId].completion_date = todayStr;
+      updated.standards[stdId].completion_date = today;
     }
 
     // Recalculate overall status
@@ -156,7 +156,7 @@ export default function CareCertificateTracker() {
     }
     if (passedCount === TOTAL_STANDARDS) {
       updated.status = 'completed';
-      if (!updated.completion_date) updated.completion_date = todayStr;
+      if (!updated.completion_date) updated.completion_date = today;
     } else if (passedCount > 0 || hasInProgress) {
       updated.status = 'in_progress';
       updated.completion_date = null;

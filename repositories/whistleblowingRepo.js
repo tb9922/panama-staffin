@@ -130,8 +130,19 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+// Column name whitelist for dynamic SQL
+const ALLOWED_COLUMNS = new Set([
+  'date_raised', 'raised_by_role', 'anonymous',
+  'category', 'description', 'severity', 'status',
+  'acknowledgement_date', 'investigator', 'investigation_start_date',
+  'findings', 'outcome', 'outcome_details',
+  'reporter_protected', 'protection_details',
+  'follow_up_date', 'follow_up_completed', 'resolution_date',
+  'lessons_learned',
+]);
+
 export async function update(id, homeId, data, version) {
-  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  const fields = Object.entries(data).filter(([k, v]) => v !== undefined && ALLOWED_COLUMNS.has(k));
   if (fields.length === 0) return findById(id, homeId);
   const params = [id, homeId, ...fields.map(([_, v]) => v)];
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');

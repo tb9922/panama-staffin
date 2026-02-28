@@ -77,7 +77,11 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (concern === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, concern);
+    let changes = diffFields(existing, concern);
+    // Strip raised_by_role from audit diff for anonymous concerns to prevent de-anonymisation
+    if (concern.anonymous) {
+      changes = changes.filter(c => c.field !== 'raised_by_role');
+    }
     await auditService.log('whistleblowing_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     const safe = concern.anonymous ? (({ raised_by_role, ...rest }) => rest)(concern) : concern;
     res.json(safe);

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -78,7 +79,7 @@ export default function ComplaintsTracker() {
 
   useEffect(() => { load(); }, []);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  const today = useLiveDate();
 
   // Minimal config object for functions that need complaint_response_days.
   // The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).

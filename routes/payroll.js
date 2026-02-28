@@ -101,7 +101,7 @@ const agencyShiftBodySchema = z.object({
 // ── Pay Rate Rules ─────────────────────────────────────────────────────────────
 
 // GET /api/payroll/rates?home=X — list active rules (seeds defaults on first call)
-router.get('/rates', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     // Seed defaults if none exist yet (idempotent)
     await payrollService.seedDefaultRulesIfNeeded(req.home.id);
@@ -159,7 +159,7 @@ router.get('/nmw', requireAuth, async (req, res, next) => {
 // ── Timesheets ─────────────────────────────────────────────────────────────────
 
 // GET /api/payroll/timesheets?home=X&date=YYYY-MM-DD — entries for a date
-router.get('/timesheets', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const dateP = dateSchema.safeParse(req.query.date);
     if (!dateP.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
@@ -169,7 +169,7 @@ router.get('/timesheets', requireAuth, requireHomeAccess, async (req, res, next)
 });
 
 // GET /api/payroll/timesheets/period?home=X&start=X&end=X — period view
-router.get('/timesheets/period', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/timesheets/period', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
@@ -264,7 +264,7 @@ router.post('/timesheets/approve-range', requireAuth, requireAdmin, requireHomeA
 // ── Payroll Runs ──────────────────────────────────────────────────────────────
 
 // GET /api/payroll/runs?home=X — list all runs
-router.get('/runs', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runs = await payrollRunRepo.findByHome(req.home.id);
     res.json(runs);
@@ -290,7 +290,7 @@ router.post('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, r
 });
 
 // GET /api/payroll/runs/:runId?home=X — get run with lines
-router.get('/runs/:runId', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -373,7 +373,7 @@ router.get('/runs/:runId/payslips', requireAuth, requireAdmin, requireHomeAccess
 // ── Agency ────────────────────────────────────────────────────────────────────
 
 // GET /api/payroll/agency/providers?home=X
-router.get('/agency/providers', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/providers', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await agencyRepo.findProvidersByHome(req.home.id));
   } catch (err) { next(err); }
@@ -405,7 +405,7 @@ router.put('/agency/providers/:id', requireAuth, requireAdmin, requireHomeAccess
 });
 
 // GET /api/payroll/agency/shifts?home=X&start=YYYY-MM-DD&end=YYYY-MM-DD
-router.get('/agency/shifts', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
@@ -443,7 +443,7 @@ router.put('/agency/shifts/:id', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // GET /api/payroll/agency/metrics?home=X&weeks=12
-router.get('/agency/metrics', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/metrics', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const weeks = Math.min(52, Math.max(1, parseInt(req.query.weeks, 10) || 12));
     res.json(await agencyRepo.getMetrics(req.home.id, weeks));
@@ -484,7 +484,7 @@ router.post('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (r
 });
 
 // GET /api/payroll/ytd?home=X&staffId=X&year=X
-router.get('/ytd', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/ytd', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffId = z.string().min(1).max(20).safeParse(req.query.staffId);
     const year    = z.coerce.number().int().min(2020).safeParse(req.query.year);
@@ -507,7 +507,7 @@ const enrolmentBodySchema = z.object({
 });
 
 // GET /api/payroll/pensions?home=X
-router.get('/pensions', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/pensions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await pensionRepo.listEnrolmentsByHome(req.home.id));
   } catch (err) { next(err); }
@@ -566,7 +566,7 @@ const sickPeriodUpdateSchema = z.object({
 });
 
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
-router.get('/sick-periods', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffId = req.query.staffId || null;
     res.json(await sspRepo.listSickPeriods(req.home.id, staffId));
@@ -606,7 +606,7 @@ const markPaidSchema = z.object({
 });
 
 // GET /api/payroll/hmrc?home=X&year=X
-router.get('/hmrc', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/hmrc', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const year = z.coerce.number().int().min(2020).safeParse(req.query.year);
     if (!year.success) return res.status(400).json({ error: 'year is required' });

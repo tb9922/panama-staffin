@@ -131,8 +131,17 @@ export async function upsertDols(homeId, data) {
   return rows[0] ? shapeDolsRow(rows[0]) : null;
 }
 
+// Column name whitelist for dynamic SQL — DoLS
+const ALLOWED_DOLS_COLUMNS = new Set([
+  'resident_name', 'dob', 'room_number',
+  'application_type', 'application_date', 'authorised',
+  'authorisation_date', 'expiry_date', 'authorisation_number', 'authorising_authority',
+  'restrictions', 'reviewed_date', 'review_status', 'next_review_date',
+  'notes',
+]);
+
 export async function updateDols(id, homeId, data, version) {
-  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  const fields = Object.entries(data).filter(([k, v]) => v !== undefined && ALLOWED_DOLS_COLUMNS.has(k));
   if (fields.length === 0) return findDolsById(id, homeId);
   const mapped = fields.map(([k, v]) => [k, k === 'restrictions' ? JSON.stringify(v) : v]);
   const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
@@ -234,8 +243,15 @@ export async function upsertMca(homeId, data) {
   return rows[0] ? shapeMcaRow(rows[0]) : null;
 }
 
+// Column name whitelist for dynamic SQL — MCA
+const ALLOWED_MCA_COLUMNS = new Set([
+  'resident_name', 'assessment_date', 'assessor',
+  'decision_area', 'lacks_capacity', 'best_interest_decision',
+  'next_review_date', 'notes',
+]);
+
 export async function updateMca(id, homeId, data, version) {
-  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  const fields = Object.entries(data).filter(([k, v]) => v !== undefined && ALLOWED_MCA_COLUMNS.has(k));
   if (fields.length === 0) return findMcaById(id, homeId);
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const values = fields.map(([_, v]) => v);

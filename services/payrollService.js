@@ -336,14 +336,14 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       if (parsedCode.missingCode) notesParts.push('WARNING: No tax code found — defaulted to 1257L');
       if (nmwWarnings.length > 0) notesParts.push(...nmwWarnings);
 
-      await payrollRunRepo.updateLine(line.id, {
+      await payrollRunRepo.updateLine(line.id, homeId, {
         ...acc,
         nmw_compliant:   nmwCompliant,
         nmw_lowest_rate: nmwLowest === Infinity ? null : round2(nmwLowest),
         notes:           notesParts.length > 0 ? notesParts.join('; ') : null,
       }, client);
 
-      await payrollRunRepo.updateLineDeductions(line.id, {
+      await payrollRunRepo.updateLineDeductions(line.id, homeId, {
         holiday_days:        acc.holiday_days,
         holiday_pay:         acc.holiday_pay,
         holiday_daily_rate:  acc.holiday_days > 0 ? round2(acc.holiday_pay / acc.holiday_days) : null,
@@ -390,7 +390,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
     }
 
-    const hasViolations = await payrollRunRepo.hasNmwViolations(runId, client);
+    const hasViolations = await payrollRunRepo.hasNmwViolations(runId, homeId, client);
     if (hasViolations) {
       throw new ValidationError(
         'Payroll cannot be approved: one or more staff members are below National Minimum Wage. ' +
@@ -579,7 +579,7 @@ export async function assemblePayslipData(runId, homeId, staffId) {
   const home  = await homeRepo.findById(homeId);
   if (!home) throw new NotFoundError('Home not found');
   const lines = await payrollRunRepo.findLinesByRun(runId, homeId);
-  const shifts = await payrollRunRepo.findShiftsByRun(runId);
+  const shifts = await payrollRunRepo.findShiftsByRun(runId, homeId);
 
   const allStaffResult = await staffRepo.findByHome(homeId);
   const allStaff = allStaffResult.rows;

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
   getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk, getLoggedInUser,
@@ -65,7 +66,7 @@ export default function RiskRegister() {
 
   useEffect(() => { load(); }, [load]);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  const today = useLiveDate();
 
   const stats = useMemo(() => getRiskStats(risks, today), [risks, today]);
 

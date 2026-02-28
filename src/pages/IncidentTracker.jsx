@@ -3,6 +3,7 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
 import { formatDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
   getCurrentHome, getLoggedInUser,
@@ -85,7 +86,7 @@ export default function IncidentTracker() {
 
   useEffect(() => { load(); }, []);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  const today = useLiveDate();
   const activeStaff = useMemo(() => staff.filter(s => s.active !== false), [staff]);
 
   // Date range for stats: last 90 days

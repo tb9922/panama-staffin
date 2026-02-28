@@ -6,11 +6,28 @@ import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
 
+const staffItemSchema = z.object({
+  id: z.string().min(1).max(50),
+  name: z.string().min(1).max(200),
+}).passthrough();
+
 const dataBodySchema = z.object({
   config: z.object({}).passthrough(),
-  staff: z.array(z.object({}).passthrough()),
+  staff: z.array(staffItemSchema).max(2000),
   overrides: z.object({}).passthrough(),
 }).passthrough();
+
+/** Detect data-corruption issues that MUST block the save */
+function detectCriticalErrors(body) {
+  const errors = [];
+  // Duplicate staff IDs → data loss on round-trip
+  const ids = body.staff.map(s => s.id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length > 0) {
+    errors.push(`Duplicate staff IDs: ${[...new Set(dupes)].join(', ')}`);
+  }
+  return errors;
+}
 
 const router = Router();
 
@@ -54,6 +71,12 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
           serverUpdatedAt,
         });
       }
+    }
+
+    // Block save on data-corruption issues
+    const criticalErrors = detectCriticalErrors(body);
+    if (criticalErrors.length > 0) {
+      return res.status(400).json({ error: 'Data integrity check failed', errors: criticalErrors });
     }
 
     const warnings = validateAll(body);

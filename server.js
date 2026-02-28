@@ -43,6 +43,12 @@ import { loadDenyList, pruneDenyList } from './services/authService.js';
 
 const app = express();
 
+// Trust first proxy (nginx) so req.ip reflects the real client IP.
+// Without this, rate limiters use 127.0.0.1 for everyone behind a proxy.
+if (config.nodeEnv === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // ── Security middleware ───────────────────────────────────────────────────────
 
 app.use(helmet());

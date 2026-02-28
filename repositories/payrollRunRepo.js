@@ -203,7 +203,7 @@ export async function createLine(runId, staffId, client) {
   return shapeLine(rows[0]);
 }
 
-export async function updateLine(lineId, data, client) {
+export async function updateLine(lineId, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE payroll_lines SET
@@ -217,6 +217,7 @@ export async function updateLine(lineId, data, client) {
        total_hours = $15, total_enhancements = $16, gross_pay = $17,
        nmw_compliant = $18, nmw_lowest_rate = $19, notes = $20
      WHERE id = $21
+       AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $22)
      RETURNING *`,
     [
       data.base_hours, data.base_pay,
@@ -228,7 +229,7 @@ export async function updateLine(lineId, data, client) {
       data.on_call_hours, data.on_call_enhancement,
       data.total_hours, data.total_enhancements, data.gross_pay,
       data.nmw_compliant, data.nmw_lowest_rate ?? null, data.notes || null,
-      lineId,
+      lineId, homeId,
     ],
   );
   return rows.length > 0 ? shapeLine(rows[0]) : null;
@@ -238,7 +239,7 @@ export async function updateLine(lineId, data, client) {
  * Update the 14 Phase 2 deduction columns on a payroll line.
  * Kept separate from updateLine to avoid changing its fixed 20-param signature.
  */
-export async function updateLineDeductions(lineId, data, client) {
+export async function updateLineDeductions(lineId, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE payroll_lines SET
@@ -257,6 +258,7 @@ export async function updateLineDeductions(lineId, data, client) {
        other_deductions     = $13,
        net_pay              = $14
      WHERE id = $15
+       AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $16)
      RETURNING *`,
     [
       data.holiday_days ?? 0,
@@ -273,19 +275,20 @@ export async function updateLineDeductions(lineId, data, client) {
       data.student_loan ?? 0,
       data.other_deductions ?? 0,
       data.net_pay ?? 0,
-      lineId,
+      lineId, homeId,
     ],
   );
   return rows.length > 0 ? shapeLine(rows[0]) : null;
 }
 
 /** Check if any line in this run has nmw_compliant = false. */
-export async function hasNmwViolations(runId, client) {
+export async function hasNmwViolations(runId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT COUNT(*) AS cnt FROM payroll_lines
-     WHERE payroll_run_id = $1 AND nmw_compliant = false`,
-    [runId],
+    `SELECT COUNT(*) AS cnt FROM payroll_lines pl
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pl.payroll_run_id = $1 AND pr.home_id = $2 AND pl.nmw_compliant = false`,
+    [runId, homeId],
   );
   return parseInt(rows[0].cnt, 10) > 0;
 }
@@ -326,23 +329,28 @@ export async function createLineShift(lineId, shift, client) {
   return shapeLineShift(rows[0]);
 }
 
-export async function findShiftsByLine(lineId) {
+export async function findShiftsByLine(lineId, homeId) {
   const { rows } = await pool.query(
-    `SELECT * FROM payroll_line_shifts WHERE payroll_line_id = $1 ORDER BY date`,
-    [lineId],
+    `SELECT pls.* FROM payroll_line_shifts pls
+     JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pls.payroll_line_id = $1 AND pr.home_id = $2
+     ORDER BY pls.date`,
+    [lineId, homeId],
   );
   return rows.map(shapeLineShift);
 }
 
 /** Find all shift detail rows for a full run (used for payslip generation). */
-export async function findShiftsByRun(runId) {
+export async function findShiftsByRun(runId, homeId) {
   const { rows } = await pool.query(
     `SELECT pls.*, pl.staff_id
      FROM payroll_line_shifts pls
      JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
-     WHERE pl.payroll_run_id = $1
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
      ORDER BY pl.staff_id, pls.date`,
-    [runId],
+    [runId, homeId],
   );
   return rows.map(r => ({ ...shapeLineShift(r), staff_id: r.staff_id }));
 }

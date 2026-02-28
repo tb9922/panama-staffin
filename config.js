@@ -87,6 +87,9 @@ export const config = {
     poolMax: parseInt(process.env.DB_POOL_MAX || '10', 10),
     idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
     connectionTimeoutMs: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000', 10),
+    ssl: process.env.DB_SSL === 'true'
+      ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+      : false,
   },
 
   // ── File uploads ───────────────────────────────────────────────────────────

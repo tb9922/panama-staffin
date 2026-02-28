@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, parseDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -56,7 +57,7 @@ export default function PolicyReviewTracker() {
 
   useEffect(() => { load(); }, [load]);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  const today = useLiveDate();
 
   const stats = useMemo(() => getPolicyStats(policies, today), [policies, today]);
 

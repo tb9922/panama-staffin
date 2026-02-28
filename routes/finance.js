@@ -57,8 +57,8 @@ const residentUpdateSchema = residentBodySchema.partial();
 const invoiceLineSchema = z.object({
   description: z.string().min(1).max(500),
   quantity: z.coerce.number().min(0).default(1),
-  unit_price: z.coerce.number(),
-  amount: z.coerce.number(),
+  unit_price: z.coerce.number().min(0),
+  amount: z.coerce.number().min(0),
   line_type: z.enum(['fee', 'top_up', 'fnc', 'additional', 'adjustment', 'credit']).optional(),
 });
 
@@ -99,9 +99,9 @@ const expenseBodySchema = z.object({
   description: z.string().min(1).max(500),
   supplier: z.string().max(200).nullable().optional(),
   invoice_ref: z.string().max(100).nullable().optional(),
-  net_amount: z.coerce.number(),
-  vat_amount: z.coerce.number().default(0),
-  gross_amount: z.coerce.number(),
+  net_amount: z.coerce.number().min(0),
+  vat_amount: z.coerce.number().min(0).default(0),
+  gross_amount: z.coerce.number().min(0),
   status: z.enum(['pending', 'approved', 'rejected', 'paid', 'void']).optional(),
   paid_date: dateSchema.nullable().optional(),
   payment_method: z.enum(['bacs', 'cheque', 'card', 'cash', 'direct_debit', 'petty_cash', 'other']).nullable().optional(),

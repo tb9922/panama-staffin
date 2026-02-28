@@ -21,6 +21,8 @@ ALTER TABLE cqc_evidence ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAU
 ALTER TABLE data_breaches ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE consent_records ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE dp_complaints ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE finance_payment_schedule ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 
 -- ── GDPR table soft deletes ─────────────────────────────────────────────────
 ALTER TABLE data_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
@@ -63,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_handover_entries_active ON handover_entries (home
 -- ALTER TABLE data_breaches DROP COLUMN IF EXISTS version;
 -- ALTER TABLE consent_records DROP COLUMN IF EXISTS version;
 -- ALTER TABLE dp_complaints DROP COLUMN IF EXISTS version;
+-- ALTER TABLE staff DROP COLUMN IF EXISTS version;
+-- ALTER TABLE finance_payment_schedule DROP COLUMN IF EXISTS version;
 -- DROP INDEX IF EXISTS idx_data_requests_active;
 -- DROP INDEX IF EXISTS idx_data_breaches_active;
 -- DROP INDEX IF EXISTS idx_consent_records_active;

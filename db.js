@@ -13,6 +13,7 @@ export const pool = new Pool({
   max: config.db.poolMax,
   idleTimeoutMillis: config.db.idleTimeoutMs,
   connectionTimeoutMillis: config.db.connectionTimeoutMs,
+  ...(config.db.ssl ? { ssl: config.db.ssl } : {}),
 });
 
 pool.on('error', (err) => {

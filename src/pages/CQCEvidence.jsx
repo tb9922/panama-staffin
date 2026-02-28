@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -67,7 +68,7 @@ export default function CQCEvidence({ data }) {
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
 
-  const today = useMemo(() => formatDate(new Date()), []);
+  const today = useLiveDate();
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
 
   // Merge live evidence state into data for score computation and evidence-for-statement calls

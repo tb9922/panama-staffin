@@ -17,11 +17,14 @@ COPY --from=builder /app/server.js ./
 COPY --from=builder /app/config.js ./
 COPY --from=builder /app/db.js ./
 COPY --from=builder /app/logger.js ./
+COPY --from=builder /app/errors.js ./
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/middleware ./middleware
 COPY --from=builder /app/routes ./routes
 COPY --from=builder /app/services ./services
 COPY --from=builder /app/repositories ./repositories
 COPY --from=builder /app/lib ./lib
+RUN addgroup -S app && adduser -S app -G app
+USER app
 EXPOSE 3001
 CMD ["node", "server.js"]
