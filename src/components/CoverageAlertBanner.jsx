@@ -1,20 +1,21 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStaffForDay, formatDate } from '../lib/rotation.js';
+import { getStaffForDay, parseDate } from '../lib/rotation.js';
 import { getDayCoverageStatus } from '../lib/escalation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 
 export default function CoverageAlertBanner({ data }) {
   const navigate = useNavigate();
+  const today = useLiveDate();
+
   const todayCoverage = useMemo(() => {
     if (!data) return null;
-    const today = new Date();
-    const staffForDay = getStaffForDay(data.staff, today, data.overrides, data.config);
+    const staffForDay = getStaffForDay(data.staff, parseDate(today), data.overrides, data.config);
     return getDayCoverageStatus(staffForDay, data.config);
-  }, [data]);
+  }, [data, today]);
 
   if (!todayCoverage || todayCoverage.overallLevel < 3) return null;
 
-  const todayStr = formatDate(new Date());
   const isCritical = todayCoverage.overallLevel >= 4;
   return (
     <div className={`px-4 py-2.5 text-sm flex items-center justify-between print:hidden ${
@@ -40,7 +41,7 @@ export default function CoverageAlertBanner({ data }) {
           return <span key={p} className="px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-medium capitalize">{p}: {esc.label}</span>;
         })}
       </div>
-      <button onClick={() => navigate(`/day/${todayStr}`)} className="text-xs font-medium underline hover:no-underline">View Details</button>
+      <button onClick={() => navigate(`/day/${today}`)} className="text-xs font-medium underline hover:no-underline">View Details</button>
     </div>
   );
 }
