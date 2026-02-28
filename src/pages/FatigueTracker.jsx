@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   getCycleDates, getStaffForDay, formatDate, getActualShift,
   isWorkingShift, isCareRole, SHIFT_COLORS,
@@ -8,10 +8,20 @@ import { CARD, TABLE, BTN } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 
 export default function FatigueTracker({ data }) {
-  const today = new Date();
-  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date]);
+  // Reactive today — updates at midnight so fatigue data is never stale
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    return () => clearTimeout(timer);
+  }, [today]);
 
-  const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date, today]);
+
+  const activeStaff = useMemo(() => data.staff.filter(s => s.active !== false && isCareRole(s.role)), [data.staff]);
   const maxConsec = data.config.max_consecutive_days;
 
   // Calculate fatigue data for each staff member
@@ -50,7 +60,7 @@ export default function FatigueTracker({ data }) {
         avgWeeklyShifts: totalWorking / 4,
       };
     }).sort((a, b) => b.fatigue.consecutive - a.fatigue.consecutive);
-  }, [activeStaff, cycleDates, data, today]);
+  }, [activeStaff, cycleDates, data.overrides, data.config, today]);
 
   const exceeded = fatigueData.filter(s => s.fatigue.exceeded);
   const atRisk = fatigueData.filter(s => s.fatigue.atRisk && !s.fatigue.exceeded);

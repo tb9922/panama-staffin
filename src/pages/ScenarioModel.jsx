@@ -32,7 +32,7 @@ export default function ScenarioModel({ data }) {
       const staff = getStaffForDay(data.staff, date, data.overrides, data.config);
       return sum + calculateDayCost(staff, data.config).total;
     }, 0);
-  }, [data]);
+  }, [data.staff, data.overrides, data.config]);
 
   // Combine presets + custom
   const allScenarios = useMemo(() => {
@@ -49,7 +49,7 @@ export default function ScenarioModel({ data }) {
       const annual = total28 / 28 * 365;
       return { ...s, ...result, baseCost, total28, monthly, annual };
     });
-  }, [allScenarios, data, baseCost]);
+  }, [allScenarios, data.config, data.staff, baseCost]);
 
   // Agency kill comparison (Typical scenario)
   const typical = scenarioResults[1];
@@ -72,7 +72,7 @@ export default function ScenarioModel({ data }) {
       const agCostWk = agWk * (0.7 * elHrs * data.config.agency_rate_day + 0.3 * nHrs * data.config.agency_rate_night) / 7;
       return { ...s, weekly, floatWk, otWk, agWk, agCostWk: agCostWk * 7 };
     });
-  }, [data]);
+  }, [data.staff, data.config]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

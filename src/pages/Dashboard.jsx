@@ -93,7 +93,7 @@ export default function Dashboard({ data }) {
       const cost = calculateDayCost(staffForDay, data.config);
       return { date, staffForDay, coverage, cost };
     });
-  }, [data, cycleDates]);
+  }, [data.staff, data.overrides, data.config, cycleDates]);
 
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);
@@ -175,7 +175,7 @@ export default function Dashboard({ data }) {
     getFinanceAlertsForDashboard(financeAlerts).forEach(a => list.push(a));
 
     return list.slice(0, 24);
-  }, [cycleData, data, hrData, financeAlerts, summary, isAdmin, today]);
+  }, [cycleData, data.staff, data.overrides, data.config, hrData, financeAlerts, summary, isAdmin, today]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

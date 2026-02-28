@@ -57,6 +57,7 @@ export default function DailyStatus() {
   const [pendingAction, setPendingAction] = useState(null);
 
   const noteTimerRef = useRef(null);
+  const savingRef = useRef(false);
 
   const closeModal = useCallback(() => {
     setModal(null);
@@ -136,6 +137,8 @@ export default function DailyStatus() {
   }
 
   async function applyOverride(staffId, shift, reason, source, sleepIn = false) {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn });
@@ -143,6 +146,7 @@ export default function DailyStatus() {
     } catch (e) {
       setError(e.message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
     setModal(null);
@@ -150,7 +154,8 @@ export default function DailyStatus() {
   }
 
   async function toggleSleepIn(staffId) {
-    if (!schedData) return;
+    if (!schedData || savingRef.current) return;
+    savingRef.current = true;
     const existing = schedData.overrides[dateStr]?.[staffId];
     setSaving(true);
     try {
@@ -178,6 +183,7 @@ export default function DailyStatus() {
     } catch (e) {
       setError(e.message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
     setModal(null);
@@ -185,6 +191,8 @@ export default function DailyStatus() {
   }
 
   async function removeOverride(staffId) {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await deleteOverride(getCurrentHome(), dateStr, staffId);
@@ -192,13 +200,15 @@ export default function DailyStatus() {
     } catch (e) {
       setError(e.message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   // Applies a SICK override and shows the cascade gap panel if coverage drops
   async function applySickOverride(staffId) {
-    if (!schedData) return;
+    if (!schedData || savingRef.current) return;
+    savingRef.current = true;
     // Simulate projected coverage before API call so gap panel shows immediately
     const projectedOverrides = JSON.parse(JSON.stringify(schedData.overrides));
     if (!projectedOverrides[dateStr]) projectedOverrides[dateStr] = {};
@@ -212,11 +222,13 @@ export default function DailyStatus() {
       await loadData();
     } catch (e) {
       setError(e.message);
+      savingRef.current = false;
       setSaving(false);
       setModal(null);
       setSelectedStaff('');
       return;
     }
+    savingRef.current = false;
     setSaving(false);
     setModal(null);
     setSelectedStaff('');

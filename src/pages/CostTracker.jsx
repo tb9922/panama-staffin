@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
@@ -30,6 +30,17 @@ export default function CostTracker({ data }) {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [monthOffset, setMonthOffset] = useState(0);
 
+  // Reactive today — updates at midnight so "today" highlighting stays accurate
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    return () => clearTimeout(timer);
+  }, [today]);
+
   const { monthDates, monthLabel } = useMemo(() => {
     if (!isAdmin) return { monthDates: [], monthLabel: '' };
     const now = new Date();
@@ -49,7 +60,7 @@ export default function CostTracker({ data }) {
       cumulative += cost.total;
       return { date, cost, staffCount: workingStaff.length, cumulative, dayNum: i + 1 };
     });
-  }, [data, monthDates, isAdmin]);
+  }, [data.staff, data.overrides, data.config, monthDates, isAdmin]);
 
   const totals = useMemo(() => dayData.reduce((acc, d) => ({
     base: acc.base + d.cost.base,
@@ -176,7 +187,7 @@ export default function CostTracker({ data }) {
           </thead>
           <tbody>
             {dayData.map(d => {
-              const isToday = formatDate(d.date) === formatDate(new Date());
+              const isToday = formatDate(d.date) === formatDate(today);
               const pct = maxCost > 0 ? (d.cost.total / maxCost) * 100 : 0;
               return (
                 <tr key={d.dayNum} className={`${TABLE.tr} ${isToday ? 'bg-blue-50/70' : ''}`}>

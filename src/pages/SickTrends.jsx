@@ -35,7 +35,7 @@ export default function SickTrends({ data }) {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const MONTHS_BACK = 6;
   const months = useMemo(() => getMonthRange(MONTHS_BACK), []);
-  const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+  const activeStaff = useMemo(() => data.staff.filter(s => s.active !== false && isCareRole(s.role)), [data.staff]);
   const [filterStaff, setFilterStaff] = useState('All');
   const [filterMonth, setFilterMonth] = useState('All');
 
@@ -72,38 +72,35 @@ export default function SickTrends({ data }) {
       const trend = secondHalf > firstHalf + 0.5 ? 'worsening' : secondHalf < firstHalf - 0.5 ? 'improving' : 'stable';
       return { ...s, monthCounts, monthDetails, total, trend };
     }).sort((a, b) => b.total - a.total);
-  }, [activeStaff, months, data]);
+  }, [activeStaff, months, data.overrides, data.config.cycle_start_date]);
 
   // Totals per month
   const monthTotals = useMemo(() => {
     return months.map((_, mi) => sickData.reduce((sum, s) => sum + s.monthCounts[mi], 0));
   }, [sickData, months]);
 
-  // Build detailed sick log — every individual sick day with exact date and who was sick
+  // Derive sick log from sickData — avoids duplicate getActualShift iteration
   const sickLog = useMemo(() => {
     const log = [];
-    activeStaff.forEach(s => {
-      months.forEach(m => {
-        m.dates.forEach(date => {
-          const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
-          if (actual.shift === 'SICK') {
-            log.push({
-              date: formatDate(date),
-              dateObj: date,
-              staffId: s.id,
-              staffName: s.name,
-              team: s.team,
-              role: s.role,
-              reason: actual.reason || '',
-              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
-            });
-          }
+    sickData.forEach(s => {
+      s.monthDetails.forEach(md => {
+        md.dates.forEach(d => {
+          log.push({
+            date: d.date,
+            dateObj: parseDate(d.date),
+            staffId: s.id,
+            staffName: s.name,
+            team: s.team,
+            role: s.role,
+            reason: d.reason,
+            dayOfWeek: d.dayOfWeek,
+          });
         });
       });
     });
-    log.sort((a, b) => b.date.localeCompare(a.date)); // most recent first
+    log.sort((a, b) => b.date.localeCompare(a.date));
     return log;
-  }, [activeStaff, months, data]);
+  }, [sickData]);
 
   // Filtered sick log
   const filteredLog = useMemo(() => {

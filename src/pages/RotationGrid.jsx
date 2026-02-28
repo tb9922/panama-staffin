@@ -137,8 +137,9 @@ export default function RotationGrid() {
     const statsBefore = calculateStaffPeriodHours(staff, monthDates, schedData.overrides, schedData.config);
     const fatigueBefore = checkFatigueRisk(staff, date, schedData.overrides, schedData.config);
 
-    const simOverrides = JSON.parse(JSON.stringify(schedData.overrides));
-    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date));
+    const simOverrides = { ...schedData.overrides };
+    if (simOverrides[dateStr]) simOverrides[dateStr] = { ...simOverrides[dateStr] };
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date);
     if (proposedShift === scheduled) {
       if (simOverrides[dateStr]) {
         delete simOverrides[dateStr][staffId];
@@ -210,8 +211,9 @@ export default function RotationGrid() {
   function openEditor(staffId, dateStr) {
     const actual = schedData.overrides[dateStr]?.[staffId]?.shift;
     const staff = schedData.staff.find(s => s.id === staffId);
-    const cycleDay = getCycleDay(parseLocalDate(dateStr), schedData.config.cycle_start_date);
-    const scheduled = getScheduledShift(staff, cycleDay);
+    const date = parseLocalDate(dateStr);
+    const cycleDay = getCycleDay(date, schedData.config.cycle_start_date);
+    const scheduled = getScheduledShift(staff, cycleDay, date);
     const currentShift = actual || scheduled;
     setEditing({ staffId, dateStr, currentShift, proposedShift: currentShift });
   }
@@ -221,7 +223,7 @@ export default function RotationGrid() {
     const { staffId, dateStr, proposedShift } = editing;
     const staff = schedData.staff.find(s => s.id === staffId);
     const date = parseLocalDate(dateStr);
-    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date));
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date);
 
     setSaving(true);
     try {
@@ -248,7 +250,7 @@ export default function RotationGrid() {
       d.setDate(d.getDate() + i);
       const dk = formatDate(d);
       const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
-      const sched = getScheduledShift(staff, cycleDay);
+      const sched = getScheduledShift(staff, cycleDay, d);
       if (sched !== 'OFF') {
         sickRows.push({ date: dk, staffId, shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' });
       }
@@ -690,10 +692,10 @@ export default function RotationGrid() {
                   className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}>
                   Sick 7 Days
                 </button>
-                {editing.currentShift !== getScheduledShift(schedData.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date)) && (
+                {editing.currentShift !== getScheduledShift(schedData.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr)) && (
                   <button onClick={() => {
                     const staff = schedData.staff.find(s => s.id === editing.staffId);
-                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date));
+                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr));
                     setEditing({ ...editing, proposedShift: scheduled });
                   }} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-blue-600 disabled:opacity-50`}>
                     Revert to Scheduled
