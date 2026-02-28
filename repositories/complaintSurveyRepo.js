@@ -7,6 +7,7 @@ function shapeRow(row) {
   if (shaped.overall_satisfaction != null) shaped.overall_satisfaction = parseFloat(shaped.overall_satisfaction);
   delete shaped.home_id;
   delete shaped.created_at;
+  delete shaped.deleted_at;
   return shaped;
 }
 
@@ -35,7 +36,7 @@ export async function sync(homeId, arr, client) {
          actions=$11,conducted_by=$12,reported_at=$13`,
       [
         s.id, homeId, s.type || null, s.date || null, s.title || null,
-        s.total_sent || null, s.responses || null, s.overall_satisfaction || null,
+        s.total_sent ?? null, s.responses ?? null, s.overall_satisfaction ?? null,
         JSON.stringify(s.area_scores || {}), s.key_feedback || null,
         s.actions || null, s.conducted_by || null, s.reported_at || null,
       ]
@@ -81,7 +82,7 @@ export async function upsert(homeId, data) {
      RETURNING *`,
     [
       id, homeId, data.type || null, data.date || null, data.title || null,
-      data.total_sent || null, data.responses || null, data.overall_satisfaction || null,
+      data.total_sent ?? null, data.responses ?? null, data.overall_satisfaction ?? null,
       JSON.stringify(data.area_scores || {}), data.key_feedback || null,
       data.actions || null, data.conducted_by || null, data.reported_at || now,
     ]

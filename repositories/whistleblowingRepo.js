@@ -4,9 +4,12 @@ function shapeRow(row) {
   const shaped = { ...row };
   for (const col of [
     'date_raised', 'acknowledgement_date', 'investigation_start_date',
-    'follow_up_date', 'resolution_date', 'reported_at', 'updated_at',
+    'follow_up_date', 'resolution_date',
   ]) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  for (const col of ['reported_at', 'updated_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
   }
   delete shaped.home_id;
   delete shaped.created_at;

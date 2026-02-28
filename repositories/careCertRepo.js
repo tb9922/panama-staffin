@@ -66,11 +66,12 @@ export async function sync(homeId, certObj, client) {
 export async function upsertStaff(homeId, staffId, record) {
   const { rows } = await pool.query(
     `INSERT INTO care_certificates
-       (home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+       (home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards, updated_at, deleted_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NULL)
      ON CONFLICT (home_id, staff_id) DO UPDATE SET
        start_date=EXCLUDED.start_date, expected_completion=EXCLUDED.expected_completion, supervisor=EXCLUDED.supervisor,
-       status=EXCLUDED.status, completion_date=EXCLUDED.completion_date, standards=EXCLUDED.standards, updated_at=NOW()
+       status=EXCLUDED.status, completion_date=EXCLUDED.completion_date, standards=EXCLUDED.standards, updated_at=NOW(),
+       deleted_at=NULL
      RETURNING *`,
     [homeId, staffId,
      record.start_date || null, record.expected_completion || null,

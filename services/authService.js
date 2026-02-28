@@ -35,6 +35,7 @@ export async function login(username, password) {
 
   // Clear any deny-list entries for this user on successful login
   deniedUsernames.delete(username);
+  await authRepo.clearForUser(username);
 
   const jti = randomUUID();
   const token = jwt.sign(

@@ -101,10 +101,11 @@ export default function PayRatesConfig({ data, user }) {
   }
 
   function formatAmount(rule) {
-    if (rule.rate_type === 'percentage')     return `${rule.amount}%`;
-    if (rule.rate_type === 'fixed_hourly')   return `+£${rule.amount.toFixed(2)}/hr`;
-    if (rule.rate_type === 'flat_per_shift') return `£${rule.amount.toFixed(2)} flat`;
-    return rule.amount;
+    const amt = parseFloat(rule.amount) || 0;
+    if (rule.rate_type === 'percentage')     return `${amt}%`;
+    if (rule.rate_type === 'fixed_hourly')   return `+£${amt.toFixed(2)}/hr`;
+    if (rule.rate_type === 'flat_per_shift') return `£${amt.toFixed(2)} flat`;
+    return amt;
   }
 
   // Group NMW rates by bracket for display

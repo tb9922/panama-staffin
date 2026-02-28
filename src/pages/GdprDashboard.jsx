@@ -135,7 +135,7 @@ export default function GdprDashboard({ user }) {
 
   async function handleAssessBreach(id) {
     try {
-      await assessBreach(id);
+      await assessBreach(home, id);
       load();
     } catch (e) { setError(e.message); }
   }
@@ -171,9 +171,9 @@ export default function GdprDashboard({ user }) {
 
   async function handleUpdateStatus(type, id, status) {
     try {
-      if (type === 'request') await updateDataRequest(id, { status });
-      else if (type === 'breach') await updateDataBreach(id, { status });
-      else if (type === 'complaint') await updateDPComplaint(id, { status });
+      if (type === 'request') await updateDataRequest(home, id, { status });
+      else if (type === 'breach') await updateDataBreach(home, id, { status });
+      else if (type === 'complaint') await updateDPComplaint(home, id, { status });
       load();
     } catch (e) { setError(e.message); }
   }
@@ -187,7 +187,7 @@ export default function GdprDashboard({ user }) {
 
   async function handleWithdrawConsent(id) {
     try {
-      await updateConsentRecord(id, { withdrawn: new Date().toISOString() });
+      await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
       load();
     } catch (e) { setError(e.message); }
   }

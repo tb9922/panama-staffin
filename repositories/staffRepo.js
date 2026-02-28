@@ -74,7 +74,7 @@ export async function sync(homeId, staffArr, client) {
         s.id, homeId, s.name, s.role, s.team, s.pref || null,
         s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out || false,
         s.start_date || null, s.date_of_birth || null, s.ni_number || null,
-        s.contract_hours || null, s.al_entitlement || null, s.al_carryover || 0, s.leaving_date || null,
+        s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover || 0, s.leaving_date || null,
       ]
     );
   }
@@ -103,7 +103,8 @@ export async function upsertOne(homeId, staff) {
        name=$3, role=$4, team=$5, pref=$6, skill=$7, hourly_rate=$8,
        active=$9, wtr_opt_out=$10, start_date=$11, leaving_date=$12,
        date_of_birth=$13, ni_number=$14, contract_hours=$15,
-       al_entitlement=$16, al_carryover=$17, updated_at=NOW()
+       al_entitlement=$16, al_carryover=$17, updated_at=NOW(),
+       deleted_at=NULL
      RETURNING *`,
     [
       staff.id, homeId, staff.name, staff.role || null, staff.team || null,

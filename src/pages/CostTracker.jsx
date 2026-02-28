@@ -30,26 +30,17 @@ export default function CostTracker({ data }) {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [monthOffset, setMonthOffset] = useState(0);
 
-  if (!isAdmin) {
-    return (
-      <div className={PAGE.container}>
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-sm">
-          Admin access required to view cost data.
-        </div>
-      </div>
-    );
-  }
-
   const { monthDates, monthLabel } = useMemo(() => {
+    if (!isAdmin) return { monthDates: [], monthLabel: '' };
     const now = new Date();
     const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const dates = getMonthDates(target.getFullYear(), target.getMonth());
     const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     return { monthDates: dates, monthLabel: label };
-  }, [monthOffset]);
+  }, [monthOffset, isAdmin]);
 
   const dayData = useMemo(() => {
+    if (!isAdmin) return [];
     let cumulative = 0;
     return monthDates.map((date, i) => {
       const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
@@ -58,7 +49,7 @@ export default function CostTracker({ data }) {
       cumulative += cost.total;
       return { date, cost, staffCount: workingStaff.length, cumulative, dayNum: i + 1 };
     });
-  }, [data, monthDates]);
+  }, [data, monthDates, isAdmin]);
 
   const totals = useMemo(() => dayData.reduce((acc, d) => ({
     base: acc.base + d.cost.base,
@@ -70,6 +61,17 @@ export default function CostTracker({ data }) {
     total: acc.total + d.cost.total,
     agency: acc.agency + d.cost.agency,
   }), { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, sleepIn: 0, total: 0, agency: 0 }), [dayData]);
+
+  if (!isAdmin) {
+    return (
+      <div className={PAGE.container}>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-sm">
+          Admin access required to view cost data.
+        </div>
+      </div>
+    );
+  }
 
   const days = monthDates.length;
   const monthlyProj = totals.total / days * 30.44;

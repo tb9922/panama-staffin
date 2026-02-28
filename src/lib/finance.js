@@ -136,7 +136,7 @@ export function calculateOccupancyRate(activeCount, registeredBeds) {
 export function getAgeingBucket(dueDate, asOfDate) {
   if (!dueDate) return 'current';
   const due = new Date(dueDate);
-  const asOf = new Date(asOfDate);
+  const asOf = asOfDate ? new Date(asOfDate) : new Date();
   const diffDays = Math.floor((asOf - due) / 86400000);
   if (diffDays <= 0) return 'current';
   if (diffDays <= 30) return 'days_1_30';

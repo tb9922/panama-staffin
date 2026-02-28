@@ -103,32 +103,6 @@ router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, n
   } catch (err) { next(err); }
 });
 
-// PUT /api/training/:staffId/:typeId?home=X — upsert single training record
-router.put('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
-  try {
-    const staffParsed = staffIdSchema.safeParse(req.params.staffId);
-    const typeParsed = typeIdSchema.safeParse(req.params.typeId);
-    if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
-    const parsed = trainingRecordSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const record = await trainingRepo.upsertRecord(req.home.id, staffParsed.data, typeParsed.data, parsed.data);
-    await auditService.log('training_record_upsert', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
-    res.json(record);
-  } catch (err) { next(err); }
-});
-
-// DELETE /api/training/:staffId/:typeId?home=X — remove training record
-router.delete('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
-  try {
-    const staffParsed = staffIdSchema.safeParse(req.params.staffId);
-    const typeParsed = typeIdSchema.safeParse(req.params.typeId);
-    if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
-    await trainingRepo.removeRecord(req.home.id, staffParsed.data, typeParsed.data);
-    await auditService.log('training_record_delete', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
-    res.json({ ok: true });
-  } catch (err) { next(err); }
-});
-
 // PUT /api/training/config/types?home=X — update training types in config
 router.put('/config/types', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
@@ -252,6 +226,35 @@ router.delete('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, 
     const deleted = await fireDrillRepo.removeDrill(req.home.id, idParsed.data);
     if (!deleted) return res.status(404).json({ error: 'Fire drill not found' });
     await auditService.log('fire_drill_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/training/:staffId/:typeId?home=X — upsert single training record
+// NOTE: Must be registered AFTER all named routes (config/*, supervisions/*, appraisals/*, fire-drills/*)
+// to avoid the greedy /:staffId/:typeId pattern shadowing them.
+router.put('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+  try {
+    const staffParsed = staffIdSchema.safeParse(req.params.staffId);
+    const typeParsed = typeIdSchema.safeParse(req.params.typeId);
+    if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+    const parsed = trainingRecordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const record = await trainingRepo.upsertRecord(req.home.id, staffParsed.data, typeParsed.data, parsed.data);
+    await auditService.log('training_record_upsert', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
+    res.json(record);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/training/:staffId/:typeId?home=X — remove training record
+// NOTE: Must be registered AFTER all named routes for the same reason.
+router.delete('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+  try {
+    const staffParsed = staffIdSchema.safeParse(req.params.staffId);
+    const typeParsed = typeIdSchema.safeParse(req.params.typeId);
+    if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+    await trainingRepo.removeRecord(req.home.id, staffParsed.data, typeParsed.data);
+    await auditService.log('training_record_delete', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -63,7 +63,7 @@ router.delete('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
     await withTransaction(async (client) => {
-      const deleted = await staffRepo.softDeleteOne(req.home.id, idParsed.data);
+      const deleted = await staffRepo.softDeleteOne(req.home.id, idParsed.data, client);
       if (!deleted) throw Object.assign(new Error('Staff member not found'), { status: 404 });
       await overrideRepo.deleteForStaff(req.home.id, idParsed.data, client);
     });

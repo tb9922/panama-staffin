@@ -37,7 +37,7 @@ export async function createProvider(homeId, provider, client) {
     `INSERT INTO agency_providers (home_id, name, contact, rate_day, rate_night)
      VALUES ($1,$2,$3,$4,$5)
      RETURNING *`,
-    [homeId, provider.name, provider.contact || null, provider.rate_day || null, provider.rate_night || null],
+    [homeId, provider.name, provider.contact || null, provider.rate_day ?? null, provider.rate_night ?? null],
   );
   return shapeProvider(rows[0]);
 }
@@ -49,7 +49,7 @@ export async function updateProvider(id, homeId, updates, client) {
      SET name = $1, contact = $2, rate_day = $3, rate_night = $4, active = $5
      WHERE id = $6 AND home_id = $7
      RETURNING *`,
-    [updates.name, updates.contact || null, updates.rate_day || null, updates.rate_night || null,
+    [updates.name, updates.contact || null, updates.rate_day ?? null, updates.rate_night ?? null,
      updates.active ?? true, id, homeId],
   );
   return rows.length > 0 ? shapeProvider(rows[0]) : null;

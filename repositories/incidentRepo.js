@@ -5,9 +5,11 @@ function shapeRow(row) {
   // Convert Date objects to ISO strings
   for (const col of ['date', 'cqc_notified_date', 'riddor_reported_date', 'safeguarding_date',
     'candour_notification_date', 'candour_letter_sent_date', 'police_contact_date',
-    'investigation_start_date', 'investigation_review_date', 'investigation_closed_date',
-    'reported_at', 'updated_at', 'frozen_at']) {
+    'investigation_start_date', 'investigation_review_date', 'investigation_closed_date']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  for (const col of ['reported_at', 'updated_at', 'frozen_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
   }
   if (shaped.cqc_notification_deadline instanceof Date) {
     shaped.cqc_notification_deadline = shaped.cqc_notification_deadline.toISOString();

@@ -341,7 +341,7 @@ export default function SickPayTracker({ data, user }) {
                     .filter(p => p.staff_id === createForm.staff_id && p.end_date)
                     .map(p => (
                       <option key={p.id} value={p.id}>
-                        Period: {p.start_date} → {p.end_date} ({parseFloat(p.ssp_weeks_paid).toFixed(2)} SSP wks)
+                        Period: {p.start_date} → {p.end_date} ({parseFloat(p.ssp_weeks_paid || 0).toFixed(2)} SSP wks)
                       </option>
                     ))}
                 </select>

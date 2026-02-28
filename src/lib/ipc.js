@@ -104,7 +104,7 @@ export function getIpcAlerts(audits, asOfDate, config) {
   const types = getIpcAuditTypes(config).filter(t => t.active);
   for (const type of types) {
     const typeAudits = arr.filter(a => a.audit_type === type.id);
-    const latest = typeAudits.sort((a, b) => b.audit_date.localeCompare(a.audit_date))[0];
+    const latest = typeAudits.filter(a => a.audit_date).sort((a, b) => b.audit_date.localeCompare(a.audit_date))[0];
     if (!latest || latest.audit_date < overdueThreshold) {
       alerts.push({ type: 'warning', msg: `IPC: ${type.name} overdue — no audit in last 3 months` });
     }

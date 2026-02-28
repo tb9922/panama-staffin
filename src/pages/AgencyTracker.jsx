@@ -530,7 +530,7 @@ export default function AgencyTracker({ data, user }) {
       )}
 
       {/* Shift Modal */}
-      {showShiftModal && providers.length > 0 && (
+      {showShiftModal && providers.some(p => p.active) && (
         <ShiftModal
           providers={providers}
           existing={editShift}

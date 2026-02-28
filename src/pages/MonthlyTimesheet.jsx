@@ -123,7 +123,7 @@ export default function MonthlyTimesheet({ data, user }) {
     for (let d = 1; d <= numDays; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateObj = parseDate(dateStr);
-      const dayOfWeek = dateObj.getUTCDay();
+      const dayOfWeek = dateObj.getDay();
 
       // Roster: what should they be doing?
       const actual = getActualShift(staff, dateObj, data.overrides || {}, data.config.cycle_start_date);

@@ -33,7 +33,7 @@ export async function assembleData(homeSlug, userRole) {
 
   // Viewer role: strip staff PII
   if (userRole !== 'admin') {
-    payload.staff = staff.map(s => ({ ...s, date_of_birth: null, ni_number: null }));
+    payload.staff = staff.map(s => ({ ...s, date_of_birth: null, ni_number: null, hourly_rate: null }));
   }
 
   return payload;
@@ -47,6 +47,10 @@ export async function saveData(homeSlug, body, username) {
 
   // await (not return) so the code below runs after the transaction commits
   await withTransaction(async (client) => {
+    if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
+    if (body.staff) await staffRepo.sync(home.id, body.staff, client);
+    if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client);
+    if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client);
     await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });

@@ -61,7 +61,8 @@ export async function sync(homeId, supervisionsObj, client) {
            actions    = EXCLUDED.actions,
            next_due   = EXCLUDED.next_due,
            notes      = EXCLUDED.notes,
-           updated_at = NOW()`,
+           updated_at = NOW(),
+           deleted_at = NULL`,
         [s.id, homeId, staffId, s.date, s.supervisor || null, s.topics || null,
          s.actions || null, s.next_due || null, s.notes || null]
       );

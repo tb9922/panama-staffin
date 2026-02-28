@@ -10,7 +10,7 @@ const router = Router();
 router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const homes = await homeService.listHomes();
-    const allowedIds = await userHomeRepo.findHomeIdsForUser(req.user.username);
+    const allowedIds = await userHomeRepo.findHomeSlugsForUser(req.user.username);
     const allowedSet = new Set(allowedIds);
     res.json(homes.filter(h => allowedSet.has(h.id)));
   } catch (err) {

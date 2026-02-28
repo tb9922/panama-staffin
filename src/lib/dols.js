@@ -174,19 +174,22 @@ export function calculateDolsCompliancePct(data, asOfDate) {
   const today = typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate || new Date());
   const dols = data.dols || [];
 
-  if (dols.length === 0) return { score: 100, active: 0, expired: 0, total: 0 };
+  if (dols.length === 0) return { score: 100, active: 0, expired: 0, applied: 0, total: 0 };
 
   let active = 0;
   let expired = 0;
+  let applied = 0;
 
   for (const dol of dols) {
     const st = getDolsStatus(dol, today);
     if (st.status === 'authorised' || st.status === 'review_due') active++;
+    else if (st.status === 'applied') applied++;
     if (st.isExpired) expired++;
   }
 
   const total = dols.length;
-  const score = total > 0 ? Math.round((active / total) * 100) : 100;
+  const decided = total - applied;
+  const score = decided > 0 ? Math.round((active / decided) * 100) : 100;
 
-  return { score, active, expired, total };
+  return { score, active, expired, applied, total };
 }

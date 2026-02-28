@@ -220,10 +220,10 @@ function validateIncidents(data, warnings, todayStr) {
     }
     if (inc.riddor_reportable && !inc.riddor_reported && inc.date) {
       const days = riddorDeadlineDays[inc.riddor_category] ?? 1;
-      const deadline = new Date(new Date(inc.date).getTime() + days * 86400000);
+      const deadline = new Date(new Date(inc.date + 'T00:00:00Z').getTime() + days * 86400000);
       if (now > deadline) overdueRiddor++;
     }
-    if (inc.investigation_status !== 'closed' && inc.date) {
+    if ((inc.investigation_status === 'open' || inc.investigation_status === 'under_review') && inc.date) {
       if (Math.floor((now - new Date(inc.date)) / 86400000) > 14) staleInvestigations++;
     }
     if (inc.duty_of_candour_applies && !inc.candour_notification_date && inc.date) {

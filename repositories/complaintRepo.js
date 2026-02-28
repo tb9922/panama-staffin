@@ -2,8 +2,11 @@ import { pool } from '../db.js';
 
 function shapeRow(row) {
   const shaped = { ...row };
-  for (const col of ['date', 'acknowledged_date', 'response_deadline', 'resolution_date', 'reported_at', 'updated_at']) {
+  for (const col of ['date', 'acknowledged_date', 'response_deadline', 'resolution_date']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
+  }
+  for (const col of ['reported_at', 'updated_at']) {
+    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
   }
   delete shaped.home_id;
   delete shaped.created_at;
@@ -43,7 +46,7 @@ export async function sync(homeId, arr, client) {
         c.category || null, c.title || null, c.description || null,
         c.acknowledged_date || null, c.response_deadline || null, c.status || null,
         c.investigator || null, c.investigation_notes || null, c.resolution || null,
-        c.resolution_date || null, c.outcome_shared || null, c.root_cause || null,
+        c.resolution_date || null, c.outcome_shared ?? null, c.root_cause || null,
         c.improvements || null, c.lessons_learned || null,
         c.reported_by || null, c.reported_at || null, c.updated_at || null,
       ]
@@ -94,7 +97,7 @@ export async function upsert(homeId, data) {
       data.category || null, data.title || null, data.description || null,
       data.acknowledged_date || null, data.response_deadline || null, data.status || null,
       data.investigator || null, data.investigation_notes || null, data.resolution || null,
-      data.resolution_date || null, data.outcome_shared || null, data.root_cause || null,
+      data.resolution_date || null, data.outcome_shared ?? null, data.root_cause || null,
       data.improvements || null, data.lessons_learned || null,
       data.reported_by || null, data.reported_at || now, now,
     ]

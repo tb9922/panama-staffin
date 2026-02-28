@@ -222,12 +222,14 @@ router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, requireHomeAc
     const { entries } = req.body;
     if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ error: 'entries array required' });
     if (entries.length > 62) return res.status(400).json({ error: 'Maximum 62 entries per batch' });
+    const parsed = [];
     for (const e of entries) {
       const p = timesheetBodySchema.safeParse(e);
       if (!p.success) return res.status(400).json({ error: `Invalid entry for ${e.date}: ${p.error.issues[0].message}` });
+      parsed.push(p.data);
     }
     const results = await withTransaction(async (client) => {
-      return timesheetRepo.bulkUpsert(req.home.id, entries, client);
+      return timesheetRepo.bulkUpsert(req.home.id, parsed, client);
     });
     res.status(201).json(results);
   } catch (err) { next(err); }

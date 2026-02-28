@@ -203,10 +203,10 @@ export default function TimesheetManager({ data, user }) {
           <p className={PAGE.subtitle}>Record actual attendance with snap-to-shift to prevent early clock-in waste</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className={BTN.secondary} onClick={() => setSelectedDate(addDays(selectedDate, -1))}>&larr;</button>
+          <button className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, -1)))}>&larr;</button>
           <input type="date" className={INPUT.sm} style={{ width: '160px' }} value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)} />
-          <button className={BTN.secondary} onClick={() => setSelectedDate(addDays(selectedDate, 1))}>&rarr;</button>
+          <button className={BTN.secondary} onClick={() => setSelectedDate(formatDate(addDays(selectedDate, 1)))}>&rarr;</button>
         </div>
       </div>
 

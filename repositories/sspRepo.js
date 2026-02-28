@@ -77,26 +77,21 @@ export async function createSickPeriod(homeId, data, client) {
 
 export async function updateSickPeriod(id, homeId, data, client) {
   const conn = client || pool;
+  const ALLOWED = ['end_date', 'waiting_days_served', 'ssp_weeks_paid', 'fit_note_received', 'fit_note_date', 'notes'];
+  const fields = [];
+  const values = [id, homeId];
+  let idx = 3;
+  for (const col of ALLOWED) {
+    if (col in data) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(data[col] ?? null);
+    }
+  }
+  if (fields.length === 0) return null;
+  fields.push('updated_at = NOW()');
   const { rows } = await conn.query(
-    `UPDATE sick_periods SET
-       end_date              = COALESCE($3, end_date),
-       waiting_days_served   = COALESCE($4, waiting_days_served),
-       ssp_weeks_paid        = COALESCE($5, ssp_weeks_paid),
-       fit_note_received     = COALESCE($6, fit_note_received),
-       fit_note_date         = COALESCE($7, fit_note_date),
-       notes                 = COALESCE($8, notes),
-       updated_at            = NOW()
-     WHERE id = $1 AND home_id = $2
-     RETURNING *`,
-    [
-      id, homeId,
-      data.end_date !== undefined ? data.end_date : null,
-      data.waiting_days_served !== undefined ? data.waiting_days_served : null,
-      data.ssp_weeks_paid !== undefined ? data.ssp_weeks_paid : null,
-      data.fit_note_received !== undefined ? data.fit_note_received : null,
-      data.fit_note_date !== undefined ? data.fit_note_date : null,
-      data.notes !== undefined ? data.notes : null,
-    ]
+    `UPDATE sick_periods SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    values
   );
   return rows[0] ? shapePeriod(rows[0]) : null;
 }

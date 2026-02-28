@@ -28,7 +28,7 @@ router.post('/', loginLimiter, async (req, res, next) => {
     }
     const { username, password } = parsed.data;
     const result = await authService.login(username, password);
-    await auditService.log('login', '-', username, null);
+    auditService.log('login', '-', username, null).catch(() => {});
     res.json(result);
   } catch (err) {
     // Log failed login attempt for brute-force detection

@@ -3,11 +3,12 @@ import { pool } from '../db.js';
 function shapeDolsRow(row) {
   const shaped = { ...row };
   for (const col of [
-    'application_date', 'authorisation_date', 'expiry_date',
-    'reviewed_date', 'next_review_date', 'updated_at',
+    'dob', 'application_date', 'authorisation_date', 'expiry_date',
+    'reviewed_date', 'next_review_date',
   ]) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
   }
+  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   if (typeof shaped.restrictions === 'string') shaped.restrictions = JSON.parse(shaped.restrictions);
   delete shaped.home_id;
   delete shaped.created_at;
@@ -17,9 +18,10 @@ function shapeDolsRow(row) {
 
 function shapeMcaRow(row) {
   const shaped = { ...row };
-  for (const col of ['assessment_date', 'next_review_date', 'updated_at']) {
+  for (const col of ['assessment_date', 'next_review_date']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
   }
+  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   delete shaped.home_id;
   delete shaped.created_at;
   delete shaped.deleted_at;

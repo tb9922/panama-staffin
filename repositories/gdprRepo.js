@@ -94,17 +94,21 @@ export async function createRequest(homeId, data, client) {
 
 export async function updateRequest(id, homeId, data, client) {
   const conn = client || pool;
+  const ALLOWED = ['status', 'identity_verified', 'notes', 'completed_date', 'completed_by'];
+  const fields = [];
+  const values = [id, homeId];
+  let idx = 3;
+  for (const col of ALLOWED) {
+    if (col in data) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(data[col] ?? null);
+    }
+  }
+  if (fields.length === 0) return null;
+  fields.push('updated_at = NOW()');
   const { rows } = await conn.query(
-    `UPDATE data_requests SET
-       status = COALESCE($2, status),
-       identity_verified = COALESCE($3, identity_verified),
-       notes = COALESCE($4, notes),
-       completed_date = COALESCE($5, completed_date),
-       completed_by = COALESCE($6, completed_by),
-       updated_at = NOW()
-     WHERE id = $1 AND home_id = $7 RETURNING *`,
-    [id, data.status || null, data.identity_verified ?? null, data.notes ?? null,
-     data.completed_date || null, data.completed_by || null, homeId]
+    `UPDATE data_requests SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    values
   );
   return rows[0] ? shapeRequest(rows[0]) : null;
 }
@@ -173,30 +177,25 @@ export async function createBreach(homeId, data, client) {
 
 export async function updateBreach(id, homeId, data, client) {
   const conn = client || pool;
+  const ALLOWED = [
+    'title', 'description', 'severity', 'risk_to_rights',
+    'ico_notifiable', 'ico_notification_deadline', 'ico_notified', 'ico_notified_date',
+    'ico_reference', 'containment_actions', 'root_cause', 'preventive_measures', 'status',
+  ];
+  const fields = [];
+  const values = [id, homeId];
+  let idx = 3;
+  for (const col of ALLOWED) {
+    if (col in data) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(data[col] ?? null);
+    }
+  }
+  if (fields.length === 0) return null;
+  fields.push('updated_at = NOW()');
   const { rows } = await conn.query(
-    `UPDATE data_breaches SET
-       title = COALESCE($2, title),
-       description = COALESCE($3, description),
-       severity = COALESCE($4, severity),
-       risk_to_rights = COALESCE($5, risk_to_rights),
-       ico_notifiable = COALESCE($6, ico_notifiable),
-       ico_notification_deadline = COALESCE($7, ico_notification_deadline),
-       ico_notified = COALESCE($8, ico_notified),
-       ico_notified_date = COALESCE($9, ico_notified_date),
-       ico_reference = COALESCE($10, ico_reference),
-       containment_actions = COALESCE($11, containment_actions),
-       root_cause = COALESCE($12, root_cause),
-       preventive_measures = COALESCE($13, preventive_measures),
-       status = COALESCE($14, status),
-       updated_at = NOW()
-     WHERE id = $1 AND home_id = $15 RETURNING *`,
-    [id, data.title ?? null, data.description ?? null, data.severity ?? null,
-     data.risk_to_rights ?? null, data.ico_notifiable ?? null,
-     data.ico_notification_deadline ?? null,
-     data.ico_notified ?? null, data.ico_notified_date ?? null,
-     data.ico_reference ?? null, data.containment_actions ?? null,
-     data.root_cause ?? null, data.preventive_measures ?? null, data.status ?? null,
-     homeId]
+    `UPDATE data_breaches SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    values
   );
   return rows[0] ? shapeBreach(rows[0]) : null;
 }
@@ -334,19 +333,21 @@ export async function createDPComplaint(homeId, data, client) {
 
 export async function updateDPComplaint(id, homeId, data, client) {
   const conn = client || pool;
+  const ALLOWED = ['status', 'severity', 'ico_involved', 'ico_reference', 'resolution', 'resolution_date'];
+  const fields = [];
+  const values = [id, homeId];
+  let idx = 3;
+  for (const col of ALLOWED) {
+    if (col in data) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(data[col] ?? null);
+    }
+  }
+  if (fields.length === 0) return null;
+  fields.push('updated_at = NOW()');
   const { rows } = await conn.query(
-    `UPDATE dp_complaints SET
-       status = COALESCE($2, status),
-       severity = COALESCE($3, severity),
-       ico_involved = COALESCE($4, ico_involved),
-       ico_reference = COALESCE($5, ico_reference),
-       resolution = COALESCE($6, resolution),
-       resolution_date = COALESCE($7, resolution_date),
-       updated_at = NOW()
-     WHERE id = $1 AND home_id = $8 RETURNING *`,
-    [id, data.status ?? null, data.severity ?? null, data.ico_involved ?? null,
-     data.ico_reference ?? null, data.resolution ?? null, data.resolution_date ?? null,
-     homeId]
+    `UPDATE dp_complaints SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    values
   );
   return rows[0] ? shapeDPComplaint(rows[0]) : null;
 }

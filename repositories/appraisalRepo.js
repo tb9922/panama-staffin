@@ -64,7 +64,8 @@ export async function sync(homeId, appraisalsObj, client) {
            development_plan = EXCLUDED.development_plan,
            next_due         = EXCLUDED.next_due,
            notes            = EXCLUDED.notes,
-           updated_at       = NOW()`,
+           updated_at       = NOW(),
+           deleted_at       = NULL`,
         [a.id, homeId, staffId, a.date, a.appraiser || null, a.objectives || null,
          a.training_needs || null, a.development_plan || null, a.next_due || null, a.notes || null]
       );

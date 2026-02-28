@@ -87,6 +87,15 @@ export async function revokeAllForUser(username, client) {
 }
 
 /**
+ * Remove all deny-list entries for a username.
+ * Called on successful re-login to prevent old revoked tokens from lingering.
+ * @param {string} username
+ */
+export async function clearForUser(username) {
+  await pool.query('DELETE FROM token_denylist WHERE username = $1', [username]);
+}
+
+/**
  * Check if a username has any revocation entries that are still active.
  * @param {string} username
  * @returns {Promise<boolean>}

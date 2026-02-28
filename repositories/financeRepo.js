@@ -190,7 +190,7 @@ export async function getNextInvoiceNumber(homeId, prefix, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT invoice_number FROM finance_invoices
-     WHERE home_id = $1 AND invoice_number LIKE $2 AND deleted_at IS NULL
+     WHERE home_id = $1 AND invoice_number LIKE $2
      ORDER BY invoice_number DESC LIMIT 1 FOR UPDATE`,
     [homeId, `${prefix}%`]);
   if (rows.length === 0) return `${prefix}-001`;

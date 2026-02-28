@@ -55,7 +55,7 @@ export default function ScenarioModel({ data }) {
   const typical = scenarioResults[1];
   const elHrs = data.config.shifts.EL.hours;
   const nHrs = data.config.shifts.N.hours;
-  const nightPct = data.config.night_gap_pct;
+  const nightPct = data.config.night_gap_pct || 0.3;
   const withoutKill28 = baseCost + typical.totalGaps * ((1 - nightPct) * elHrs * data.config.agency_rate_day + nightPct * nHrs * data.config.agency_rate_night) * 28;
   const withKill28 = typical.total28;
   const annualSaving = (withoutKill28 - withKill28) / 28 * 365;
@@ -227,11 +227,11 @@ export default function ScenarioModel({ data }) {
       <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500">
         <strong>Assumptions:</strong> Float pool = {data.staff.filter(s => s.team === 'Float' && s.active !== false).length} |
         OT pool = {data.config.bank_staff_pool_size} |
-        Night gap % = {(data.config.night_gap_pct * 100).toFixed(0)}% |
+        Night gap % = {((data.config.night_gap_pct || 0.3) * 100).toFixed(0)}% |
         OT premium = £{data.config.ot_premium}/hr |
         Agency day = £{data.config.agency_rate_day}/hr |
         Agency night = £{data.config.agency_rate_night}/hr |
-        Weekly OT cap = {data.config.weekly_ot_cap} shifts
+        Weekly OT cap = {data.config.weekly_ot_cap || 8} shifts
       </div>
     </div>
   );

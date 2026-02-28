@@ -364,7 +364,6 @@ function InvoicesTab({ home, isAdmin }) {
   async function openEdit(inv) {
     setEditing(inv);
     setForm({ ...inv });
-    const detail = await getFinanceInvoices(home, {}).catch(() => null);
     // Fetch full invoice with lines
     try {
       const { getFinanceInvoice } = await import('../lib/api.js');

@@ -2,9 +2,10 @@ import { pool } from '../db.js';
 
 function shapeRow(row) {
   const shaped = { ...row };
-  for (const col of ['last_reviewed', 'next_review_due', 'updated_at']) {
+  for (const col of ['last_reviewed', 'next_review_due']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
   }
+  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   if (typeof shaped.changes === 'string') shaped.changes = JSON.parse(shaped.changes);
   delete shaped.home_id;
   delete shaped.created_at;
@@ -41,7 +42,7 @@ export async function sync(homeId, arr, client) {
         p.id, homeId, p.policy_name || null, p.policy_ref || null,
         p.category || null, p.version || null,
         p.last_reviewed || null, p.next_review_due || null,
-        p.review_frequency_months || null, p.status || null,
+        p.review_frequency_months ?? null, p.status || null,
         p.reviewed_by || null, p.approved_by || null,
         JSON.stringify(p.changes || []), p.notes || null,
         p.updated_at || null,
@@ -90,7 +91,7 @@ export async function upsert(homeId, data) {
       id, homeId, data.policy_name || null, data.policy_ref || null,
       data.category || null, data.version || null,
       data.last_reviewed || null, data.next_review_due || null,
-      data.review_frequency_months || null, data.status || null,
+      data.review_frequency_months ?? null, data.status || null,
       data.reviewed_by || null, data.approved_by || null,
       JSON.stringify(data.changes || []), data.notes || null,
       now,

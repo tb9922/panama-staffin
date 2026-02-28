@@ -336,11 +336,11 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     }
 
     // Anonymise access/audit log entries for this staff member
+    // access_log.home_id is always NULL — filter by user_name only
     if (originalName) {
       await client.query(
-        `UPDATE access_log SET user_name = '[REDACTED]'
-         WHERE user_name = $1 AND home_id = $2`,
-        [originalName, homeId]
+        `UPDATE access_log SET user_name = '[REDACTED]' WHERE user_name = $1`,
+        [originalName]
       );
     }
 

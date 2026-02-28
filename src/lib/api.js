@@ -605,8 +605,8 @@ export async function createDataRequest(homeSlug, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function updateDataRequest(id, data) {
-  return apiFetch(`${API_BASE}/gdpr/requests/${id}`, {
+export async function updateDataRequest(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/gdpr/requests/${id}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -630,13 +630,13 @@ export async function createDataBreach(homeSlug, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function updateDataBreach(id, data) {
-  return apiFetch(`${API_BASE}/gdpr/breaches/${id}`, {
+export async function updateDataBreach(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/gdpr/breaches/${id}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function assessBreach(id) {
-  return apiFetch(`${API_BASE}/gdpr/breaches/${id}/assess`, {
+export async function assessBreach(homeSlug, id) {
+  return apiFetch(`${API_BASE}/gdpr/breaches/${id}/assess?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(),
   });
 }
@@ -658,8 +658,8 @@ export async function createConsentRecord(homeSlug, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function updateConsentRecord(id, data) {
-  return apiFetch(`${API_BASE}/gdpr/consent/${id}`, {
+export async function updateConsentRecord(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/gdpr/consent/${id}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
@@ -673,8 +673,8 @@ export async function createDPComplaint(homeSlug, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function updateDPComplaint(id, data) {
-  return apiFetch(`${API_BASE}/gdpr/complaints/${id}`, {
+export async function updateDPComplaint(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/gdpr/complaints/${id}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }

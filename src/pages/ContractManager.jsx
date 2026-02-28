@@ -43,13 +43,14 @@ export default function ContractManager() {
       const filters = { limit: LIMIT, offset };
       if (filterStaff) filters.staffId = filterStaff;
       if (filterStatus) filters.status = filterStatus;
+      if (filterType) filters.contractType = filterType;
       const res = await getHrContracts(home, filters);
       setItems(res?.rows || []);
       setTotal(res?.total || 0);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [home, filterStaff, filterStatus, offset]);
+  }, [home, filterStaff, filterStatus, filterType, offset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -132,9 +133,6 @@ export default function ContractManager() {
     return Math.ceil(diff);
   }
 
-  // Client-side type filter (API may not support contract_type filter)
-  const filtered = filterType ? items.filter(i => i.contract_type === filterType) : items;
-
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
   if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading contracts...</p></div></div>;
@@ -206,8 +204,8 @@ export default function ContractManager() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No contracts</td></tr>}
-              {filtered.map(item => (
+              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No contracts</td></tr>}
+              {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>
                   <td className={TABLE.td}>

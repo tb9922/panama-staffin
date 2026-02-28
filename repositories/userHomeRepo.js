@@ -44,6 +44,20 @@ export async function findHomeIdsForUser(username) {
 }
 
 /**
+ * Get all home slugs a user can access.
+ * Used by the homes list endpoint where listAll() returns slug-based IDs.
+ */
+export async function findHomeSlugsForUser(username) {
+  const { rows } = await pool.query(
+    `SELECT h.slug FROM user_home_access uha
+     JOIN homes h ON h.id = uha.home_id
+     WHERE uha.username = $1`,
+    [username]
+  );
+  return rows.map(r => r.slug);
+}
+
+/**
  * Grant a user access to all existing homes.
  * Used when seeding a new admin or during initial setup.
  */

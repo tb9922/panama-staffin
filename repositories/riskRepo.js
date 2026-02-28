@@ -2,9 +2,10 @@ import { pool } from '../db.js';
 
 function shapeRow(row) {
   const shaped = { ...row };
-  for (const col of ['last_reviewed', 'next_review', 'updated_at']) {
+  for (const col of ['last_reviewed', 'next_review']) {
     if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
   }
+  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   delete shaped.home_id;
   delete shaped.created_at;
   delete shaped.deleted_at;

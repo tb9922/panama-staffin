@@ -25,7 +25,8 @@ try {
     const eq = trimmed.indexOf('=');
     if (eq < 0) continue;
     const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
+    const raw = trimmed.slice(eq + 1).trim();
+    const val = raw.replace(/^(['"])(.*)\1$/, '$2');
     if (key && !(key in process.env)) process.env[key] = val;
   }
 } catch {
