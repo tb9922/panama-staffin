@@ -125,9 +125,9 @@ beforeAll(async () => {
     [homeA, STAFF[0]]
   );
   await pool.query(
-    `INSERT INTO hr_grievance_actions (grievance_id, description, responsible, due_date, status)
-     VALUES ($1, 'Arrange mediation session', 'HR Lead', '2025-10-01', 'pending')`,
-    [grv.id]
+    `INSERT INTO hr_grievance_actions (grievance_id, home_id, description, responsible, due_date, status)
+     VALUES ($1, $2, 'Arrange mediation session', 'HR Lead', '2025-10-01', 'pending')`,
+    [grv.id, homeA]
   );
 
   // ── HR Case Notes (author = staff name) ────────────────────────────────
@@ -467,7 +467,7 @@ describe('gatherPersonalData: staff', () => {
     const keys = Object.keys(result.data);
     const required = [
       'staff', 'shift_overrides', 'training_records', 'supervisions', 'appraisals',
-      'timesheet_entries', 'payroll_lines', 'tax_codes', 'ssp_periods',
+      'timesheet_entries', 'payroll_lines', 'tax_codes', 'sick_periods',
       'pension_enrolment', 'pension_contributions', 'access_log',
       'incidents', 'fire_drills', 'handover_entries',
       'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_grievance_actions',

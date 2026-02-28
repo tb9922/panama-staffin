@@ -42,7 +42,7 @@ import usersRouter from './routes/users.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
-import { purgeOlderThan as purgeAuditLog } from './repositories/auditRepo.js';
+import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
 
 const app = express();
 

@@ -29,9 +29,9 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
       for (const [caseType, parentTable] of Object.entries(caseTypeMap)) {
         const subquery = `SELECT id FROM ${parentTable} WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoffExpr}`;
         const sql = dryRun
-          ? `SELECT COUNT(*) FROM ${child} WHERE home_id = $1 AND case_type = '${caseType}' AND case_id IN (${subquery})`
-          : `DELETE FROM ${child} WHERE home_id = $1 AND case_type = '${caseType}' AND case_id IN (${subquery})`;
-        const result = await client.query(sql, [homeId, years]);
+          ? `SELECT COUNT(*) FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`
+          : `DELETE FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`;
+        const result = await client.query(sql, [homeId, years, caseType]);
         total += dryRun ? parseInt(result.rows[0].count, 10) : result.rowCount;
       }
       counts[child] = total;
@@ -41,11 +41,11 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
     const grvSub = `SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoffExpr}`;
     if (dryRun) {
       const { rows } = await client.query(
-        `SELECT COUNT(*) FROM hr_grievance_actions WHERE grievance_id IN (${grvSub})`, [homeId, years]);
+        `SELECT COUNT(*) FROM hr_grievance_actions WHERE home_id = $1 AND grievance_id IN (${grvSub})`, [homeId, years]);
       counts.hr_grievance_actions = parseInt(rows[0].count, 10);
     } else {
       const { rowCount } = await client.query(
-        `DELETE FROM hr_grievance_actions WHERE grievance_id IN (${grvSub})`, [homeId, years]);
+        `DELETE FROM hr_grievance_actions WHERE home_id = $1 AND grievance_id IN (${grvSub})`, [homeId, years]);
       counts.hr_grievance_actions = rowCount;
     }
 

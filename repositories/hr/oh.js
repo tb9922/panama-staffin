@@ -7,7 +7,7 @@ const shapeOh = createShaper({
     'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date',
     'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
     'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
-    'status', 'created_by', 'created_at', 'updated_at', 'version',
+    'notes', 'status', 'created_by', 'created_at', 'updated_at', 'version',
   ],
   dates: ['referral_date', 'consent_date', 'appointment_date', 'report_received_date', 'estimated_return_date', 'follow_up_date'],
   jsonArrays: ['questions_for_oh', 'adjustments_implemented'],

@@ -59,7 +59,7 @@ export async function createContract(homeId, data, client) {
      data.hours_per_week ?? null, data.working_pattern || null,
      data.hourly_rate ?? null, data.pay_frequency || null, data.annual_leave_days ?? 28,
      data.notice_period_employer || null, data.notice_period_employee || null,
-     data.probation_period_months || null, data.probation_start_date || null,
+     data.probation_period_months ?? null, data.probation_start_date || null,
      data.probation_end_date || null, data.status ?? 'active']
   );
   return shapeContract(rows[0]);

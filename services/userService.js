@@ -127,4 +127,5 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userRepo.updatePassword(user.id, hash);
+  await authService.revokeUser(username);
 }

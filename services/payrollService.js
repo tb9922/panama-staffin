@@ -57,13 +57,13 @@ const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0
 // ── Default Pay Rate Rules (seeded once per home on first payroll access) ──────
 
 const DEFAULT_RULES = [
-  { name: 'Night Enhancement',     rate_type: 'percentage',    amount: 15,   applies_to: 'night',       priority: 0 },
-  { name: 'Saturday Enhancement',  rate_type: 'percentage',    amount: 10,   applies_to: 'weekend_sat', priority: 0 },
-  { name: 'Sunday Enhancement',    rate_type: 'percentage',    amount: 20,   applies_to: 'weekend_sun', priority: 0 },
-  { name: 'Bank Holiday Premium',  rate_type: 'percentage',    amount: 50,   applies_to: 'bank_holiday',priority: 0 },
-  { name: 'Sleep-in Flat Rate',    rate_type: 'flat_per_shift',amount: 50,   applies_to: 'sleep_in',    priority: 0 },
-  { name: 'Overtime Premium',      rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'overtime',    priority: 0 },
-  { name: 'On-Call Premium',       rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0 },
+  { name: 'Night Enhancement',     rate_type: 'percentage',    amount: 15,   applies_to: 'night',       priority: 0, effective_from: '2020-01-01' },
+  { name: 'Saturday Enhancement',  rate_type: 'percentage',    amount: 10,   applies_to: 'weekend_sat', priority: 0, effective_from: '2020-01-01' },
+  { name: 'Sunday Enhancement',    rate_type: 'percentage',    amount: 20,   applies_to: 'weekend_sun', priority: 0, effective_from: '2020-01-01' },
+  { name: 'Bank Holiday Premium',  rate_type: 'percentage',    amount: 50,   applies_to: 'bank_holiday',priority: 0, effective_from: '2020-01-01' },
+  { name: 'Sleep-in Flat Rate',    rate_type: 'flat_per_shift',amount: 50,   applies_to: 'sleep_in',    priority: 0, effective_from: '2020-01-01' },
+  { name: 'Overtime Premium',      rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'overtime',    priority: 0, effective_from: '2020-01-01' },
+  { name: 'On-Call Premium',       rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0, effective_from: '2020-01-01' },
 ];
 
 /**

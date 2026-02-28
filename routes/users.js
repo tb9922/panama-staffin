@@ -73,6 +73,22 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, async (req, res, n
   }
 });
 
+// POST /api/users/change-password — user changes own password (any role)
+// MUST be defined BEFORE /:id routes to avoid being caught by the param route
+router.post('/change-password', writeRateLimiter, requireAuth, async (req, res, next) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    await userService.changeOwnPassword(req.user.username, parsed.data.currentPassword, parsed.data.newPassword);
+    await auditService.log('user_password_change', '-', req.user.username, null);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.message === 'Current password is incorrect') return res.status(400).json({ error: err.message });
+    if (err.message?.startsWith('Password must')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 // GET /api/users/:id — get single user (admin only)
 router.get('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -126,21 +142,6 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireAdmin, 
   }
 });
 
-// POST /api/users/change-password — user changes own password (any role)
-router.post('/change-password', writeRateLimiter, requireAuth, async (req, res, next) => {
-  try {
-    const parsed = changePasswordSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    await userService.changeOwnPassword(req.user.username, parsed.data.currentPassword, parsed.data.newPassword);
-    await auditService.log('user_password_change', '-', req.user.username, null);
-    res.json({ ok: true });
-  } catch (err) {
-    if (err.message === 'Current password is incorrect') return res.status(400).json({ error: err.message });
-    if (err.message?.startsWith('Password must')) return res.status(400).json({ error: err.message });
-    next(err);
-  }
-});
-
 // GET /api/users/:id/homes — list homes a user has access to (admin only)
 router.get('/:id/homes', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -162,6 +163,18 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requireAdmin, async (req
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const user = await userRepo.findById(id.data);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Prevent admin from modifying their own home access
+    if (user.username === req.user.username) {
+      return res.status(400).json({ error: 'Cannot modify your own home access' });
+    }
+
+    // Validate acting admin has access to all homes being granted
+    const actorHomeIds = new Set(await userHomeRepo.findHomeIdsForUser(req.user.username));
+    const unauthorized = parsed.data.homeIds.filter(hid => !actorHomeIds.has(hid));
+    if (unauthorized.length > 0) {
+      return res.status(403).json({ error: 'You cannot grant access to homes you do not have access to' });
+    }
 
     // Get current home IDs, then diff to grant/revoke
     const currentIds = new Set(await userHomeRepo.findHomeIdsForUser(user.username));

@@ -47,12 +47,13 @@ export const SHIFT_COLORS = {
   'BH-N': 'bg-pink-100 text-pink-700 border border-pink-200',
 };
 
-// Date utilities — all use UTC to match getCycleDay and avoid BST midnight bugs
+// Date utilities — use local-time getters so both local-midnight and UTC-midnight
+// Date objects resolve to the correct calendar day in UK timezones (GMT/BST).
 export function formatDate(date) {
   const d = new Date(date);
-  const year = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -63,7 +64,7 @@ export function parseDate(str) {
 
 export function addDays(date, days) {
   const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
+  d.setDate(d.getDate() + days);
   return d;
 }
 
