@@ -271,7 +271,7 @@ export function isInProbation(staff, config, asOfDate) {
   const start = parseDate(staff.start_date);
   const probMonths = config.supervision_probation_months || 6;
   const probEnd = new Date(start);
-  probEnd.setUTCMonth(probEnd.getUTCMonth() + probMonths);
+  probEnd.setMonth(probEnd.getMonth() + probMonths);
   const now = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
   return now < probEnd;
 }

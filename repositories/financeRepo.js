@@ -200,8 +200,9 @@ export async function getNextInvoiceNumber(homeId, prefix, client) {
     [homeId, `${prefix}%`]);
   if (rows.length === 0) return `${prefix}-001`;
   const last = rows[0].invoice_number;
-  const seq = parseInt(last.split('-').pop()) + 1;
-  return `${prefix}-${String(seq).padStart(3, '0')}`;
+  const seq = parseInt(last.split('-').pop(), 10);
+  if (isNaN(seq)) return `${prefix}-001`;
+  return `${prefix}-${String(seq + 1).padStart(3, '0')}`;
 }
 
 export async function createInvoice(homeId, data, client) {
@@ -253,10 +254,13 @@ export async function updateInvoice(id, homeId, data, client, version) {
 
 // ── Invoice Lines ─────────────────────────────────────────────────────────────
 
-export async function findInvoiceLines(invoiceId, client) {
+export async function findInvoiceLines(invoiceId, homeId, client) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND deleted_at IS NULL ORDER BY id', [invoiceId]);
+  const params = [invoiceId];
+  let sql = 'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND deleted_at IS NULL';
+  if (homeId) { params.push(homeId); sql += ` AND home_id = $${params.length}`; }
+  sql += ' ORDER BY id';
+  const { rows } = await conn.query(sql, params);
   return rows.map(shapeInvoiceLine);
 }
 
@@ -269,9 +273,12 @@ export async function createInvoiceLine(invoiceId, homeId, data, client) {
   return shapeInvoiceLine(rows[0]);
 }
 
-export async function deleteInvoiceLines(invoiceId, client) {
+export async function deleteInvoiceLines(invoiceId, homeId, client) {
   const conn = client || pool;
-  await conn.query('UPDATE finance_invoice_lines SET deleted_at = NOW() WHERE invoice_id = $1 AND deleted_at IS NULL', [invoiceId]);
+  const params = [invoiceId];
+  let sql = 'UPDATE finance_invoice_lines SET deleted_at = NOW() WHERE invoice_id = $1 AND deleted_at IS NULL';
+  if (homeId) { params.push(homeId); sql += ` AND home_id = $${params.length}`; }
+  await conn.query(sql, params);
 }
 
 // ── Expenses ──────────────────────────────────────────────────────────────────
@@ -380,6 +387,7 @@ export async function getIncomeSummary(homeId, from, to, client) {
        COUNT(*)::int                    AS invoice_count
      FROM finance_invoices
      WHERE home_id = $1 AND deleted_at IS NULL
+       AND status NOT IN ('void', 'credited')
        AND COALESCE(issue_date, created_at::date) >= $2
        AND COALESCE(issue_date, created_at::date) <= $3`,
     [homeId, from, to]);
@@ -396,7 +404,7 @@ export async function getExpenseSummary(homeId, from, to, client) {
      FROM finance_expenses
      WHERE home_id = $1 AND deleted_at IS NULL
        AND expense_date >= $2 AND expense_date <= $3
-       AND status != 'void'`,
+       AND status NOT IN ('void', 'rejected')`,
     [homeId, from, to]);
   const r = rows[0];
   return { total_expenses: f(r.total_expenses), expense_count: r.expense_count };

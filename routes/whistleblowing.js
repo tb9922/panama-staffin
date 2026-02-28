@@ -32,7 +32,8 @@ const concernBodySchema = z.object({
   resolution_date:          dateSchema.optional(),
   lessons_learned:          z.string().max(5000).nullable().optional(),
 });
-const concernUpdateSchema = concernBodySchema.partial();
+// anonymous is immutable after creation — omit from update schema to prevent de-anonymisation
+const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial();
 
 // GET /api/whistleblowing?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -56,7 +57,12 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
   try {
     const parsed = concernBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const concern = await whistleblowingRepo.upsert(req.home.id, parsed.data);
+    const createData = { ...parsed.data };
+    // Strip identifying info when concern is anonymous
+    if (createData.anonymous) {
+      delete createData.raised_by_role;
+    }
+    const concern = await whistleblowingRepo.upsert(req.home.id, createData);
     await auditService.log('whistleblowing_create', req.home.slug, req.user.username, { id: concern?.id });
     const safe = concern.anonymous ? (({ raised_by_role, ...rest }) => rest)(concern) : concern;
     res.status(201).json(safe);

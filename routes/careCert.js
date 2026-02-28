@@ -92,7 +92,14 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
     if (!currentRecord) return res.status(404).json({ error: 'Care certificate record not found' });
     const bodyParsed = careCertUpdateSchema.safeParse(req.body);
     if (!bodyParsed.success) return res.status(400).json({ error: 'Validation failed', issues: bodyParsed.error.issues });
+    // Deep merge standards to avoid overwriting other standards on single-standard update
     const updated = { ...currentRecord, ...bodyParsed.data };
+    if (bodyParsed.data.standards && currentRecord.standards) {
+      updated.standards = { ...currentRecord.standards };
+      for (const [stdKey, stdVal] of Object.entries(bodyParsed.data.standards)) {
+        updated.standards[stdKey] = { ...(currentRecord.standards[stdKey] || {}), ...stdVal };
+      }
+    }
     const result = await careCertRepo.upsertStaff(req.home.id, idParsed.data, updated);
     const changes = diffFields(currentRecord, result);
     await auditService.log('care_cert_update', req.home.slug, req.user.username, { staffId: idParsed.data, changes });

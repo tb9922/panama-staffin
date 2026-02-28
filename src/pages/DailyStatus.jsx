@@ -404,7 +404,10 @@ export default function DailyStatus() {
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm flex items-center justify-between">
+        <span>{error}</span>
+        <button onClick={() => { setError(null); loadData(); }} className="text-red-900 underline text-xs ml-4">Retry</button>
+      </div>
     </div>
   );
 

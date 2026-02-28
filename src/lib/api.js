@@ -182,13 +182,13 @@ export async function createComplaint(homeSlug, data) {
 }
 
 export async function updateComplaint(homeSlug, id, data) {
-  return apiFetch(`${API_BASE}/complaints/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
 
 export async function deleteComplaint(homeSlug, id) {
-  return apiFetch(`${API_BASE}/complaints/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/complaints/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
     method: 'DELETE', headers: authHeaders(),
   });
 }

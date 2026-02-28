@@ -1330,6 +1330,15 @@ export async function findMeetings(caseType, caseId, homeId, client) {
   return rows.map(shapeMeeting);
 }
 
+export async function findMeetingById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2',
+    [id, homeId]
+  );
+  return rows[0] ? shapeMeeting(rows[0]) : null;
+}
+
 export async function createMeeting(homeId, caseType, caseId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

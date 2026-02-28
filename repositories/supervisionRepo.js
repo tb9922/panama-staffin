@@ -91,7 +91,7 @@ export async function upsertSession(homeId, staffId, record) {
     `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date=EXCLUDED.date, supervisor=EXCLUDED.supervisor, topics=EXCLUDED.topics, actions=EXCLUDED.actions, next_due=EXCLUDED.next_due, notes=EXCLUDED.notes, updated_at=NOW()
+       date=EXCLUDED.date, supervisor=EXCLUDED.supervisor, topics=EXCLUDED.topics, actions=EXCLUDED.actions, next_due=EXCLUDED.next_due, notes=EXCLUDED.notes, updated_at=NOW(), deleted_at=NULL
      RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.supervisor || null,
      record.topics || null, record.actions || null, record.next_due || null, record.notes || null]

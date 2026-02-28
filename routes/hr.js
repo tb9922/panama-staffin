@@ -682,7 +682,7 @@ function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapF
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
 
-      const version = req.body._version != null ? parseInt(req.body._version) : null;
+      const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
       const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
       if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
 
@@ -1088,7 +1088,9 @@ router.put('/meetings/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     const parsed = meetingBodySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { _version } = req.body;
-    const version = _version != null ? parseInt(_version) : null;
+    const version = _version != null ? parseInt(_version, 10) : null;
+    const existing = await hrRepo.findMeetingById(id, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Meeting not found' });
     const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data, null, version);
     if (!meeting) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log(`hr_${meeting.case_type}_meeting_update`, req.home.slug, req.user.username, { id: meeting.id });
@@ -1100,7 +1102,7 @@ router.put('/meetings/:id', requireAuth, requireAdmin, requireHomeAccess, async 
 
 router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const retentionYears = parseInt(req.body.retention_years) || 6;
+    const retentionYears = Math.max(1, parseInt(req.body.retention_years, 10) || 6);
     const dryRun = req.body.dry_run !== false;
     const counts = await hrRepo.purgeExpiredRecords(req.home.id, retentionYears, dryRun);
     // Also purge audit log entries beyond retention period

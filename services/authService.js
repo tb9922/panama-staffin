@@ -33,9 +33,11 @@ export async function login(username, password) {
   const valid = await bcrypt.compare(password, user.hash);
   if (!valid) throw new AuthenticationError('Invalid credentials');
 
-  // Clear any deny-list entries for this user on successful login
-  deniedUsernames.delete(username);
-  await authRepo.clearForUser(username);
+  // Do NOT clear deny-list entries on login — revoked users must stay revoked.
+  // Admin must explicitly un-revoke via a dedicated endpoint.
+  if (deniedUsernames.has(username)) {
+    throw new AuthenticationError('Account access has been revoked');
+  }
 
   const jti = randomUUID();
   const token = jwt.sign(

@@ -58,7 +58,8 @@ export async function sync(homeId, drillsArr, client) {
          corrective_actions      = EXCLUDED.corrective_actions,
          conducted_by            = EXCLUDED.conducted_by,
          notes                   = EXCLUDED.notes,
-         updated_at              = NOW()`,
+         updated_at              = NOW(),
+         deleted_at              = NULL`,
       [
         d.id, homeId, d.date, d.time || null, d.scenario || null,
         d.evacuation_time_seconds ?? null,
@@ -91,7 +92,7 @@ export async function upsertDrill(homeId, record) {
        evacuation_time_seconds=EXCLUDED.evacuation_time_seconds, staff_present=EXCLUDED.staff_present,
        residents_evacuated=EXCLUDED.residents_evacuated, issues=EXCLUDED.issues,
        corrective_actions=EXCLUDED.corrective_actions,
-       conducted_by=EXCLUDED.conducted_by, notes=EXCLUDED.notes, updated_at=NOW()
+       conducted_by=EXCLUDED.conducted_by, notes=EXCLUDED.notes, updated_at=NOW(), deleted_at=NULL
      RETURNING *`,
     [record.id, homeId, record.date, record.time || null, record.scenario || null,
      record.evacuation_time_seconds ?? null,

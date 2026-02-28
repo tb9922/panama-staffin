@@ -297,17 +297,18 @@ export async function hasNmwViolations(runId, homeId, client) {
 
 function shapeLineShift(row) {
   const toDate = (v) => v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+  const f = (v) => v != null ? parseFloat(v) : 0;
   return {
     id: row.id,
     payroll_line_id: row.payroll_line_id,
     date: toDate(row.date),
     shift_code: row.shift_code,
-    hours: parseFloat(row.hours),
-    base_rate: parseFloat(row.base_rate),
-    base_amount: parseFloat(row.base_amount),
+    hours: f(row.hours),
+    base_rate: f(row.base_rate),
+    base_amount: f(row.base_amount),
     enhancements_json: row.enhancements_json,
-    total_amount: parseFloat(row.total_amount),
-    effective_hourly_rate: parseFloat(row.effective_hourly_rate),
+    total_amount: f(row.total_amount),
+    effective_hourly_rate: f(row.effective_hourly_rate),
   };
 }
 

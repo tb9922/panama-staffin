@@ -19,7 +19,7 @@ export async function createResident(homeId, data) {
   return resident;
 }
 
-export async function updateResident(id, homeId, data, username) {
+export async function updateResident(id, homeId, data, username, version) {
   if ('funding_type' in data) validateFundingConsistency(data);
 
   // Fee change requires transaction to prevent TOCTOU race
@@ -40,11 +40,11 @@ export async function updateResident(id, homeId, data, username) {
         }, client);
         logger.info({ homeId, residentId: id, oldFee, newFee }, 'Fee change recorded');
       }
-      return financeRepo.updateResident(id, homeId, data, client);
+      return financeRepo.updateResident(id, homeId, data, client, version);
     });
   }
 
-  return financeRepo.updateResident(id, homeId, data);
+  return financeRepo.updateResident(id, homeId, data, null, version);
 }
 
 function validateFundingConsistency(data) {
@@ -72,7 +72,7 @@ export async function findInvoices(homeId, filters) {
 export async function findInvoiceById(id, homeId) {
   const invoice = await financeRepo.findInvoiceById(id, homeId);
   if (!invoice) return null;
-  const lines = await financeRepo.findInvoiceLines(id);
+  const lines = await financeRepo.findInvoiceLines(id, homeId);
   return { ...invoice, lines };
 }
 
@@ -111,7 +111,7 @@ export async function createInvoiceWithLines(homeId, data, username) {
     }
 
     logger.info({ homeId, invoiceId: invoice.id, invoiceNumber, total: totalAmount, payerType: invoice.payer_type, createdBy: username }, 'Invoice created');
-    const savedLines = await financeRepo.findInvoiceLines(invoice.id, client);
+    const savedLines = await financeRepo.findInvoiceLines(invoice.id, homeId, client);
     return { ...invoice, lines: savedLines };
   });
 }
@@ -122,28 +122,29 @@ export async function updateInvoice(id, homeId, data) {
   return result;
 }
 
-export async function updateInvoiceWithLines(id, homeId, data, username) {
+export async function updateInvoiceWithLines(id, homeId, data, username, version) {
   const existing = await financeRepo.findInvoiceById(id, homeId);
   if (!existing) return null;
 
   return withTransaction(async (client) => {
     // Recalculate totals if lines provided
     if (data.lines) {
-      await financeRepo.deleteInvoiceLines(id, client);
+      await financeRepo.deleteInvoiceLines(id, homeId, client);
       const lines = data.lines;
-      const subtotal = lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0);
+      const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
       const adjustments = parseFloat(data.adjustments ?? existing.adjustments) || 0;
-      const totalAmount = subtotal + adjustments;
+      const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
       data.subtotal = subtotal;
       data.total_amount = totalAmount;
-      data.balance_due = totalAmount - (existing.amount_paid || 0);
+      data.balance_due = Math.round((totalAmount - (existing.amount_paid || 0)) * 100) / 100;
       for (const line of lines) {
         await financeRepo.createInvoiceLine(id, homeId, line, client);
       }
     }
 
-    const invoice = await financeRepo.updateInvoice(id, homeId, data, client);
-    const savedLines = await financeRepo.findInvoiceLines(id, client);
+    const invoice = await financeRepo.updateInvoice(id, homeId, data, client, version);
+    if (invoice === null) return null;
+    const savedLines = await financeRepo.findInvoiceLines(id, homeId, client);
     return { ...invoice, lines: savedLines };
   });
 }
@@ -165,8 +166,8 @@ export async function recordPayment(invoiceId, homeId, paymentData, username) {
       throw Object.assign(new Error(`Payment amount (${paymentAmount}) exceeds outstanding balance (${invoice.balance_due})`), { statusCode: 400 });
     }
 
-    const newPaid = (invoice.amount_paid || 0) + paymentAmount;
-    const newBalance = invoice.total_amount - newPaid;
+    const newPaid = Math.round(((invoice.amount_paid || 0) + paymentAmount) * 100) / 100;
+    const newBalance = Math.round((invoice.total_amount - newPaid) * 100) / 100;
     const newStatus = newBalance <= 0 ? 'paid' : 'partially_paid';
 
     const updated = await financeRepo.updateInvoice(invoiceId, homeId, {
@@ -199,8 +200,8 @@ export async function createExpense(homeId, data) {
   return expense;
 }
 
-export async function updateExpense(id, homeId, data) {
-  const result = await financeRepo.updateExpense(id, homeId, data);
+export async function updateExpense(id, homeId, data, version) {
+  const result = await financeRepo.updateExpense(id, homeId, data, null, version);
   if (result) logger.info({ homeId, expenseId: id, fields: Object.keys(data) }, 'Expense updated');
   return result;
 }
@@ -265,7 +266,7 @@ export async function getFinanceDashboard(homeId, from, to) {
   let registeredBeds = 0;
   try {
     const { rows: homeRows } = await pool.query('SELECT config FROM homes WHERE id = $1', [homeId]);
-    registeredBeds = homeRows[0]?.config?.registered_beds || 0;
+    registeredBeds = homeRows[0]?.config?.registered_beds ?? 0;
   } catch { /* fallback */ }
 
   const totalExpenses = expenses.total_expenses + staffCosts + agencyCosts;
@@ -369,8 +370,8 @@ export async function createPaymentSchedule(homeId, data, username) {
   return schedule;
 }
 
-export async function updatePaymentSchedule(id, homeId, data) {
-  const result = await financeRepo.updatePaymentSchedule(id, homeId, data);
+export async function updatePaymentSchedule(id, homeId, data, version) {
+  const result = await financeRepo.updatePaymentSchedule(id, homeId, data, null, version);
   if (result) logger.info({ homeId, scheduleId: id, fields: Object.keys(data) }, 'Payment schedule updated');
   return result;
 }
@@ -465,7 +466,7 @@ export async function softDeleteInvoice(id, homeId, username) {
   return withTransaction(async (client) => {
     const deleted = await financeRepo.softDelete('invoice', id, homeId, client);
     if (deleted) {
-      await financeRepo.deleteInvoiceLines(id, client);
+      await financeRepo.deleteInvoiceLines(id, homeId, client);
       logger.info({ homeId, invoiceId: id, deletedBy: username }, 'Invoice soft-deleted');
     }
     return deleted;

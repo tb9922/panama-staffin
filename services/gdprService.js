@@ -375,7 +375,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     if (originalName) {
       await client.query(
         `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
-         WHERE home_id = $2 AND raised_by_name = $3 AND deleted_at IS NULL`,
+         WHERE home_id = $2 AND raised_by_name = $3`,
         [anon, homeId, originalName]
       );
     }

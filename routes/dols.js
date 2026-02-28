@@ -49,7 +49,11 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
       dolsRepo.findByHome(req.home.id),
       dolsRepo.findMcaByHome(req.home.id),
     ]);
-    res.json({ dols: dolsResult.rows, mcaAssessments: mcaResult.rows });
+    // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
+    const isAdmin = req.user.role === 'admin';
+    const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob, ...rest }) => rest);
+    const mcaAssessments = mcaResult.rows;
+    res.json({ dols, mcaAssessments });
   } catch (err) { next(err); }
 });
 

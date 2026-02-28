@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
   getCurrentHome,
   getSchedulingData,
@@ -51,7 +52,7 @@ export default function AnnualLeave() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const today = new Date();
+  const today = useLiveDate();
 
   const activeStaff = useMemo(() => {
     if (!schedData) return [];
