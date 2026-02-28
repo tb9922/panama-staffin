@@ -6,7 +6,7 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getCqcEvidence, createCqcEvidence, updateCqcEvidence,
+  getCurrentHome, getCqcEvidence, createCqcEvidence,
   deleteCqcEvidence, getLoggedInUser,
 } from '../lib/api.js';
 import {

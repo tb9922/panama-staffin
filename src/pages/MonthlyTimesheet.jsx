@@ -6,7 +6,7 @@ import {
   batchUpsertTimesheets, approveTimesheetRange,
   upsertTimesheet, approveTimesheet, disputeTimesheet,
 } from '../lib/api.js';
-import { getActualShift, getShiftHours, WORKING_SHIFTS, formatDate, parseDate } from '../lib/rotation.js';
+import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 
 const STATUS_BADGE = {
@@ -464,10 +464,6 @@ export default function MonthlyTimesheet({ data, user }) {
   const pendingCount = rows.filter(r => r.entry?.status === 'pending').length;
   const missingCount = rows.filter(r => r.rowType === 'missing').length;
 
-  if (!data) return <div className={PAGE.container}><p>Loading data...</p></div>;
-
-  const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
-
   // Auto-calculate payable hours in edit form
   const editPayable = useMemo(() => {
     if (!editForm.actual_start || !editForm.actual_end) return null;
@@ -475,6 +471,10 @@ export default function MonthlyTimesheet({ data, user }) {
     const snapEnd   = snapToShift(editForm.scheduled_end,   editForm.actual_end,   snapConfig.window, snapConfig.enabled);
     return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes);
   }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
+
+  if (!data) return <div className={PAGE.container}><p>Loading data...</p></div>;
+
+  const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
   return (
     <div className={PAGE.container}>

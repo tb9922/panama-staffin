@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
-import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -361,8 +360,8 @@ export default function RiskRegister() {
                 const catDef = RISK_CATEGORIES.find(c => c.id === risk.category);
                 const inherent = risk.risk_score || getRiskScore(risk.likelihood, risk.impact);
                 const residual = risk.residual_score || getRiskScore(risk.residual_likelihood, risk.residual_impact);
-                const inherentBand = getRiskBand(inherent);
-                const residualBand = getRiskBand(residual);
+                const _inherentBand = getRiskBand(inherent);
+                const _residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
                   <tr key={risk.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(risk)}>

@@ -46,15 +46,15 @@ export function getTaxYear(date) {
  */
 export function getHMRCTaxMonth(date) {
   const d = new Date(date);
-  const taxStart = getTaxYearStart(d);
-  const month = d.getUTCMonth();
+  const _taxStart = getTaxYearStart(d);
+  const _month = d.getUTCMonth();
   const day = d.getUTCDate();
   // Months within tax year (April = 3, May = 4 ... March = 2)
   const calMonth = d.getUTCMonth(); // 0-indexed
   const calYear = d.getUTCFullYear();
   // Tax month starts on 6th. If day < 6, we're still in the previous tax month.
   const adjustedMonth = day < 6 ? calMonth - 1 : calMonth;
-  const adjustedYear = adjustedMonth < 0 ? calYear - 1 : calYear;
+  const _adjustedYear = adjustedMonth < 0 ? calYear - 1 : calYear;
   const finalMonth = ((adjustedMonth + 12) % 12);
   // April (3) = tax month 1, March (2) = tax month 12
   return ((finalMonth - 3 + 12) % 12) + 1;
@@ -282,8 +282,8 @@ export function calculateNI(grossPay, payFrequency, niThresholds, niRates) {
     return { employeeNI: 0, employerNI: 0 };
   }
 
-  const periodKey = payFrequency === 'monthly' ? 'monthly_amount' : 'weekly_amount';
-  const weeks = payFrequency === 'monthly' ? (52 / 12) : payFrequency === 'fortnightly' ? 2 : 1;
+  const _periodKey = payFrequency === 'monthly' ? 'monthly_amount' : 'weekly_amount';
+  const _weeks = payFrequency === 'monthly' ? (52 / 12) : payFrequency === 'fortnightly' ? 2 : 1;
 
   function threshold(name) {
     const row = niThresholds.find(t => t.threshold_name === name);
@@ -370,7 +370,7 @@ export function assessPensionEligibility(staff, grossThisPeriod, payFrequency, p
   const age = staff.date_of_birth ? calculateAge(staff.date_of_birth, refDate) : null;
 
   const periodsInYear = payFrequency === 'weekly' ? 52 : payFrequency === 'fortnightly' ? 26 : 12;
-  const annualisedGross = grossThisPeriod * periodsInYear;
+  const _annualisedGross = grossThisPeriod * periodsInYear;
   const triggerPeriod = pensionConfig.trigger_annual / periodsInYear;
   const lowerPeriod = pensionConfig.lower_qualifying_weekly * (payFrequency === 'monthly' ? (52 / 12) : payFrequency === 'fortnightly' ? 2 : 1);
 

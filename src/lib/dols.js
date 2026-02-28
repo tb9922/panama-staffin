@@ -1,7 +1,7 @@
 // DoLS/LPS & MCA — Constants, Helpers, CQC Metric Calculators
 // Maps to QS3/QS14 (Consent & Liberty) — CQC Regulation 11/13
 
-import { formatDate, parseDate, addDays } from './rotation.js';
+import { formatDate, parseDate } from './rotation.js';
 
 // ── Application Types ────────────────────────────────────────────────────────
 

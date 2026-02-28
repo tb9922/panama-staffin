@@ -11,7 +11,7 @@ import {
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
   DP_COMPLAINT_CATEGORIES, DATA_CATEGORIES,
-  calculateDeadline, calculateICODeadline, daysUntilDeadline, isOverdue,
+  calculateDeadline, daysUntilDeadline, isOverdue,
   calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
 } from '../lib/gdpr.js';
 

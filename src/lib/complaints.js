@@ -147,7 +147,7 @@ export function getSurveyStats(surveys, fromDate, toDate) {
 
 export function getComplaintAlerts(complaints, config) {
   const alerts = [];
-  const today = formatDate(new Date());
+  const _today = formatDate(new Date());
 
   for (const c of complaints) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
@@ -164,7 +164,7 @@ export function getComplaintAlerts(complaints, config) {
   return alerts;
 }
 
-export function getSurveyAlerts(surveys, config) {
+export function getSurveyAlerts(surveys, _config) {
   const alerts = [];
   if (!surveys || surveys.length === 0) return alerts;
 

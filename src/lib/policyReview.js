@@ -1,7 +1,7 @@
 // Policy Review — Constants, Helpers, CQC Metric Calculators
 // Maps to QS31 (Governance & Management) — CQC Regulation 17
 
-import { formatDate, parseDate, addDays } from './rotation.js';
+import { formatDate, parseDate } from './rotation.js';
 
 // ── Default Policies ────────────────────────────────────────────────────────
 

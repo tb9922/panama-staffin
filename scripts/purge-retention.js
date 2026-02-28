@@ -22,7 +22,7 @@
  */
 
 import { pool } from '../db.js';
-import * as auditRepo from '../repositories/auditRepo.js';
+
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditService from '../services/auditService.js';
 

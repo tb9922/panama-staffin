@@ -161,7 +161,7 @@ export function generatePayslipPDF(payslip) {
     line.other_deductions > 0 && ['Other Deductions', `(${fmtGbp(line.other_deductions)})`],
   ].filter(Boolean);
 
-  const hasDeductions = deductionRows.length > 0;
+  const _hasDeductions = deductionRows.length > 0;
   deductionRows.push(['EST. NET PAY', fmtGbp(line.net_pay || grossTotal)]);
 
   doc.autoTable({

@@ -26,7 +26,7 @@ const FREQ_LABEL = {
   monthly:      'Monthly',
 };
 
-export default function PayrollDashboard({ data, user }) {
+export default function PayrollDashboard({ _data, user }) {
   const homeSlug = getCurrentHome();
   const isAdmin  = user?.role === 'admin';
   const navigate = useNavigate();
@@ -84,7 +84,7 @@ export default function PayrollDashboard({ data, user }) {
 
   // Summary from most recent run
   const latest = runs[0];
-  const nmwFlags = runs.filter(r => r.status === 'calculated').length; // proxy
+  const _nmwFlags = runs.filter(r => r.status === 'calculated').length; // proxy
 
   return (
     <div className={PAGE.container}>

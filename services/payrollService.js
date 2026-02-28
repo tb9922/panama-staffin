@@ -301,7 +301,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // Gross for deductions = base pay + enhancements + holiday pay + SSP
       const grossForTax = round2(acc.gross_pay + acc.holiday_pay + acc.ssp_amount);
 
-      const { tax, isRefund } = calculatePAYE(grossForTax, parsedCode, payPeriod, periodsInYear, priorYTD, taxBands);
+      const { tax, isRefund: _isRefund } = calculatePAYE(grossForTax, parsedCode, payPeriod, periodsInYear, priorYTD, taxBands);
       // tax may be negative (refund) — clamp to 0 for payment; record actual value for YTD accuracy
       const taxDeducted = round2(tax);
 

@@ -232,7 +232,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function AgencyTracker({ data, user }) {
+export default function AgencyTracker({ _data, user }) {
   const homeSlug = getCurrentHome();
   const isAdmin  = user?.role === 'admin';
 

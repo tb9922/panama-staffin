@@ -203,7 +203,7 @@ export default function StaffRegister() {
   }
 
   const isEd = (id) => editing === id;
-  const row = (id) => (editing === id ? editingRow : allStaff.find(s => s.id === id)) || {};
+  const _row = (id) => (editing === id ? editingRow : allStaff.find(s => s.id === id)) || {};
 
   if (loading) {
     return (

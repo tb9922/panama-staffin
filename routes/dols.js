@@ -51,7 +51,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
     ]);
     // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
     const isAdmin = req.user.role === 'admin';
-    const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob, ...rest }) => rest);
+    const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob: _dob, ...rest }) => rest);
     const mcaAssessments = mcaResult.rows;
     res.json({ dols, mcaAssessments });
   } catch (err) { next(err); }

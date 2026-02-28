@@ -6,7 +6,7 @@ import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } fr
 export default function PayablesManager({ user }) {
   const isAdmin = user?.role === 'admin';
   const [schedules, setSchedules] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [_total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);

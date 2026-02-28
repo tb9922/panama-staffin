@@ -37,7 +37,7 @@ function currentTaxYear() {
   return now.getFullYear() - 1;
 }
 
-export default function HMRCDashboard({ data, user }) {
+export default function HMRCDashboard({ _data, user }) {
   const homeSlug = getCurrentHome();
   const isAdmin  = user?.role === 'admin';
 

@@ -1,7 +1,7 @@
 // Care Certificate — Constants, Helpers, CQC Metric Calculators
 // Maps to QS6 (Competent Staff) — CQC Regulation 18
 
-import { formatDate, parseDate, addDays } from './rotation.js';
+import { parseDate } from './rotation.js';
 
 // ── Care Certificate Standards (2025 update incl. Oliver McGowan) ──────────
 

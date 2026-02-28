@@ -367,7 +367,7 @@ export default function SickTrends({ data }) {
               </tr>
             </thead>
             <tbody>
-              {filteredLog.map((entry, i) => (
+              {filteredLog.map((entry, _i) => (
                 <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
                   <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>

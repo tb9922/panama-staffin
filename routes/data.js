@@ -95,7 +95,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
         staffCount: body.staff.length,
         warningCount: warnings.length,
       });
-    } catch (_) { /* validation/audit failure must not surface after response */ }
+    } catch { /* validation/audit failure must not surface after response */ }
   } catch (err) {
     next(err);
   }

@@ -40,6 +40,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
       - name: Security audit
         run: npm audit --audit-level=moderate
         continue-on-error: true
@@ -107,4 +111,6 @@ jobs:
             npm run build
             node scripts/migrate.js
             pm2 restart panama --update-env
-            echo "Deploy complete: $(date)"
+            sleep 5
+            curl -f http://localhost:3001/health || exit 1
+            echo "Health check passed — deploy complete: $(date)"

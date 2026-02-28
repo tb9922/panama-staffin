@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { config } from '../config.js';
+
 import { pool, withTransaction } from '../db.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';

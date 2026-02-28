@@ -214,6 +214,9 @@ export default function AbsenceManager() {
     if (sheets.length > 0) downloadXLSX('absence_management', sheets);
   }
 
+  const rf = (key, val) => setRtwForm(prev => ({ ...prev, [key]: val }));
+  const ohf = (key, val) => setOhForm(prev => ({ ...prev, [key]: val }));
+
   if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading absence data...</p></div></div>;
 
   return (
@@ -408,9 +411,6 @@ export default function AbsenceManager() {
   }
 
   // ── RTW Modal ───────────────────────────────────────────────────────────
-
-  const rf = (key, val) => setRtwForm(prev => ({ ...prev, [key]: val }));
-  const ohf = (key, val) => setOhForm(prev => ({ ...prev, [key]: val }));
 
   function renderRtwModal() {
     return (

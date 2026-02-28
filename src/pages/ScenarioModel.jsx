@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getCycleDates, getStaffForDay, formatDate } from '../lib/rotation.js';
+import { getCycleDates, getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN } from '../lib/design.js';
 

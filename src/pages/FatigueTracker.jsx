@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import {
-  getCycleDates, getStaffForDay, formatDate, getActualShift,
+  getCycleDates, formatDate, getActualShift,
   isWorkingShift, isCareRole, SHIFT_COLORS,
 } from '../lib/rotation.js';
 import { checkFatigueRisk } from '../lib/escalation.js';

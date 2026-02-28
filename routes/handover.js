@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as auditService from '../services/auditService.js';
-import { diffFields } from '../lib/audit.js';
+
 import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();

@@ -5,12 +5,15 @@
  * We mock db.js / config.js to avoid requiring environment variables.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 // Mock the database module to prevent config.js env var validation
 vi.mock('../../db.js', () => ({ pool: {} }));
 
-const { addWorkingDays, workingDaysBetween } = await import('../../services/hrService.js');
+let addWorkingDays, workingDaysBetween;
+beforeAll(async () => {
+  ({ addWorkingDays, workingDaysBetween } = await import('../../services/hrService.js'));
+});
 
 // ── Bradford Factor helpers ──────────────────────────────────────────────────
 // groupSpells and getTriggerLevel are not exported, so we test them indirectly

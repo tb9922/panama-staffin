@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE } from '../lib/design.js';
 import { getCurrentHome, getHrStats, getHrWarnings } from '../lib/api.js';
-import { WARNING_LEVELS, getStatusBadge } from '../lib/hr.js';
+import { WARNING_LEVELS } from '../lib/hr.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },

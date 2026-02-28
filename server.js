@@ -103,7 +103,7 @@ app.use('/api/scheduling', schedulingRouter);
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
-  try { await pool.query('SELECT 1'); dbOk = true; } catch {}
+  try { await pool.query('SELECT 1'); dbOk = true; } catch { /* no-op */ }
   const status = dbOk ? 200 : 503;
   res.status(status).json({
     status: dbOk ? 'ok' : 'degraded',
@@ -171,7 +171,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Catch unhandled promise rejections — without this, Node silently crashes
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   logger.error({ err: reason }, 'Unhandled promise rejection');
   if (config.sentryDsn) Sentry.captureException(reason);
 });

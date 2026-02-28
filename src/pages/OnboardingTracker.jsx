@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import { formatDate } from '../lib/rotation.js';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
   buildOnboardingMatrix, getOnboardingStats,
@@ -52,7 +51,7 @@ export default function OnboardingTracker() {
   const onboardingData = useMemo(() => state?.onboarding || {}, [state]);
 
   const matrix = useMemo(() => buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, onboardingData), [activeStaff, onboardingData]);
-  const stats = useMemo(() => getOnboardingStats(matrix), [matrix]);
+  const _stats = useMemo(() => getOnboardingStats(matrix), [matrix]);
 
   const filteredStaff = useMemo(() => {
     let list = activeStaff;

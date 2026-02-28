@@ -7,13 +7,13 @@ import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS, calculateComplianceScore,
   getDateRange, calculateTrainingBreakdown, getCoverageSummary,
   calculateSafeguardingTrainingPct, getDbsStatusList, getFatigueSummary,
-  calculateSickRate, calculateOnboardingCompletionPct, getScoreBand,
-  calculateFireDrillCompliancePct, calculateAppraisalCompletionPct,
+  calculateSickRate,
+  calculateFireDrillCompliancePct,
   calculateMcaTrainingCompliancePct, calculateEqualityTrainingPct,
   calculateDataProtectionTrainingPct, calculateStaffTurnover,
   calculateFatigueBreachesPct, calculateTrainingTrend,
 } from './cqc.js';
-import { getTrainingTypes, getFireDrillStatus, getAppraisalStats } from './training.js';
+import { getFireDrillStatus, getAppraisalStats } from './training.js';
 import { ONBOARDING_SECTIONS, buildOnboardingMatrix, getOnboardingStats } from './onboarding.js';
 import { calculateActionCompletionRate, getIncidentTrendData } from './incidents.js';
 import { getComplaintStats, getSurveyStats } from './complaints.js';

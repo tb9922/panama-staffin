@@ -40,7 +40,7 @@ export default function SickPayTracker({ data, user }) {
 
   const staffMap = {};
   (data?.staff || []).forEach(s => { staffMap[s.id] = s; });
-  const activeStaff = (data?.staff || []).filter(s => s.active !== false);
+  const _activeStaff = (data?.staff || []).filter(s => s.active !== false);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

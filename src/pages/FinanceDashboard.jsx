@@ -10,7 +10,7 @@ const ALERT_STYLES = {
 };
 
 export default function FinanceDashboard({ user }) {
-  const isAdmin = user?.role === 'admin';
+  const _isAdmin = user?.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);

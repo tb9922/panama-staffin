@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { formatDate } from '../../lib/rotation.js';
 import {
-  getTrainingTypes, buildComplianceMatrix, getComplianceStats,
+  buildComplianceMatrix, getComplianceStats,
   calculateExpiry, TRAINING_METHODS, TRAINING_STATUS, STATUS_DISPLAY,
 } from '../../lib/training.js';
 import { updateTrainingTypes, upsertTrainingRecord } from '../../lib/api.js';
@@ -22,7 +22,7 @@ const CELL_COLORS = {
   wrong_level:   'bg-orange-200 text-orange-800 hover:bg-orange-300 cursor-pointer hover:shadow-sm',
 };
 
-export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, config, onReload }) {
+export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, onReload }) {
   const [view, setView] = useState('matrix');
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -42,7 +42,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [importError, setImportError] = useState(null);
 
   const today = new Date();
-  const todayStr = formatDate(today);
+  const _todayStr = formatDate(today);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
   const activeTypes = useMemo(() => trainingTypes.filter(t => t.active), [trainingTypes]);
 
@@ -186,7 +186,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       const rawType = typeCol >= 0 ? cols[typeCol] : '';
       let rawDate = dateCol >= 0 ? cols[dateCol] : '';
 
-      const ddmmyyyy = rawDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      const ddmmyyyy = rawDate.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
       if (ddmmyyyy) rawDate = `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`;
 
       let matchedStaff = null;
