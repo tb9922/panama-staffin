@@ -3,7 +3,8 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import { getCurrentHome, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 
-export default function PayablesManager() {
+export default function PayablesManager({ user }) {
+  const isAdmin = user?.role === 'admin';
   const [schedules, setSchedules] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -141,7 +142,7 @@ export default function PayablesManager() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openCreate} className={BTN.primary}>Add Schedule</button>
+          {isAdmin && <button onClick={openCreate} className={BTN.primary}>Add Schedule</button>}
         </div>
       </div>
 
@@ -189,7 +190,7 @@ export default function PayablesManager() {
                         <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(s.amount)}</td>
                         <td className={`${TABLE.td} ${isPastDue ? 'text-red-600 font-bold' : ''}`}>{s.next_due}</td>
                         <td className={TABLE.td}>
-                          <button onClick={() => handleProcess(s)} disabled={processing === s.id} className={`${BTN.success} ${BTN.xs}`}>{processing === s.id ? 'Processing...' : 'Process'}</button>
+                          {isAdmin && <button onClick={() => handleProcess(s)} disabled={processing === s.id} className={`${BTN.success} ${BTN.xs}`}>{processing === s.id ? 'Processing...' : 'Process'}</button>}
                         </td>
                       </tr>
                     );
@@ -229,9 +230,9 @@ export default function PayablesManager() {
                   <td className={TABLE.td}>{s.auto_approve ? <span className={BADGE.green}>Yes</span> : <span className={BADGE.gray}>No</span>}</td>
                   <td className={TABLE.td}>{s.on_hold ? <span className={BADGE.amber}>On Hold</span> : <span className={BADGE.green}>Active</span>}</td>
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => handleToggleHold(s)} className={`${BTN.ghost} ${BTN.xs}`}>
+                    {isAdmin && <button onClick={() => handleToggleHold(s)} className={`${BTN.ghost} ${BTN.xs}`}>
                       {s.on_hold ? 'Release' : 'Hold'}
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}
@@ -288,7 +289,7 @@ export default function PayablesManager() {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Schedule'}</button>
+              {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Schedule'}</button>}
             </div>
           </div>
         </div>

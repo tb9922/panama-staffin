@@ -7,7 +7,7 @@ import {
   DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
 } from '../lib/ipc.js';
 import {
-  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit,
+  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, getLoggedInUser,
 } from '../lib/api.js';
 
 const TABS = [
@@ -28,6 +28,7 @@ const EMPTY_FORM = {
 };
 
 export default function IpcAuditTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [audits, setAudits] = useState([]);
   const [auditTypes, setAuditTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -198,7 +199,7 @@ export default function IpcAuditTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>
+          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
         </div>
       </div>
 
@@ -261,7 +262,7 @@ export default function IpcAuditTracker() {
                 const actionsTotal = (audit.corrective_actions || []).length;
                 const hasOutbreak = audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed');
                 return (
-                  <tr key={audit.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(audit)}>
+                  <tr key={audit.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(audit)}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
                     <td className={TABLE.td}>{typeDef?.name || audit.audit_type}</td>
                     <td className={TABLE.td}>{audit.auditor || '-'}</td>
@@ -481,7 +482,7 @@ export default function IpcAuditTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && isAdmin && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

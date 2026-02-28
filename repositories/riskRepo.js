@@ -37,9 +37,9 @@ export async function sync(homeId, arr, client) {
          last_reviewed=$15,next_review=$16,status=$17,updated_at=$18,deleted_at=NULL`,
       [
         r.id, homeId, r.title || null, r.description || null, r.category || null,
-        r.owner || null, r.likelihood || null, r.impact || null, r.inherent_risk || null,
-        JSON.stringify(r.controls || []), r.residual_likelihood || null,
-        r.residual_impact || null, r.residual_risk || null,
+        r.owner || null, r.likelihood ?? null, r.impact ?? null, r.inherent_risk ?? null,
+        JSON.stringify(r.controls || []), r.residual_likelihood ?? null,
+        r.residual_impact ?? null, r.residual_risk ?? null,
         JSON.stringify(r.actions || []), r.last_reviewed || null,
         r.next_review || null, r.status || null, r.updated_at || null,
       ]
@@ -84,12 +84,25 @@ export async function upsert(homeId, data) {
      RETURNING *`,
     [
       id, homeId, data.title || null, data.description || null, data.category || null,
-      data.owner || null, data.likelihood || null, data.impact || null, data.inherent_risk || null,
-      JSON.stringify(data.controls || []), data.residual_likelihood || null,
-      data.residual_impact || null, data.residual_risk || null,
+      data.owner || null, data.likelihood ?? null, data.impact ?? null, data.inherent_risk ?? null,
+      JSON.stringify(data.controls || []), data.residual_likelihood ?? null,
+      data.residual_impact ?? null, data.residual_risk ?? null,
       JSON.stringify(data.actions || []), data.last_reviewed || null,
       data.next_review || null, data.status || null, now,
     ]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+export async function update(id, homeId, data) {
+  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  if (fields.length === 0) return findById(id, homeId);
+  const mapped = fields.map(([k, v]) => [k, ['controls', 'actions'].includes(k) ? JSON.stringify(v) : v]);
+  const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
+  const values = mapped.map(([_, v]) => v);
+  const { rows } = await pool.query(
+    `UPDATE risk_register SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    [id, homeId, ...values]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
+import * as auditService from '../services/auditService.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -61,6 +62,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
+    await auditService.log('complaint.create', req.home.slug, req.user.username, { complaint_id: complaint?.id });
     res.status(201).json(complaint);
   } catch (err) { next(err); }
 });
@@ -79,6 +81,7 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const complaint = await complaintRepo.update(idParsed.data, req.home.id, updates);
     if (!complaint) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('complaint.update', req.home.slug, req.user.username, { complaint_id: idParsed.data });
     res.json(complaint);
   } catch (err) { next(err); }
 });
@@ -90,6 +93,7 @@ router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, a
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await complaintRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('complaint.delete', req.home.slug, req.user.username, { complaint_id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -100,6 +104,7 @@ router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const survey = await complaintSurveyRepo.upsert(req.home.id, parsed.data);
+    await auditService.log('survey.create', req.home.slug, req.user.username, { survey_id: survey?.id });
     res.status(201).json(survey);
   } catch (err) { next(err); }
 });
@@ -111,8 +116,13 @@ router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = surveyUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const survey = await complaintSurveyRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    const updates = Object.fromEntries(
+      Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
+    );
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+    const survey = await complaintSurveyRepo.update(idParsed.data, req.home.id, updates);
     if (!survey) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('survey.update', req.home.slug, req.user.username, { survey_id: idParsed.data });
     res.json(survey);
   } catch (err) { next(err); }
 });
@@ -124,6 +134,7 @@ router.delete('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await complaintSurveyRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('survey.delete', req.home.slug, req.user.username, { survey_id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

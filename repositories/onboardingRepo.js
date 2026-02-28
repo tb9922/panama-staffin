@@ -12,7 +12,7 @@ export async function findByHome(homeId) {
   );
   const result = {};
   for (const row of rows) {
-    result[row.staff_id] = row.data || {};
+    result[row.staff_id] = row.data ?? {};
   }
   return result;
 }
@@ -34,7 +34,7 @@ export async function sync(homeId, onboardingObj, client) {
        ON CONFLICT (home_id, staff_id) DO UPDATE SET
          data       = EXCLUDED.data,
          updated_at = NOW()`,
-      [homeId, staffId, JSON.stringify(data || {})]
+      [homeId, staffId, JSON.stringify(data ?? {})]
     );
   }
 }
@@ -47,7 +47,7 @@ export async function upsertSection(homeId, staffId, section, sectionData) {
       'SELECT data FROM onboarding WHERE home_id=$1 AND staff_id=$2 FOR UPDATE',
       [homeId, staffId]
     );
-    const existing = rows[0]?.data || {};
+    const existing = rows[0]?.data ?? {};
     const merged = { ...existing, [section]: sectionData };
     await client.query(
       `INSERT INTO onboarding (home_id, staff_id, data, updated_at)
@@ -77,7 +77,7 @@ export async function clearSection(homeId, staffId, section) {
       await client.query('COMMIT');
       return null;
     }
-    const existing = rows[0].data || {};
+    const existing = rows[0].data ?? {};
     delete existing[section];
     await client.query(
       'UPDATE onboarding SET data=$3, updated_at=NOW() WHERE home_id=$1 AND staff_id=$2',

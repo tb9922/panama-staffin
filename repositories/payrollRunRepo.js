@@ -24,6 +24,7 @@ function shapeRun(row) {
     approved_at: toTs(row.approved_at),
     exported_at: toTs(row.exported_at),
     export_format: row.export_format,
+    ytd_applied: !!row.ytd_applied,
     notes: row.notes,
     created_at: toTs(row.created_at),
     updated_at: toTs(row.updated_at),
@@ -45,6 +46,18 @@ export async function findById(runId, homeId, client) {
     [runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
+}
+
+/** Check if any non-voided run overlaps the given date range for this home. */
+export async function hasOverlap(homeId, periodStart, periodEnd, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT COUNT(*) AS cnt FROM payroll_runs
+     WHERE home_id = $1 AND status NOT IN ('voided')
+       AND period_start <= $3 AND period_end >= $2`,
+    [homeId, periodStart, periodEnd],
+  );
+  return parseInt(rows[0].cnt, 10) > 0;
 }
 
 export async function create(homeId, run, client) {
@@ -94,6 +107,15 @@ export async function updateTotals(runId, homeId, totals, client) {
     [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
+}
+
+/** Mark a run as having had YTD applied (prevents double-counting on re-approval). */
+export async function markYtdApplied(runId, homeId, client) {
+  const conn = client || pool;
+  await conn.query(
+    `UPDATE payroll_runs SET ytd_applied = true, updated_at = NOW() WHERE id = $1 AND home_id = $2`,
+    [runId, homeId],
+  );
 }
 
 /** Delete all lines + shifts for a run (used when recalculating). */
@@ -156,11 +178,14 @@ function shapeLine(row) {
   };
 }
 
-export async function findLinesByRun(runId, client) {
+export async function findLinesByRun(runId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM payroll_lines WHERE payroll_run_id = $1 ORDER BY staff_id`,
-    [runId],
+    `SELECT pl.* FROM payroll_lines pl
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
+     ORDER BY pl.staff_id`,
+    [runId, homeId],
   );
   return rows.map(shapeLine);
 }

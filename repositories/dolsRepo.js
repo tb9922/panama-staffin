@@ -121,6 +121,19 @@ export async function upsertDols(homeId, data) {
   return rows[0] ? shapeDolsRow(rows[0]) : null;
 }
 
+export async function updateDols(id, homeId, data) {
+  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  if (fields.length === 0) return findDolsById(id, homeId);
+  const mapped = fields.map(([k, v]) => [k, k === 'restrictions' ? JSON.stringify(v) : v]);
+  const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
+  const values = mapped.map(([_, v]) => v);
+  const { rows } = await pool.query(
+    `UPDATE dols SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    [id, homeId, ...values]
+  );
+  return rows[0] ? shapeDolsRow(rows[0]) : null;
+}
+
 export async function softDeleteDols(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE dols SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
@@ -202,6 +215,18 @@ export async function upsertMca(homeId, data) {
       data.lacks_capacity ?? false, data.best_interest_decision || null,
       data.next_review_date || null, data.notes || null, now,
     ]
+  );
+  return rows[0] ? shapeMcaRow(rows[0]) : null;
+}
+
+export async function updateMca(id, homeId, data) {
+  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  if (fields.length === 0) return findMcaById(id, homeId);
+  const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
+  const values = fields.map(([_, v]) => v);
+  const { rows } = await pool.query(
+    `UPDATE mca_assessments SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    [id, homeId, ...values]
   );
   return rows[0] ? shapeMcaRow(rows[0]) : null;
 }

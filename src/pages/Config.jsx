@@ -15,6 +15,8 @@ export default function Config() {
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [newBhDate, setNewBhDate] = useState('');
+  const [newBhName, setNewBhName] = useState('');
 
   useDirtyGuard(dirty);
 
@@ -382,15 +384,13 @@ export default function Config() {
           ))}
         </div>
         <div className="flex gap-3">
-          <input id="bh-date" type="date" className={INPUT.sm} />
-          <input id="bh-name" type="text" placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
+          <input type="date" value={newBhDate} onChange={e => setNewBhDate(e.target.value)} className={INPUT.sm} />
+          <input type="text" value={newBhName} onChange={e => setNewBhName(e.target.value)} placeholder="Holiday name" className={`${INPUT.sm} flex-1`} />
           <button onClick={() => {
-            const dateEl = document.getElementById('bh-date');
-            const nameEl = document.getElementById('bh-name');
-            if (dateEl.value && nameEl.value) {
-              handleChange('bank_holidays', [...(config.bank_holidays || []), { date: dateEl.value, name: nameEl.value }]);
-              dateEl.value = '';
-              nameEl.value = '';
+            if (newBhDate && newBhName) {
+              handleChange('bank_holidays', [...(config.bank_holidays || []), { date: newBhDate, name: newBhName }]);
+              setNewBhDate('');
+              setNewBhName('');
             }
           }} className={`${BTN.primary} ${BTN.sm} !bg-pink-600 hover:!bg-pink-700 active:!bg-pink-800`}>Add</button>
         </div>

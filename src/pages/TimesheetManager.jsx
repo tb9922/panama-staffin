@@ -397,24 +397,23 @@ export default function TimesheetManager({ data, user }) {
 // ── Shift Time Helpers ────────────────────────────────────────────────────────
 
 function getShiftStart(shift, config) {
-  const e = config?.shifts?.E;
-  const l = config?.shifts?.L;
-  const n = config?.shifts?.N;
+  const shifts = config?.shifts || {};
   switch (shift) {
-    case 'E': case 'OC-E': return '07:00';
-    case 'L': case 'OC-L': return '13:00';
-    case 'EL': case 'OC-EL': case 'BH-D': return '07:00';
-    case 'N': case 'OC-N': case 'BH-N': return '19:30';
+    case 'E': case 'OC-E': return shifts.E?.start || '07:00';
+    case 'L': case 'OC-L': return shifts.L?.start || '13:00';
+    case 'EL': case 'OC-EL': case 'BH-D': return shifts.EL?.start || shifts.E?.start || '07:00';
+    case 'N': case 'OC-N': case 'BH-N': return shifts.N?.start || '19:30';
     default: return null;
   }
 }
 
 function getShiftEnd(shift, config) {
+  const shifts = config?.shifts || {};
   switch (shift) {
-    case 'E': case 'OC-E': return '13:00';
-    case 'L': case 'OC-L': return '19:00';
-    case 'EL': case 'OC-EL': case 'BH-D': return '19:00';
-    case 'N': case 'OC-N': case 'BH-N': return '07:30';
+    case 'E': case 'OC-E': return shifts.E?.end || '13:00';
+    case 'L': case 'OC-L': return shifts.L?.end || '19:00';
+    case 'EL': case 'OC-EL': case 'BH-D': return shifts.EL?.end || shifts.L?.end || '19:00';
+    case 'N': case 'OC-N': case 'BH-N': return shifts.N?.end || '07:30';
     default: return null;
   }
 }

@@ -3,7 +3,7 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk,
+  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk, getLoggedInUser,
 } from '../lib/api.js';
 import {
   getRiskScore, getRiskBand, getRiskStats,
@@ -19,7 +19,7 @@ const TABS = [
 const EMPTY_FORM = {
   title: '', description: '', category: '', owner: '',
   likelihood: 1, impact: 1,
-  controls: '',
+  controls: [],
   residual_likelihood: 1, residual_impact: 1,
   actions: [],
   last_reviewed: '', next_review: '', status: 'open',
@@ -34,6 +34,7 @@ const HEATMAP_COLORS = {
 };
 
 export default function RiskRegister() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [risks, setRisks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -108,11 +109,16 @@ export default function RiskRegister() {
 
   function openEdit(risk) {
     setEditingId(risk.id);
+    // Migrate legacy string controls to array format
+    let controls = risk.controls || [];
+    if (typeof controls === 'string') {
+      controls = controls.trim() ? [{ description: controls, effectiveness: '' }] : [];
+    }
     setForm({
       title: risk.title || '', description: risk.description || '',
       category: risk.category || '', owner: risk.owner || '',
       likelihood: risk.likelihood || 1, impact: risk.impact || 1,
-      controls: risk.controls || '',
+      controls,
       residual_likelihood: risk.residual_likelihood || 1, residual_impact: risk.residual_impact || 1,
       actions: risk.actions || [],
       last_reviewed: risk.last_reviewed || '', next_review: risk.next_review || '',
@@ -165,7 +171,7 @@ export default function RiskRegister() {
         risk.title, catDef?.name || risk.category, risk.owner,
         risk.likelihood, risk.impact,
         risk.risk_score || getRiskScore(risk.likelihood, risk.impact), band.name,
-        risk.controls,
+        Array.isArray(risk.controls) ? risk.controls.map(c => c.description).join('; ') : (risk.controls || ''),
         risk.residual_likelihood, risk.residual_impact,
         risk.residual_score || getRiskScore(risk.residual_likelihood, risk.residual_impact), resBand.name,
         actionsTotal > 0 ? `${actionsDone}/${actionsTotal}` : '-',
@@ -219,7 +225,7 @@ export default function RiskRegister() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openAdd} className={BTN.primary}>+ New Risk</button>
+          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Risk</button>}
         </div>
       </div>
 
@@ -356,7 +362,7 @@ export default function RiskRegister() {
                 const residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
-                  <tr key={risk.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(risk)}>
+                  <tr key={risk.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(risk)}>
                     <td className={TABLE.td}>
                       <div className="font-medium text-gray-900">{risk.title}</div>
                       {risk.description && <div className="text-xs text-gray-400 truncate max-w-xs">{risk.description}</div>}
@@ -463,8 +469,31 @@ export default function RiskRegister() {
                 </div>
 
                 <div>
-                  <label className={INPUT.label}>Controls / Mitigations</label>
-                  <textarea className={`${INPUT.base} h-16`} placeholder="Describe current controls in place..." value={form.controls} onChange={e => setForm({ ...form, controls: e.target.value })} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={INPUT.label}>Controls / Mitigations</label>
+                    <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                      onClick={() => setForm({ ...form, controls: [...form.controls, { description: '', effectiveness: '' }] })}>
+                      + Add Control
+                    </button>
+                  </div>
+                  {form.controls.length === 0 && <p className="text-xs text-gray-400">No controls recorded</p>}
+                  {form.controls.map((ctrl, i) => (
+                    <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
+                      <div className="flex gap-2">
+                        <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Control description" value={ctrl.description}
+                          onChange={e => { const c = [...form.controls]; c[i] = { ...c[i], description: e.target.value }; setForm({ ...form, controls: c }); }} />
+                        <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                          onClick={() => setForm({ ...form, controls: form.controls.filter((_, j) => j !== i) })}>Remove</button>
+                      </div>
+                      <select className={INPUT.sm} value={ctrl.effectiveness || ''}
+                        onChange={e => { const c = [...form.controls]; c[i] = { ...c[i], effectiveness: e.target.value }; setForm({ ...form, controls: c }); }}>
+                        <option value="">Effectiveness...</option>
+                        <option value="effective">Effective</option>
+                        <option value="partially_effective">Partially Effective</option>
+                        <option value="ineffective">Ineffective</option>
+                      </select>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Residual Risk */}
@@ -551,7 +580,7 @@ export default function RiskRegister() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && isAdmin && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

@@ -71,9 +71,12 @@ export async function findRequests(homeId, client) {
   return rows.map(shapeRequest);
 }
 
-export async function findRequestById(id, client) {
+export async function findRequestById(id, homeId, client) {
   const conn = client || pool;
-  const { rows } = await conn.query(`SELECT * FROM data_requests WHERE id = $1`, [id]);
+  const { rows } = await conn.query(
+    `SELECT * FROM data_requests WHERE id = $1 AND home_id = $2`,
+    [id, homeId]
+  );
   return rows[0] ? shapeRequest(rows[0]) : null;
 }
 
@@ -264,13 +267,25 @@ export async function createConsent(homeId, data, client) {
 
 export async function updateConsent(id, homeId, data, client) {
   const conn = client || pool;
+  const setClauses = [];
+  const values = [id, homeId];
+  let idx = 3;
+
+  if ('withdrawn' in data) {
+    setClauses.push(`withdrawn = $${idx++}`);
+    values.push(data.withdrawn ?? null);
+  }
+  if ('notes' in data) {
+    setClauses.push(`notes = $${idx++}`);
+    values.push(data.notes ?? null);
+  }
+
+  if (setClauses.length === 0) return null;
+  setClauses.push('updated_at = NOW()');
+
   const { rows } = await conn.query(
-    `UPDATE consent_records SET
-       withdrawn = COALESCE($2, withdrawn),
-       notes = COALESCE($3, notes),
-       updated_at = NOW()
-     WHERE id = $1 AND home_id = $4 RETURNING *`,
-    [id, data.withdrawn || null, data.notes ?? null, homeId]
+    `UPDATE consent_records SET ${setClauses.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    values
   );
   return rows[0] ? shapeConsent(rows[0]) : null;
 }

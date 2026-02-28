@@ -41,6 +41,7 @@ function metricColor(value, lowerIsBetter) {
 
 // Hybrid: keeps data prop for score computation; evidence CRUD goes through API
 export default function CQCEvidence({ data }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
@@ -308,8 +309,8 @@ export default function CQCEvidence({ data }) {
                                     {me.added_by && ` | by ${me.added_by}`}
                                   </div>
                                 </div>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
-                                  className="text-xs text-red-400 hover:text-red-600 shrink-0 ml-2">Remove</button>
+                                {isAdmin && <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
+                                  className="text-xs text-red-400 hover:text-red-600 shrink-0 ml-2">Remove</button>}
                               </div>
                             ))}
                           </div>
@@ -318,12 +319,12 @@ export default function CQCEvidence({ data }) {
 
                       {evidenceLoading ? (
                         <span className="text-xs text-gray-400">Loading evidence...</span>
-                      ) : (
+                      ) : isAdmin ? (
                         <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
                           + Add Evidence
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>

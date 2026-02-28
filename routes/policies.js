@@ -22,7 +22,7 @@ const policyBodySchema = z.object({
     version: z.string().max(50),
     date:    dateSchema.optional(),
     summary: z.string().max(2000).nullable().optional(),
-  })).optional(),
+  })).max(200).optional(),
   notes:                  z.string().max(5000).nullable().optional(),
 });
 const policyUpdateSchema = policyBodySchema.partial();
@@ -52,7 +52,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = policyUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const policy = await policyRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    const policy = await policyRepo.update(idParsed.data, req.home.id, parsed.data);
     if (!policy) return res.status(404).json({ error: 'Not found' });
     res.json(policy);
   } catch (err) { next(err); }

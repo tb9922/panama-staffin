@@ -18,7 +18,7 @@ const riskBodySchema = z.object({
   controls:             z.array(z.object({
     description:   z.string().max(2000),
     effectiveness: z.string().max(100).nullable().optional(),
-  })).optional(),
+  })).max(100).optional(),
   residual_likelihood:  z.coerce.number().int().min(1).max(5).nullable().optional(),
   residual_impact:      z.coerce.number().int().min(1).max(5).nullable().optional(),
   residual_risk:        z.coerce.number().int().min(1).max(25).nullable().optional(),
@@ -28,7 +28,7 @@ const riskBodySchema = z.object({
     due_date:       dateSchema.optional(),
     status:         z.string().max(50).nullable().optional(),
     completed_date: dateSchema.optional(),
-  })).optional(),
+  })).max(100).optional(),
   last_reviewed:        dateSchema.optional(),
   next_review:          dateSchema.optional(),
   status:               z.string().max(50).nullable().optional(),
@@ -60,7 +60,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = riskUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const risk = await riskRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    const risk = await riskRepo.update(idParsed.data, req.home.id, parsed.data);
     if (!risk) return res.status(404).json({ error: 'Not found' });
     res.json(risk);
   } catch (err) { next(err); }

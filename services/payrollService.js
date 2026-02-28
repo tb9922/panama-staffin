@@ -404,9 +404,16 @@ export async function approveRun(runId, homeId, homeSlug, username) {
 
     // ── Phase 2: Write YTD and HMRC liability ─────────────────────────────────
 
+    // Guard: skip YTD upsert if already applied (prevents double-counting on re-approval)
+    if (run.ytd_applied) {
+      throw new ValidationError(
+        'YTD has already been applied for this run. Void the run and create a new one to make corrections.',
+      );
+    }
+
     const taxYear  = getTaxYear(new Date(run.period_end));
     const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
-    const lines    = await payrollRunRepo.findLinesByRun(runId, client);
+    const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
     // Write YTD increments for each staff member (upsert — adds to existing YTD)
     for (const l of lines) {
@@ -426,6 +433,9 @@ export async function approveRun(runId, homeId, homeSlug, username) {
         net_pay:          l.net_pay      || 0,
       }, client);
     }
+
+    // Mark YTD as applied so re-approval cannot double-count
+    await payrollRunRepo.markYtdApplied(runId, homeId, client);
 
     // Accumulate HMRC liability totals for this run and upsert into monthly tracker
     const totals = lines.reduce((acc, l) => ({
@@ -465,7 +475,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
       throw new ValidationError('Payroll run must be approved before exporting');
     }
 
-    const lines    = await payrollRunRepo.findLinesByRun(runId, client);
+    const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
     const allStaff = await staffRepo.findByHome(homeId);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
@@ -566,7 +576,7 @@ export async function assemblePayslipData(runId, homeId, staffId) {
 
   const home  = await homeRepo.findById(homeId);
   if (!home) throw new NotFoundError('Home not found');
-  const lines = await payrollRunRepo.findLinesByRun(runId);
+  const lines = await payrollRunRepo.findLinesByRun(runId, homeId);
   const shifts = await payrollRunRepo.findShiftsByRun(runId);
 
   const allStaff = await staffRepo.findByHome(homeId);

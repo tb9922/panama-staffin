@@ -25,7 +25,8 @@ const TABS = [
   { id: 'access',     label: 'Access Log' },
 ];
 
-export default function GdprDashboard() {
+export default function GdprDashboard({ user }) {
+  const isAdmin = user?.role === 'admin';
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,6 +43,10 @@ export default function GdprDashboard() {
   // Modal state
   const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'complaint'
   const [form, setForm] = useState({});
+
+  // Erasure confirmation state
+  const [erasureConfirm, setErasureConfirm] = useState(null); // request id to erase
+  const [erasureInput, setErasureInput] = useState('');
 
   const home = getCurrentHome();
 
@@ -149,10 +154,17 @@ export default function GdprDashboard() {
     } catch (e) { setError(e.message); }
   }
 
-  async function handleExecuteErasure(id) {
-    if (!confirm('This will permanently anonymise all personal data for this subject. This cannot be undone. Continue?')) return;
+  function handleExecuteErasure(id) {
+    setErasureConfirm(id);
+    setErasureInput('');
+  }
+
+  async function confirmErasure() {
+    if (erasureInput !== 'ERASE' || !erasureConfirm) return;
     try {
-      await executeErasure(home, id);
+      await executeErasure(home, erasureConfirm);
+      setErasureConfirm(null);
+      setErasureInput('');
       load();
     } catch (e) { setError(e.message); }
   }
@@ -224,6 +236,34 @@ export default function GdprDashboard() {
       {showModal === 'breach' && renderBreachModal()}
       {showModal === 'consent' && renderConsentModal()}
       {showModal === 'complaint' && renderComplaintModal()}
+
+      {/* Erasure Confirmation Modal */}
+      {erasureConfirm && (
+        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) { setErasureConfirm(null); setErasureInput(''); } }}>
+          <div className={MODAL.panelSm} onClick={e => e.stopPropagation()}>
+            <h3 className={MODAL.title}>Confirm Permanent Erasure</h3>
+            <div className="space-y-3">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                This will permanently anonymise all personal data for this subject. This action cannot be undone.
+              </div>
+              <div>
+                <label className={INPUT.label}>Type <strong>ERASE</strong> to confirm</label>
+                <input
+                  className={INPUT.base}
+                  value={erasureInput}
+                  onChange={e => setErasureInput(e.target.value)}
+                  placeholder="ERASE"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className={MODAL.footer}>
+              <button className={BTN.secondary} onClick={() => { setErasureConfirm(null); setErasureInput(''); }}>Cancel</button>
+              <button className={BTN.danger} disabled={erasureInput !== 'ERASE'} onClick={confirmErasure}>Execute Erasure</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -289,9 +329,9 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Requests</h2>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
             New Request
-          </button>
+          </button>}
         </div>
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
@@ -316,7 +356,7 @@ export default function GdprDashboard() {
                       </td>
                       <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(r.status)]}>{r.status}</span></td>
                       <td className={TABLE.td}>
-                        <div className="flex gap-1 flex-wrap">
+                        {isAdmin && <div className="flex gap-1 flex-wrap">
                           {r.request_type === 'sar' && r.status !== 'completed' && (
                             <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleGatherData(r.id)}>Gather</button>
                           )}
@@ -329,7 +369,7 @@ export default function GdprDashboard() {
                           {r.status === 'in_progress' && (
                             <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleUpdateStatus('request', r.id, 'completed')}>Complete</button>
                           )}
-                        </div>
+                        </div>}
                       </td>
                     </tr>
                   );
@@ -347,9 +387,9 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Breaches</h2>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
             Report Breach
-          </button>
+          </button>}
         </div>
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
@@ -371,12 +411,12 @@ export default function GdprDashboard() {
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(b.status)]}>{b.status}</span></td>
                     <td className={TABLE.td}>
-                      <div className="flex gap-1 flex-wrap">
+                      {isAdmin && <div className="flex gap-1 flex-wrap">
                         <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleAssessBreach(b.id)}>Assess</button>
                         {b.status === 'open' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'contained')}>Contain</button>}
                         {b.status === 'contained' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'resolved')}>Resolve</button>}
                         {b.status === 'resolved' && <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'closed')}>Close</button>}
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))}
@@ -432,9 +472,9 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Consent Records</h2>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ subject_type: 'staff', legal_basis: 'consent' }); setShowModal('consent'); }}>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ subject_type: 'staff', legal_basis: 'consent' }); setShowModal('consent'); }}>
             Record Consent
-          </button>
+          </button>}
         </div>
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
@@ -454,7 +494,7 @@ export default function GdprDashboard() {
                       {c.withdrawn ? <span className={BADGE.red}>Withdrawn {c.withdrawn.slice(0, 10)}</span> : <span className={BADGE.green}>Active</span>}
                     </td>
                     <td className={TABLE.td}>
-                      {!c.withdrawn && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleWithdrawConsent(c.id)}>Withdraw</button>}
+                      {isAdmin && !c.withdrawn && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleWithdrawConsent(c.id)}>Withdraw</button>}
                     </td>
                   </tr>
                 ))}
@@ -471,9 +511,9 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Protection Complaints</h2>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
             Log Complaint
-          </button>
+          </button>}
         </div>
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>
@@ -492,10 +532,10 @@ export default function GdprDashboard() {
                     <td className={TABLE.td}>{c.ico_involved ? <span className={BADGE.red}>Yes</span> : <span className={BADGE.gray}>No</span>}</td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(c.status)]}>{c.status}</span></td>
                     <td className={TABLE.td}>
-                      <div className="flex gap-1 flex-wrap">
+                      {isAdmin && <div className="flex gap-1 flex-wrap">
                         {c.status === 'open' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('complaint', c.id, 'investigating')}>Investigate</button>}
                         {c.status === 'investigating' && <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleUpdateStatus('complaint', c.id, 'resolved')}>Resolve</button>}
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))}

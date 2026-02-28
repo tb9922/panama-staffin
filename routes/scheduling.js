@@ -13,7 +13,7 @@ const router = Router();
 const VALID_SHIFTS = [
   'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
   'OC-E', 'OC-L', 'OC-EL', 'OC-N',
-  'AG-E', 'AG-L', 'AG-N',
+  'AG-E', 'AG-L', 'AG-EL', 'AG-N',
   'BH-D', 'BH-N',
 ];
 const shiftSchema = z.enum(VALID_SHIFTS);

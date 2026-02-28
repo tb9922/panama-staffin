@@ -264,6 +264,10 @@ router.post('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, r
     if (parsed.data.period_start >= parsed.data.period_end) {
       return res.status(400).json({ error: 'period_start must be before period_end' });
     }
+    const overlap = await payrollRunRepo.hasOverlap(req.home.id, parsed.data.period_start, parsed.data.period_end);
+    if (overlap) {
+      return res.status(409).json({ error: 'A payroll run already exists that overlaps this period. Void the existing run first or adjust the dates.' });
+    }
     const run = await payrollRunRepo.create(req.home.id, parsed.data);
     res.status(201).json(run);
   } catch (err) { next(err); }
@@ -276,7 +280,7 @@ router.get('/runs/:runId', requireAuth, requireHomeAccess, async (req, res, next
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     const run   = await payrollRunRepo.findById(runIdP.data, req.home.id);
     if (!run) return res.status(404).json({ error: 'Run not found' });
-    const lines = await payrollRunRepo.findLinesByRun(runIdP.data);
+    const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
     res.json({ run, lines });
   } catch (err) { next(err); }
 });
@@ -288,7 +292,7 @@ router.post('/runs/:runId/calculate', requireAuth, requireAdmin, requireHomeAcce
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     await payrollService.calculateRun(runIdP.data, req.home.id, req.home.slug, req.user.username);
     const run   = await payrollRunRepo.findById(runIdP.data, req.home.id);
-    const lines = await payrollRunRepo.findLinesByRun(runIdP.data);
+    const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
     res.json({ run, lines });
   } catch (err) { next(err); }
 });
@@ -326,7 +330,9 @@ router.get('/runs/:runId/payslips/:staffId', requireAuth, requireAdmin, requireH
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
-    const staffId = req.params.staffId;
+    const staffIdP = z.string().min(1).max(20).regex(/^[A-Za-z0-9_-]+$/).safeParse(req.params.staffId);
+    if (!staffIdP.success) return res.status(400).json({ error: 'Invalid staff ID' });
+    const staffId = staffIdP.data;
     const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffId);
     if (!payslips.length) return res.status(404).json({ error: 'No payslip data found for this staff member' });
     const pdf = generatePayslipPDF(payslips[0]);
@@ -438,7 +444,7 @@ const taxCodeBodySchema = z.object({
 });
 
 // GET /api/payroll/tax-codes?home=X
-router.get('/tax-codes', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await taxRepo.listTaxCodesByHome(req.home.id));
   } catch (err) { next(err); }
@@ -605,7 +611,7 @@ router.get('/runs/:runId/summary-pdf', requireAuth, requireAdmin, requireHomeAcc
     if (!['approved', 'exported', 'locked'].includes(run.status)) {
       return res.status(400).json({ error: 'Summary PDF only available for approved runs' });
     }
-    const lines = await payrollRunRepo.findLinesByRun(runIdP.data);
+    const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
     const doc = generateSummaryPDF(run, lines, { name: req.home.config?.home_name || req.home.name });
     const buffer = Buffer.from(doc.output('arraybuffer'));
     res.setHeader('Content-Type', 'application/pdf');

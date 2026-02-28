@@ -36,6 +36,7 @@ const EMPTY_SURVEY = {
 };
 
 export default function ComplaintsTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [complaints, setComplaints] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [complaintCategories, setComplaintCategories] = useState([]);
@@ -247,10 +248,10 @@ export default function ComplaintsTracker() {
           {viewMode === 'complaints' ? (
             <>
               <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-              <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>
+              {isAdmin && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>}
             </>
           ) : (
-            <button onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
+            isAdmin && <button onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
           )}
         </div>
       </div>
@@ -336,7 +337,7 @@ export default function ComplaintsTracker() {
                           {c.response_deadline || '--'}
                         </td>
                         <td className={TABLE.td}>
-                          <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>
+                          {isAdmin && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                         </td>
                       </tr>
                     );
@@ -380,7 +381,7 @@ export default function ComplaintsTracker() {
                         ) : '--'}
                       </td>
                       <td className={TABLE.td}>
-                        <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>
+                        {isAdmin && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                       </td>
                     </tr>
                   ))}
@@ -541,10 +542,10 @@ export default function ComplaintsTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              {editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {isAdmin && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary}>Save</button>
+              {isAdmin && <button onClick={handleSave} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
 
@@ -611,10 +612,10 @@ export default function ComplaintsTracker() {
               </div>
             </div>
             <div className={MODAL.footer}>
-              {editingSurveyId && <button onClick={handleDeleteSurvey} className={BTN.danger}>Delete</button>}
+              {isAdmin && editingSurveyId && <button onClick={handleDeleteSurvey} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>
+              {isAdmin && <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
     </div>

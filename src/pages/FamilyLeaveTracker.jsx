@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getHrFamilyLeave, createHrFamilyLeave, updateHrFamilyLeave } from '../lib/api.js';
 import { FAMILY_LEAVE_TYPES, FAMILY_LEAVE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -63,14 +64,12 @@ export default function FamilyLeaveTracker() {
 
   useEffect(() => { setOffset(0); }, [filterStaff, filterType]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowModal(false); setEditing(null); setForm(blankForm()); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
+  function closeModal() {
+    setShowModal(false);
+    setEditing(null);
+    setForm(blankForm());
+    setFormError('');
+  }
 
   function openNew() {
     setEditing(null);
@@ -190,8 +189,9 @@ export default function FamilyLeaveTracker() {
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>{item.staff_id}</td>
                   <td className={TABLE.td}>
-                    {typeName(item.leave_type)}
-                    {PROTECTED_TYPES.includes(item.leave_type) && <span className={BADGE.purple + ' ml-1'}>Protected</span>}
+                    {PROTECTED_TYPES.includes(item.leave_type)
+                      ? <><span>Family Leave</span><span className={BADGE.purple + ' ml-1'}>Protected</span></>
+                      : typeName(item.leave_type)}
                   </td>
                   <td className={TABLE.td}>{item.start_date || '—'}</td>
                   <td className={TABLE.td}>{item.end_date || '—'}</td>
@@ -210,9 +210,7 @@ export default function FamilyLeaveTracker() {
 
       {/* Modal */}
       {showModal && (
-        <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
-            <h3 className={MODAL.title}>{editing ? 'Edit Family Leave' : 'New Family Leave Record'}</h3>
+        <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Family Leave' : 'New Family Leave Record'} size="xl">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => set('staff_id', val)} label="Staff Member" required />
@@ -274,11 +272,10 @@ export default function FamilyLeaveTracker() {
             <FileAttachments caseType="family_leave" caseId={editing?.id} />
             {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.secondary} onClick={closeModal} disabled={saving}>Cancel</button>
               <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

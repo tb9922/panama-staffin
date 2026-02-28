@@ -38,7 +38,7 @@ export async function sync(homeId, arr, client) {
          reported_at=$12,updated_at=$13,deleted_at=NULL`,
       [
         a.id, homeId, a.audit_date || null, a.audit_type || null, a.auditor || null,
-        a.overall_score || null, a.compliance_pct || null,
+        a.overall_score ?? null, a.compliance_pct ?? null,
         JSON.stringify(a.risk_areas || []), JSON.stringify(a.corrective_actions || []),
         JSON.stringify(a.outbreak || {}), a.notes || null,
         a.reported_at || null, a.updated_at || null,
@@ -94,35 +94,15 @@ export async function upsert(homeId, data) {
 }
 
 export async function update(id, homeId, data) {
-  const now = new Date().toISOString();
-  // Only update fields that were actually provided — COALESCE preserves existing values for omitted fields
+  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  if (fields.length === 0) return findById(id, homeId);
+  const jsonCols = ['risk_areas', 'corrective_actions', 'outbreak'];
+  const mapped = fields.map(([k, v]) => [k, jsonCols.includes(k) ? JSON.stringify(v) : v]);
+  const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
+  const values = mapped.map(([_, v]) => v);
   const { rows } = await pool.query(
-    `UPDATE ipc_audits SET
-       audit_date = COALESCE($3, audit_date),
-       audit_type = COALESCE($4, audit_type),
-       auditor = COALESCE($5, auditor),
-       overall_score = COALESCE($6, overall_score),
-       compliance_pct = COALESCE($7, compliance_pct),
-       risk_areas = COALESCE($8, risk_areas),
-       corrective_actions = COALESCE($9, corrective_actions),
-       outbreak = COALESCE($10, outbreak),
-       notes = COALESCE($11, notes),
-       updated_at = $12
-     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
-     RETURNING *`,
-    [
-      id, homeId,
-      data.audit_date !== undefined ? data.audit_date : null,
-      data.audit_type !== undefined ? data.audit_type : null,
-      data.auditor !== undefined ? data.auditor : null,
-      data.overall_score !== undefined ? data.overall_score : null,
-      data.compliance_pct !== undefined ? data.compliance_pct : null,
-      data.risk_areas !== undefined ? JSON.stringify(data.risk_areas) : null,
-      data.corrective_actions !== undefined ? JSON.stringify(data.corrective_actions) : null,
-      data.outbreak !== undefined ? JSON.stringify(data.outbreak) : null,
-      data.notes !== undefined ? data.notes : null,
-      now,
-    ]
+    `UPDATE ipc_audits SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    [id, homeId, ...values]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
 }

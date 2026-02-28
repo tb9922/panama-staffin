@@ -633,7 +633,7 @@ const caseNoteBodySchema = z.object({
 
 // ── Case Route Factory ──────────────────────────────────────────────────────
 
-function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapFields, filters, hasGetById = true, repoFind, repoFindById, repoCreate, repoUpdate, auditPrefix }) {
+function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapFields, filters, hasGetById = true, repoFind, repoFindById, repoCreate, repoUpdate, auditPrefix, table }) {
   const prefix = auditPrefix || type;
 
   // GET list
@@ -695,6 +695,20 @@ function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapF
       res.json(result);
     } catch (err) { next(err); }
   });
+
+  // DELETE soft-delete
+  if (table) {
+    router.delete(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+      try {
+        const idParsed = idSchema.safeParse(req.params.id);
+        if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
+        const deleted = await hrRepo.softDeleteCase(table, idParsed.data, req.home.id);
+        if (!deleted) return res.status(404).json({ error: `${type} case not found` });
+        await auditService.log(`hr_${prefix}_delete`, req.home.slug, req.user.username, { id: idParsed.data });
+        res.status(204).end();
+      } catch (err) { next(err); }
+    });
+  }
 }
 
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
@@ -714,6 +728,7 @@ registerCaseRoutes(router, {
   filters: { staff_id: 'staffId', status: 'status' },
   repoFind: hrRepo.findDisciplinary, repoFindById: hrRepo.findDisciplinaryById,
   repoCreate: hrRepo.createDisciplinary, repoUpdate: hrRepo.updateDisciplinary,
+  table: 'hr_disciplinary_cases',
 });
 
 registerCaseRoutes(router, {
@@ -723,6 +738,7 @@ registerCaseRoutes(router, {
   filters: { staff_id: 'staffId', status: 'status' },
   repoFind: hrRepo.findGrievance, repoFindById: hrRepo.findGrievanceById,
   repoCreate: hrRepo.createGrievance, repoUpdate: hrRepo.updateGrievance,
+  table: 'hr_grievance_cases',
 });
 
 // ── Grievance Actions ───────────────────────────────────────────────────────
@@ -770,6 +786,7 @@ registerCaseRoutes(router, {
   filters: { staff_id: 'staffId', status: 'status', type: 'type' },
   repoFind: hrRepo.findPerformance, repoFindById: hrRepo.findPerformanceById,
   repoCreate: hrRepo.createPerformance, repoUpdate: hrRepo.updatePerformance,
+  table: 'hr_performance_cases',
 });
 
 // ── Absence ─────────────────────────────────────────────────────────────────
@@ -798,6 +815,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findRtwInterviews, repoFindById: hrRepo.findRtwInterviewById,
   repoCreate: hrRepo.createRtwInterview, repoUpdate: hrRepo.updateRtwInterview,
   auditPrefix: 'rtw',
+  table: 'hr_rtw_interviews',
 });
 
 registerCaseRoutes(router, {
@@ -808,6 +826,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findOhReferrals, repoFindById: hrRepo.findOhReferralById,
   repoCreate: hrRepo.createOhReferral, repoUpdate: hrRepo.updateOhReferral,
   auditPrefix: 'oh_referral',
+  table: 'hr_oh_referrals',
 });
 
 registerCaseRoutes(router, {
@@ -817,6 +836,7 @@ registerCaseRoutes(router, {
   filters: { staff_id: 'staffId', status: 'status' },
   repoFind: hrRepo.findContracts, repoFindById: hrRepo.findContractById,
   repoCreate: hrRepo.createContract, repoUpdate: hrRepo.updateContract,
+  table: 'hr_contracts',
 });
 
 registerCaseRoutes(router, {
@@ -826,6 +846,7 @@ registerCaseRoutes(router, {
   filters: { staff_id: 'staffId', type: 'type' },
   repoFind: hrRepo.findFamilyLeave, repoFindById: hrRepo.findFamilyLeaveById,
   repoCreate: hrRepo.createFamilyLeave, repoUpdate: hrRepo.updateFamilyLeave,
+  table: 'hr_family_leave',
 });
 
 registerCaseRoutes(router, {
@@ -836,6 +857,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findFlexWorking, repoFindById: hrRepo.findFlexWorkingById,
   repoCreate: hrRepo.createFlexWorking, repoUpdate: hrRepo.updateFlexWorking,
   auditPrefix: 'flex_working',
+  table: 'hr_flexible_working',
 });
 
 registerCaseRoutes(router, {
@@ -845,6 +867,7 @@ registerCaseRoutes(router, {
   filters: { record_type: 'recordType', staff_id: 'staffId' },
   repoFind: hrRepo.findEdi, repoFindById: hrRepo.findEdiById,
   repoCreate: hrRepo.createEdi, repoUpdate: hrRepo.updateEdi,
+  table: 'hr_edi_records',
 });
 
 registerCaseRoutes(router, {
@@ -855,6 +878,7 @@ registerCaseRoutes(router, {
   repoFind: (homeId, _f, client, pag) => hrRepo.findTupe(homeId, client, pag),
   repoFindById: hrRepo.findTupeById,
   repoCreate: hrRepo.createTupe, repoUpdate: hrRepo.updateTupe,
+  table: 'hr_tupe_transfers',
 });
 
 registerCaseRoutes(router, {
@@ -865,6 +889,7 @@ registerCaseRoutes(router, {
   repoFind: hrRepo.findRenewals, repoFindById: hrRepo.findRenewalById,
   repoCreate: hrRepo.createRenewal, repoUpdate: hrRepo.updateRenewal,
   auditPrefix: 'dbs_renewal',
+  table: 'hr_rtw_dbs_renewals',
 });
 
 // ── Cross-cutting: Warnings & Stats ─────────────────────────────────────────
@@ -975,7 +1000,9 @@ router.get('/attachments/download/:id', requireAuth, requireAdmin, requireHomeAc
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
     const att = await hrRepo.findAttachmentById(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    const filePath = path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name);
+    const uploadDir = path.resolve(config.upload.dir);
+    const filePath = path.resolve(path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name));
+    if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
     const safeName = att.original_name.replace(/["\r\n;]/g, '_');
     res.set({
       'Content-Type': att.mime_type,
@@ -1060,8 +1087,10 @@ router.put('/meetings/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
     const parsed = meetingBodySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data);
-    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+    const { _version } = req.body;
+    const version = _version != null ? parseInt(_version) : null;
+    const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data, null, version);
+    if (!meeting) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log(`hr_${meeting.case_type}_meeting_update`, req.home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);
   } catch (err) { next(err); }

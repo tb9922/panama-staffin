@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
-import { CARD, TABLE, BTN, BADGE } from '../lib/design.js';
+import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getLoggedInUser } from '../lib/api.js';
 
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -26,7 +27,19 @@ function getMonthDates(year, month) {
 }
 
 export default function CostTracker({ data }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [monthOffset, setMonthOffset] = useState(0);
+
+  if (!isAdmin) {
+    return (
+      <div className={PAGE.container}>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-sm">
+          Admin access required to view cost data.
+        </div>
+      </div>
+    );
+  }
 
   const { monthDates, monthLabel } = useMemo(() => {
     const now = new Date();

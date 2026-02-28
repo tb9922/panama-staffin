@@ -754,7 +754,7 @@ export default function App() {
           <Route path="/payroll/hmrc"       element={<HMRCDashboard data={data} user={user} />} />
           <Route path="/payroll/:runId"     element={<PayrollDetail data={data} user={user} />} />
           <Route path="/payroll"            element={<PayrollDashboard data={data} user={user} />} />
-          <Route path="/gdpr"              element={<GdprDashboard />} />
+          <Route path="/gdpr"              element={<GdprDashboard user={user} />} />
           <Route path="/hr"                element={<HrDashboard />} />
           <Route path="/hr/disciplinary"   element={<DisciplinaryTracker />} />
           <Route path="/hr/grievance"      element={<GrievanceTracker />} />
@@ -766,11 +766,11 @@ export default function App() {
           <Route path="/hr/edi"            element={<EdiTracker />} />
           <Route path="/hr/tupe"           element={<TupeManager />} />
           <Route path="/hr/renewals"       element={<RtwDbsRenewals />} />
-          <Route path="/finance"             element={<FinanceDashboard />} />
-          <Route path="/finance/income"      element={<IncomeTracker />} />
-          <Route path="/finance/expenses"    element={<ExpenseTracker />} />
-          <Route path="/finance/receivables" element={<ReceivablesManager />} />
-          <Route path="/finance/payables"    element={<PayablesManager />} />
+          <Route path="/finance"             element={<FinanceDashboard user={user} />} />
+          <Route path="/finance/income"      element={<IncomeTracker user={user} />} />
+          <Route path="/finance/expenses"    element={<ExpenseTracker user={user} />} />
+          <Route path="/finance/receivables" element={<ReceivablesManager user={user} />} />
+          <Route path="/finance/payables"    element={<PayablesManager user={user} />} />
           <Route path="/reports" element={<Reports data={data} />} />
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/settings" element={<Config />} />

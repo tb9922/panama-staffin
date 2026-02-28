@@ -42,7 +42,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = evidenceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    const item = await cqcEvidenceRepo.update(idParsed.data, req.home.id, parsed.data);
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json(item);
   } catch (err) { next(err); }

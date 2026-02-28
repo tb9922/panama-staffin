@@ -4,7 +4,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, loadData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
+import { getCurrentHome, loadData, createStaff, updateStaffMember, deleteStaffMember, getLoggedInUser } from '../lib/api.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -29,6 +29,7 @@ const EMPTY_STAFF = {
 
 export default function StaffRegister() {
   const homeSlug = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [allStaff, setAllStaff] = useState([]);
   const [config, setConfig] = useState(null);
   const [overrides, setOverrides] = useState({});
@@ -234,30 +235,43 @@ export default function StaffRegister() {
         </div>
         <div className="flex gap-2 print:hidden">
           <button onClick={() => {
-            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
+            const headers = isAdmin
+              ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
+              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
-              return [s.id, s.name, s.role, s.team, s.pref, s.skill, s.hourly_rate?.toFixed(2),
-                s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                s.notes || '', stats ? stats.totalHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : ''];
+              return isAdmin
+                ? [s.id, s.name, s.role, s.team, s.pref, s.skill, s.hourly_rate?.toFixed(2),
+                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                  s.notes || '', stats ? stats.totalHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : '']
+                : [s.id, s.name, s.role, s.team, s.pref, s.skill,
+                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                  s.notes || '', stats ? stats.totalHours.toFixed(1) : ''];
             });
             downloadCSV('staff_register.csv', headers, rows);
           }} className={BTN.secondary}>Export CSV</button>
           <button onClick={() => {
-            const headers = ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay'];
+            const headers = isAdmin
+              ? ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Rate £/hr', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours', '28d Pay']
+              : ['ID', 'Name', 'Role', 'Team', 'Pref', 'Skill', 'Start Date', 'Leaving Date', 'WTR Opt-Out', 'Active', 'Notes', '28d Hours'];
             const rows = staff.map(s => {
               const stats = staffStats[s.id];
-              return [s.id, s.name, s.role, s.team, s.pref, s.skill,
-                s.hourly_rate != null ? parseFloat(s.hourly_rate.toFixed(2)) : '',
-                s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                s.notes || '',
-                stats ? parseFloat(stats.totalHours.toFixed(1)) : '',
-                stats ? parseFloat(stats.totalPay.toFixed(0)) : ''];
+              return isAdmin
+                ? [s.id, s.name, s.role, s.team, s.pref, s.skill,
+                  s.hourly_rate != null ? parseFloat(s.hourly_rate.toFixed(2)) : '',
+                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                  s.notes || '',
+                  stats ? parseFloat(stats.totalHours.toFixed(1)) : '',
+                  stats ? parseFloat(stats.totalPay.toFixed(0)) : '']
+                : [s.id, s.name, s.role, s.team, s.pref, s.skill,
+                  s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
+                  s.notes || '',
+                  stats ? parseFloat(stats.totalHours.toFixed(1)) : ''];
             });
             downloadXLSX('staff_register', [{ name: 'Staff Register', headers, rows }]);
           }} className={BTN.secondary}>Export Excel</button>
           <button onClick={handlePrint} className={BTN.secondary}>Print</button>
-          <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={BTN.primary}>+ Add Staff</button>
+          {isAdmin && <button onClick={() => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); }} className={BTN.primary}>+ Add Staff</button>}
         </div>
       </div>
 
@@ -386,14 +400,14 @@ export default function StaffRegister() {
               <SortHeader col="team">Team</SortHeader>
               <SortHeader col="pref">Pref</SortHeader>
               <SortHeader col="skill">Skill</SortHeader>
-              <SortHeader col="hourly_rate">Rate</SortHeader>
+              {isAdmin && <SortHeader col="hourly_rate">Rate</SortHeader>}
               <th className={TABLE.th}>Start</th>
               <th className={TABLE.th}>WTR</th>
               <th className={TABLE.th}>Notes</th>
               <th className={TABLE.th}>AL</th>
               <th className={`${TABLE.th} text-center`}>Active</th>
               <th className={`${TABLE.th} text-right print:hidden`}>28d Hrs</th>
-              <th className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>
+              {isAdmin && <th className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
               <th className={`${TABLE.th} print:hidden`}></th>
             </tr>
           </thead>
@@ -454,7 +468,8 @@ export default function StaffRegister() {
                       ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.skill}</span>}
                     </td>
 
-                    {/* Rate — editable */}
+                    {/* Rate — editable (admin only) */}
+                    {isAdmin && (
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <div>
@@ -477,6 +492,7 @@ export default function StaffRegister() {
                         </div>
                       )}
                     </td>
+                    )}
 
                     {/* Start Date — editable */}
                     <td className={TABLE.td}>
@@ -561,12 +577,15 @@ export default function StaffRegister() {
                     <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
                       {stats ? stats.totalHours.toFixed(1) : '-'}
                     </td>
+                    {isAdmin && (
                     <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
                       {stats ? `£${stats.totalPay.toFixed(0)}` : '-'}
                     </td>
+                    )}
 
-                    {/* Actions */}
+                    {/* Actions (admin only) */}
                     <td className={`${TABLE.td} print:hidden`}>
+                      {isAdmin && (
                       <div className="flex gap-2 justify-end">
                         {isEd(s.id) ? (
                           <>
@@ -581,11 +600,12 @@ export default function StaffRegister() {
                         )}
                         <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
                       </div>
+                      )}
                     </td>
                   </tr>
                   {rErr && (
                     <tr key={`${s.id}-err`}>
-                      <td colSpan={15} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
+                      <td colSpan={isAdmin ? 15 : 13} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
                         {rErr}
                       </td>
                     </tr>

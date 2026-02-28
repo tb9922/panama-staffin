@@ -335,6 +335,31 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Anonymise access/audit log entries for this staff member
+    if (originalName) {
+      await client.query(
+        `UPDATE access_log SET user_name = '[REDACTED]'
+         WHERE user_name = $1 AND home_id = $2`,
+        [originalName, homeId]
+      );
+    }
+
+    // Anonymise handover entries authored by this staff member
+    if (originalName) {
+      await client.query(
+        `UPDATE handover_entries SET author = '[REDACTED]', content = '[REDACTED]'
+         WHERE home_id = $1 AND author = $2`,
+        [homeId, originalName]
+      );
+    }
+
+    // Anonymise grievance action descriptions linked to this staff member's grievance cases
+    await client.query(
+      `UPDATE hr_grievance_actions SET description = '[REDACTED]'
+       WHERE grievance_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2)`,
+      [homeId, staffId]
+    );
+
     // Remove onboarding data (pre-employment checks — not needed after erasure)
     await client.query(
       `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
@@ -518,7 +543,7 @@ export function assessBreachRisk(breachData) {
 // ── Passthrough to repo ──────────────────────────────────────────────────────
 
 export async function findRequests(homeId) { return gdprRepo.findRequests(homeId); }
-export async function findRequestById(id) { return gdprRepo.findRequestById(id); }
+export async function findRequestById(id, homeId) { return gdprRepo.findRequestById(id, homeId); }
 export async function createRequest(homeId, data) { return gdprRepo.createRequest(homeId, data); }
 export async function updateRequest(id, homeId, data, client) { return gdprRepo.updateRequest(id, homeId, data, client); }
 

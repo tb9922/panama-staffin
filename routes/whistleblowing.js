@@ -52,7 +52,8 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = concernBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const concern = await whistleblowingRepo.upsert(req.home.id, parsed.data);
-    res.status(201).json(concern);
+    const safe = concern.anonymous ? (({ raised_by_role, ...rest }) => rest)(concern) : concern;
+    res.status(201).json(safe);
   } catch (err) { next(err); }
 });
 
@@ -63,9 +64,10 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = concernUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const concern = await whistleblowingRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
+    const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, parsed.data);
     if (!concern) return res.status(404).json({ error: 'Not found' });
-    res.json(concern);
+    const safe = concern.anonymous ? (({ raised_by_role, ...rest }) => rest)(concern) : concern;
+    res.json(safe);
   } catch (err) { next(err); }
 });
 

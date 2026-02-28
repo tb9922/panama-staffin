@@ -79,7 +79,7 @@ export async function revokeAllForUser(username, client) {
   // Insert a sentinel with a generated UUID — the middleware will check by username
   const { rows } = await conn.query(
     `INSERT INTO token_denylist (jti, username, expires_at)
-     VALUES (gen_random_uuid(), $1, NOW() + INTERVAL '12 hours')
+     VALUES (gen_random_uuid(), $1, NOW() + INTERVAL '24 hours')
      RETURNING jti`,
     [username]
   );

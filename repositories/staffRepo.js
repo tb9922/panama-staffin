@@ -185,9 +185,10 @@ export async function updateOne(homeId, staffId, fields) {
  * Soft-delete a single staff member.
  * @param {number} homeId
  * @param {string} staffId
+ * @param {object} [client] — optional pg client for transaction participation
  */
-export async function softDeleteOne(homeId, staffId) {
-  const { rowCount } = await pool.query(
+export async function softDeleteOne(homeId, staffId, client) {
+  const { rowCount } = await (client || pool).query(
     `UPDATE staff SET deleted_at = NOW(), active = false, leaving_date = CURRENT_DATE
      WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]

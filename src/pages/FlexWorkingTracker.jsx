@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
 import { FLEX_WORKING_STATUSES, FLEX_REFUSAL_REASONS, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -73,14 +74,12 @@ export default function FlexWorkingTracker() {
 
   useEffect(() => { setOffset(0); }, [filterStaff, filterStatus]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowModal(false); setEditing(null); setForm(blankForm()); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
+  function closeModal() {
+    setShowModal(false);
+    setEditing(null);
+    setForm(blankForm());
+    setFormError('');
+  }
 
   function openNew() {
     setEditing(null);
@@ -231,9 +230,7 @@ export default function FlexWorkingTracker() {
 
       {/* Modal */}
       {showModal && (
-        <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
-            <h3 className={MODAL.title}>{editing ? 'Edit Flexible Working Request' : 'New Flexible Working Request'}</h3>
+        <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Flexible Working Request' : 'New Flexible Working Request'} size="xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => set('staff_id', val)} label="Staff Member" required />
@@ -324,11 +321,10 @@ export default function FlexWorkingTracker() {
             <FileAttachments caseType="flexible_working" caseId={editing?.id} />
             {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
+              <button className={BTN.secondary} onClick={closeModal} disabled={saving}>Cancel</button>
               <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

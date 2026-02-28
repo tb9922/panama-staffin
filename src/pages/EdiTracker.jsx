@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
 import { EDI_RECORD_TYPES, EDI_STATUSES, HARASSMENT_CATEGORIES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -69,14 +70,12 @@ export default function EdiTracker() {
 
   useEffect(() => { setOffset(0); }, [filterType, filterStaff]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowModal(false); setEditing(null); setForm(blankForm()); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
+  function closeModal() {
+    setShowModal(false);
+    setEditing(null);
+    setForm(blankForm());
+    setFormError('');
+  }
 
   function openNew() {
     setEditing(null);
@@ -225,9 +224,7 @@ export default function EdiTracker() {
 
       {/* Modal */}
       {showModal && (
-        <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
-            <h3 className={MODAL.title}>{editing ? 'Edit EDI Record' : 'New EDI Record'}</h3>
+        <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit EDI Record' : 'New EDI Record'} size="xl">
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -306,11 +303,10 @@ export default function EdiTracker() {
             <FileAttachments caseType="edi" caseId={editing?.id} />
             {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} disabled={saving} onClick={() => setShowModal(false)}>Cancel</button>
+              <button className={BTN.secondary} disabled={saving} onClick={closeModal}>Cancel</button>
               <button className={BTN.primary} disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

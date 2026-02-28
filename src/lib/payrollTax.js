@@ -9,10 +9,12 @@
  * approximation — per-day attribution is Phase 4.
  */
 
+import { calculateAge } from './payroll.js';
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 function round2(n) {
-  return Math.round(n * 100) / 100;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 // ─── Tax Year Helpers ─────────────────────────────────────────────────────────
@@ -389,17 +391,6 @@ export function assessPensionEligibility(staff, grossThisPeriod, payFrequency, p
   }
 
   return { category: 'entitled_worker', shouldAutoEnrol: false };
-}
-
-/** Calculate age in whole years as of a reference date. */
-function calculateAge(dobStr, refDate) {
-  const dob = new Date(dobStr);
-  let age = refDate.getUTCFullYear() - dob.getUTCFullYear();
-  const mDiff = refDate.getUTCMonth() - dob.getUTCMonth();
-  if (mDiff < 0 || (mDiff === 0 && refDate.getUTCDate() < dob.getUTCDate())) {
-    age -= 1;
-  }
-  return age;
 }
 
 /**

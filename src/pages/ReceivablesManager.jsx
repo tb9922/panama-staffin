@@ -12,7 +12,8 @@ const BUCKETS = [
   { id: '90+', label: '90+ days', key: 'days_90_plus', min: 91, max: Infinity },
 ];
 
-export default function ReceivablesManager() {
+export default function ReceivablesManager({ user }) {
+  const isAdmin = user?.role === 'admin';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -258,7 +259,7 @@ export default function ReceivablesManager() {
 
             <div className={MODAL.footer}>
               <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
-              <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>
+              {isAdmin && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
             </div>
           </div>
         </div>

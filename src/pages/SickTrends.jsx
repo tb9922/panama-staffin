@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getLoggedInUser } from '../lib/api.js';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -31,11 +32,20 @@ function getDatesInRange(start, end) {
 }
 
 export default function SickTrends({ data }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const MONTHS_BACK = 6;
   const months = useMemo(() => getMonthRange(MONTHS_BACK), []);
   const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
   const [filterStaff, setFilterStaff] = useState('All');
   const [filterMonth, setFilterMonth] = useState('All');
+
+  // Anonymise staff names for non-admin viewers
+  const staffLabel = useMemo(() => {
+    if (isAdmin) return (s) => s.name;
+    const map = new Map();
+    activeStaff.forEach((s, i) => map.set(s.id, `Staff Member ${i + 1}`));
+    return (s) => map.get(s.id) || `Staff Member`;
+  }, [isAdmin, activeStaff]);
 
   // Calculate sick days per staff per month — includes exact dates
   const sickData = useMemo(() => {
@@ -148,11 +158,11 @@ export default function SickTrends({ data }) {
           <button onClick={() => {
             const summaryHeaders = ['Staff', 'Team', 'Role', ...months.map(m => m.fullLabel), 'Total', 'Trend'];
             const summaryRows = sickData.map(s => [
-              s.name, s.team, s.role, ...s.monthCounts, s.total, s.trend,
+              staffLabel(s), s.team, s.role, ...s.monthCounts, s.total, s.trend,
             ]);
             const logHeaders = ['Date', 'Day', 'Staff', 'Team', 'Role', 'Reason'];
             const logRows = sickLog.map(e => [
-              e.date, e.dayOfWeek, e.staffName, e.team, e.role, e.reason || '',
+              e.date, e.dayOfWeek, isAdmin ? e.staffName : staffLabel({ id: e.staffId }), e.team, e.role, e.reason || '',
             ]);
             downloadXLSX(`sick_trends_${data.config.home_name}`, [
               { name: 'Monthly Summary', headers: summaryHeaders, rows: summaryRows },
@@ -240,7 +250,7 @@ export default function SickTrends({ data }) {
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs text-gray-400 w-4 text-right">{i + 1}.</span>
                       <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{s.name}</div>
+                        <div className="text-sm font-medium truncate">{staffLabel(s)}</div>
                         <div className="text-[10px] text-gray-400">{s.team} — {s.role}</div>
                       </div>
                     </div>
@@ -277,7 +287,7 @@ export default function SickTrends({ data }) {
                 const ti = trendIcon(s.trend);
                 return (
                   <tr key={s.id} className={`${TABLE.tr} ${s.total >= 3 ? 'bg-red-50' : ''}`}>
-                    <td className={`${TABLE.td} font-medium`}>{s.name}</td>
+                    <td className={`${TABLE.td} font-medium`}>{staffLabel(s)}</td>
                     <td className={`${TABLE.td} text-xs text-gray-500`}>{s.team}</td>
                     <td className={`${TABLE.td} text-xs text-gray-500`}>{s.role}</td>
                     {s.monthDetails.map((md, mi) => (
@@ -333,7 +343,7 @@ export default function SickTrends({ data }) {
           <div className="flex gap-2">
             <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} className={`${INPUT.sm} w-auto`}>
               <option value="All">All Staff</option>
-              {staffWithSick.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {staffWithSick.map(s => <option key={s.id} value={s.id}>{staffLabel(s)}</option>)}
             </select>
             <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className={`${INPUT.sm} w-auto`}>
               <option value="All">All Months</option>
@@ -364,7 +374,7 @@ export default function SickTrends({ data }) {
                 <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
                   <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>
-                  <td className={`${TABLE.td} font-medium`}>{entry.staffName}</td>
+                  <td className={`${TABLE.td} font-medium`}>{isAdmin ? entry.staffName : (staffLabel({ id: entry.staffId }))}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.team}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.role}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.reason || '—'}</td>

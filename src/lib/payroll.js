@@ -394,7 +394,7 @@ export function buildGenericCSV(payrollLines, staffMap, run, ytdMap = null) {
 // ── Internal Helpers ──────────────────────────────────────────────────────────
 
 function round2(n) {
-  return Math.round(n * 100) / 100;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 /** Parse 'HH:MM' to minutes since midnight. */

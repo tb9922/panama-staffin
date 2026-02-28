@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 
 // ── pay_rate_rules ────────────────────────────────────────────────────────────
 
@@ -76,27 +76,34 @@ export async function create(homeId, rule, client) {
 /**
  * "Soft-close" the current version of a rule, then create a new one.
  * This preserves history — the old rule's effective_to is set to today.
+ * Wrapped in a transaction to ensure atomicity (close + create succeed or both roll back).
  */
 export async function update(ruleId, homeId, updates, client) {
-  const conn = client || pool;
-  const today = new Date().toISOString().slice(0, 10);
+  const exec = async (conn) => {
+    const today = new Date().toISOString().slice(0, 10);
 
-  // Close the existing rule
-  await conn.query(
-    `UPDATE pay_rate_rules SET effective_to = $1, updated_at = NOW()
-     WHERE id = $2 AND home_id = $3 AND effective_to IS NULL`,
-    [today, ruleId, homeId],
-  );
+    // Close the existing rule
+    const { rowCount } = await conn.query(
+      `UPDATE pay_rate_rules SET effective_to = $1, updated_at = NOW()
+       WHERE id = $2 AND home_id = $3 AND effective_to IS NULL`,
+      [today, ruleId, homeId],
+    );
+    if (rowCount === 0) return null;
 
-  // Create new version
-  const { rows } = await conn.query(
-    `INSERT INTO pay_rate_rules (home_id, name, rate_type, amount, applies_to, priority, effective_from)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
-     RETURNING *`,
-    [homeId, updates.name, updates.rate_type, updates.amount, updates.applies_to,
-     updates.priority ?? 0, today],
-  );
-  return shapeRule(rows[0]);
+    // Create new version
+    const { rows } = await conn.query(
+      `INSERT INTO pay_rate_rules (home_id, name, rate_type, amount, applies_to, priority, effective_from)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [homeId, updates.name, updates.rate_type, updates.amount, updates.applies_to,
+       updates.priority ?? 0, today],
+    );
+    return shapeRule(rows[0]);
+  };
+
+  // If caller already provided a transaction client, use it; otherwise create one
+  if (client) return exec(client);
+  return withTransaction(exec);
 }
 
 /** Deactivate a rule (set effective_to = today). No hard deletes. */

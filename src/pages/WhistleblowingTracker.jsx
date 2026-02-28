@@ -4,7 +4,7 @@ import { formatDate } from '../lib/rotation.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
   getCurrentHome, getWhistleblowingConcerns, createWhistleblowingConcern,
-  updateWhistleblowingConcern, deleteWhistleblowingConcern,
+  updateWhistleblowingConcern, deleteWhistleblowingConcern, getLoggedInUser,
 } from '../lib/api.js';
 import {
   getWhistleblowingStats,
@@ -29,6 +29,7 @@ const EMPTY_FORM = {
 };
 
 export default function WhistleblowingTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [concerns, setConcerns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -201,7 +202,7 @@ export default function WhistleblowingTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>
+          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
         </div>
       </div>
 
@@ -269,7 +270,7 @@ export default function WhistleblowingTracker() {
                 const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
                 const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
                 return (
-                  <tr key={concern.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(concern)}>
+                  <tr key={concern.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(concern)}>
                     <td className={TABLE.td}>{concern.date_raised}</td>
                     <td className={TABLE.td}>{catDef?.name || concern.category}</td>
                     <td className={TABLE.td}>
@@ -453,7 +454,7 @@ export default function WhistleblowingTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && isAdmin && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

@@ -18,7 +18,7 @@ const dolsBodySchema = z.object({
   expiry_date:            dateSchema.optional(),
   authorisation_number:   z.string().max(200).nullable().optional(),
   authorising_authority:  z.string().max(200).nullable().optional(),
-  restrictions:           z.array(z.string().max(500)).optional(),
+  restrictions:           z.array(z.string().max(500)).max(50).optional(),
   reviewed_date:          dateSchema.optional(),
   review_status:          z.string().max(50).nullable().optional(),
   next_review_date:       dateSchema.optional(),
@@ -66,7 +66,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = dolsUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const record = await dolsRepo.upsertDols(req.home.id, { ...parsed.data, id: idParsed.data });
+    const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data);
     if (!record) return res.status(404).json({ error: 'Not found' });
     res.json(record);
   } catch (err) { next(err); }
@@ -100,7 +100,7 @@ router.put('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (req,
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = mcaUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const record = await dolsRepo.upsertMca(req.home.id, { ...parsed.data, id: idParsed.data });
+    const record = await dolsRepo.updateMca(idParsed.data, req.home.id, parsed.data);
     if (!record) return res.status(404).json({ error: 'Not found' });
     res.json(record);
   } catch (err) { next(err); }

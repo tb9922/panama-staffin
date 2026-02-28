@@ -27,7 +27,7 @@ function shapeRow(row) {
 export async function findByHomeAndDate(homeId, date) {
   const { rows } = await pool.query(
     `SELECT * FROM handover_entries
-     WHERE home_id = $1 AND entry_date = $2
+     WHERE home_id = $1 AND entry_date = $2 AND deleted_at IS NULL
      ORDER BY
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
        CASE category WHEN 'clinical' THEN 1 WHEN 'safety' THEN 2 WHEN 'operational' THEN 3 WHEN 'admin' THEN 4 ELSE 5 END,
@@ -46,7 +46,7 @@ export async function findByHomeAndDate(homeId, date) {
 export async function findByHomeAndDateRange(homeId, fromDate, toDate) {
   const { rows } = await pool.query(
     `SELECT * FROM handover_entries
-     WHERE home_id = $1 AND entry_date BETWEEN $2 AND $3
+     WHERE home_id = $1 AND entry_date BETWEEN $2 AND $3 AND deleted_at IS NULL
      ORDER BY entry_date,
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
        created_at`,
@@ -82,7 +82,7 @@ export async function updateEntry(id, homeId, updates) {
   const { rows } = await pool.query(
     `UPDATE handover_entries
      SET content = $3, priority = $4, updated_at = NOW()
-     WHERE id = $1 AND home_id = $2
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
      RETURNING *`,
     [id, homeId, updates.content, updates.priority]
   );
@@ -99,7 +99,7 @@ export async function acknowledgeEntry(id, homeId, username) {
   const { rows } = await pool.query(
     `UPDATE handover_entries
      SET acknowledged_by = $3, acknowledged_at = NOW()
-     WHERE id = $1 AND home_id = $2
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
      RETURNING *`,
     [id, homeId, username]
   );
@@ -107,13 +107,14 @@ export async function acknowledgeEntry(id, homeId, username) {
 }
 
 /**
- * Delete an entry. Returns true if deleted, false if not found.
+ * Soft-delete an entry by setting deleted_at. Returns true if soft-deleted, false if not found.
+ * Assumes deleted_at column exists on handover_entries (requires migration if not present).
  * @param {string} id      UUID
  * @param {number} homeId  ownership check
  */
 export async function deleteEntry(id, homeId) {
   const { rowCount } = await pool.query(
-    'DELETE FROM handover_entries WHERE id = $1 AND home_id = $2',
+    'UPDATE handover_entries SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
     [id, homeId]
   );
   return rowCount > 0;

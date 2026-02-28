@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
+import { getLoggedInUser } from '../lib/api.js';
 
 function getMonday(date) {
   const d = new Date(date);
@@ -11,6 +12,7 @@ function getMonday(date) {
 }
 
 export default function Reports({ data }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [generating, setGenerating] = useState(null);
   const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));
   const [costMonth, setCostMonth] = useState(() => {
@@ -56,7 +58,7 @@ export default function Reports({ data }) {
         </div>
       ),
     },
-    {
+    ...(isAdmin ? [{
       id: 'cost',
       title: 'Monthly Cost Report',
       description: 'Full P&L breakdown by day. Base pay, OT premium, agency, bank holiday costs. Budget comparison if set.',
@@ -69,7 +71,7 @@ export default function Reports({ data }) {
             className={INPUT.sm} />
         </div>
       ),
-    },
+    }] : []),
     {
       id: 'coverage',
       title: 'Coverage & Escalation',
@@ -84,14 +86,14 @@ export default function Reports({ data }) {
         </div>
       ),
     },
-    {
+    ...(isAdmin ? [{
       id: 'staff',
       title: 'Staff Register',
       description: 'Complete staff list with roles, teams, skill points, hourly rates, and contract details.',
       icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
       color: 'purple',
       dateInput: null,
-    },
+    }] : []),
   ];
 
   const colorClasses = {

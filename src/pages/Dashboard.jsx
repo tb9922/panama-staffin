@@ -14,11 +14,12 @@ import { getWhistleblowingAlerts } from '../lib/whistleblowing.js';
 import { getDolsAlerts } from '../lib/dols.js';
 import { getCareCertAlerts } from '../lib/careCertificate.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts } from '../lib/api.js';
+import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts, getLoggedInUser } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
 export default function Dashboard({ data }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const navigate = useNavigate();
   // Reactive today — updates at midnight so shift-handover coverage is never stale
   const [today, setToday] = useState(() => new Date());
@@ -90,28 +91,31 @@ export default function Dashboard({ data }) {
       });
     });
 
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach(s => {
+    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
       const fatigue = checkFatigueRisk(s, today, data.overrides, data.config);
+      const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
       if (fatigue.exceeded) {
-        list.push({ type: 'error', msg: `${s.name}: ${fatigue.consecutive} consecutive days (max ${data.config.max_consecutive_days})` });
+        list.push({ type: 'error', msg: `${label}: ${fatigue.consecutive} consecutive days (max ${data.config.max_consecutive_days})` });
       } else if (fatigue.atRisk) {
-        list.push({ type: 'warning', msg: `${s.name}: ${fatigue.consecutive} consecutive days — at limit` });
+        list.push({ type: 'warning', msg: `${label}: ${fatigue.consecutive} consecutive days — at limit` });
       }
     });
 
     // NMW compliance check
     const nlwRate = data.config.nlw_rate || 12.21;
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach(s => {
+    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
       if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
-        list.push({ type: 'error', msg: `${s.name}: £${s.hourly_rate.toFixed(2)}/hr is below NLW £${nlwRate.toFixed(2)}` });
+        const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
+        list.push({ type: 'error', msg: `${label}: £${isAdmin ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below NLW £${nlwRate.toFixed(2)}` });
       }
     });
 
     // AL accrual overbooked check
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach(s => {
+    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
       const acc = calculateAccrual(s, data.config, data.overrides, today);
       if (acc.remaining < 0) {
-        list.push({ type: 'warning', msg: `${s.name}: ${Math.abs(acc.remaining).toFixed(1)} AL days over earned balance` });
+        const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
+        list.push({ type: 'warning', msg: `${label}: ${Math.abs(acc.remaining).toFixed(1)} AL days over earned balance` });
       }
     });
 
@@ -272,7 +276,8 @@ export default function Dashboard({ data }) {
           </div>
         </div>
 
-        {/* Cost Summary */}
+        {/* Cost Summary (admin only) */}
+        {isAdmin ? (
         <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/costs')}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
           <div className="space-y-3">
@@ -300,6 +305,12 @@ export default function Dashboard({ data }) {
             </div>
           </div>
         </div>
+        ) : (
+        <div className={CARD.padded}>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary</h2>
+          <p className="text-sm text-gray-400">Admin access required</p>
+        </div>
+        )}
 
         {/* 28-Day Heatmap */}
         <div className={`${CARD.padded} lg:col-span-2`}>

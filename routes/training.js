@@ -20,14 +20,14 @@ const trainingTypeSchema = z.object({
   name: z.string().min(1).max(200),
   category: z.enum(['statutory', 'mandatory']),
   refresher_months: z.coerce.number().int().min(1).max(120).nullable(),
-  roles: z.array(z.string().max(100)).nullable(),
+  roles: z.array(z.string().max(100)).max(50).nullable(),
   legislation: z.string().max(500).nullable().optional(),
   active: z.boolean(),
   levels: z.array(z.object({
     id: z.string().max(50),
     name: z.string().max(200),
-    roles: z.array(z.string().max(100)).nullable().optional(),
-  })).optional(),
+    roles: z.array(z.string().max(100)).max(50).nullable().optional(),
+  })).max(20).optional(),
 });
 
 const trainingTypesArraySchema = z.array(trainingTypeSchema).max(100);
@@ -73,7 +73,7 @@ const fireDrillSchema = z.object({
   time:                    z.string().max(10).nullable().optional(),
   scenario:                z.string().max(2000).nullable().optional(),
   evacuation_time_seconds: z.coerce.number().int().min(0).max(3600).nullable().optional(),
-  staff_present:           z.array(z.string().max(20)).optional(),
+  staff_present:           z.array(z.string().max(20)).max(200).optional(),
   residents_evacuated:     z.coerce.number().int().min(0).max(500).nullable().optional(),
   issues:                  z.string().max(5000).nullable().optional(),
   corrective_actions:      z.string().max(5000).nullable().optional(),

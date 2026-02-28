@@ -123,8 +123,8 @@ router.post('/requests/:id/gather', requireAuth, requireAdmin, requireHomeAccess
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const request = await gdprService.findRequestById(idP.data);
-    if (!request || request.home_id !== req.home.id) return res.status(404).json({ error: 'Request not found' });
+    const request = await gdprService.findRequestById(idP.data, req.home.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
     const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, req.home.id, null, request.subject_name);
     await auditService.log('sar_gather', req.home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
@@ -137,13 +137,16 @@ router.post('/requests/:id/execute', requireAuth, requireAdmin, requireHomeAcces
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const request = await gdprService.findRequestById(idP.data);
-    if (!request || request.home_id !== req.home.id) return res.status(404).json({ error: 'Request not found' });
+    const request = await gdprService.findRequestById(idP.data, req.home.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
     if (request.request_type !== 'erasure') {
       return res.status(400).json({ error: 'Only erasure requests can be executed' });
     }
     if (!request.identity_verified) {
       return res.status(400).json({ error: 'Identity must be verified before erasure' });
+    }
+    if (request.subject_type !== 'staff') {
+      return res.status(400).json({ error: 'Automated erasure only supported for staff subjects' });
     }
     const result = await gdprService.executeErasure(
       request.subject_id, req.home.id, idP.data, req.user.username, req.home.slug

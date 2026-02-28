@@ -12,12 +12,13 @@ import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
+import { getCurrentHome, getLoggedInUser, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -860,7 +861,7 @@ export default function OnboardingTracker() {
                         return (
                           <div key={sec.id}
                             className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => openModal(s.id, sec.id)}>
+                            onClick={() => isAdmin && openModal(s.id, sec.id)}>
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
                               <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
@@ -882,7 +883,7 @@ export default function OnboardingTracker() {
                         return (
                           <div key={sec.id}
                             className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => openModal(s.id, sec.id)}>
+                            onClick={() => isAdmin && openModal(s.id, sec.id)}>
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
                               <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
@@ -917,13 +918,15 @@ export default function OnboardingTracker() {
               <input type="text" value={modalForm.notes || ''} onChange={e => setField('notes', e.target.value)} className={INPUT.base} placeholder="Optional notes" />
             </div>
             <div className={MODAL.footer}>
-              {onboardingData?.[modalStaffId]?.[modalSection] && (
+              {isAdmin && onboardingData?.[modalStaffId]?.[modalSection] && (
                 <button onClick={handleClear} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
               )}
               <button onClick={() => { setShowModal(false); setError(null); }} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={saving} className={BTN.primary}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+              {isAdmin && (
+                <button onClick={handleSave} disabled={saving} className={BTN.primary}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
             </div>
       </Modal>
     </div>

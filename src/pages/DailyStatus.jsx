@@ -9,6 +9,7 @@ import {
   getDayCoverageStatus, calculateDayCost, checkFatigueRisk, validateSwap,
 } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
+import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 import {
@@ -55,6 +56,16 @@ export default function DailyStatus() {
   const [pendingAction, setPendingAction] = useState(null);
 
   const noteTimerRef = useRef(null);
+
+  const closeModal = useCallback(() => {
+    setModal(null);
+    setSelectedStaff('');
+    setSwapFrom('');
+    setSwapTo('');
+    setAgencyShiftType('');
+  }, []);
+
+  useEscapeKey(!!modal, closeModal);
 
   const currentUser = getLoggedInUser();
   const isAdmin = currentUser?.role === 'admin';
@@ -570,8 +581,8 @@ export default function DailyStatus() {
 
       {/* Modal */}
       {modal && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panelSm}>
+        <div className={MODAL.overlay} onClick={closeModal}>
+          <div className={MODAL.panelSm} onClick={e => e.stopPropagation()}>
             <h2 className={MODAL.title}>
               {modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'}
             </h2>
@@ -634,7 +645,7 @@ export default function DailyStatus() {
                   );
                 })()}
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setSwapFrom(''); setSwapTo(''); }} className={BTN.ghost}>Cancel</button>
+                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   {(() => {
                     const a = staffForDay.find(s => s.id === swapFrom);
                     const b = staffForDay.find(s => s.id === swapTo);
@@ -727,7 +738,7 @@ export default function DailyStatus() {
                   );
                 })()}
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setAgencyShiftType(''); }} className={BTN.ghost}>Cancel</button>
+                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   <button disabled={!agencyShiftType || saving} onClick={async () => {
                     const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
                     setSaving(true);
@@ -751,7 +762,7 @@ export default function DailyStatus() {
                     .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>)}
                 </select>
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
+                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || saving} onClick={() => applyOverride(selectedStaff, 'TRN', 'Training', 'manual')}
                     className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
@@ -765,7 +776,7 @@ export default function DailyStatus() {
                     .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift}){s.sleep_in ? ' — remove SI' : ' — add SI'}</option>)}
                 </select>
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
+                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || saving} onClick={() => toggleSleepIn(selectedStaff)}
                     className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
@@ -789,7 +800,7 @@ export default function DailyStatus() {
                   <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
                 )}
                 <div className={MODAL.footer}>
-                  <button onClick={() => { setModal(null); setSelectedStaff(''); }} className={BTN.ghost}>Cancel</button>
+                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day)} onClick={() => {
                     if (modal === 'sick') applySickOverride(selectedStaff);
                     else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');

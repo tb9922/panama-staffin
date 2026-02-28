@@ -15,7 +15,8 @@ const TABS = [
   { id: 'invoices', label: 'Invoices' },
 ];
 
-export default function IncomeTracker() {
+export default function IncomeTracker({ user }) {
+  const isAdmin = user?.role === 'admin';
   const [tab, setTab] = useState('residents');
   const home = getCurrentHome();
 
@@ -37,15 +38,15 @@ export default function IncomeTracker() {
         ))}
       </div>
 
-      {tab === 'residents' && <ResidentsTab home={home} />}
-      {tab === 'invoices' && <InvoicesTab home={home} />}
+      {tab === 'residents' && <ResidentsTab home={home} isAdmin={isAdmin} />}
+      {tab === 'invoices' && <InvoicesTab home={home} isAdmin={isAdmin} />}
     </div>
   );
 }
 
 // ── Residents Tab ────────────────────────────────────────────────────────────
 
-function ResidentsTab({ home }) {
+function ResidentsTab({ home, isAdmin }) {
   const [residents, setResidents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -149,7 +150,7 @@ function ResidentsTab({ home }) {
         <span className="text-sm text-gray-500">{total} resident{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExportResidents} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        <button onClick={openCreate} className={BTN.primary}>Add Resident</button>
+        {isAdmin && <button onClick={openCreate} className={BTN.primary}>Add Resident</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -295,7 +296,7 @@ function ResidentsTab({ home }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>
+              {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
           </div>
         </div>
@@ -306,7 +307,7 @@ function ResidentsTab({ home }) {
 
 // ── Invoices Tab ─────────────────────────────────────────────────────────────
 
-function InvoicesTab({ home }) {
+function InvoicesTab({ home, isAdmin }) {
   const [invoices, setInvoices] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -457,7 +458,7 @@ function InvoicesTab({ home }) {
         <span className="text-sm text-gray-500">{total} invoice{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExportInvoices} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        <button onClick={openCreate} className={BTN.primary}>New Invoice</button>
+        {isAdmin && <button onClick={openCreate} className={BTN.primary}>New Invoice</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -594,9 +595,9 @@ function InvoicesTab({ home }) {
                       </select></div>
                     <div className="col-span-2"><label className={INPUT.label}>Reference</label>
                       <input value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
-                    <div className="col-span-2">
+                    {isAdmin && <div className="col-span-2">
                       <button onClick={handlePayment} className={BTN.success}>Record Payment</button>
-                    </div>
+                    </div>}
                   </div>
                 )}
               </div>
@@ -604,7 +605,7 @@ function InvoicesTab({ home }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
+              {isAdmin && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
           </div>
         </div>

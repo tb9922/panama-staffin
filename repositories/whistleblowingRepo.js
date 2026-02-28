@@ -123,6 +123,18 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+export async function update(id, homeId, data) {
+  const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+  if (fields.length === 0) return findById(id, homeId);
+  const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
+  const values = fields.map(([_, v]) => v);
+  const { rows } = await pool.query(
+    `UPDATE whistleblowing_concerns SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
+    [id, homeId, ...values]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
 export async function softDelete(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE whistleblowing_concerns SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry } from '../lib/api.js';
-import { downloadXLSX } from '../lib/excel.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 
 const SHIFTS = [
@@ -115,7 +114,8 @@ export default function HandoverNotes({ data, user }) {
     }
   }
 
-  function handleExport() {
+  async function handleExport() {
+    const { downloadXLSX } = await import('../lib/excel.js');
     const sheets = SHIFTS.map(s => {
       const shiftEntries = entries.filter(e => e.shift === s.id);
       return {

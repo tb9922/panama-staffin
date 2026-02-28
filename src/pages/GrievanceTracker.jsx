@@ -95,7 +95,7 @@ export default function GrievanceTracker() {
   async function openEdit(c) {
     const reqId = ++editReqRef.current;
     setEditing(c);
-    setForm({ ...c });
+    setForm({ ...c, description: c.subject_summary || c.description || '' });
     setModalTab('details');
     setNoteText('');
     setShowActionForm(false);
@@ -432,7 +432,12 @@ export default function GrievanceTracker() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={INPUT.label}>Outcome</label>
-            <input className={INPUT.base} value={form.outcome || ''} onChange={e => f('outcome', e.target.value)} placeholder="e.g. upheld, partially upheld, not upheld" />
+            <select className={INPUT.select} value={form.outcome || ''} onChange={e => f('outcome', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="upheld">Upheld</option>
+              <option value="partially_upheld">Partially Upheld</option>
+              <option value="not_upheld">Not Upheld</option>
+            </select>
           </div>
           <div>
             <label className={INPUT.label}>Outcome Date</label>

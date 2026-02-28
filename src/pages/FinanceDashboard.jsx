@@ -9,7 +9,8 @@ const ALERT_STYLES = {
   info: 'bg-blue-50 border-blue-200 text-blue-700',
 };
 
-export default function FinanceDashboard() {
+export default function FinanceDashboard({ user }) {
+  const isAdmin = user?.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);

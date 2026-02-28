@@ -100,22 +100,24 @@ export const COMPANION_ROLES = [
 // ── Grievance ─────────────────────────────────────────────────────────────────
 
 export const GRIEVANCE_CATEGORIES = [
-  { id: 'pay', name: 'Pay & Benefits' },
-  { id: 'bullying', name: 'Bullying & Harassment' },
+  { id: 'bullying', name: 'Bullying' },
+  { id: 'harassment', name: 'Harassment' },
   { id: 'discrimination', name: 'Discrimination' },
+  { id: 'pay', name: 'Pay & Benefits' },
   { id: 'working_conditions', name: 'Working Conditions' },
   { id: 'management', name: 'Management' },
-  { id: 'contractual', name: 'Contractual' },
+  { id: 'health_safety', name: 'Health & Safety' },
   { id: 'other', name: 'Other' },
 ];
 
 export const GRIEVANCE_STATUSES = [
   { id: 'open', name: 'Open', badgeKey: 'blue' },
   { id: 'acknowledged', name: 'Acknowledged', badgeKey: 'blue' },
-  { id: 'investigation', name: 'Investigation', badgeKey: 'amber' },
+  { id: 'investigating', name: 'Investigating', badgeKey: 'amber' },
   { id: 'hearing_scheduled', name: 'Hearing Scheduled', badgeKey: 'orange' },
-  { id: 'decided', name: 'Decided', badgeKey: 'green' },
-  { id: 'appeal', name: 'Under Appeal', badgeKey: 'purple' },
+  { id: 'outcome_issued', name: 'Outcome Issued', badgeKey: 'green' },
+  { id: 'appeal_pending', name: 'Appeal Pending', badgeKey: 'purple' },
+  { id: 'appeal_complete', name: 'Appeal Complete', badgeKey: 'purple' },
   { id: 'closed', name: 'Closed', badgeKey: 'gray' },
   { id: 'withdrawn', name: 'Withdrawn', badgeKey: 'gray' },
 ];
@@ -132,9 +134,10 @@ export const PERFORMANCE_STATUSES = [
   { id: 'open', name: 'Open', badgeKey: 'blue' },
   { id: 'informal', name: 'Informal Stage', badgeKey: 'blue' },
   { id: 'pip_active', name: 'PIP Active', badgeKey: 'amber' },
+  { id: 'pip_review', name: 'PIP Review', badgeKey: 'amber' },
   { id: 'hearing_scheduled', name: 'Hearing Scheduled', badgeKey: 'orange' },
-  { id: 'decided', name: 'Decided', badgeKey: 'green' },
-  { id: 'appeal', name: 'Under Appeal', badgeKey: 'purple' },
+  { id: 'outcome_issued', name: 'Outcome Issued', badgeKey: 'green' },
+  { id: 'appeal_pending', name: 'Appeal Pending', badgeKey: 'purple' },
   { id: 'closed', name: 'Closed', badgeKey: 'gray' },
 ];
 

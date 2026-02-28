@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCurrentHome, getTrainingData } from '../lib/api.js';
+import { getCurrentHome, getTrainingData, getLoggedInUser } from '../lib/api.js';
 import { PAGE, TAB } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import TrainingGrid from '../components/training/TrainingGrid.jsx';
@@ -16,6 +16,7 @@ const TABS = [
 
 export default function TrainingMatrix() {
   const homeSlug = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [tab, setTab] = useState('training');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +74,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           config={{ training_types: state.trainingTypes }}
           onReload={() => setRefreshKey(k => k + 1)}
+          readOnly={!isAdmin}
         />
       )}
       {tab === 'supervisions' && (
@@ -82,6 +84,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           config={state.config || {}}
           onReload={() => setRefreshKey(k => k + 1)}
+          readOnly={!isAdmin}
         />
       )}
       {tab === 'appraisals' && (
@@ -90,6 +93,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
+          readOnly={!isAdmin}
         />
       )}
       {tab === 'fire_drills' && (
@@ -98,6 +102,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
+          readOnly={!isAdmin}
         />
       )}
     </div>

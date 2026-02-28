@@ -6,7 +6,7 @@ import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getDols, createDols, updateDols, deleteDols,
-  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment,
+  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment, getLoggedInUser,
 } from '../lib/api.js';
 import {
   getDolsStatus, getMcaStatus, getDolsStats,
@@ -18,7 +18,7 @@ const EMPTY_DOLS_FORM = {
   application_type: 'dols', application_date: '',
   authorised: false, authorisation_date: '', expiry_date: '',
   authorisation_number: '', authorising_authority: '',
-  restrictions: '',
+  restrictions: [],
   reviewed_date: '', review_status: '', next_review_date: '',
   notes: '',
 };
@@ -30,6 +30,7 @@ const EMPTY_MCA_FORM = {
 };
 
 export default function DolsTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [dols, setDols] = useState([]);
   const [mcaAssessments, setMcaAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +102,11 @@ export default function DolsTracker() {
 
   function openEditDols(dol) {
     setEditingId(dol.id);
+    // Migrate legacy string restrictions to array format
+    let restrictions = dol.restrictions || [];
+    if (typeof restrictions === 'string') {
+      restrictions = restrictions.trim() ? [restrictions] : [];
+    }
     setForm({
       resident_name: dol.resident_name || '',
       dob: dol.dob || '',
@@ -112,7 +118,7 @@ export default function DolsTracker() {
       expiry_date: dol.expiry_date || '',
       authorisation_number: dol.authorisation_number || '',
       authorising_authority: dol.authorising_authority || '',
-      restrictions: dol.restrictions || '',
+      restrictions,
       reviewed_date: dol.reviewed_date || '',
       review_status: dol.review_status || '',
       next_review_date: dol.next_review_date || '',
@@ -208,12 +214,14 @@ export default function DolsTracker() {
       const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
       const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
       return [
-        dol.resident_name, dol.dob || '', dol.room_number || '',
+        dol.resident_name,
+        ...(isAdmin ? [dol.dob || ''] : []),
+        dol.room_number || '',
         typeDef?.name || dol.application_type, dol.application_date,
         dol.authorised ? 'Yes' : 'No', dol.authorisation_date || '',
         dol.expiry_date || '', statusDef?.name || st.status,
         dol.authorisation_number || '', dol.authorising_authority || '',
-        dol.restrictions || '', dol.reviewed_date || '',
+        Array.isArray(dol.restrictions) ? dol.restrictions.join('; ') : (dol.restrictions || ''), dol.reviewed_date || '',
         dol.next_review_date || '', dol.notes || '',
       ];
     });
@@ -232,7 +240,7 @@ export default function DolsTracker() {
     downloadXLSX(`DoLS_MCA_Register_${today}`, [
       {
         name: 'DoLS-LPS',
-        headers: ['Resident', 'DOB', 'Room', 'Type', 'Applied', 'Authorised',
+        headers: ['Resident', ...(isAdmin ? ['DOB'] : []), 'Room', 'Type', 'Applied', 'Authorised',
           'Auth Date', 'Expiry', 'Status', 'Auth Number', 'Authority',
           'Restrictions', 'Reviewed', 'Next Review', 'Notes'],
         rows: dolsRows,
@@ -275,9 +283,9 @@ export default function DolsTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
+          {isAdmin && <button onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
             + {viewMode === 'dols' ? 'New DoLS/LPS' : 'New MCA'}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -359,7 +367,7 @@ export default function DolsTracker() {
                     const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
                     const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={dol.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEditDols(dol)}>
+                      <tr key={dol.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEditDols(dol)}>
                         <td className={TABLE.td}>{dol.resident_name}</td>
                         <td className={TABLE.td}><span className={typeBadge(dol.application_type)}>{typeDef?.name || dol.application_type}</span></td>
                         <td className={TABLE.td}>{dol.application_date}</td>
@@ -402,7 +410,7 @@ export default function DolsTracker() {
                     const st = getMcaStatus(mca, today);
                     const statusDef = MCA_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={mca.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEditMca(mca)}>
+                      <tr key={mca.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEditMca(mca)}>
                         <td className={TABLE.td}>{mca.resident_name}</td>
                         <td className={TABLE.td}>{mca.assessment_date}</td>
                         <td className={TABLE.td}>{mca.assessor || '-'}</td>
@@ -435,11 +443,11 @@ export default function DolsTracker() {
                   <input type="text" className={INPUT.base} value={form.resident_name}
                     onChange={e => setForm({ ...form, resident_name: e.target.value })} />
                 </div>
-                <div>
+                {isAdmin && <div>
                   <label className={INPUT.label}>Date of Birth</label>
                   <input type="date" className={INPUT.base} value={form.dob}
                     onChange={e => setForm({ ...form, dob: e.target.value })} />
-                </div>
+                </div>}
                 <div>
                   <label className={INPUT.label}>Room Number</label>
                   <input type="text" className={INPUT.base} value={form.room_number}
@@ -502,10 +510,23 @@ export default function DolsTracker() {
 
               {/* Restrictions */}
               <div>
-                <label className={INPUT.label}>Restrictions / Conditions</label>
-                <textarea className={`${INPUT.base} h-20`} placeholder="Details of any restrictions applied..."
-                  value={form.restrictions}
-                  onChange={e => setForm({ ...form, restrictions: e.target.value })} />
+                <div className="flex items-center justify-between mb-1">
+                  <label className={INPUT.label}>Restrictions / Conditions</label>
+                  <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                    onClick={() => setForm({ ...form, restrictions: [...form.restrictions, ''] })}>
+                    + Add Restriction
+                  </button>
+                </div>
+                {form.restrictions.length === 0 && <p className="text-xs text-gray-400">No restrictions recorded</p>}
+                {form.restrictions.map((r, i) => (
+                  <div key={i} className="flex gap-2 mb-1.5">
+                    <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
+                      value={r}
+                      onChange={e => { const arr = [...form.restrictions]; arr[i] = e.target.value; setForm({ ...form, restrictions: arr }); }} />
+                    <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                      onClick={() => setForm({ ...form, restrictions: form.restrictions.filter((_, j) => j !== i) })}>Remove</button>
+                  </div>
+                ))}
               </div>
 
               {/* Review */}
@@ -532,7 +553,7 @@ export default function DolsTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && isAdmin && (
                 <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
@@ -607,7 +628,7 @@ export default function DolsTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {editingId && isAdmin && (
                 <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

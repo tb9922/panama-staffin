@@ -89,6 +89,33 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
+// Column name whitelist for dynamic SQL
+const ALLOWED_COLUMNS = new Set([
+  'type', 'date', 'title', 'total_sent', 'responses',
+  'overall_satisfaction', 'area_scores', 'key_feedback', 'actions', 'conducted_by',
+]);
+
+export async function update(id, homeId, data) {
+  const fields = Object.entries(data).filter(
+    ([k, v]) => v !== undefined && ALLOWED_COLUMNS.has(k)
+  );
+  if (fields.length === 0) return null;
+
+  // JSON-encode area_scores if present
+  const values = fields.map(([k, v]) =>
+    k === 'area_scores' ? JSON.stringify(v ?? {}) : v
+  );
+
+  const setClause = fields.map(([k], i) => `${k} = $${i + 3}`).join(', ');
+  const { rows } = await pool.query(
+    `UPDATE complaint_surveys SET ${setClause}, updated_at = NOW()
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+     RETURNING *`,
+    [id, homeId, ...values]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
 export async function softDelete(id, homeId) {
   const { rowCount } = await pool.query(
     'UPDATE complaint_surveys SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',

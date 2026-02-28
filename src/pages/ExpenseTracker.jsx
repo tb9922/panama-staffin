@@ -9,7 +9,7 @@ import {
   getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 
-export default function ExpenseTracker() {
+export default function ExpenseTracker({ user: userProp }) {
   const [expenses, setExpenses] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,8 @@ export default function ExpenseTracker() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const home = getCurrentHome();
-  const user = getLoggedInUser();
+  const user = userProp || getLoggedInUser();
+  const isAdmin = user?.role === 'admin';
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -153,7 +154,7 @@ export default function ExpenseTracker() {
         <span className="text-sm text-gray-500">{total} expense{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        <button onClick={openCreate} className={BTN.primary}>Add Expense</button>
+        {isAdmin && <button onClick={openCreate} className={BTN.primary}>Add Expense</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -184,7 +185,7 @@ export default function ExpenseTracker() {
                   <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(exp.gross_amount)}</td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(exp.status, EXPENSE_STATUSES)]}>{getLabel(exp.status, EXPENSE_STATUSES)}</span></td>
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
-                    {exp.status === 'pending' && exp.created_by !== user?.username && (
+                    {isAdmin && exp.status === 'pending' && exp.created_by !== user?.username && (
                       <button onClick={() => handleApprove(exp)} className={`${BTN.success} ${BTN.xs}`}>Approve</button>
                     )}
                   </td>
@@ -267,7 +268,7 @@ export default function ExpenseTracker() {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {!readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
+              {isAdmin && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
             </div>
           </div>
         </div>

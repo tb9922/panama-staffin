@@ -5,7 +5,7 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getPolicies, createPolicy, updatePolicy, deletePolicy,
+  getCurrentHome, getLoggedInUser, getPolicies, createPolicy, updatePolicy, deletePolicy,
 } from '../lib/api.js';
 import {
   getPolicyStatus, getPolicyStats,
@@ -27,6 +27,7 @@ const EMPTY_FORM = {
 };
 
 export default function PolicyReviewTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -260,7 +261,7 @@ export default function PolicyReviewTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>
+          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
         </div>
       </div>
 
@@ -321,7 +322,7 @@ export default function PolicyReviewTracker() {
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);
                 return (
-                  <tr key={policy.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(policy)}>
+                  <tr key={policy.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(policy)}>
                     <td className={TABLE.td}>{policy.policy_name}</td>
                     <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
                     <td className={TABLE.td}>{policy.version}</td>
@@ -433,16 +434,18 @@ export default function PolicyReviewTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && (
+              {isAdmin && editingId && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
-              {editingId && (
+              {isAdmin && editingId && (
                 <button onClick={handleMarkReviewed} className={BTN.success}>Mark as Reviewed</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={!form.policy_name} className={BTN.primary}>
-                {editingId ? 'Update' : 'Save'}
-              </button>
+              {isAdmin && (
+                <button onClick={handleSave} disabled={!form.policy_name} className={BTN.primary}>
+                  {editingId ? 'Update' : 'Save'}
+                </button>
+              )}
             </div>
       </Modal>
     </div>

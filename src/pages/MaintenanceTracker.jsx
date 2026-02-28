@@ -9,7 +9,7 @@ import {
   getMaintenanceStatus, MAINTENANCE_STATUSES, FREQUENCY_OPTIONS, DEFAULT_MAINTENANCE_CATEGORIES,
 } from '../lib/maintenance.js';
 import {
-  getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
+  getCurrentHome, getLoggedInUser, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
 } from '../lib/api.js';
 
 const EMPTY_FORM = {
@@ -20,6 +20,7 @@ const EMPTY_FORM = {
 };
 
 export default function MaintenanceTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [checks, setChecks] = useState([]);
   const [maintenanceCategories, setMaintenanceCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -171,7 +172,7 @@ export default function MaintenanceTracker() {
         <h1 className={PAGE.title}>Maintenance & Environment</h1>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>
+          {isAdmin && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
 
@@ -247,7 +248,7 @@ export default function MaintenanceTracker() {
                   </td>
                   <td className={TABLE.td}>{m.certificate_ref || '--'}</td>
                   <td className={TABLE.td}>
-                    <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>
+                    {isAdmin && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                   </td>
                 </tr>
               ))}
@@ -361,10 +362,10 @@ export default function MaintenanceTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              {editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {isAdmin && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary}>Save</button>
+              {isAdmin && <button onClick={handleSave} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
     </div>

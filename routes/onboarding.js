@@ -13,7 +13,7 @@ const sectionSchema = z.enum([
 ]);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
-// Onboarding section data — each section has different fields but common patterns
+// Onboarding section data — strict schema, only known fields accepted
 const onboardingSectionSchema = z.object({
   status:         z.enum(['not_started', 'in_progress', 'completed', 'na']).optional(),
   date:           dateSchema.optional(),
@@ -22,7 +22,7 @@ const onboardingSectionSchema = z.object({
   notes:          z.string().max(5000).nullable().optional(),
   verified_by:    z.string().max(200).nullable().optional(),
   verified_date:  dateSchema.optional(),
-}).catchall(z.union([z.string().max(5000), z.boolean(), z.number(), z.null()]));
+}).strict();
 
 // GET /api/onboarding?home=X
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
