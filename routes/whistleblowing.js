@@ -5,6 +5,7 @@ import * as whistleblowingRepo from '../repositories/whistleblowingRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -38,7 +39,8 @@ const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial(
 // GET /api/whistleblowing?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const concernsResult = await whistleblowingRepo.findByHome(req.home.id);
+    const pg = paginationSchema.parse(req.query);
+    const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const concerns = concernsResult.rows;
     // Strip raised_by_role from anonymous concerns to prevent de-anonymisation
     const safe = concerns.map(c => {
@@ -48,7 +50,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
       }
       return c;
     });
-    res.json({ concerns: safe });
+    res.json({ concerns: safe, _total: concernsResult.total });
   } catch (err) { next(err); }
 });
 

@@ -5,6 +5,7 @@ import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -45,15 +46,16 @@ const mcaUpdateSchema = mcaBodySchema.partial();
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [dolsResult, mcaResult] = await Promise.all([
-      dolsRepo.findByHome(req.home.id),
-      dolsRepo.findMcaByHome(req.home.id),
+      dolsRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      dolsRepo.findMcaByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
     // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
     const isAdmin = req.user.role === 'admin';
     const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob: _dob, ...rest }) => rest);
     const mcaAssessments = mcaResult.rows;
-    res.json({ dols, mcaAssessments });
+    res.json({ dols, mcaAssessments, _total: dolsResult.total });
   } catch (err) { next(err); }
 });
 

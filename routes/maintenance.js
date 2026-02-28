@@ -5,6 +5,7 @@ import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -31,10 +32,11 @@ const maintenanceUpdateSchema = maintenanceBodySchema.partial();
 // GET /api/maintenance?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const checksResult = await maintenanceRepo.findByHome(req.home.id);
+    const pg = paginationSchema.parse(req.query);
+    const checksResult = await maintenanceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const checks = checksResult.rows;
     const maintenanceCategories = req.home.config?.maintenance_categories || [];
-    res.json({ checks, maintenanceCategories });
+    res.json({ checks, maintenanceCategories, _total: checksResult.total });
   } catch (err) { next(err); }
 });
 

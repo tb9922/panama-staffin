@@ -6,6 +6,7 @@ import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -50,14 +51,15 @@ const surveyUpdateSchema = surveyBodySchema.partial();
 // GET /api/complaints?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [complaintsResult, surveysResult] = await Promise.all([
-      complaintRepo.findByHome(req.home.id),
-      complaintSurveyRepo.findByHome(req.home.id),
+      complaintRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      complaintSurveyRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
     const complaints = complaintsResult.rows;
     const surveys = surveysResult.rows;
     const complaintCategories = req.home.config?.complaint_categories || [];
-    res.json({ complaints, surveys, complaintCategories });
+    res.json({ complaints, surveys, complaintCategories, _total: complaintsResult.total });
   } catch (err) { next(err); }
 });
 

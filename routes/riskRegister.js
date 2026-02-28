@@ -5,6 +5,7 @@ import * as riskRepo from '../repositories/riskRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -42,8 +43,9 @@ const riskUpdateSchema = riskBodySchema.partial();
 // GET /api/risk-register?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const risksResult = await riskRepo.findByHome(req.home.id);
-    res.json({ risks: risksResult.rows });
+    const pg = paginationSchema.parse(req.query);
+    const risksResult = await riskRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
+    res.json({ risks: risksResult.rows, _total: risksResult.total });
   } catch (err) { next(err); }
 });
 

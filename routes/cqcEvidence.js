@@ -5,6 +5,7 @@ import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -24,8 +25,9 @@ const evidenceUpdateSchema = evidenceBodySchema.partial();
 // GET /api/cqc-evidence?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id);
-    res.json({ evidence: evidenceResult.rows });
+    const pg = paginationSchema.parse(req.query);
+    const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
+    res.json({ evidence: evidenceResult.rows, _total: evidenceResult.total });
   } catch (err) { next(err); }
 });
 

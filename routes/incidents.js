@@ -6,6 +6,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -76,14 +77,15 @@ const incidentUpdateSchema = incidentBodySchema.partial();
 // GET /api/incidents?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [incidentsResult, staffResult] = await Promise.all([
-      incidentRepo.findByHome(req.home.id),
+      incidentRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       staffRepo.findByHome(req.home.id),
     ]);
     const incidents = incidentsResult.rows;
     const incidentTypes = req.home.config?.incident_types || [];
     const staff = staffResult.rows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
-    res.json({ incidents, incidentTypes, staff });
+    res.json({ incidents, incidentTypes, staff, _total: incidentsResult.total });
   } catch (err) { next(err); }
 });
 

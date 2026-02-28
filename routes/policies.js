@@ -5,6 +5,7 @@ import * as policyRepo from '../repositories/policyRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -34,8 +35,9 @@ const policyUpdateSchema = policyBodySchema.partial();
 // GET /api/policies?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const policiesResult = await policyRepo.findByHome(req.home.id);
-    res.json({ policies: policiesResult.rows });
+    const pg = paginationSchema.parse(req.query);
+    const policiesResult = await policyRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
+    res.json({ policies: policiesResult.rows, _total: policiesResult.total });
   } catch (err) { next(err); }
 });
 

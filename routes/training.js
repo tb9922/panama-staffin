@@ -9,6 +9,7 @@ import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -87,10 +88,11 @@ const fireDrillSchema = z.object({
 // GET /api/training?home=X — one-shot load for TrainingMatrix
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [trainingResult, supervisionsResult, appraisalsResult, fireDrills, staffResult] = await Promise.all([
-      trainingRepo.findByHome(req.home.id),
-      supervisionRepo.findByHome(req.home.id),
-      appraisalRepo.findByHome(req.home.id),
+      trainingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      supervisionRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      appraisalRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       fireDrillRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
