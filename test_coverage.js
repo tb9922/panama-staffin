@@ -426,7 +426,18 @@ sub('6d. S007 SICK impact');
 
 sub('6e. Bank holidays');
 {
-  warn('BH shifts not auto-upgraded to BH-D/BH-N','BH premium requires manual override');
+  // Verify BH auto-upgrade works — getStaffForDay upgrades working shifts to BH-D/BH-N on BH dates
+  // Use a BH after the cycle start date so staff are actually scheduled
+  const cycleStart = CONFIG.cycle_start_date || '2025-01-06';
+  const futureBH = (CONFIG.bank_holidays || []).find(bh => bh.date >= cycleStart);
+  if (futureBH) {
+    const sf = getStaffForDay(STAFF, parseDate(futureBH.date), {}, CONFIG);
+    const bhShifts = sf.filter(s => s.shift === 'BH-D' || s.shift === 'BH-N');
+    assert(bhShifts.length > 0, 'BH auto-upgrade produces BH-D/BH-N shifts on ' + futureBH.date);
+    console.log('  BH auto-upgrade working: ' + bhShifts.length + ' staff upgraded on ' + futureBH.date + ' (' + futureBH.name + ')');
+  } else {
+    console.log('  No future bank holidays configured — skipping BH upgrade test');
+  }
 }
 
 sub('6f. Feb 2026 grid');

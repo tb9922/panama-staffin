@@ -8,6 +8,7 @@ import {
 import {
   getDayCoverageStatus, calculateDayCost, checkFatigueRisk, validateSwap,
 } from '../lib/escalation.js';
+import { calculateAccrual } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
 import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
@@ -799,9 +800,24 @@ export default function DailyStatus() {
                 {modal === 'al' && alCount >= schedData.config.max_al_same_day && (
                   <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
                 )}
+                {modal === 'al' && selectedStaff && (() => {
+                  const staff = schedData.staff.find(s => s.id === selectedStaff);
+                  if (!staff) return null;
+                  const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
+                  if (accrual.remaining <= 0) {
+                    return <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">
+                      No AL remaining ({accrual.accrued.toFixed(1)} earned, {accrual.used} used)
+                    </div>;
+                  }
+                  return <div className="text-xs text-gray-500">AL: {accrual.remaining.toFixed(1)} days remaining</div>;
+                })()}
                 <div className={MODAL.footer}>
                   <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day)} onClick={() => {
+                  <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day) || (modal === 'al' && selectedStaff && (() => {
+                    const staff = schedData.staff.find(s => s.id === selectedStaff);
+                    if (!staff) return false;
+                    return calculateAccrual(staff, schedData.config, schedData.overrides, currentDate).remaining <= 0;
+                  })())} onClick={() => {
                     if (modal === 'sick') applySickOverride(selectedStaff);
                     else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');
                     else {

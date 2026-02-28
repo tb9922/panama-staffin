@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { pool } from '../db.js';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
@@ -9,6 +10,68 @@ import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
+
+/**
+ * Validate an AL override before allowing it.
+ * Checks max_al_same_day and per-staff entitlement.
+ * Returns error string or null if valid.
+ */
+async function validateALOverride(homeId, config, date, staffId) {
+  // 1. Check max AL per day (excluding this staff's existing override on this date)
+  const maxAL = config?.max_al_same_day || 2;
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS cnt FROM shift_overrides
+     WHERE home_id = $1 AND date = $2 AND shift = 'AL' AND staff_id != $3`,
+    [homeId, date, staffId]
+  );
+  if (countRows[0].cnt >= maxAL) {
+    return `Max AL per day (${maxAL}) already reached on ${date}`;
+  }
+
+  // 2. Check staff entitlement in current leave year
+  const leaveYearStart = config?.leave_year_start || '04-01';
+  const [lyMM, lyDD] = leaveYearStart.split('-').map(Number);
+  const now = new Date();
+  const thisYearBoundary = new Date(Date.UTC(now.getUTCFullYear(), lyMM - 1, lyDD));
+  let lyStartStr, lyEndStr;
+  if (now >= thisYearBoundary) {
+    lyStartStr = thisYearBoundary.toISOString().slice(0, 10);
+    const nextBoundary = new Date(Date.UTC(now.getUTCFullYear() + 1, lyMM - 1, lyDD));
+    nextBoundary.setUTCDate(nextBoundary.getUTCDate() - 1);
+    lyEndStr = nextBoundary.toISOString().slice(0, 10);
+  } else {
+    const prevBoundary = new Date(Date.UTC(now.getUTCFullYear() - 1, lyMM - 1, lyDD));
+    lyStartStr = prevBoundary.toISOString().slice(0, 10);
+    const endBoundary = new Date(thisYearBoundary);
+    endBoundary.setUTCDate(endBoundary.getUTCDate() - 1);
+    lyEndStr = endBoundary.toISOString().slice(0, 10);
+  }
+
+  // Count existing AL for this staff in the leave year
+  const { rows: alRows } = await pool.query(
+    `SELECT COUNT(*)::int AS cnt FROM shift_overrides
+     WHERE home_id = $1 AND staff_id = $2 AND shift = 'AL'
+       AND date >= $3 AND date <= $4`,
+    [homeId, staffId, lyStartStr, lyEndStr]
+  );
+  const alUsed = alRows[0].cnt;
+
+  // Get staff entitlement
+  const { rows: staffRows } = await pool.query(
+    `SELECT al_entitlement, al_carryover FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    [homeId, staffId]
+  );
+  if (staffRows.length === 0) return null; // agency/unknown staff — skip entitlement check
+  const staff = staffRows[0];
+  const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days || 28);
+  const entitlement = base + (staff.al_carryover || 0);
+
+  if (alUsed >= entitlement) {
+    return `Staff has used ${alUsed} of ${entitlement} AL days — no entitlement remaining`;
+  }
+
+  return null;
+}
 
 const VALID_SHIFTS = [
   'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
@@ -68,6 +131,10 @@ router.put('/overrides', requireAuth, requireAdmin, requireHomeAccess, async (re
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, staffId, shift, reason, source, sleep_in } = parsed.data;
+    if (shift === 'AL') {
+      const alError = await validateALOverride(req.home.id, req.home.config, date, staffId);
+      if (alError) return res.status(400).json({ error: alError });
+    }
     await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
     await auditService.log('override_upsert', req.home.slug, req.user.username, { date, staffId, shift });
     res.json({ ok: true });
@@ -111,6 +178,12 @@ router.post('/overrides/bulk', requireAuth, requireAdmin, requireHomeAccess, asy
   try {
     const parsed = bulkBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    // Validate AL overrides before bulk upsert
+    const alOverrides = parsed.data.overrides.filter(o => o.shift === 'AL');
+    for (const o of alOverrides) {
+      const alError = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId);
+      if (alError) return res.status(400).json({ error: alError });
+    }
     await overrideRepo.upsertBulk(req.home.id, parsed.data.overrides);
     await auditService.log('override_bulk_upsert', req.home.slug, req.user.username, { count: parsed.data.overrides.length });
     res.json({ ok: true, count: parsed.data.overrides.length });
