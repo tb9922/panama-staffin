@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import * as homeRepo from '../repositories/homeRepo.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 
@@ -86,79 +86,58 @@ const dpComplaintUpdateSchema = z.object({
   resolution_date: dateSchema.optional(),
 });
 
-// ── Helper ───────────────────────────────────────────────────────────────────
-
-async function resolveHome(req, res) {
-  const parsed = homeIdSchema.safeParse(req.query.home);
-  if (!parsed.success) { res.status(400).json({ error: 'Invalid home parameter' }); return null; }
-  if (!parsed.data)    { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(parsed.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  return home;
-}
-
 // ── Data Requests (SAR/Erasure/etc.) ─────────────────────────────────────────
 
 // GET /api/gdpr/requests?home=X
-router.get('/requests', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/requests', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await gdprService.findRequests(home.id));
+    res.json(await gdprService.findRequests(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/requests?home=X
-router.post('/requests', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/requests', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = requestBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createRequest(home.id, parsed.data));
+    res.status(201).json(await gdprService.createRequest(req.home.id, parsed.data));
   } catch (err) { next(err); }
 });
 
 // PUT /api/gdpr/requests/:id?home=X
-router.put('/requests/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/requests/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = requestUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateRequest(idP.data, home.id, parsed.data);
+    const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Request not found' });
     res.json(result);
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/requests/:id/gather — trigger SAR data export
-router.post('/requests/:id/gather', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/requests/:id/gather', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const request = await gdprService.findRequestById(idP.data);
-    if (!request || request.home_id !== home.id) return res.status(404).json({ error: 'Request not found' });
-    const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, home.id, null, request.subject_name);
-    await auditService.log('sar_gather', home.slug, req.user.username,
+    if (!request || request.home_id !== req.home.id) return res.status(404).json({ error: 'Request not found' });
+    const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, req.home.id, null, request.subject_name);
+    await auditService.log('sar_gather', req.home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
     res.json(data);
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/requests/:id/execute — execute erasure
-router.post('/requests/:id/execute', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/requests/:id/execute', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const request = await gdprService.findRequestById(idP.data);
-    if (!request || request.home_id !== home.id) return res.status(404).json({ error: 'Request not found' });
+    if (!request || request.home_id !== req.home.id) return res.status(404).json({ error: 'Request not found' });
     if (request.request_type !== 'erasure') {
       return res.status(400).json({ error: 'Only erasure requests can be executed' });
     }
@@ -166,7 +145,7 @@ router.post('/requests/:id/execute', requireAuth, requireAdmin, async (req, res,
       return res.status(400).json({ error: 'Identity must be verified before erasure' });
     }
     const result = await gdprService.executeErasure(
-      request.subject_id, home.id, idP.data, req.user.username, home.slug
+      request.subject_id, req.home.id, idP.data, req.user.username, req.home.slug
     );
     res.json(result);
   } catch (err) { next(err); }
@@ -175,56 +154,47 @@ router.post('/requests/:id/execute', requireAuth, requireAdmin, async (req, res,
 // ── Data Breaches ────────────────────────────────────────────────────────────
 
 // GET /api/gdpr/breaches?home=X
-router.get('/breaches', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await gdprService.findBreaches(home.id));
+    res.json(await gdprService.findBreaches(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/breaches?home=X
-router.post('/breaches', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = breachBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createBreach(home.id, parsed.data));
+    res.status(201).json(await gdprService.createBreach(req.home.id, parsed.data));
   } catch (err) { next(err); }
 });
 
 // PUT /api/gdpr/breaches/:id?home=X
-router.put('/breaches/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/breaches/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
     const parsed = breachUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateBreach(idP.data, home.id, parsed.data);
+    const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Breach not found' });
     res.json(result);
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/breaches/:id/assess — risk assessment
-router.post('/breaches/:id/assess', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/breaches/:id/assess', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const breach = await gdprService.findBreachById(idP.data, home.id);
+    const breach = await gdprService.findBreachById(idP.data, req.home.id);
     if (!breach) return res.status(404).json({ error: 'Breach not found' });
     const assessment = gdprService.assessBreachRisk(breach);
-    // Auto-update breach with assessment results + ICO notification deadline
     const updates = { ico_notifiable: assessment.icoNotifiable };
     if (assessment.icoNotifiable && assessment.icoDeadline) {
       updates.ico_notification_deadline = assessment.icoDeadline;
     }
-    await gdprService.updateBreach(idP.data, home.id, updates);
+    await gdprService.updateBreach(idP.data, req.home.id, updates);
     res.json(assessment);
   } catch (err) { next(err); }
 });
@@ -235,8 +205,9 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, async (req, res, 
 router.get('/retention', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     if (req.query.scan === 'true') {
-      const home = await resolveHome(req, res);
-      if (!home) return;
+      if (!req.query.home) return res.status(400).json({ error: 'home parameter required for scan' });
+      const home = await homeRepo.findBySlug(req.query.home);
+      if (!home) return res.status(404).json({ error: 'Home not found' });
       res.json(await gdprService.scanRetention(home.id));
     } else {
       res.json(await gdprService.getRetentionSchedule());
@@ -247,30 +218,24 @@ router.get('/retention', requireAuth, requireAdmin, async (req, res, next) => {
 // ── Consent Records ──────────────────────────────────────────────────────────
 
 // GET /api/gdpr/consent?home=X
-router.get('/consent', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await gdprService.findConsent(home.id));
+    res.json(await gdprService.findConsent(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/consent?home=X
-router.post('/consent', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = consentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createConsent(home.id, parsed.data));
+    res.status(201).json(await gdprService.createConsent(req.home.id, parsed.data));
   } catch (err) { next(err); }
 });
 
 // PUT /api/gdpr/consent/:id?home=X
-router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/consent/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid consent ID' });
     const parsed = z.object({
@@ -278,7 +243,7 @@ router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => 
       notes: z.string().max(2000).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateConsent(idP.data, home.id, parsed.data);
+    const result = await gdprService.updateConsent(idP.data, req.home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Consent record not found' });
     res.json(result);
   } catch (err) { next(err); }
@@ -287,35 +252,29 @@ router.put('/consent/:id', requireAuth, requireAdmin, async (req, res, next) => 
 // ── DP Complaints ────────────────────────────────────────────────────────────
 
 // GET /api/gdpr/complaints?home=X
-router.get('/complaints', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await gdprService.findDPComplaints(home.id));
+    res.json(await gdprService.findDPComplaints(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/complaints?home=X
-router.post('/complaints', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = dpComplaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createDPComplaint(home.id, parsed.data));
+    res.status(201).json(await gdprService.createDPComplaint(req.home.id, parsed.data));
   } catch (err) { next(err); }
 });
 
 // PUT /api/gdpr/complaints/:id?home=X
-router.put('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid complaint ID' });
     const parsed = dpComplaintUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateDPComplaint(idP.data, home.id, parsed.data);
+    const result = await gdprService.updateDPComplaint(idP.data, req.home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Complaint not found' });
     res.json(result);
   } catch (err) { next(err); }

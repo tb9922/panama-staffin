@@ -1,106 +1,123 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import * as homeRepo from '../repositories/homeRepo.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 
 const router = Router();
-
-const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).optional();
 const idSchema = z.string().min(1).max(100);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
-async function resolveHome(req, res) {
-  const p = homeIdSchema.safeParse(req.query.home);
-  if (!p.success || !p.data) { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(p.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  return home;
-}
+const complaintBodySchema = z.object({
+  date:                dateSchema,
+  raised_by:           z.string().max(100).nullable().optional(),
+  raised_by_name:      z.string().max(200).nullable().optional(),
+  category:            z.string().max(100).nullable().optional(),
+  title:               z.string().min(1).max(500),
+  description:         z.string().max(10000).nullable().optional(),
+  acknowledged_date:   dateSchema.optional(),
+  response_deadline:   dateSchema.optional(),
+  status:              z.enum(['open', 'acknowledged', 'investigating', 'resolved', 'closed']).optional(),
+  investigator:        z.string().max(200).nullable().optional(),
+  investigation_notes: z.string().max(10000).nullable().optional(),
+  resolution:          z.string().max(10000).nullable().optional(),
+  resolution_date:     dateSchema.optional(),
+  outcome_shared:      z.boolean().optional(),
+  root_cause:          z.string().max(5000).nullable().optional(),
+  improvements:        z.string().max(5000).nullable().optional(),
+  lessons_learned:     z.string().max(5000).nullable().optional(),
+});
+const complaintUpdateSchema = complaintBodySchema.partial();
+
+const surveyBodySchema = z.object({
+  type:                 z.string().max(100).nullable().optional(),
+  date:                 dateSchema,
+  title:                z.string().min(1).max(500),
+  total_sent:           z.coerce.number().int().min(0).nullable().optional(),
+  responses:            z.coerce.number().int().min(0).nullable().optional(),
+  overall_satisfaction: z.coerce.number().min(1).max(5).nullable().optional(),
+  area_scores:          z.record(z.string(), z.coerce.number()).optional(),
+  key_feedback:         z.string().max(10000).nullable().optional(),
+  actions:              z.string().max(10000).nullable().optional(),
+  conducted_by:         z.string().max(200).nullable().optional(),
+});
+const surveyUpdateSchema = surveyBodySchema.partial();
 
 // GET /api/complaints?home=X
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const [complaints, surveys] = await Promise.all([
-      complaintRepo.findByHome(home.id),
-      complaintSurveyRepo.findByHome(home.id),
+      complaintRepo.findByHome(req.home.id),
+      complaintSurveyRepo.findByHome(req.home.id),
     ]);
-    const complaintCategories = home.config?.complaint_categories || [];
+    const complaintCategories = req.home.config?.complaint_categories || [];
     res.json({ complaints, surveys, complaintCategories });
   } catch (err) { next(err); }
 });
 
 // POST /api/complaints?home=X
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    if (!req.body?.title || !req.body?.date) return res.status(400).json({ error: 'title and date are required' });
-    const complaint = await complaintRepo.upsert(home.id, { ...req.body, reported_by: req.user.username });
+    const parsed = complaintBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
     res.status(201).json(complaint);
   } catch (err) { next(err); }
 });
 
 // PUT /api/complaints/complaints/:id?home=X
-router.put('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const complaint = await complaintRepo.upsert(home.id, { ...req.body, id: idParsed.data });
+    const parsed = complaintUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
     if (!complaint) return res.status(404).json({ error: 'Not found' });
     res.json(complaint);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/complaints/complaints/:id?home=X
-router.delete('/complaints/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const deleted = await complaintRepo.softDelete(idParsed.data, home.id);
+    const deleted = await complaintRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
 // POST /api/complaints/surveys?home=X
-router.post('/surveys', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    if (!req.body?.title || !req.body?.date) return res.status(400).json({ error: 'title and date are required' });
-    const survey = await complaintSurveyRepo.upsert(home.id, req.body);
+    const parsed = surveyBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const survey = await complaintSurveyRepo.upsert(req.home.id, parsed.data);
     res.status(201).json(survey);
   } catch (err) { next(err); }
 });
 
 // PUT /api/complaints/surveys/:id?home=X
-router.put('/surveys/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const survey = await complaintSurveyRepo.upsert(home.id, { ...req.body, id: idParsed.data });
+    const parsed = surveyUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const survey = await complaintSurveyRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
     if (!survey) return res.status(404).json({ error: 'Not found' });
     res.json(survey);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/complaints/surveys/:id?home=X
-router.delete('/surveys/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const deleted = await complaintSurveyRepo.softDelete(idParsed.data, home.id);
+    const deleted = await complaintSurveyRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (err) { next(err); }

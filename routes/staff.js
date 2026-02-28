@@ -1,65 +1,73 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import * as homeRepo from '../repositories/homeRepo.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import { withTransaction } from '../db.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
-const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).optional();
 const staffIdSchema = z.string().min(1).max(20);
 
-async function resolveHome(req, res) {
-  const p = homeIdSchema.safeParse(req.query.home);
-  if (!p.success || !p.data) { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(p.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  return home;
-}
+const STAFF_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
+const STAFF_TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
+
+const staffBodySchema = z.object({
+  id:              z.string().min(1).max(20),
+  name:            z.string().min(1).max(200),
+  role:            z.enum(STAFF_ROLES),
+  team:            z.enum(STAFF_TEAMS),
+  pref:            z.enum(['E', 'L', 'EL']).nullable().optional(),
+  skill:           z.number().int().min(0).max(5).optional(),
+  hourly_rate:     z.number().positive().optional(),
+  active:          z.boolean().optional(),
+  wtr_opt_out:     z.boolean().optional(),
+  start_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  contract_hours:  z.number().min(0).nullable().optional(),
+  date_of_birth:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  ni_number:       z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional(),
+  al_entitlement:  z.number().int().min(0).nullable().optional(),
+  al_carryover:    z.number().int().min(0).optional(),
+  leaving_date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+const staffUpdateSchema = staffBodySchema.partial();
 
 // POST /api/staff?home=X — create a new staff member
 // Client generates the ID (format "S001", "S002" etc.) — server accepts it as-is
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    if (!req.body?.id || !req.body?.name) {
-      return res.status(400).json({ error: 'id and name are required' });
-    }
-    const staff = await staffRepo.upsertOne(home.id, req.body);
-    await auditService.log('staff_create', home.slug, req.user.username, { staff_id: req.body.id });
+    const parsed = staffBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const staff = await staffRepo.upsertOne(req.home.id, parsed.data);
+    await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: parsed.data.id });
     res.status(201).json(staff);
   } catch (err) { next(err); }
 });
 
 // PUT /api/staff/:staffId?home=X — update a staff member
-router.put('/:staffId', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const staff = await staffRepo.upsertOne(home.id, { ...req.body, id: idParsed.data });
+    const parsed = staffUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, parsed.data);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     res.json(staff);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/staff/:staffId?home=X — soft-delete staff + remove their overrides
-router.delete('/:staffId', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
     await withTransaction(async (client) => {
-      const deleted = await staffRepo.softDeleteOne(home.id, idParsed.data);
+      const deleted = await staffRepo.softDeleteOne(req.home.id, idParsed.data);
       if (!deleted) throw Object.assign(new Error('Staff member not found'), { status: 404 });
-      await overrideRepo.deleteForStaff(home.id, idParsed.data, client);
+      await overrideRepo.deleteForStaff(req.home.id, idParsed.data, client);
     });
-    await auditService.log('staff_delete', home.slug, req.user.username, { staff_id: idParsed.data });
+    await auditService.log('staff_delete', req.home.slug, req.user.username, { staff_id: idParsed.data });
     res.json({ ok: true });
   } catch (err) {
     if (err.status === 404) return res.status(404).json({ error: err.message });

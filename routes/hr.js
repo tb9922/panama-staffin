@@ -7,15 +7,13 @@ import crypto from 'crypto';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
 import rateLimit from 'express-rate-limit';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import { config } from '../config.js';
-import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as hrService from '../services/hrService.js';
 import * as hrRepo from '../repositories/hrRepo.js';
 import * as auditService from '../services/auditService.js';
 import * as auditRepo from '../repositories/auditRepo.js';
-import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import {
   mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
   mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
@@ -67,7 +65,6 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.m
 
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
-const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const staffIdSchema = z.string().min(1).max(20);
@@ -642,43 +639,37 @@ function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapF
   const prefix = auditPrefix || type;
 
   // GET list
-  router.get(path, requireAuth, requireAdmin, async (req, res, next) => {
+  router.get(path, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
     try {
-      const home = await resolveHome(req, res);
-      if (!home) return;
       const f = {};
       for (const [queryParam, filterKey] of Object.entries(filters || {})) {
         if (req.query[queryParam]) f[filterKey] = req.query[queryParam];
       }
       const pag = { limit: req.query.limit, offset: req.query.offset };
-      const result = await repoFind(home.id, f, null, pag);
+      const result = await repoFind(req.home.id, f, null, pag);
       res.json(result);
     } catch (err) { next(err); }
   });
 
   // POST create
-  router.post(path, requireAuth, requireAdmin, async (req, res, next) => {
+  router.post(path, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
     try {
-      const home = await resolveHome(req, res);
-      if (!home) return;
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
       const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
-      const result = await repoCreate(home.id, { ...mapped, created_by: req.user.username });
-      await auditService.log(`hr_${prefix}_create`, home.slug, req.user.username, { id: result.id });
+      const result = await repoCreate(req.home.id, { ...mapped, created_by: req.user.username });
+      await auditService.log(`hr_${prefix}_create`, req.home.slug, req.user.username, { id: result.id });
       res.status(201).json(result);
     } catch (err) { next(err); }
   });
 
   // GET by ID
   if (hasGetById) {
-    router.get(`${path}/:id`, requireAuth, requireAdmin, async (req, res, next) => {
+    router.get(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
       try {
-        const home = await resolveHome(req, res);
-        if (!home) return;
         const parsed = idSchema.safeParse(req.params.id);
         if (!parsed.success) return res.status(400).json({ error: 'Invalid case ID' });
-        const row = await repoFindById(parsed.data, home.id);
+        const row = await repoFindById(parsed.data, req.home.id);
         if (!row) return res.status(404).json({ error: `${type} case not found` });
         res.json(row);
       } catch (err) { next(err); }
@@ -686,50 +677,32 @@ function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapF
   }
 
   // PUT update — with optimistic locking + field-diff audit
-  router.put(`${path}/:id`, requireAuth, requireAdmin, async (req, res, next) => {
+  router.put(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
     try {
-      const home = await resolveHome(req, res);
-      if (!home) return;
       const idParsed = idSchema.safeParse(req.params.id);
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
 
       const version = req.body._version != null ? parseInt(req.body._version) : null;
-      const existing = repoFindById ? await repoFindById(idParsed.data, home.id) : null;
+      const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
       if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
 
       const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
-      const result = await repoUpdate(idParsed.data, home.id, mapped, null, version);
+      const result = await repoUpdate(idParsed.data, req.home.id, mapped, null, version);
       if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
 
       const changes = existing ? diffFields(existing, result) : [];
-      await auditService.log(`hr_${prefix}_update`, home.slug, req.user.username, { id: result.id, changes });
+      await auditService.log(`hr_${prefix}_update`, req.home.slug, req.user.username, { id: result.id, changes });
       res.json(result);
     } catch (err) { next(err); }
   });
 }
 
-// ── Helper ──────────────────────────────────────────────────────────────────
-
-async function resolveHome(req, res) {
-  const parsed = homeIdSchema.safeParse(req.query.home);
-  if (!parsed.success) { res.status(400).json({ error: 'Invalid home parameter' }); return null; }
-  if (!parsed.data)    { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(parsed.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  // Per-home authorization — verify the user has access to this specific home
-  const allowed = await userHomeRepo.hasAccess(req.user.username, home.id);
-  if (!allowed) { res.status(403).json({ error: 'You do not have access to this home' }); return null; }
-  return home;
-}
-
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
-router.get('/staff', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/staff', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const staff = await staffRepo.findByHome(home.id);
+    const staff = await staffRepo.findByHome(req.home.id);
     res.json(staff.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
   } catch (err) { next(err); }
 });
@@ -757,43 +730,37 @@ registerCaseRoutes(router, {
 // ── Grievance Actions ───────────────────────────────────────────────────────
 
 // GET /api/hr/cases/grievance/:id/actions?home=X
-router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    res.json(await hrRepo.findGrievanceActions(idP.data, home.id));
+    res.json(await hrRepo.findGrievanceActions(idP.data, req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/hr/cases/grievance/:id/actions?home=X
-router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = grievanceActionBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.createGrievanceAction(idP.data, home.id, parsed.data);
-    await auditService.log('hr_grievance_action_create', home.slug, req.user.username, { id: result.id });
+    const result = await hrRepo.createGrievanceAction(idP.data, req.home.id, parsed.data);
+    await auditService.log('hr_grievance_action_create', req.home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
 // PUT /api/hr/grievance-actions/:id?home=X
-router.put('/grievance-actions/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/grievance-actions/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
     const parsed = grievanceActionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.updateGrievanceAction(idP.data, home.id, parsed.data);
+    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, parsed.data);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
-    await auditService.log('hr_grievance_action_update', home.slug, req.user.username, { id: result.id });
+    await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, { id: result.id });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -810,22 +777,18 @@ registerCaseRoutes(router, {
 // ── Absence ─────────────────────────────────────────────────────────────────
 
 // GET /api/hr/absence/summary?home=X
-router.get('/absence/summary', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/absence/summary', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await hrService.calculateBradfordScores(home.id));
+    res.json(await hrService.calculateBradfordScores(req.home.id));
   } catch (err) { next(err); }
 });
 
 // GET /api/hr/absence/staff/:staffId?home=X
-router.get('/absence/staff/:staffId', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/absence/staff/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const staffIdP = staffIdSchema.safeParse(req.params.staffId);
     if (!staffIdP.success) return res.status(400).json({ error: 'Invalid staff ID' });
-    res.json(await hrService.getAbsenceSummary(home.id, staffIdP.data));
+    res.json(await hrService.getAbsenceSummary(req.home.id, staffIdP.data));
   } catch (err) { next(err); }
 });
 
@@ -909,54 +872,46 @@ registerCaseRoutes(router, {
 // ── Cross-cutting: Warnings & Stats ─────────────────────────────────────────
 
 // GET /api/hr/warnings?home=X
-router.get('/warnings', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/warnings', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await hrService.getActiveWarnings(home.id));
+    res.json(await hrService.getActiveWarnings(req.home.id));
   } catch (err) { next(err); }
 });
 
 // GET /api/hr/stats?home=X
-router.get('/stats', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/stats', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await hrService.getHrStats(home.id));
+    res.json(await hrService.getHrStats(req.home.id));
   } catch (err) { next(err); }
 });
 
 // ── Case Notes ──────────────────────────────────────────────────────────────
 
 // GET /api/hr/case-notes/:caseType/:caseId?home=X
-router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const caseTypeP = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseIdP = idSchema.safeParse(req.params.caseId);
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    res.json(await hrRepo.findCaseNotes(home.id, caseTypeP.data, caseIdP.data));
+    res.json(await hrRepo.findCaseNotes(req.home.id, caseTypeP.data, caseIdP.data));
   } catch (err) { next(err); }
 });
 
 // POST /api/hr/case-notes/:caseType/:caseId?home=X
-router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const caseTypeP = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseIdP = idSchema.safeParse(req.params.caseId);
     if (!caseIdP.success) return res.status(400).json({ error: 'Invalid case ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = caseNoteBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.createCaseNote(home.id, caseTypeP.data, caseIdP.data, {
+    const result = await hrRepo.createCaseNote(req.home.id, caseTypeP.data, caseIdP.data, {
       author: req.user.username,
       content: parsed.data.note,
     });
-    await auditService.log('hr_case_note_create', home.slug, req.user.username, { id: result.id });
+    await auditService.log('hr_case_note_create', req.home.slug, req.user.username, { id: result.id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -964,30 +919,26 @@ router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, async (r
 // ── File Attachments ────────────────────────────────────────────────────────
 
 // GET /api/hr/attachments/:caseType/:caseId?home=X
-router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = caseTypeSchema.safeParse(req.params.caseType);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-    const files = await hrRepo.findAttachments(parsed.data, caseId, home.id);
+    const files = await hrRepo.findAttachments(parsed.data, caseId, req.home.id);
     res.json(files);
   } catch (err) { next(err); }
 });
 
 // POST /api/hr/attachments/:caseType/:caseId?home=X
-router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    // Validate home and caseType BEFORE multer writes any bytes to disk
-    const home = await resolveHome(req, res);
-    if (!home) return;
+    // Validate caseType BEFORE multer writes any bytes to disk
     const caseTypeParsed = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeParsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-    req._homeId = home.id;
+    req._homeId = req.home.id;
     upload.single('file')(req, res, async (err) => {
       if (err) {
         if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });
@@ -1004,7 +955,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (
         }
         const descParsed = z.string().max(500).optional().safeParse(req.body.description);
         const description = descParsed.success ? (descParsed.data || null) : null;
-        const attachment = await hrRepo.createAttachment(home.id, caseTypeParsed.data, caseId, {
+        const attachment = await hrRepo.createAttachment(req.home.id, caseTypeParsed.data, caseId, {
           original_name: req.file.originalname,
           stored_name: req.file.filename,
           mime_type: req.file.mimetype,
@@ -1012,7 +963,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (
           description: description,
           uploaded_by: req.user.username,
         });
-        await auditService.log('hr_attachment_upload', home.slug, req.user.username, { id: attachment.id });
+        await auditService.log('hr_attachment_upload', req.home.slug, req.user.username, { id: attachment.id });
         res.status(201).json(attachment);
       } catch (e) { next(e); }
     });
@@ -1020,15 +971,13 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, async (
 });
 
 // GET /api/hr/attachments/download/:id?home=X
-router.get('/attachments/download/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/attachments/download/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrRepo.findAttachmentById(id, home.id);
+    const att = await hrRepo.findAttachmentById(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    const filePath = path.join(config.upload.dir, String(home.id), att.case_type, String(att.case_id), att.stored_name);
+    const filePath = path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name);
     const safeName = att.original_name.replace(/["\r\n;]/g, '_');
     res.set({
       'Content-Type': att.mime_type,
@@ -1043,18 +992,16 @@ router.get('/attachments/download/:id', requireAuth, requireAdmin, async (req, r
 });
 
 // DELETE /api/hr/attachments/:id?home=X
-router.delete('/attachments/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/attachments/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrRepo.deleteAttachment(id, home.id);
+    const att = await hrRepo.deleteAttachment(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     // Delete file from disk (best effort)
-    const filePath = path.join(config.upload.dir, String(home.id), att.case_type, String(att.case_id), att.stored_name);
+    const filePath = path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name);
     await unlink(filePath).catch(() => {});
-    await auditService.log('hr_attachment_delete', home.slug, req.user.username, { id, caseType: att.case_type, caseId: att.case_id });
+    await auditService.log('hr_attachment_delete', req.home.slug, req.user.username, { id, caseType: att.case_type, caseId: att.case_id });
     res.json({ deleted: true });
   } catch (err) { next(err); }
 });
@@ -1079,82 +1026,72 @@ const meetingBodySchema = z.object({
 const meetingCaseTypeSchema = z.enum(['disciplinary', 'grievance', 'performance']);
 
 // GET /api/hr/meetings/:caseType/:caseId?home=X
-router.get('/meetings/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/meetings/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const parsed = meetingCaseTypeSchema.safeParse(req.params.caseType);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
-    const meetings = await hrRepo.findMeetings(parsed.data, caseId, home.id);
+    const meetings = await hrRepo.findMeetings(parsed.data, caseId, req.home.id);
     res.json(meetings);
   } catch (err) { next(err); }
 });
 
 // POST /api/hr/meetings/:caseType/:caseId?home=X
-router.post('/meetings/:caseType/:caseId', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/meetings/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const ctParsed = meetingCaseTypeSchema.safeParse(req.params.caseType);
     if (!ctParsed.success) return res.status(400).json({ error: 'Invalid case type' });
     const caseId = Number(req.params.caseId);
     if (!Number.isInteger(caseId) || caseId < 1) return res.status(400).json({ error: 'Invalid case ID' });
     const parsed = meetingBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const meeting = await hrRepo.createMeeting(home.id, ctParsed.data, caseId, {
+    const meeting = await hrRepo.createMeeting(req.home.id, ctParsed.data, caseId, {
       ...parsed.data,
       recorded_by: req.user.username,
     });
-    await auditService.log(`hr_${ctParsed.data}_meeting_create`, home.slug, req.user.username, { id: meeting.id });
+    await auditService.log(`hr_${ctParsed.data}_meeting_create`, req.home.slug, req.user.username, { id: meeting.id });
     res.status(201).json(meeting);
   } catch (err) { next(err); }
 });
 
 // PUT /api/hr/meetings/:id?home=X
-router.put('/meetings/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/meetings/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
     const parsed = meetingBodySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const meeting = await hrRepo.updateMeeting(id, home.id, parsed.data);
+    const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data);
     if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
-    await auditService.log(`hr_${meeting.case_type}_meeting_update`, home.slug, req.user.username, { id: meeting.id });
+    await auditService.log(`hr_${meeting.case_type}_meeting_update`, req.home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);
   } catch (err) { next(err); }
 });
 
 // ── GDPR Retention ──────────────────────────────────────────────────────────
 
-router.post('/admin/purge-expired', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const retentionYears = parseInt(req.body.retention_years) || 6;
     const dryRun = req.body.dry_run !== false;
-    const counts = await hrRepo.purgeExpiredRecords(home.id, retentionYears, dryRun);
+    const counts = await hrRepo.purgeExpiredRecords(req.home.id, retentionYears, dryRun);
     // Also purge audit log entries beyond retention period
     const retentionDays = retentionYears * 365;
     counts.audit_log = dryRun
       ? await auditRepo.countOlderThan(retentionDays)
       : await auditRepo.purgeOlderThan(retentionDays);
-    await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', home.slug, req.user.username, { retentionYears, counts });
+    await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', req.home.slug, req.user.username, { retentionYears, counts });
     res.json({ dry_run: dryRun, retention_years: retentionYears, counts });
   } catch (err) { next(err); }
 });
 
-router.get('/admin/audit-export', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/admin/audit-export', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
     const from = req.query.from || '1970-01-01';
     const to = req.query.to || '9999-12-31';
-    const rows = await auditRepo.exportHrByHome(home.slug, from, to);
-    res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${home.slug}-${from}-${to}.json"`);
+    const rows = await auditRepo.exportHrByHome(req.home.slug, from, to);
+    res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${req.home.slug}-${from}-${to}.json"`);
     res.json(rows);
   } catch (err) { next(err); }
 });

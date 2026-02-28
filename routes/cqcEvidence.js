@@ -1,66 +1,59 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import * as homeRepo from '../repositories/homeRepo.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 
 const router = Router();
-
-const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).optional();
 const idSchema = z.string().min(1).max(100);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
-async function resolveHome(req, res) {
-  const p = homeIdSchema.safeParse(req.query.home);
-  if (!p.success || !p.data) { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(p.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  return home;
-}
+const evidenceBodySchema = z.object({
+  quality_statement: z.string().min(1).max(20).regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-5]|WL([1-9]|10))$/),
+  type:              z.enum(['quantitative', 'qualitative']),
+  title:             z.string().min(1).max(500),
+  description:       z.string().max(10000).nullable().optional(),
+  date_from:         dateSchema.optional(),
+  date_to:           dateSchema.optional(),
+});
+const evidenceUpdateSchema = evidenceBodySchema.partial();
 
 // GET /api/cqc-evidence?home=X
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const evidence = await cqcEvidenceRepo.findByHome(home.id);
+    const evidence = await cqcEvidenceRepo.findByHome(req.home.id);
     res.json({ evidence });
   } catch (err) { next(err); }
 });
 
 // POST /api/cqc-evidence?home=X
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    if (!req.body?.quality_statement || !req.body?.title) {
-      return res.status(400).json({ error: 'quality_statement and title are required' });
-    }
-    const item = await cqcEvidenceRepo.upsert(home.id, { ...req.body, added_by: req.user.username });
+    const parsed = evidenceBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
     res.status(201).json(item);
   } catch (err) { next(err); }
 });
 
 // PUT /api/cqc-evidence/:id?home=X
-router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const item = await cqcEvidenceRepo.upsert(home.id, { ...req.body, id: idParsed.data });
+    const parsed = evidenceUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json(item);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/cqc-evidence/:id?home=X
-router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const deleted = await cqcEvidenceRepo.softDelete(idParsed.data, home.id);
+    const deleted = await cqcEvidenceRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (err) { next(err); }

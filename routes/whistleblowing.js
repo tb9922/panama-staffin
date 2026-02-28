@@ -1,66 +1,72 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import * as homeRepo from '../repositories/homeRepo.js';
+import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as whistleblowingRepo from '../repositories/whistleblowingRepo.js';
 
 const router = Router();
-
-const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).optional();
 const idSchema = z.string().min(1).max(100);
+const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
-async function resolveHome(req, res) {
-  const p = homeIdSchema.safeParse(req.query.home);
-  if (!p.success || !p.data) { res.status(400).json({ error: 'home parameter is required' }); return null; }
-  const home = await homeRepo.findBySlug(p.data);
-  if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
-  return home;
-}
+const concernBodySchema = z.object({
+  date_raised:              dateSchema,
+  raised_by_role:           z.string().max(200).nullable().optional(),
+  anonymous:                z.boolean().optional(),
+  category:                 z.enum(['malpractice', 'bullying', 'safety', 'compliance', 'other']),
+  description:              z.string().max(10000).nullable().optional(),
+  severity:                 z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  status:                   z.string().max(50).nullable().optional(),
+  acknowledgement_date:     dateSchema.optional(),
+  investigator:             z.string().max(200).nullable().optional(),
+  investigation_start_date: dateSchema.optional(),
+  findings:                 z.string().max(10000).nullable().optional(),
+  outcome:                  z.string().max(200).nullable().optional(),
+  outcome_details:          z.string().max(10000).nullable().optional(),
+  reporter_protected:       z.boolean().optional(),
+  protection_details:       z.string().max(5000).nullable().optional(),
+  follow_up_date:           dateSchema.optional(),
+  follow_up_completed:      z.boolean().optional(),
+  resolution_date:          dateSchema.optional(),
+  lessons_learned:          z.string().max(5000).nullable().optional(),
+});
+const concernUpdateSchema = concernBodySchema.partial();
 
 // GET /api/whistleblowing?home=X
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const concerns = await whistleblowingRepo.findByHome(home.id);
+    const concerns = await whistleblowingRepo.findByHome(req.home.id);
     res.json({ concerns });
   } catch (err) { next(err); }
 });
 
 // POST /api/whistleblowing?home=X
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    if (!req.body?.date_raised || !req.body?.category) {
-      return res.status(400).json({ error: 'date_raised and category are required' });
-    }
-    const concern = await whistleblowingRepo.upsert(home.id, req.body);
+    const parsed = concernBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const concern = await whistleblowingRepo.upsert(req.home.id, parsed.data);
     res.status(201).json(concern);
   } catch (err) { next(err); }
 });
 
 // PUT /api/whistleblowing/:id?home=X
-router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const concern = await whistleblowingRepo.upsert(home.id, { ...req.body, id: idParsed.data });
+    const parsed = concernUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    const concern = await whistleblowingRepo.upsert(req.home.id, { ...parsed.data, id: idParsed.data });
     if (!concern) return res.status(404).json({ error: 'Not found' });
     res.json(concern);
   } catch (err) { next(err); }
 });
 
 // DELETE /api/whistleblowing/:id?home=X
-router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const home = await resolveHome(req, res);
-    if (!home) return;
-    const deleted = await whistleblowingRepo.softDelete(idParsed.data, home.id);
+    const deleted = await whistleblowingRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (err) { next(err); }
