@@ -42,6 +42,7 @@ import usersRouter from './routes/users.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
+import { purgeOlderThan as purgeAuditLog } from './repositories/auditRepo.js';
 
 const app = express();
 
@@ -158,6 +159,11 @@ const server = app.listen(config.port, async () => {
   // Prune expired deny-list entries daily
   setInterval(
     () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
+    24 * 60 * 60 * 1000
+  ).unref();
+  // Purge audit entries past 7-year retention daily
+  setInterval(
+    () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
     24 * 60 * 60 * 1000
   ).unref();
 });

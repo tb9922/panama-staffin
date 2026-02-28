@@ -28,6 +28,19 @@ export async function findBySlug(slug) {
 }
 
 /**
+ * Lock + fetch a home row within a transaction (SELECT ... FOR UPDATE).
+ * The second concurrent save blocks until the first commits, then sees
+ * the new updated_at and correctly 409s via optimistic locking.
+ */
+export async function findBySlugForUpdate(slug, client) {
+  const { rows } = await client.query(
+    'SELECT * FROM homes WHERE slug = $1 FOR UPDATE',
+    [slug]
+  );
+  return rows[0] || null;
+}
+
+/**
  * List all homes with config metadata for the homes list endpoint.
  * Returns [{id, slug, name, beds, type}]
  */

@@ -1,5 +1,5 @@
 import { withTransaction } from '../db.js';
-import { NotFoundError } from '../errors.js';
+import { NotFoundError, ConflictError } from '../errors.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
@@ -42,14 +42,25 @@ export async function assembleData(homeSlug, userRole) {
   return payload;
 }
 
-// Save all domains in a single transaction.
-// On any failure the whole transaction rolls back — no partial saves.
-export async function saveData(homeSlug, body, username) {
-  const home = await homeRepo.findBySlug(homeSlug);
-  if (!home) throw new NotFoundError(`Home not found: ${homeSlug}`);
-
+// Save all domains in a single transaction with row-level locking.
+// SELECT ... FOR UPDATE on the homes row ensures concurrent saves are serialised:
+// the second save blocks until the first commits, then sees the new updated_at
+// and correctly 409s via optimistic locking. No partial saves on any failure.
+export async function saveData(homeSlug, body, username, clientUpdatedAt) {
   // await (not return) so the code below runs after the transaction commits
   await withTransaction(async (client) => {
+    // Lock the home row — concurrent saves block here until this transaction commits
+    const home = await homeRepo.findBySlugForUpdate(homeSlug, client);
+    if (!home) throw new NotFoundError(`Home not found: ${homeSlug}`);
+
+    // Optimistic locking check inside the lock — guarantees no race window
+    if (clientUpdatedAt && home.updated_at) {
+      const serverUpdatedAt = home.updated_at.toISOString();
+      if (serverUpdatedAt !== clientUpdatedAt) {
+        throw new ConflictError('This home was modified by someone else since you last loaded it.');
+      }
+    }
+
     if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
     if (body.staff) await staffRepo.sync(home.id, body.staff, client);
     if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client);
