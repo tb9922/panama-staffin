@@ -9,12 +9,13 @@ function shapeRow(row) {
   shaped.status = row.status;
   // standards stored as JSONB — pg returns it already parsed
   shaped.standards = row.standards || {};
+  shaped.updated_at = row.updated_at ? row.updated_at.toISOString() : undefined;
   return { staffId: row.staff_id, data: shaped };
 }
 
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM care_certificates WHERE home_id = $1',
+    'SELECT * FROM care_certificates WHERE home_id = $1 AND deleted_at IS NULL',
     [homeId]
   );
   // Shape to: { "staffId": { start_date, expected_completion, supervisor, status, completion_date, standards } }
@@ -34,11 +35,11 @@ export async function sync(homeId, certObj, client) {
     await conn.query(
       `INSERT INTO care_certificates (
          home_id, staff_id, start_date, expected_completion, supervisor,
-         status, completion_date, standards
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         status, completion_date, standards, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
        ON CONFLICT (home_id, staff_id) DO UPDATE SET
-         start_date=$3,expected_completion=$4,supervisor=$5,
-         status=$6,completion_date=$7,standards=$8`,
+         start_date=EXCLUDED.start_date,expected_completion=EXCLUDED.expected_completion,supervisor=EXCLUDED.supervisor,
+         status=EXCLUDED.status,completion_date=EXCLUDED.completion_date,standards=EXCLUDED.standards,updated_at=NOW()`,
       [
         homeId, staffId,
         cert.start_date || null, cert.expected_completion || null,
@@ -49,26 +50,27 @@ export async function sync(homeId, certObj, client) {
     );
   }
 
-  // Remove staff who no longer have a care cert record
+  // Soft-delete staff who no longer have a care cert record
   const staffIds = Object.keys(certObj);
-  if (staffIds.length > 0) {
-    await conn.query(
-      `DELETE FROM care_certificates WHERE home_id = $1 AND staff_id != ALL($2::text[])`,
-      [homeId, staffIds]
-    );
-  } else {
-    await conn.query(`DELETE FROM care_certificates WHERE home_id = $1`, [homeId]);
+  if (staffIds.length === 0) {
+    // Empty payload guard: never wipe all records
+    return;
   }
+  await conn.query(
+    `UPDATE care_certificates SET deleted_at = NOW()
+     WHERE home_id = $1 AND staff_id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, staffIds]
+  );
 }
 
 export async function upsertStaff(homeId, staffId, record) {
   const { rows } = await pool.query(
     `INSERT INTO care_certificates
-       (home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       (home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
      ON CONFLICT (home_id, staff_id) DO UPDATE SET
-       start_date=$3, expected_completion=$4, supervisor=$5,
-       status=$6, completion_date=$7, standards=$8
+       start_date=EXCLUDED.start_date, expected_completion=EXCLUDED.expected_completion, supervisor=EXCLUDED.supervisor,
+       status=EXCLUDED.status, completion_date=EXCLUDED.completion_date, standards=EXCLUDED.standards, updated_at=NOW()
      RETURNING *`,
     [homeId, staffId,
      record.start_date || null, record.expected_completion || null,
@@ -81,7 +83,7 @@ export async function upsertStaff(homeId, staffId, record) {
 
 export async function removeStaff(homeId, staffId) {
   const { rowCount } = await pool.query(
-    'DELETE FROM care_certificates WHERE home_id=$1 AND staff_id=$2',
+    'UPDATE care_certificates SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND deleted_at IS NULL',
     [homeId, staffId]
   );
   return rowCount > 0;

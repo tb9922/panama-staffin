@@ -6,6 +6,8 @@ import {
 import { createSupervision, updateSupervision, deleteSupervision } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
+import Modal from '../Modal.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -27,6 +29,8 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  useDirtyGuard(showModal);
 
   const today = new Date();
   const todayStr = formatDate(today);
@@ -243,67 +247,62 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       </div>
 
       {/* Supervision Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={MODAL.panelLg}>
-            <h2 className={MODAL.title}>{modalData.existing ? 'Edit' : 'Record'} Supervision</h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={INPUT.label}>Date</label>
-                  <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Supervisor</label>
-                  <input type="text" value={modalData.supervisor} onChange={e => setModalData({ ...modalData, supervisor: e.target.value })}
-                    className={INPUT.base} placeholder="Supervisor name" />
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Topics Discussed</label>
-                <textarea value={modalData.topics} onChange={e => setModalData({ ...modalData, topics: e.target.value })}
-                  className={`${INPUT.base} h-20 resize-none`} placeholder="Key topics covered in the session..." />
-              </div>
-              <div>
-                <label className={INPUT.label}>Actions Agreed</label>
-                <textarea value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
-                  className={`${INPUT.base} h-20 resize-none`} placeholder="Action items agreed upon..." />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={INPUT.label}>Next Due (auto)</label>
-                  <input type="date" value={modalData.existing ? modalData.next_due : supNextDue}
-                    onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} />
-                  {!modalData.existing && modalData.staffId && (() => {
-                    const s = activeStaff.find(x => x.id === modalData.staffId);
-                    if (!s) return null;
-                    const freq = getSupervisionFrequency(s, config, today);
-                    const prob = isInProbation(s, config, today);
-                    return <p className="text-[10px] text-gray-400 mt-0.5">{prob ? 'Probation' : 'Standard'}: every {freq} days</p>;
-                  })()}
-                </div>
-                <div>
-                  <label className={INPUT.label}>Notes</label>
-                  <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
-                    className={INPUT.base} placeholder="Optional notes" />
-                </div>
-              </div>
-              {error && <p className="text-xs text-red-600">{error}</p>}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={modalData.existing ? 'Edit Supervision' : 'Record Supervision'} size="lg">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Date</label>
+              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
             </div>
-            <div className={MODAL.footer}>
-              {modalData.existing && (
-                <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
-              )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave}
-                disabled={!modalData.staffId || !modalData.date || saving}
-                className={`${BTN.primary} disabled:opacity-50`}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Supervisor</label>
+              <input type="text" value={modalData.supervisor} onChange={e => setModalData({ ...modalData, supervisor: e.target.value })}
+                className={INPUT.base} placeholder="Supervisor name" />
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>Topics Discussed</label>
+            <textarea value={modalData.topics} onChange={e => setModalData({ ...modalData, topics: e.target.value })}
+              className={`${INPUT.base} h-20 resize-none`} placeholder="Key topics covered in the session..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Actions Agreed</label>
+            <textarea value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
+              className={`${INPUT.base} h-20 resize-none`} placeholder="Action items agreed upon..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Next Due (auto)</label>
+              <input type="date" value={modalData.existing ? modalData.next_due : supNextDue}
+                onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} />
+              {!modalData.existing && modalData.staffId && (() => {
+                const s = activeStaff.find(x => x.id === modalData.staffId);
+                if (!s) return null;
+                const freq = getSupervisionFrequency(s, config, today);
+                const prob = isInProbation(s, config, today);
+                return <p className="text-[10px] text-gray-400 mt-0.5">{prob ? 'Probation' : 'Standard'}: every {freq} days</p>;
+              })()}
+            </div>
+            <div>
+              <label className={INPUT.label}>Notes</label>
+              <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+                className={INPUT.base} placeholder="Optional notes" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-      )}
+        <div className={MODAL.footer}>
+          {modalData.existing && (
+            <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+          )}
+          <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+          <button onClick={handleSave}
+            disabled={!modalData.staffId || !modalData.date || saving}
+            className={`${BTN.primary} disabled:opacity-50`}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }

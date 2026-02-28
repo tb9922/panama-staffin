@@ -8,9 +8,9 @@ import { pool } from '../db.js';
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
     `SELECT staff_id, training_type_id, completed, expiry, trainer, method,
-            certificate_ref, level, notes
+            certificate_ref, level, notes, updated_at
      FROM training_records
-     WHERE home_id = $1`,
+     WHERE home_id = $1 AND deleted_at IS NULL`,
     [homeId]
   );
   const result = {};
@@ -24,6 +24,7 @@ export async function findByHome(homeId) {
       certificate_ref: row.certificate_ref || undefined,
       level:     row.level     || undefined,
       notes:     row.notes     || undefined,
+      updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
     };
   }
   return result;
@@ -79,7 +80,7 @@ export async function upsertRecord(homeId, staffId, typeId, record) {
        trainer = EXCLUDED.trainer, method = EXCLUDED.method,
        certificate_ref = EXCLUDED.certificate_ref, level = EXCLUDED.level,
        notes = EXCLUDED.notes, updated_at = NOW()
-     RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes`,
+     RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes, updated_at`,
     [homeId, staffId, typeId,
      record.completed || null, record.expiry || null,
      record.trainer || null, record.method || null,
@@ -95,12 +96,13 @@ export async function upsertRecord(homeId, staffId, typeId, record) {
     certificate_ref: r.certificate_ref || undefined,
     level:     r.level     || undefined,
     notes:     r.notes     || undefined,
+    updated_at: r.updated_at ? r.updated_at.toISOString() : undefined,
   };
 }
 
 export async function removeRecord(homeId, staffId, typeId) {
   await pool.query(
-    'DELETE FROM training_records WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3',
+    'UPDATE training_records SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
     [homeId, staffId, typeId]
   );
 }

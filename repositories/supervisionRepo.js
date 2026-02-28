@@ -9,6 +9,7 @@ function shapeRow(row) {
     actions:    row.actions || undefined,
     next_due:   row.next_due ? row.next_due.toISOString().slice(0, 10) : undefined,
     notes:      row.notes || undefined,
+    updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
   };
 }
 
@@ -19,7 +20,7 @@ function shapeRow(row) {
  */
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes
+    `SELECT id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at
      FROM supervisions WHERE home_id = $1 AND deleted_at IS NULL ORDER BY staff_id, date`,
     [homeId]
   );
@@ -51,15 +52,16 @@ export async function sync(homeId, supervisionsObj, client) {
   for (const [staffId, sessions] of Object.entries(supervisionsObj)) {
     for (const s of sessions) {
       await conn.query(
-        `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
          ON CONFLICT (home_id, id) DO UPDATE SET
            date       = EXCLUDED.date,
            supervisor = EXCLUDED.supervisor,
            topics     = EXCLUDED.topics,
            actions    = EXCLUDED.actions,
            next_due   = EXCLUDED.next_due,
-           notes      = EXCLUDED.notes`,
+           notes      = EXCLUDED.notes,
+           updated_at = NOW()`,
         [s.id, homeId, staffId, s.date, s.supervisor || null, s.topics || null,
          s.actions || null, s.next_due || null, s.notes || null]
       );
@@ -81,11 +83,11 @@ export async function sync(homeId, supervisionsObj, client) {
 
 export async function upsertSession(homeId, staffId, record) {
   const { rows } = await pool.query(
-    `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date=$4, supervisor=$5, topics=$6, actions=$7, next_due=$8, notes=$9
-     RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes`,
+       date=EXCLUDED.date, supervisor=EXCLUDED.supervisor, topics=EXCLUDED.topics, actions=EXCLUDED.actions, next_due=EXCLUDED.next_due, notes=EXCLUDED.notes, updated_at=NOW()
+     RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.supervisor || null,
      record.topics || null, record.actions || null, record.next_due || null, record.notes || null]
   );

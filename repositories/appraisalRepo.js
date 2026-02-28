@@ -10,6 +10,7 @@ function shapeRow(row) {
     development_plan: row.development_plan || undefined,
     next_due:         row.next_due ? row.next_due.toISOString().slice(0, 10) : undefined,
     notes:            row.notes || undefined,
+    updated_at:       row.updated_at ? row.updated_at.toISOString() : undefined,
   };
 }
 
@@ -20,7 +21,7 @@ function shapeRow(row) {
  */
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes
+    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at
      FROM appraisals WHERE home_id = $1 AND deleted_at IS NULL ORDER BY staff_id, date`,
     [homeId]
   );
@@ -53,8 +54,8 @@ export async function sync(homeId, appraisalsObj, client) {
     for (const a of sessions) {
       await conn.query(
         `INSERT INTO appraisals
-           (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
          ON CONFLICT (home_id, id) DO UPDATE SET
            date             = EXCLUDED.date,
            appraiser        = EXCLUDED.appraiser,
@@ -62,7 +63,8 @@ export async function sync(homeId, appraisalsObj, client) {
            training_needs   = EXCLUDED.training_needs,
            development_plan = EXCLUDED.development_plan,
            next_due         = EXCLUDED.next_due,
-           notes            = EXCLUDED.notes`,
+           notes            = EXCLUDED.notes,
+           updated_at       = NOW()`,
         [a.id, homeId, staffId, a.date, a.appraiser || null, a.objectives || null,
          a.training_needs || null, a.development_plan || null, a.next_due || null, a.notes || null]
       );
@@ -84,12 +86,12 @@ export async function sync(homeId, appraisalsObj, client) {
 export async function upsertAppraisal(homeId, staffId, record) {
   const { rows } = await pool.query(
     `INSERT INTO appraisals
-       (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date=$4, appraiser=$5, objectives=$6, training_needs=$7,
-       development_plan=$8, next_due=$9, notes=$10
-     RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes`,
+       date=EXCLUDED.date, appraiser=EXCLUDED.appraiser, objectives=EXCLUDED.objectives, training_needs=EXCLUDED.training_needs,
+       development_plan=EXCLUDED.development_plan, next_due=EXCLUDED.next_due, notes=EXCLUDED.notes, updated_at=NOW()
+     RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.appraiser || null,
      record.objectives || null, record.training_needs || null,
      record.development_plan || null, record.next_due || null, record.notes || null]

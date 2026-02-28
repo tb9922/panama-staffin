@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { getCurrentHome, getTrainingData } from '../lib/api.js';
-import { PAGE } from '../lib/design.js';
+import { PAGE, TAB } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import TrainingGrid from '../components/training/TrainingGrid.jsx';
 import SupervisionPanel from '../components/training/SupervisionPanel.jsx';
 import AppraisalPanel from '../components/training/AppraisalPanel.jsx';
@@ -19,21 +20,21 @@ export default function TrainingMatrix() {
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useDirtyGuard(false); // Child components manage their own modals
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getTrainingData(homeSlug);
-      setState(data);
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [homeSlug]);
-
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getTrainingData(homeSlug);
+        if (!stale) { setState(data); setError(null); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [homeSlug, refreshKey]);
 
   if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
   if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
@@ -55,12 +56,10 @@ export default function TrainingMatrix() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-gray-200 print:hidden">
+      <div className={TAB.bar + ' mb-5 print:hidden'}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}>
+            className={`${TAB.button} ${tab === t.id ? TAB.active : TAB.inactive}`}>
             {t.label}
           </button>
         ))}
@@ -73,7 +72,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           config={{ training_types: state.trainingTypes }}
-          onReload={load}
+          onReload={() => setRefreshKey(k => k + 1)}
         />
       )}
       {tab === 'supervisions' && (
@@ -82,7 +81,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           config={state.config || {}}
-          onReload={load}
+          onReload={() => setRefreshKey(k => k + 1)}
         />
       )}
       {tab === 'appraisals' && (
@@ -90,7 +89,7 @@ export default function TrainingMatrix() {
           appraisals={state.appraisals}
           staff={state.staff}
           homeSlug={homeSlug}
-          onReload={load}
+          onReload={() => setRefreshKey(k => k + 1)}
         />
       )}
       {tab === 'fire_drills' && (
@@ -98,7 +97,7 @@ export default function TrainingMatrix() {
           fireDrills={state.fireDrills}
           staff={state.staff}
           homeSlug={homeSlug}
-          onReload={load}
+          onReload={() => setRefreshKey(k => k + 1)}
         />
       )}
     </div>

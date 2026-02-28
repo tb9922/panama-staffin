@@ -5,6 +5,7 @@ import { getCurrentHome, getHrContracts, createHrContract, updateHrContract } fr
 import { CONTRACT_TYPES, CONTRACT_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const emptyForm = () => ({
   staff_id: '', contract_type: 'permanent', start_date: '', end_date: '',
@@ -21,6 +22,8 @@ export default function ContractManager() {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   useDirtyGuard(showModal);
 
   // Filters
@@ -30,21 +33,26 @@ export default function ContractManager() {
 
   const home = getCurrentHome();
 
+  const LIMIT = 50;
+
   const load = useCallback(async () => {
     if (!home) return;
     setLoading(true);
     try {
-      const filters = {};
+      const filters = { limit: LIMIT, offset };
       if (filterStaff) filters.staffId = filterStaff;
       if (filterStatus) filters.status = filterStatus;
       const res = await getHrContracts(home, filters);
       setItems(res?.rows || []);
+      setTotal(res?.total || 0);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [home, filterStaff, filterStatus]);
+  }, [home, filterStaff, filterStatus, offset]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { setOffset(0); }, [filterStaff, filterStatus, filterType]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -223,6 +231,7 @@ export default function ContractManager() {
           </table>
         </div>
       </div>
+      <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
 
       {/* Modal */}
       {showModal && (

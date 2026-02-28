@@ -5,6 +5,7 @@ import { getCurrentHome, getHrRenewals, createHrRenewal, updateHrRenewal } from 
 import { RENEWAL_CHECK_TYPES, RENEWAL_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 function checkTypeName(id) {
   return RENEWAL_CHECK_TYPES.find(t => t.id === id)?.name || id;
@@ -29,8 +30,12 @@ const blankForm = () => ({
   document_type: '',
 });
 
+const LIMIT = 50;
+
 export default function RtwDbsRenewals() {
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -51,18 +56,21 @@ export default function RtwDbsRenewals() {
     if (!home) return;
     setLoading(true);
     try {
-      const filters = {};
+      const filters = { limit: LIMIT, offset };
       if (filterStaff) filters.staffId = filterStaff;
       if (filterType) filters.checkType = filterType;
       if (filterStatus) filters.status = filterStatus;
       const res = await getHrRenewals(home, filters);
       setItems(res?.rows || []);
+      setTotal(res?.total || 0);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [home, filterStaff, filterType, filterStatus]);
+  }, [home, filterStaff, filterType, filterStatus, offset]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { setOffset(0); }, [filterStaff, filterType, filterStatus]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -220,6 +228,7 @@ export default function RtwDbsRenewals() {
             </tbody>
           </table>
         </div>
+        <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
       </div>
 
       {/* Modal */}

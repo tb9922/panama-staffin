@@ -7,6 +7,7 @@ import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const MODAL_TABS = ['Concern', 'Informal', 'PIP', 'Hearing', 'Outcome', 'Appeal', 'Notes'];
 
@@ -29,6 +30,8 @@ export default function PerformanceTracker() {
   const [form, setForm] = useState(emptyForm());
   const [modalTab, setModalTab] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   useDirtyGuard(showModal);
 
   // Filters
@@ -39,23 +42,27 @@ export default function PerformanceTracker() {
   const [refreshKey, setRefreshKey] = useState(0);
   const home = getCurrentHome();
 
+  const LIMIT = 50;
+
   useEffect(() => {
     let stale = false;
     (async () => {
       if (!home) return;
       setLoading(true);
       try {
-        const filters = {};
+        const filters = { limit: LIMIT, offset };
         if (filterStaff) filters.staffId = filterStaff;
         if (filterStatus) filters.status = filterStatus;
         if (filterType) filters.type = filterType;
         const res = await getHrPerformance(home, filters);
-        if (!stale) { setItems(res?.rows || []); setError(null); }
+        if (!stale) { setItems(res?.rows || []); setTotal(res?.total || 0); setError(null); }
       } catch (e) { if (!stale) setError(e.message); }
       finally { if (!stale) setLoading(false); }
     })();
     return () => { stale = true; };
-  }, [home, filterStaff, filterStatus, filterType, refreshKey]);
+  }, [home, filterStaff, filterStatus, filterType, offset, refreshKey]);
+
+  useEffect(() => { setOffset(0); }, [filterStaff, filterStatus, filterType]);
 
   function openNew() {
     setEditing(null);
@@ -197,6 +204,7 @@ export default function PerformanceTracker() {
           </table>
         </div>
       </div>
+      <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
 
       {/* Modal */}
       {showModal && (

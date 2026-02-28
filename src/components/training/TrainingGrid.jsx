@@ -7,6 +7,7 @@ import {
 import { updateTrainingTypes, upsertTrainingRecord } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
+import Modal from '../Modal.jsx';
 import TrainingRecordModal from './TrainingRecordModal.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -38,6 +39,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [csvRows, setCsvRows] = useState([]);
   const [csvErrors, setCsvErrors] = useState([]);
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState(null);
 
   const today = new Date();
   const todayStr = formatDate(today);
@@ -93,6 +95,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
 
   const [allTypes, setAllTypes] = useState(() => trainingTypes);
   const [typesSaving, setTypesSaving] = useState(false);
+  const [typeError, setTypeError] = useState(null);
 
   // Keep allTypes in sync if parent reloads (after save)
   useMemo(() => { setAllTypes(trainingTypes); }, [trainingTypes]);
@@ -113,11 +116,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
 
   async function saveTypes() {
     setTypesSaving(true);
+    setTypeError(null);
     try {
       await updateTrainingTypes(homeSlug, allTypes);
       onReload();
     } catch (e) {
-      alert('Failed to save training types: ' + e.message);
+      setTypeError('Failed to save training types: ' + e.message);
     } finally {
       setTypesSaving(false);
     }
@@ -232,6 +236,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
     const validRows = csvRows.filter(r => r.valid);
     if (validRows.length === 0) return;
     setImporting(true);
+    setImportError(null);
     try {
       for (const row of validRows) {
         const method = TRAINING_METHODS.includes(row.method?.toLowerCase()) ? row.method.toLowerCase() : 'e-learning';
@@ -250,7 +255,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       setCsvRows([]);
       setCsvErrors([]);
     } catch (e) {
-      alert('Import failed: ' + e.message);
+      setImportError('Import failed: ' + e.message);
     } finally {
       setImporting(false);
     }
@@ -482,11 +487,14 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                 ))}
               </tbody>
             </table>
-            <div className="p-3 flex gap-2">
-              <button onClick={addTrainingType} className={`${BTN.secondary} ${BTN.sm}`}>+ Add Custom Type</button>
-              <button onClick={saveTypes} disabled={typesSaving} className={`${BTN.primary} ${BTN.sm} disabled:opacity-50`}>
-                {typesSaving ? 'Saving...' : 'Save Types'}
-              </button>
+            <div className="p-3 flex flex-col gap-2">
+              {typeError && <p className="text-xs text-red-600">{typeError}</p>}
+              <div className="flex gap-2">
+                <button onClick={addTrainingType} className={`${BTN.secondary} ${BTN.sm}`}>+ Add Custom Type</button>
+                <button onClick={saveTypes} disabled={typesSaving} className={`${BTN.primary} ${BTN.sm} disabled:opacity-50`}>
+                  {typesSaving ? 'Saving...' : 'Save Types'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -525,97 +533,92 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       })()}
 
       {/* CSV Import Modal */}
-      {showImportModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); } }}>
-          <div className={`${MODAL.panelLg} max-h-[85vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>Import Training Records from CSV</h2>
-
-            {csvRows.length === 0 ? (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Upload a CSV file with training completion records. Expected columns:
-                </p>
-                <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 font-mono">
-                  staff_name, training_type, completed_date, trainer, method, certificate_ref
-                </div>
-                <p className="text-xs text-gray-400">
-                  Dates can be DD/MM/YYYY or YYYY-MM-DD. Staff and training types are matched by name (case-insensitive).
-                </p>
-                <div>
-                  <label className={INPUT.label}>Select CSV File</label>
-                  <input type="file" accept=".csv,.txt" onChange={handleCSVFile}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <span className={BADGE.blue}>{csvRows.length} rows parsed</span>
-                  <span className={BADGE.green}>{csvRows.filter(r => r.valid).length} valid</span>
-                  {csvRows.filter(r => !r.valid).length > 0 && (
-                    <span className={BADGE.red}>{csvRows.filter(r => !r.valid).length} unmatched</span>
-                  )}
-                </div>
-                {csvErrors.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-32 overflow-y-auto">
-                    <div className="text-xs font-semibold text-red-700 mb-1">Matching Issues:</div>
-                    {csvErrors.map((err, i) => (
-                      <div key={i} className="text-xs text-red-600">{err}</div>
-                    ))}
-                  </div>
-                )}
-                <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className={TABLE.table}>
-                    <thead className={TABLE.thead}>
-                      <tr>
-                        <th className={TABLE.th}>Row</th>
-                        <th className={TABLE.th}>Staff</th>
-                        <th className={TABLE.th}>Training</th>
-                        <th className={TABLE.th}>Date</th>
-                        <th className={TABLE.th}>Trainer</th>
-                        <th className={TABLE.th}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {csvRows.map((row, i) => (
-                        <tr key={i} className={row.valid ? '' : 'bg-red-50'}>
-                          <td className={TABLE.tdMono}>{row.line}</td>
-                          <td className={TABLE.td}>
-                            {row.matchedStaff ? <span className="text-gray-900">{row.matchedStaff.name}</span> : <span className="text-red-600">{row.rawName || '?'}</span>}
-                          </td>
-                          <td className={TABLE.td}>
-                            {row.matchedType ? <span className="text-gray-900">{row.matchedType.name}</span> : <span className="text-red-600">{row.rawType || '?'}</span>}
-                          </td>
-                          <td className={TABLE.tdMono}>{row.rawDate || '-'}</td>
-                          <td className={TABLE.td}>{row.trainer || '-'}</td>
-                          <td className={TABLE.td}>
-                            <span className={row.valid ? BADGE.green : BADGE.red}>{row.valid ? 'Ready' : 'Error'}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 cursor-pointer hover:text-blue-600">
-                    Choose a different file
-                    <input type="file" accept=".csv,.txt" onChange={handleCSVFile} className="hidden" />
-                  </label>
-                </div>
-              </div>
-            )}
-
-            <div className={MODAL.footer}>
-              <button onClick={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); }} className={BTN.ghost}>Cancel</button>
-              {csvRows.filter(r => r.valid).length > 0 && (
-                <button onClick={handleImportCSV} disabled={importing} className={`${BTN.primary} disabled:opacity-50`}>
-                  {importing ? 'Importing...' : `Import ${csvRows.filter(r => r.valid).length} Records`}
-                </button>
-              )}
+      <Modal isOpen={showImportModal} onClose={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); }} title="Import Training Records from CSV" size="lg">
+        {csvRows.length === 0 ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Upload a CSV file with training completion records. Expected columns:
+            </p>
+            <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 font-mono">
+              staff_name, training_type, completed_date, trainer, method, certificate_ref
+            </div>
+            <p className="text-xs text-gray-400">
+              Dates can be DD/MM/YYYY or YYYY-MM-DD. Staff and training types are matched by name (case-insensitive).
+            </p>
+            <div>
+              <label className={INPUT.label}>Select CSV File</label>
+              <input type="file" accept=".csv,.txt" onChange={handleCSVFile}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
             </div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <span className={BADGE.blue}>{csvRows.length} rows parsed</span>
+              <span className={BADGE.green}>{csvRows.filter(r => r.valid).length} valid</span>
+              {csvRows.filter(r => !r.valid).length > 0 && (
+                <span className={BADGE.red}>{csvRows.filter(r => !r.valid).length} unmatched</span>
+              )}
+            </div>
+            {csvErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-32 overflow-y-auto">
+                <div className="text-xs font-semibold text-red-700 mb-1">Matching Issues:</div>
+                {csvErrors.map((err, i) => (
+                  <div key={i} className="text-xs text-red-600">{err}</div>
+                ))}
+              </div>
+            )}
+            <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr>
+                    <th className={TABLE.th}>Row</th>
+                    <th className={TABLE.th}>Staff</th>
+                    <th className={TABLE.th}>Training</th>
+                    <th className={TABLE.th}>Date</th>
+                    <th className={TABLE.th}>Trainer</th>
+                    <th className={TABLE.th}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvRows.map((row, i) => (
+                    <tr key={i} className={row.valid ? '' : 'bg-red-50'}>
+                      <td className={TABLE.tdMono}>{row.line}</td>
+                      <td className={TABLE.td}>
+                        {row.matchedStaff ? <span className="text-gray-900">{row.matchedStaff.name}</span> : <span className="text-red-600">{row.rawName || '?'}</span>}
+                      </td>
+                      <td className={TABLE.td}>
+                        {row.matchedType ? <span className="text-gray-900">{row.matchedType.name}</span> : <span className="text-red-600">{row.rawType || '?'}</span>}
+                      </td>
+                      <td className={TABLE.tdMono}>{row.rawDate || '-'}</td>
+                      <td className={TABLE.td}>{row.trainer || '-'}</td>
+                      <td className={TABLE.td}>
+                        <span className={row.valid ? BADGE.green : BADGE.red}>{row.valid ? 'Ready' : 'Error'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 cursor-pointer hover:text-blue-600">
+                Choose a different file
+                <input type="file" accept=".csv,.txt" onChange={handleCSVFile} className="hidden" />
+              </label>
+            </div>
+          </div>
+        )}
+
+        {importError && <p className="text-xs text-red-600 mt-2">{importError}</p>}
+        <div className={MODAL.footer}>
+          <button onClick={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); }} className={BTN.ghost}>Cancel</button>
+          {csvRows.filter(r => r.valid).length > 0 && (
+            <button onClick={handleImportCSV} disabled={importing} className={`${BTN.primary} disabled:opacity-50`}>
+              {importing ? 'Importing...' : `Import ${csvRows.filter(r => r.valid).length} Records`}
+            </button>
+          )}
         </div>
-      )}
+      </Modal>
     </>
   );
 }

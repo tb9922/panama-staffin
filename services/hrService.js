@@ -1,4 +1,3 @@
-import { pool } from '../db.js';
 import * as hrRepo from '../repositories/hrRepo.js';
 
 // ── Bradford Factor ─────────────────────────────────────────────────────────
@@ -53,18 +52,10 @@ export async function calculateBradfordScores(homeId) {
   const yearAgo = new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate()));
   const cutoff = yearAgo.toISOString().slice(0, 10);
 
-  const { rows: sickRows } = await pool.query(
-    `SELECT date, staff_id FROM shift_overrides
-     WHERE home_id = $1 AND shift = 'SICK' AND date >= $2
-     ORDER BY staff_id, date`,
-    [homeId, cutoff]
-  );
-
-  // Load absence_triggers from home config if overridden
-  const { rows: homeRows } = await pool.query(
-    `SELECT config FROM homes WHERE id = $1`, [homeId]
-  );
-  const homeConfig = homeRows[0]?.config || {};
+  const [sickRows, homeConfig] = await Promise.all([
+    hrRepo.findSickOverrides(homeId, cutoff),
+    hrRepo.findHomeConfig(homeId),
+  ]);
   const triggers = homeConfig.absence_triggers || DEFAULT_TRIGGERS;
 
   // Group rows by staff_id
@@ -102,17 +93,10 @@ export async function getAbsenceSummary(homeId, staffId) {
   const yearAgo = new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate()));
   const cutoff = yearAgo.toISOString().slice(0, 10);
 
-  const { rows: sickRows } = await pool.query(
-    `SELECT date FROM shift_overrides
-     WHERE home_id = $1 AND staff_id = $2 AND shift = 'SICK' AND date >= $3
-     ORDER BY date`,
-    [homeId, staffId, cutoff]
-  );
-
-  const { rows: homeRows } = await pool.query(
-    `SELECT config FROM homes WHERE id = $1`, [homeId]
-  );
-  const homeConfig = homeRows[0]?.config || {};
+  const [sickRows, homeConfig] = await Promise.all([
+    hrRepo.findStaffSickOverrides(homeId, staffId, cutoff),
+    hrRepo.findHomeConfig(homeId),
+  ]);
   const triggers = homeConfig.absence_triggers || DEFAULT_TRIGGERS;
 
   const dates = sickRows.map(r =>

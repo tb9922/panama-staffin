@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { formatDate } from '../lib/rotation.js';
 import {
   CARE_CERTIFICATE_STANDARDS, CC_CATEGORIES, CC_STATUSES, CC_STANDARD_STATUSES,
@@ -7,6 +7,8 @@ import {
 } from '../lib/careCertificate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
 
 const STATUS_BADGE_MAP = {
@@ -41,24 +43,24 @@ export default function CareCertificateTracker() {
 
   // Pending standard updates buffered locally before save
   const [pendingUpdates, setPendingUpdates] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useDirtyGuard(showModal || showStartModal);
 
   const today = new Date();
   const todayStr = formatDate(today);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getCareCertData(homeSlug);
-      setState(data);
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [homeSlug]);
-
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getCareCertData(homeSlug);
+        if (!stale) { setState(data); setError(null); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [homeSlug, refreshKey]);
 
   const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
   const careCertData = useMemo(() => state?.careCert || {}, [state]);
@@ -104,10 +106,10 @@ export default function CareCertificateTracker() {
         start_date: startForm.start_date,
         supervisor: startForm.supervisor,
       });
-      await load();
+      setRefreshKey(k => k + 1);
       setShowStartModal(false);
     } catch (e) {
-      alert('Failed to start Care Certificate: ' + e.message);
+      setError('Failed to start Care Certificate: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -170,11 +172,11 @@ export default function CareCertificateTracker() {
     setSaving(true);
     try {
       await updateCareCert(homeSlug, selectedStaffId, pendingUpdates);
-      await load();
+      setRefreshKey(k => k + 1);
       setShowModal(false);
       setPendingUpdates(null);
     } catch (e) {
-      alert('Failed to save changes: ' + e.message);
+      setError('Failed to save changes: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -185,11 +187,11 @@ export default function CareCertificateTracker() {
     setSaving(true);
     try {
       await updateCareCert(homeSlug, selectedStaffId, { supervisor: editSupervisor });
-      await load();
+      setRefreshKey(k => k + 1);
       // Keep modal open, update pending state
       if (pendingUpdates) setPendingUpdates({ ...pendingUpdates, supervisor: editSupervisor });
     } catch (e) {
-      alert('Failed to save supervisor: ' + e.message);
+      setError('Failed to save supervisor: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -200,12 +202,12 @@ export default function CareCertificateTracker() {
     setSaving(true);
     try {
       await deleteCareCert(homeSlug, selectedStaffId);
-      await load();
+      setRefreshKey(k => k + 1);
       setShowModal(false);
       setSelectedStaffId(null);
       setPendingUpdates(null);
     } catch (e) {
-      alert('Failed to remove: ' + e.message);
+      setError('Failed to remove: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -256,7 +258,7 @@ export default function CareCertificateTracker() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
+  if (!state && error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const selectedRecord = getSelectedRecord();
   const selectedStaff = selectedStaffId ? activeStaff.find(s => s.id === selectedStaffId) : null;
@@ -274,6 +276,8 @@ export default function CareCertificateTracker() {
           <button onClick={openStartModal} className={BTN.primary} disabled={eligibleStaff.length === 0}>Start New</button>
         </div>
       </div>
+
+      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -365,10 +369,7 @@ export default function CareCertificateTracker() {
       </div>
 
       {/* ── Start New Modal ─────────────────────────────────────────────── */}
-      {showStartModal && (
-        <div className={MODAL.overlay} onClick={() => setShowStartModal(false)}>
-          <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>Start Care Certificate</h2>
+      <Modal isOpen={showStartModal} onClose={() => { setShowStartModal(false); setError(null); }} title="Start Care Certificate" size="md">
             <div className="space-y-4">
               <div>
                 <label className={INPUT.label}>Staff Member</label>
@@ -399,25 +400,20 @@ export default function CareCertificateTracker() {
               )}
             </div>
             <div className={MODAL.footer}>
-              <button onClick={() => setShowStartModal(false)} className={BTN.secondary}>Cancel</button>
+              <button onClick={() => { setShowStartModal(false); setError(null); }} className={BTN.secondary}>Cancel</button>
               <button onClick={handleStartSave} className={BTN.primary}
                 disabled={!startForm.staffId || !startForm.start_date || saving}>
                 {saving ? 'Starting...' : 'Start'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ── Detail Modal ────────────────────────────────────────────────── */}
-      {showModal && selectedStaffId && selectedRecord && (
-        <div className={MODAL.overlay} onClick={() => { setShowModal(false); setPendingUpdates(null); }}>
-          <div className={MODAL.panelXl} onClick={e => e.stopPropagation()}>
+      <Modal isOpen={!!(showModal && selectedStaffId && selectedRecord)} onClose={() => { setShowModal(false); setPendingUpdates(null); setError(null); }} title={selectedStaff?.name || 'Staff Detail'} size="xl">
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className={MODAL.title}>{selectedStaff?.name}</h2>
-                <p className="text-sm text-gray-500 -mt-2">{selectedStaff?.role} — Care Certificate</p>
+                <p className="text-sm text-gray-500">{selectedStaff?.role} — Care Certificate</p>
               </div>
               <span className={STATUS_BADGE_MAP[selectedResult?.status] || BADGE.gray}>
                 {CC_STATUSES[selectedResult?.status]?.label || selectedResult?.status}
@@ -543,15 +539,13 @@ export default function CareCertificateTracker() {
             <div className="flex justify-between mt-6 pt-4 border-t border-gray-100">
               <button onClick={handleRemoveStaff} disabled={saving} className={`${BTN.danger} ${BTN.sm}`}>Remove from Tracking</button>
               <div className="flex gap-2">
-                <button onClick={() => { setShowModal(false); setPendingUpdates(null); }} className={BTN.secondary}>Cancel</button>
+                <button onClick={() => { setShowModal(false); setPendingUpdates(null); setError(null); }} className={BTN.secondary}>Cancel</button>
                 <button onClick={handleSaveChanges} disabled={saving} className={BTN.primary}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

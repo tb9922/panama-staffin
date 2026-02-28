@@ -6,6 +6,7 @@ import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
+import rateLimit from 'express-rate-limit';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { config } from '../config.js';
 import * as homeRepo from '../repositories/homeRepo.js';
@@ -13,7 +14,8 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as hrService from '../services/hrService.js';
 import * as hrRepo from '../repositories/hrRepo.js';
 import * as auditService from '../services/auditService.js';
-import { pool } from '../db.js';
+import * as auditRepo from '../repositories/auditRepo.js';
+import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import {
   mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
   mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
@@ -22,6 +24,15 @@ import {
 } from '../lib/hrFieldMappers.js';
 
 const router = Router();
+
+// ── Rate limiting — all HR endpoints (GDPR special category data) ─────────
+router.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+}));
 
 // ── Multer upload config ────────────────────────────────────────────────────
 // Sanitize path segment — strip anything that isn't alphanumeric, hyphen, or underscore
@@ -65,9 +76,6 @@ const caseTypeSchema = z.enum([
   'oh_referral', 'contract', 'family_leave', 'flexible_working',
   'edi', 'tupe', 'renewal',
 ]);
-
-// ── Query filter helpers ──────────────────────────────────────────────────
-}
 
 // ── Disciplinary Schemas ────────────────────────────────────────────────────
 
@@ -710,6 +718,9 @@ async function resolveHome(req, res) {
   if (!parsed.data)    { res.status(400).json({ error: 'home parameter is required' }); return null; }
   const home = await homeRepo.findBySlug(parsed.data);
   if (!home) { res.status(404).json({ error: 'Home not found' }); return null; }
+  // Per-home authorization — verify the user has access to this specific home
+  const allowed = await userHomeRepo.hasAccess(req.user.username, home.id);
+  if (!allowed) { res.status(403).json({ error: 'You do not have access to this home' }); return null; }
   return home;
 }
 
@@ -1018,10 +1029,15 @@ router.get('/attachments/download/:id', requireAuth, requireAdmin, async (req, r
     const att = await hrRepo.findAttachmentById(id, home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     const filePath = path.join(config.upload.dir, String(home.id), att.case_type, String(att.case_id), att.stored_name);
-    res.setHeader('Content-Type', att.mime_type);
     const safeName = att.original_name.replace(/["\r\n;]/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
-    res.setHeader('Content-Length', att.size_bytes);
+    res.set({
+      'Content-Type': att.mime_type,
+      'Content-Disposition': `attachment; filename="${safeName}"`,
+      'Content-Length': att.size_bytes,
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'X-Frame-Options': 'DENY',
+    });
     createReadStream(filePath).pipe(res);
   } catch (err) { next(err); }
 });
@@ -1121,6 +1137,11 @@ router.post('/admin/purge-expired', requireAuth, requireAdmin, async (req, res, 
     const retentionYears = parseInt(req.body.retention_years) || 6;
     const dryRun = req.body.dry_run !== false;
     const counts = await hrRepo.purgeExpiredRecords(home.id, retentionYears, dryRun);
+    // Also purge audit log entries beyond retention period
+    const retentionDays = retentionYears * 365;
+    counts.audit_log = dryRun
+      ? await auditRepo.countOlderThan(retentionDays)
+      : await auditRepo.purgeOlderThan(retentionDays);
     await auditService.log(dryRun ? 'hr_purge_preview' : 'hr_purge_execute', home.slug, req.user.username, { retentionYears, counts });
     res.json({ dry_run: dryRun, retention_years: retentionYears, counts });
   } catch (err) { next(err); }
@@ -1132,10 +1153,7 @@ router.get('/admin/audit-export', requireAuth, requireAdmin, async (req, res, ne
     if (!home) return;
     const from = req.query.from || '1970-01-01';
     const to = req.query.to || '9999-12-31';
-    const { rows } = await pool.query(
-      `SELECT * FROM audit_log WHERE home_slug = $1 AND action LIKE 'hr_%' AND ts >= $2 AND ts <= $3 ORDER BY ts DESC`,
-      [home.slug, from, to]
-    );
+    const rows = await auditRepo.exportHrByHome(home.slug, from, to);
     res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${home.slug}-${from}-${to}.json"`);
     res.json(rows);
   } catch (err) { next(err); }

@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, loadData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
@@ -45,25 +46,23 @@ export default function StaffRegister() {
   const [newStaff, setNewStaff] = useState({ ...EMPTY_STAFF });
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useDirtyGuard(!!editing || showAdd);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const d = await loadData(homeSlug);
-      setAllStaff(d.staff || []);
-      setConfig(d.config || {});
-      setOverrides(d.overrides || {});
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [homeSlug]);
-
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const d = await loadData(homeSlug);
+        if (!stale) { setAllStaff(d.staff || []); setConfig(d.config || {}); setOverrides(d.overrides || {}); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [homeSlug, refreshKey]);
 
   const nlwRate = config?.nlw_rate || 12.21;
 
@@ -134,7 +133,7 @@ export default function StaffRegister() {
       await updateStaffMember(homeSlug, editingRow.id, editingRow);
       setEditing(null);
       setEditingRow(null);
-      await load();
+      setRefreshKey(k => k + 1);
     } catch (e) {
       setRowError({ id: editingRow.id, msg: e.message });
     } finally {
@@ -161,7 +160,7 @@ export default function StaffRegister() {
       await createStaff(homeSlug, staffEntry);
       setNewStaff({ ...EMPTY_STAFF });
       setShowAdd(false);
-      await load();
+      setRefreshKey(k => k + 1);
     } catch (e) {
       setRowError({ id: 'add', msg: e.message });
     } finally {
@@ -177,7 +176,7 @@ export default function StaffRegister() {
     try {
       await deleteStaffMember(homeSlug, id);
       if (editing === id) { setEditing(null); setEditingRow(null); }
-      await load();
+      setRefreshKey(k => k + 1);
     } catch (e) {
       setRowError({ id, msg: e.message });
     } finally {
@@ -218,7 +217,7 @@ export default function StaffRegister() {
       <div className="p-6 max-w-7xl mx-auto">
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
           {error}
-          <button onClick={load} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
+          <button onClick={() => setRefreshKey(k => k + 1)} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
         </div>
       </div>
     );
@@ -279,10 +278,7 @@ export default function StaffRegister() {
       </div>
 
       {/* Add Staff Modal */}
-      {showAdd && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panel}>
-            <h2 className={MODAL.title}>Add New Staff</h2>
+      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); }} title="Add New Staff" size="md">
             {rowError?.id === 'add' && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3">
                 {rowError.msg}
@@ -377,9 +373,7 @@ export default function StaffRegister() {
               <button onClick={addStaff} disabled={!newStaff.name || saving}
                 className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Add'}</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Table */}
       <div className={CARD.flush}>
@@ -418,7 +412,7 @@ export default function StaffRegister() {
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <input type="text" value={r.name} onChange={e => updateEditingRow('name', e.target.value)}
-                          className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-sm w-32 font-medium focus:border-blue-500 focus:outline-none" autoFocus />
+                          className={INPUT.inline + ' w-32 font-medium'} autoFocus />
                       ) : (
                         <span className="font-medium cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.name}</span>
                       )}
@@ -427,7 +421,7 @@ export default function StaffRegister() {
                     {/* Role — editable */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <select value={r.role} onChange={e => updateEditingRow('role', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-28">
+                        <select value={r.role} onChange={e => updateEditingRow('role', e.target.value)} className={INPUT.inlineSelect + ' w-28'}>
                           {ROLES.map(ro => <option key={ro}>{ro}</option>)}
                         </select>
                       ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.role}</span>}
@@ -436,7 +430,7 @@ export default function StaffRegister() {
                     {/* Team — editable */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <select value={r.team} onChange={e => updateEditingRow('team', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-20">
+                        <select value={r.team} onChange={e => updateEditingRow('team', e.target.value)} className={INPUT.inlineSelect + ' w-20'}>
                           {TEAMS.map(t => <option key={t}>{t}</option>)}
                         </select>
                       ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.team}</span>}
@@ -445,7 +439,7 @@ export default function StaffRegister() {
                     {/* Pref — editable */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16">
+                        <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className={INPUT.inlineSelect + ' w-16'}>
                           {PREFS.map(p => <option key={p}>{p}</option>)}
                         </select>
                       ) : <span className="font-mono text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.pref}</span>}
@@ -456,7 +450,7 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="number" step="0.5" min="0" max="2" value={r.skill}
                           onChange={e => updateEditingRow('skill', parseFloat(e.target.value) || 0)}
-                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                          className={INPUT.inline + ' w-14'} />
                       ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.skill}</span>}
                     </td>
 
@@ -468,7 +462,7 @@ export default function StaffRegister() {
                             <span className="text-xs text-gray-400">£</span>
                             <input type="number" step="0.25" min={nlwRate} value={r.hourly_rate}
                               onChange={e => updateEditingRow('hourly_rate', parseFloat(e.target.value) || 0)}
-                              className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-16" />
+                              className={INPUT.inline + ' w-16'} />
                           </div>
                           {r.hourly_rate < nlwRate && (
                             <p className="text-[10px] text-red-600 mt-0.5">Below NLW</p>
@@ -488,7 +482,7 @@ export default function StaffRegister() {
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <input type="date" value={r.start_date || ''} onChange={e => updateEditingRow('start_date', e.target.value)}
-                          className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs" />
+                          className={INPUT.inline} />
                       ) : <span className="text-xs text-gray-500 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.start_date || '-'}</span>}
                     </td>
 
@@ -507,7 +501,7 @@ export default function StaffRegister() {
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
-                          className="border border-gray-300 rounded-lg px-1.5 py-0.5 text-xs w-40" placeholder="Notes..." />
+                          className={INPUT.inline + ' w-40'} placeholder="Notes..." />
                       ) : <span className="text-xs text-gray-500 max-w-[150px] truncate block cursor-pointer hover:text-blue-600 transition-colors"
                         title={s.notes} onClick={() => startEditing(s)}>{s.notes || '-'}</span>}
                     </td>
@@ -520,11 +514,11 @@ export default function StaffRegister() {
                             placeholder={String(config?.al_entitlement_days || 28)}
                             title="Entitlement override (blank = default)"
                             onChange={e => updateEditingRow('al_entitlement', e.target.value ? parseInt(e.target.value) : null)}
-                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                            className={INPUT.inline + ' w-14'} />
                           <input type="number" min="0" max="28" value={r.al_carryover || 0}
                             title="Carryover from previous year"
                             onChange={e => updateEditingRow('al_carryover', parseInt(e.target.value) || 0)}
-                            className="border border-gray-300 rounded-lg px-1 py-0.5 text-xs w-14" />
+                            className={INPUT.inline + ' w-14'} />
                         </div>
                       ) : (
                         <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>

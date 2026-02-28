@@ -116,7 +116,6 @@ export function getCareCertStats(careCertData, activeStaff, asOfDate) {
       completed++;
     } else if (result.status === 'overdue') {
       overdue++;
-      inProgress++;
     } else if (result.status === 'in_progress') {
       inProgress++;
       if (result.weeksElapsed <= CC_COMPLETION_WEEKS) onTrack++;

@@ -8,6 +8,7 @@ import {
   getHrCaseNotes, createHrCaseNote,
 } from '../lib/api.js';
 import { GRIEVANCE_CATEGORIES, GRIEVANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
+import Pagination from '../components/Pagination.jsx';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
@@ -52,10 +53,15 @@ export default function GrievanceTracker() {
   const [filterStaff, setFilterStaff] = useState('');
   useDirtyGuard(showModal);
   const [filterStatus, setFilterStatus] = useState('');
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const home = getCurrentHome();
   const editReqRef = useRef(0);
+  useEffect(() => setOffset(0), [filterStaff, filterStatus]);
+
+  const LIMIT = 50;
 
   useEffect(() => {
     let stale = false;
@@ -63,16 +69,16 @@ export default function GrievanceTracker() {
       if (!home) return;
       setLoading(true);
       try {
-        const filters = {};
+        const filters = { limit: LIMIT, offset };
         if (filterStaff) filters.staffId = filterStaff;
         if (filterStatus) filters.status = filterStatus;
         const res = await getHrGrievance(home, filters);
-        if (!stale) { setCases(res?.rows || []); setError(null); }
+        if (!stale) { setCases(res?.rows || []); setTotal(res?.total || 0); setError(null); }
       } catch (e) { if (!stale) setError(e.message); }
       finally { if (!stale) setLoading(false); }
     })();
     return () => { stale = true; };
-  }, [home, filterStaff, filterStatus, refreshKey]);
+  }, [home, filterStaff, filterStatus, refreshKey, offset]);
 
   function openCreate() {
     setEditing(null);
@@ -267,6 +273,7 @@ export default function GrievanceTracker() {
           </table>
         </div>
       </div>
+      <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
 
       {/* Modal */}
       {showModal && renderModal()}

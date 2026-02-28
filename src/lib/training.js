@@ -95,7 +95,9 @@ export function compareLevels(trainingType, levelIdA, levelIdB) {
   if (!trainingType.levels) return 0;
   const idxA = trainingType.levels.findIndex(l => l.id === levelIdA);
   const idxB = trainingType.levels.findIndex(l => l.id === levelIdB);
-  if (idxA === -1 || idxB === -1) return 0;
+  if (idxA === -1 && idxB === -1) return 0; // both unknown = equal
+  if (idxA === -1) return -1; // A unknown, treat as less than B
+  if (idxB === -1) return 1;  // B unknown, treat as less than A
   if (idxA === idxB) return 0;
   return idxA < idxB ? -1 : 1;
 }
@@ -156,7 +158,10 @@ export function calculateExpiry(completedDateStr, refresherMonths) {
   const totalMonths = (y * 12 + (m - 1)) + refresherMonths;
   const expiryYear = Math.floor(totalMonths / 12);
   const expiryMonth = (totalMonths % 12) + 1;
-  return `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // Clamp day to last day of target month (e.g. Jan 31 + 1mo → Feb 28, not Feb 31)
+  const lastDayOfMonth = new Date(expiryYear, expiryMonth, 0).getDate();
+  const clampedDay = Math.min(d, lastDayOfMonth);
+  return `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
 }
 
 // ── Status Calculation ─────────────────────────────────────────────────────
@@ -177,12 +182,14 @@ export function getTrainingStatus(staffMember, trainingType, staffRecords, asOfD
   const diffMs = expiry.getTime() - now.getTime();
   const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
+  // Compute required level before expiry check so it's available in all returns
+  const requiredLevel = getRequiredLevel(trainingType, staffMember.role);
+
   if (daysUntilExpiry < 0) {
-    return { status: TRAINING_STATUS.EXPIRED, record, daysUntilExpiry, requiredLevel: null };
+    return { status: TRAINING_STATUS.EXPIRED, record, daysUntilExpiry, requiredLevel };
   }
 
   // Level check: if type has levels, verify the recorded level meets the requirement
-  const requiredLevel = getRequiredLevel(trainingType, staffMember.role);
   if (requiredLevel && record.level) {
     if (compareLevels(trainingType, record.level, requiredLevel.id) < 0) {
       return { status: TRAINING_STATUS.WRONG_LEVEL, record, daysUntilExpiry, requiredLevel };

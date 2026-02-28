@@ -84,8 +84,8 @@ export const config = {
     user: process.env.DB_USER || 'panama',
     password: process.env.DB_PASSWORD,
     poolMax: parseInt(process.env.DB_POOL_MAX || '10', 10),
-    idleTimeoutMs: 30000,
-    connectionTimeoutMs: 2000,
+    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
+    connectionTimeoutMs: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000', 10),
   },
 
   // ── File uploads ───────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { formatDate } from '../lib/rotation.js';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
@@ -10,6 +10,8 @@ import {
 } from '../lib/onboarding.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -29,21 +31,21 @@ export default function OnboardingTracker() {
   const [modalSection, setModalSection] = useState(null);
   const [modalStaffId, setModalStaffId] = useState(null);
   const [modalForm, setModalForm] = useState({});
+  const [refreshKey, setRefreshKey] = useState(0);
+  useDirtyGuard(showModal);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getOnboardingData(homeSlug);
-      setState(data);
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [homeSlug]);
-
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getOnboardingData(homeSlug);
+        if (!stale) { setState(data); setError(null); }
+      } catch (e) { if (!stale) setError(e.message); }
+      finally { if (!stale) setLoading(false); }
+    })();
+    return () => { stale = true; };
+  }, [homeSlug, refreshKey]);
 
   const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
   const onboardingData = useMemo(() => state?.onboarding || {}, [state]);
@@ -111,10 +113,10 @@ export default function OnboardingTracker() {
     setSaving(true);
     try {
       await upsertOnboardingSection(homeSlug, modalStaffId, modalSection, modalForm);
-      await load();
+      setRefreshKey(k => k + 1);
       setShowModal(false);
     } catch (e) {
-      alert('Failed to save: ' + e.message);
+      setError('Failed to save: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -125,10 +127,10 @@ export default function OnboardingTracker() {
     setSaving(true);
     try {
       await clearOnboardingSection(homeSlug, modalStaffId, modalSection);
-      await load();
+      setRefreshKey(k => k + 1);
       setShowModal(false);
     } catch (e) {
-      alert('Failed to remove: ' + e.message);
+      setError('Failed to remove: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -769,6 +771,8 @@ export default function OnboardingTracker() {
         <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
       </div>
 
+      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className="rounded-xl p-3 bg-blue-50 border border-blue-200">
@@ -898,10 +902,7 @@ export default function OnboardingTracker() {
       </div>
 
       {/* Section Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[85vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{sectionName} — {staffName}</h2>
+      <Modal isOpen={showModal} onClose={() => { setShowModal(false); setError(null); }} title={`${sectionName} — ${staffName}`} size="lg">
             <div className="mb-4">
               <label className={INPUT.label}>Status</label>
               <select value={modalForm.status || ONBOARDING_STATUS.NOT_STARTED} onChange={e => setField('status', e.target.value)} className={`${INPUT.select} w-auto`}>
@@ -919,14 +920,12 @@ export default function OnboardingTracker() {
               {onboardingData?.[modalStaffId]?.[modalSection] && (
                 <button onClick={handleClear} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
               )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+              <button onClick={() => { setShowModal(false); setError(null); }} className={BTN.ghost}>Cancel</button>
               <button onClick={handleSave} disabled={saving} className={BTN.primary}>
                 {saving ? 'Saving...' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

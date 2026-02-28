@@ -9,6 +9,7 @@ import {
 import { BRADFORD_TRIGGERS, getAbsenceTriggerBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const TABS = [
   { id: 'bradford', label: 'Bradford Scores' },
@@ -30,6 +31,8 @@ const emptyOh = () => ({
   follow_up_date: '', notes: '',
 });
 
+const LIMIT = 50;
+
 export default function AbsenceManager() {
   const [tab, setTab] = useState('bradford');
   const [loading, setLoading] = useState(true);
@@ -44,12 +47,16 @@ export default function AbsenceManager() {
 
   // RTW
   const [rtwList, setRtwList] = useState([]);
+  const [rtwTotal, setRtwTotal] = useState(0);
+  const [rtwOffset, setRtwOffset] = useState(0);
   const [showRtwModal, setShowRtwModal] = useState(false);
   const [editingRtw, setEditingRtw] = useState(null);
   const [rtwForm, setRtwForm] = useState(emptyRtw());
 
   // OH
   const [ohList, setOhList] = useState([]);
+  const [ohTotal, setOhTotal] = useState(0);
+  const [ohOffset, setOhOffset] = useState(0);
   const [showOhModal, setShowOhModal] = useState(false);
   const [editingOh, setEditingOh] = useState(null);
   const [ohForm, setOhForm] = useState(emptyOh());
@@ -63,16 +70,18 @@ export default function AbsenceManager() {
     try {
       const [sum, rtwRes, ohRes] = await Promise.all([
         getAbsenceSummary(home),
-        getHrRtwInterviews(home),
-        getHrOhReferrals(home),
+        getHrRtwInterviews(home, { limit: LIMIT, offset: rtwOffset }),
+        getHrOhReferrals(home, { limit: LIMIT, offset: ohOffset }),
       ]);
       setSummary((sum || []).sort((a, b) => (b.score || 0) - (a.score || 0)));
       setRtwList(rtwRes?.rows || []);
+      setRtwTotal(rtwRes?.total || 0);
       setOhList(ohRes?.rows || []);
+      setOhTotal(ohRes?.total || 0);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [home]);
+  }, [home, rtwOffset, ohOffset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -352,6 +361,7 @@ export default function AbsenceManager() {
             </tbody>
           </table>
         </div>
+        <Pagination total={rtwTotal} limit={LIMIT} offset={rtwOffset} onChange={setRtwOffset} />
       </div>
     );
   }
@@ -392,6 +402,7 @@ export default function AbsenceManager() {
             </tbody>
           </table>
         </div>
+        <Pagination total={ohTotal} limit={LIMIT} offset={ohOffset} onChange={setOhOffset} />
       </div>
     );
   }

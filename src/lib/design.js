@@ -33,12 +33,22 @@ export const BADGE = {
   pink:    'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-200',
 };
 
+// ── Tabs ────────────────────────────────────────────────────────────────────
+export const TAB = {
+  bar: 'flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto',
+  button: 'px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors',
+  active: 'border-blue-600 text-blue-600',
+  inactive: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+};
+
 // ── Form Inputs ──────────────────────────────────────────────────────────────
 export const INPUT = {
   base:   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-colors duration-150 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20',
   sm:     'w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-colors duration-150 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20',
   select: 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm transition-colors duration-150 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20',
   label:  'block text-sm font-medium text-gray-700 mb-1',
+  inline:       'rounded-lg border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-900 transition-colors duration-150 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20',
+  inlineSelect: 'rounded-lg border border-gray-300 bg-white px-1 py-0.5 text-xs text-gray-900 transition-colors duration-150 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20',
 };
 
 // ── Tables ────────────────────────────────────────────────────────────────────

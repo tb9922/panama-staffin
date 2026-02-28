@@ -3,7 +3,53 @@ import { pool } from '../db.js';
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 
+// ── Shape Factory ────────────────────────────────────────────────────────────
+// Builds a row → API-object shaper from a declarative config.
+// fields = explicit whitelist (security boundary — only listed fields reach the frontend)
+// dates/timestamps/jsonArrays/jsonObjects/ints/floats = transformation sets
+// aliases = { frontendName: 'dbField' | (row, out) => value }
+function createShaper({ fields, dates, timestamps, jsonArrays, jsonObjects, ints, floats, aliases }) {
+  const dateSet  = new Set(dates || []);
+  const tsSet    = new Set(timestamps || ['created_at', 'updated_at']);
+  const arrSet   = new Set(jsonArrays || []);
+  const objSet   = new Set(jsonObjects || []);
+  const intSet   = new Set(ints || []);
+  const floatSet = new Set(floats || []);
+
+  return function shape(row) {
+    if (!row) return null;
+    const out = {};
+    for (const key of fields) {
+      const v = row[key];
+      if (dateSet.has(key))       out[key] = d(v);
+      else if (tsSet.has(key))    out[key] = ts(v);
+      else if (arrSet.has(key))   out[key] = v || [];
+      else if (objSet.has(key))   out[key] = v || {};
+      else if (intSet.has(key))   out[key] = v != null ? parseInt(v, 10) : null;
+      else if (floatSet.has(key)) out[key] = v != null ? parseFloat(v) : null;
+      else                        out[key] = v;
+    }
+    if (aliases) {
+      for (const [alias, src] of Object.entries(aliases)) {
+        out[alias] = typeof src === 'function' ? src(row, out) : out[src];
+      }
+    }
+    return out;
+  };
+}
+
+// Allowed ORDER BY expressions — prevents SQL injection if a caller ever passes user input.
+// Every paginate() call must use one of these exact strings.
+const ALLOWED_ORDER_BY = new Set([
+  'date_raised DESC', 'rtw_date DESC', 'referral_date DESC',
+  'contract_start_date DESC', 'request_date DESC NULLS LAST',
+  'request_date DESC', 'created_at DESC', 'transfer_date DESC',
+]);
+
 async function paginate(conn, sql, params, orderBy, shaper, pag = {}) {
+  if (!ALLOWED_ORDER_BY.has(orderBy)) {
+    throw new Error(`paginate: disallowed ORDER BY clause: ${orderBy}`);
+  }
   const limit = Math.min(Math.max(parseInt(pag.limit) || 200, 1), 500);
   const offset = Math.max(parseInt(pag.offset) || 0, 0);
   const countSql = `SELECT COUNT(*) FROM (${sql}) _c`;
@@ -17,48 +63,39 @@ async function paginate(conn, sql, params, orderBy, shaper, pag = {}) {
 
 // ── Disciplinary Cases ──────────────────────────────────────────────────────
 
-function shapeDisc(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    date_raised: d(row.date_raised), raised_by: row.raised_by,
-    source: row.source, source_ref: row.source_ref, category: row.category,
-    allegation_summary: row.allegation_summary, allegation_detail: row.allegation_detail,
-    investigation_status: row.investigation_status, investigation_officer: row.investigation_officer,
-    investigation_start_date: d(row.investigation_start_date), investigation_notes: row.investigation_notes,
-    witnesses: row.witnesses || [], evidence_items: row.evidence_items || [],
-    investigation_completed_date: d(row.investigation_completed_date),
-    investigation_findings: row.investigation_findings, investigation_recommendation: row.investigation_recommendation,
-    suspended: row.suspended, suspension_date: d(row.suspension_date),
-    suspension_reason: row.suspension_reason, suspension_review_date: d(row.suspension_review_date),
-    suspension_end_date: d(row.suspension_end_date), suspension_on_full_pay: row.suspension_on_full_pay,
-    hearing_status: row.hearing_status, hearing_date: d(row.hearing_date),
-    hearing_time: row.hearing_time, hearing_location: row.hearing_location,
-    hearing_chair: row.hearing_chair, hearing_letter_sent_date: d(row.hearing_letter_sent_date),
-    hearing_companion_name: row.hearing_companion_name, hearing_companion_role: row.hearing_companion_role,
-    hearing_notes: row.hearing_notes, hearing_employee_response: row.hearing_employee_response,
-    outcome: row.outcome, outcome_date: d(row.outcome_date), outcome_reason: row.outcome_reason,
-    outcome_letter_sent_date: d(row.outcome_letter_sent_date), outcome_letter_method: row.outcome_letter_method,
-    warning_expiry_date: d(row.warning_expiry_date),
-    notice_period_start: d(row.notice_period_start), notice_period_end: d(row.notice_period_end),
-    pay_in_lieu_of_notice: row.pay_in_lieu_of_notice, dismissal_effective_date: d(row.dismissal_effective_date),
-    appeal_status: row.appeal_status, appeal_received_date: d(row.appeal_received_date),
-    appeal_deadline: d(row.appeal_deadline), appeal_grounds: row.appeal_grounds,
-    appeal_hearing_date: d(row.appeal_hearing_date), appeal_hearing_chair: row.appeal_hearing_chair,
-    appeal_hearing_companion_name: row.appeal_hearing_companion_name,
-    appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
-    appeal_outcome_reason: row.appeal_outcome_reason,
-    appeal_outcome_letter_sent_date: d(row.appeal_outcome_letter_sent_date),
-    linked_grievance_id: row.linked_grievance_id,
-    disciplinary_paused_for_grievance: row.disciplinary_paused_for_grievance,
-    status: row.status, closed_date: d(row.closed_date), closed_reason: row.closed_reason,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    outcome_notes: row.outcome_reason,
-    appeal_date: d(row.appeal_received_date),
-  };
-}
+const shapeDisc = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id', 'date_raised', 'raised_by', 'source', 'source_ref', 'category',
+    'allegation_summary', 'allegation_detail',
+    'investigation_status', 'investigation_officer', 'investigation_start_date', 'investigation_notes',
+    'witnesses', 'evidence_items', 'investigation_completed_date',
+    'investigation_findings', 'investigation_recommendation',
+    'suspended', 'suspension_date', 'suspension_reason', 'suspension_review_date',
+    'suspension_end_date', 'suspension_on_full_pay',
+    'hearing_status', 'hearing_date', 'hearing_time', 'hearing_location',
+    'hearing_chair', 'hearing_letter_sent_date', 'hearing_companion_name', 'hearing_companion_role',
+    'hearing_notes', 'hearing_employee_response',
+    'outcome', 'outcome_date', 'outcome_reason', 'outcome_letter_sent_date', 'outcome_letter_method',
+    'warning_expiry_date', 'notice_period_start', 'notice_period_end',
+    'pay_in_lieu_of_notice', 'dismissal_effective_date',
+    'appeal_status', 'appeal_received_date', 'appeal_deadline', 'appeal_grounds',
+    'appeal_hearing_date', 'appeal_hearing_chair', 'appeal_hearing_companion_name',
+    'appeal_outcome', 'appeal_outcome_date', 'appeal_outcome_reason', 'appeal_outcome_letter_sent_date',
+    'linked_grievance_id', 'disciplinary_paused_for_grievance',
+    'status', 'closed_date', 'closed_reason',
+    'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'date_raised', 'investigation_start_date', 'investigation_completed_date',
+    'suspension_date', 'suspension_review_date', 'suspension_end_date',
+    'hearing_date', 'hearing_letter_sent_date', 'outcome_date', 'outcome_letter_sent_date',
+    'warning_expiry_date', 'notice_period_start', 'notice_period_end', 'dismissal_effective_date',
+    'appeal_received_date', 'appeal_deadline', 'appeal_hearing_date',
+    'appeal_outcome_date', 'appeal_outcome_letter_sent_date', 'closed_date',
+  ],
+  jsonArrays: ['witnesses', 'evidence_items'],
+  aliases: { outcome_notes: 'outcome_reason', appeal_date: 'appeal_received_date' },
+});
 
 export async function findDisciplinary(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
@@ -97,6 +134,8 @@ export async function updateDisciplinary(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'date_raised', 'raised_by', 'source', 'source_ref', 'category',
+    'allegation_summary', 'allegation_detail',
     'investigation_status', 'investigation_officer', 'investigation_start_date',
     'investigation_notes', 'witnesses', 'evidence_items', 'investigation_completed_date',
     'investigation_findings', 'investigation_recommendation',
@@ -137,44 +176,35 @@ export async function updateDisciplinary(id, homeId, data, client, version) {
 
 // ── Grievance Cases ─────────────────────────────────────────────────────────
 
-function shapeGrv(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    date_raised: d(row.date_raised), raised_by_method: row.raised_by_method,
-    category: row.category, protected_characteristic: row.protected_characteristic,
-    subject_summary: row.subject_summary, description: row.subject_summary,
-    subject_detail: row.subject_detail,
-    desired_outcome: row.desired_outcome,
-    acknowledged_date: d(row.acknowledged_date), acknowledge_deadline: d(row.acknowledge_deadline),
-    acknowledged_by: row.acknowledged_by,
-    investigation_status: row.investigation_status, investigation_officer: row.investigation_officer,
-    investigation_start_date: d(row.investigation_start_date), investigation_notes: row.investigation_notes,
-    witnesses: row.witnesses || [], evidence_items: row.evidence_items || [],
-    investigation_completed_date: d(row.investigation_completed_date),
-    investigation_findings: row.investigation_findings,
-    hearing_status: row.hearing_status, hearing_date: d(row.hearing_date),
-    hearing_time: row.hearing_time, hearing_location: row.hearing_location,
-    hearing_chair: row.hearing_chair, hearing_letter_sent_date: d(row.hearing_letter_sent_date),
-    hearing_companion_name: row.hearing_companion_name, hearing_companion_role: row.hearing_companion_role,
-    hearing_notes: row.hearing_notes, employee_statement_at_hearing: row.employee_statement_at_hearing,
-    outcome: row.outcome, outcome_date: d(row.outcome_date), outcome_reason: row.outcome_reason,
-    outcome_letter_sent_date: d(row.outcome_letter_sent_date),
-    mediation_offered: row.mediation_offered, mediation_accepted: row.mediation_accepted,
-    mediator_name: row.mediator_name,
-    appeal_status: row.appeal_status, appeal_received_date: d(row.appeal_received_date),
-    appeal_deadline: d(row.appeal_deadline), appeal_grounds: row.appeal_grounds,
-    appeal_hearing_date: d(row.appeal_hearing_date), appeal_hearing_chair: row.appeal_hearing_chair,
-    appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
-    appeal_outcome_reason: row.appeal_outcome_reason,
-    appeal_outcome_letter_sent_date: d(row.appeal_outcome_letter_sent_date),
-    linked_disciplinary_id: row.linked_disciplinary_id, triggers_disciplinary: row.triggers_disciplinary,
-    status: row.status, confidential: row.confidential,
-    closed_date: d(row.closed_date), closed_reason: row.closed_reason,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-  };
-}
+const shapeGrv = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id', 'date_raised', 'raised_by_method',
+    'category', 'protected_characteristic', 'subject_summary', 'subject_detail', 'desired_outcome',
+    'acknowledged_date', 'acknowledge_deadline', 'acknowledged_by',
+    'investigation_status', 'investigation_officer', 'investigation_start_date', 'investigation_notes',
+    'witnesses', 'evidence_items', 'investigation_completed_date', 'investigation_findings',
+    'hearing_status', 'hearing_date', 'hearing_time', 'hearing_location',
+    'hearing_chair', 'hearing_letter_sent_date', 'hearing_companion_name', 'hearing_companion_role',
+    'hearing_notes', 'employee_statement_at_hearing',
+    'outcome', 'outcome_date', 'outcome_reason', 'outcome_letter_sent_date',
+    'mediation_offered', 'mediation_accepted', 'mediator_name',
+    'appeal_status', 'appeal_received_date', 'appeal_deadline', 'appeal_grounds',
+    'appeal_hearing_date', 'appeal_hearing_chair',
+    'appeal_outcome', 'appeal_outcome_date', 'appeal_outcome_reason', 'appeal_outcome_letter_sent_date',
+    'linked_disciplinary_id', 'triggers_disciplinary',
+    'status', 'confidential', 'closed_date', 'closed_reason',
+    'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'date_raised', 'acknowledged_date', 'acknowledge_deadline',
+    'investigation_start_date', 'investigation_completed_date',
+    'hearing_date', 'hearing_letter_sent_date', 'outcome_date', 'outcome_letter_sent_date',
+    'appeal_received_date', 'appeal_deadline', 'appeal_hearing_date',
+    'appeal_outcome_date', 'appeal_outcome_letter_sent_date', 'closed_date',
+  ],
+  jsonArrays: ['witnesses', 'evidence_items'],
+  aliases: { description: 'subject_summary' },
+});
 
 export async function findGrievance(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
@@ -200,7 +230,7 @@ export async function createGrievance(homeId, data, client) {
         subject_summary, subject_detail, desired_outcome, status, confidential, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [homeId, data.staff_id, data.date_raised, data.raised_by_method || 'written', data.category,
-     data.protected_characteristic || null, data.description,
+     data.protected_characteristic || null, data.subject_summary || data.description,
      data.subject_detail || null, data.desired_outcome || null,
      data.status || 'open', data.confidential ?? false, data.created_by]
   );
@@ -251,16 +281,11 @@ export async function updateGrievance(id, homeId, data, client, version) {
 
 // ── Grievance Actions ───────────────────────────────────────────────────────
 
-function shapeGrvAction(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, grievance_id: row.grievance_id,
-    description: row.description,
-    responsible: row.responsible, due_date: d(row.due_date),
-    completed_date: d(row.completed_date), status: row.status,
-    created_at: ts(row.created_at),
-  };
-}
+const shapeGrvAction = createShaper({
+  fields: ['id', 'home_id', 'grievance_id', 'description', 'responsible', 'due_date', 'completed_date', 'status', 'created_at'],
+  dates: ['due_date', 'completed_date'],
+  timestamps: ['created_at'],
+});
 
 export async function findGrievanceActions(grievanceId, homeId, client) {
   const conn = client || pool;
@@ -299,43 +324,33 @@ export async function updateGrievanceAction(id, homeId, data, client) {
 
 // ── Performance Cases ───────────────────────────────────────────────────────
 
-function shapePerf(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id, type: row.type,
-    date_raised: d(row.date_raised), raised_by: row.raised_by,
-    concern_summary: row.concern_summary, concern_detail: row.concern_detail,
-    performance_area: row.performance_area,
-    informal_discussion_date: d(row.informal_discussion_date),
-    informal_discussion_notes: row.informal_discussion_notes,
-    informal_targets: row.informal_targets || [],
-    informal_review_date: d(row.informal_review_date), informal_outcome: row.informal_outcome,
-    pip_start_date: d(row.pip_start_date), pip_end_date: d(row.pip_end_date),
-    pip_objectives: row.pip_objectives || [],
-    pip_overall_outcome: row.pip_overall_outcome, pip_extended_to: d(row.pip_extended_to),
-    hearing_status: row.hearing_status, hearing_date: d(row.hearing_date),
-    hearing_time: row.hearing_time, hearing_location: row.hearing_location,
-    hearing_chair: row.hearing_chair, hearing_letter_sent_date: d(row.hearing_letter_sent_date),
-    hearing_companion_name: row.hearing_companion_name, hearing_companion_role: row.hearing_companion_role,
-    hearing_notes: row.hearing_notes,
-    outcome: row.outcome, outcome_date: d(row.outcome_date), outcome_reason: row.outcome_reason,
-    outcome_letter_sent_date: d(row.outcome_letter_sent_date), warning_expiry_date: d(row.warning_expiry_date),
-    redeployment_offered: row.redeployment_offered, redeployment_role: row.redeployment_role,
-    redeployment_accepted: row.redeployment_accepted,
-    appeal_status: row.appeal_status, appeal_received_date: d(row.appeal_received_date),
-    appeal_deadline: d(row.appeal_deadline), appeal_grounds: row.appeal_grounds,
-    appeal_hearing_date: d(row.appeal_hearing_date),
-    appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
-    appeal_outcome_reason: row.appeal_outcome_reason,
-    status: row.status, closed_date: d(row.closed_date),
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    description: row.concern_summary,
-    informal_notes: row.informal_discussion_notes,
-    appeal_date: d(row.appeal_received_date),
-  };
-}
+const shapePerf = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id', 'type', 'date_raised', 'raised_by',
+    'concern_summary', 'concern_detail', 'performance_area',
+    'informal_discussion_date', 'informal_discussion_notes', 'informal_targets',
+    'informal_review_date', 'informal_outcome',
+    'pip_start_date', 'pip_end_date', 'pip_objectives', 'pip_overall_outcome', 'pip_extended_to',
+    'hearing_status', 'hearing_date', 'hearing_time', 'hearing_location',
+    'hearing_chair', 'hearing_letter_sent_date', 'hearing_companion_name', 'hearing_companion_role',
+    'hearing_notes',
+    'outcome', 'outcome_date', 'outcome_reason', 'outcome_letter_sent_date', 'warning_expiry_date',
+    'redeployment_offered', 'redeployment_role', 'redeployment_accepted',
+    'appeal_status', 'appeal_received_date', 'appeal_deadline', 'appeal_grounds',
+    'appeal_hearing_date', 'appeal_outcome', 'appeal_outcome_date', 'appeal_outcome_reason',
+    'status', 'closed_date',
+    'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'date_raised', 'informal_discussion_date', 'informal_review_date',
+    'pip_start_date', 'pip_end_date', 'pip_extended_to',
+    'hearing_date', 'hearing_letter_sent_date', 'outcome_date', 'outcome_letter_sent_date',
+    'warning_expiry_date', 'appeal_received_date', 'appeal_deadline',
+    'appeal_hearing_date', 'appeal_outcome_date', 'closed_date',
+  ],
+  jsonArrays: ['informal_targets', 'pip_objectives'],
+  aliases: { description: 'concern_summary', informal_notes: 'informal_discussion_notes', appeal_date: 'appeal_received_date' },
+});
 
 export async function findPerformance(homeId, { staffId, status, type } = {}, client, pag) {
   const conn = client || pool;
@@ -407,31 +422,24 @@ export async function updatePerformance(id, homeId, data, client, version) {
 
 // ── RTW Interviews ──────────────────────────────────────────────────────────
 
-function shapeRtw(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    absence_start_date: d(row.absence_start_date), absence_end_date: d(row.absence_end_date),
-    absence_days: row.absence_days != null ? parseInt(row.absence_days, 10) : null, absence_reason: row.absence_reason,
-    rtw_date: d(row.rtw_date), rtw_conducted_by: row.rtw_conducted_by,
-    fit_to_return: row.fit_to_return, adjustments_needed: row.adjustments_needed,
-    adjustments_detail: row.adjustments_detail, underlying_condition: row.underlying_condition,
-    oh_referral_recommended: row.oh_referral_recommended, follow_up_date: d(row.follow_up_date),
-    notes: row.notes,
-    fit_note_received: row.fit_note_received, fit_note_date: d(row.fit_note_date),
-    fit_note_type: row.fit_note_type, fit_note_adjustments: row.fit_note_adjustments,
-    fit_note_review_date: d(row.fit_note_review_date),
-    bradford_score_after: row.bradford_score_after != null ? parseFloat(row.bradford_score_after) : null, trigger_reached: row.trigger_reached,
-    action_taken: row.action_taken, linked_case_id: row.linked_case_id,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    conducted_by: row.rtw_conducted_by,
-    fit_for_work: row.fit_to_return,
-    adjustments: row.adjustments_detail,
-    referral_needed: row.oh_referral_recommended,
-  };
-}
+const shapeRtw = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id',
+    'absence_start_date', 'absence_end_date', 'absence_days', 'absence_reason',
+    'rtw_date', 'rtw_conducted_by', 'fit_to_return', 'adjustments_needed',
+    'adjustments_detail', 'underlying_condition', 'oh_referral_recommended', 'follow_up_date', 'notes',
+    'fit_note_received', 'fit_note_date', 'fit_note_type', 'fit_note_adjustments', 'fit_note_review_date',
+    'bradford_score_after', 'trigger_reached', 'action_taken', 'linked_case_id',
+    'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: ['absence_start_date', 'absence_end_date', 'rtw_date', 'follow_up_date', 'fit_note_date', 'fit_note_review_date'],
+  ints: ['absence_days'],
+  floats: ['bradford_score_after'],
+  aliases: {
+    conducted_by: 'rtw_conducted_by', fit_for_work: 'fit_to_return',
+    adjustments: 'adjustments_detail', referral_needed: 'oh_referral_recommended',
+  },
+});
 
 export async function findRtwInterviewById(id, homeId, client) {
   const conn = client || pool;
@@ -476,7 +484,7 @@ export async function updateRtwInterview(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'rtw_date', 'rtw_conducted_by',
+    'absence_start_date', 'rtw_date', 'rtw_conducted_by',
     'absence_end_date', 'absence_days', 'absence_reason', 'fit_to_return',
     'adjustments_needed', 'adjustments_detail', 'underlying_condition',
     'oh_referral_recommended', 'follow_up_date', 'notes',
@@ -501,27 +509,19 @@ export async function updateRtwInterview(id, homeId, data, client, version) {
 
 // ── OH Referrals ────────────────────────────────────────────────────────────
 
-function shapeOh(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    referral_date: d(row.referral_date), referred_by: row.referred_by,
-    reason: row.reason, questions_for_oh: row.questions_for_oh || [],
-    employee_consent_obtained: row.employee_consent_obtained, consent_date: d(row.consent_date),
-    oh_provider: row.oh_provider, appointment_date: d(row.appointment_date),
-    report_received_date: d(row.report_received_date), report_summary: row.report_summary,
-    fit_for_role: row.fit_for_role, adjustments_recommended: row.adjustments_recommended,
-    estimated_return_date: d(row.estimated_return_date), disability_likely: row.disability_likely,
-    follow_up_date: d(row.follow_up_date), adjustments_implemented: row.adjustments_implemented || [],
-    status: row.status,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    provider: row.oh_provider,
-    report_date: d(row.report_received_date),
-    recommendations: row.adjustments_recommended,
-  };
-}
+const shapeOh = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id',
+    'referral_date', 'referred_by', 'reason', 'questions_for_oh',
+    'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date',
+    'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
+    'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
+    'status', 'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: ['referral_date', 'consent_date', 'appointment_date', 'report_received_date', 'estimated_return_date', 'follow_up_date'],
+  jsonArrays: ['questions_for_oh', 'adjustments_implemented'],
+  aliases: { provider: 'oh_provider', report_date: 'report_received_date', recommendations: 'adjustments_recommended' },
+});
 
 export async function findOhReferralById(id, homeId, client) {
   const conn = client || pool;
@@ -559,11 +559,11 @@ export async function updateOhReferral(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'reason', 'referred_by',
+    'referral_date', 'reason', 'referred_by',
     'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date', 'status',
     'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
     'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
-    'questions_for_oh',
+    'questions_for_oh', 'notes',
   ];
   const jsonFields = ['questions_for_oh', 'adjustments_implemented'];
   for (const key of settable) {
@@ -586,41 +586,31 @@ export async function updateOhReferral(id, homeId, data, client, version) {
 
 // ── Contracts ───────────────────────────────────────────────────────────────
 
-function shapeContract(row) {
-  if (!row) return null;
-  const f = v => v != null ? parseFloat(v) : null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    statement_issued: row.statement_issued, statement_issued_date: d(row.statement_issued_date),
-    contract_type: row.contract_type, contract_start_date: d(row.contract_start_date),
-    contract_end_date: d(row.contract_end_date),
-    job_title: row.job_title, job_description_ref: row.job_description_ref,
-    reporting_to: row.reporting_to, place_of_work: row.place_of_work,
-    hours_per_week: f(row.hours_per_week), working_pattern: row.working_pattern,
-    hourly_rate: f(row.hourly_rate), pay_frequency: row.pay_frequency,
-    annual_leave_days: row.annual_leave_days,
-    notice_period_employer: row.notice_period_employer, notice_period_employee: row.notice_period_employee,
-    probation_period_months: row.probation_period_months,
-    probation_start_date: d(row.probation_start_date), probation_end_date: d(row.probation_end_date),
-    probation_reviews: row.probation_reviews || [],
-    probation_outcome: row.probation_outcome, probation_extension_date: d(row.probation_extension_date),
-    probation_extension_reason: row.probation_extension_reason,
-    probation_confirmed_date: d(row.probation_confirmed_date),
-    probation_confirmation_letter_sent: row.probation_confirmation_letter_sent,
-    variations: row.variations || [],
-    termination_type: row.termination_type, termination_date: d(row.termination_date),
-    termination_reason: row.termination_reason, notice_given_date: d(row.notice_given_date),
-    notice_given_by: row.notice_given_by, last_working_day: d(row.last_working_day),
-    garden_leave: row.garden_leave, pilon: row.pilon,
-    exit_interview_date: d(row.exit_interview_date), exit_interview_notes: row.exit_interview_notes,
-    references_agreed: row.references_agreed,
-    status: row.status, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    start_date: d(row.contract_start_date),
-    end_date: d(row.contract_end_date),
-  };
-}
+const shapeContract = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id',
+    'statement_issued', 'statement_issued_date', 'contract_type', 'contract_start_date', 'contract_end_date',
+    'job_title', 'job_description_ref', 'reporting_to', 'place_of_work',
+    'hours_per_week', 'working_pattern', 'hourly_rate', 'pay_frequency', 'annual_leave_days',
+    'notice_period_employer', 'notice_period_employee',
+    'probation_period_months', 'probation_start_date', 'probation_end_date',
+    'probation_reviews', 'probation_outcome', 'probation_extension_date', 'probation_extension_reason',
+    'probation_confirmed_date', 'probation_confirmation_letter_sent',
+    'variations',
+    'termination_type', 'termination_date', 'termination_reason', 'notice_given_date',
+    'notice_given_by', 'last_working_day', 'garden_leave', 'pilon',
+    'exit_interview_date', 'exit_interview_notes', 'references_agreed',
+    'status', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'statement_issued_date', 'contract_start_date', 'contract_end_date',
+    'probation_start_date', 'probation_end_date', 'probation_extension_date', 'probation_confirmed_date',
+    'termination_date', 'notice_given_date', 'last_working_day', 'exit_interview_date',
+  ],
+  floats: ['hours_per_week', 'hourly_rate'],
+  jsonArrays: ['probation_reviews', 'variations'],
+  aliases: { start_date: 'contract_start_date', end_date: 'contract_end_date' },
+});
 
 export async function findContracts(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
@@ -666,7 +656,7 @@ export async function updateContract(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'statement_issued', 'statement_issued_date', 'contract_type', 'contract_end_date',
+    'contract_start_date', 'statement_issued', 'statement_issued_date', 'contract_type', 'contract_end_date',
     'job_title', 'job_description_ref', 'reporting_to', 'place_of_work',
     'hours_per_week', 'working_pattern', 'hourly_rate', 'pay_frequency', 'annual_leave_days',
     'notice_period_employer', 'notice_period_employee',
@@ -676,7 +666,7 @@ export async function updateContract(id, homeId, data, client, version) {
     'variations',
     'termination_type', 'termination_date', 'termination_reason', 'notice_given_date',
     'notice_given_by', 'last_working_day', 'garden_leave', 'pilon',
-    'exit_interview_date', 'exit_interview_notes', 'references_agreed', 'status',
+    'exit_interview_date', 'exit_interview_notes', 'references_agreed', 'status', 'notes',
   ];
   const jsonFields = ['probation_reviews', 'variations'];
   for (const key of settable) {
@@ -699,46 +689,45 @@ export async function updateContract(id, homeId, data, client, version) {
 
 // ── Family Leave ────────────────────────────────────────────────────────────
 
-function shapeFamilyLeave(row) {
-  if (!row) return null;
-  const f = v => v != null ? parseFloat(v) : null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id, type: row.type,
-    request_date: d(row.request_date),
-    expected_due_date: d(row.expected_due_date), actual_birth_date: d(row.actual_birth_date),
-    mat_b1_received: row.mat_b1_received, mat_b1_date: d(row.mat_b1_date),
-    paternity_week_choice: row.paternity_week_choice, paternity_start_date: d(row.paternity_start_date),
-    spl_total_weeks: row.spl_total_weeks, spl_notice_received_date: d(row.spl_notice_received_date),
-    spl_partner_employer: row.spl_partner_employer, spl_booking_notices: row.spl_booking_notices || [],
-    matching_date: d(row.matching_date), placement_date: d(row.placement_date),
-    upl_child_name: row.upl_child_name, upl_child_dob: d(row.upl_child_dob),
-    upl_weeks_requested: row.upl_weeks_requested, upl_weeks_used_total: row.upl_weeks_used_total,
-    bereavement_date: d(row.bereavement_date), bereavement_relationship: row.bereavement_relationship,
-    leave_start_date: d(row.leave_start_date), leave_end_date: d(row.leave_end_date),
-    expected_return_date: d(row.expected_return_date), actual_return_date: d(row.actual_return_date),
-    statutory_pay_type: row.statutory_pay_type, statutory_pay_start_date: d(row.statutory_pay_start_date),
-    enhanced_pay: row.enhanced_pay, enhanced_pay_weeks: row.enhanced_pay_weeks,
-    enhanced_pay_rate: f(row.enhanced_pay_rate),
-    risk_assessment_date: d(row.risk_assessment_date), risk_assessment_by: row.risk_assessment_by,
-    risks_identified: row.risks_identified, adjustments_made: row.adjustments_made,
-    risk_assessment_review_date: d(row.risk_assessment_review_date),
-    kit_days: row.kit_days || [], split_days: row.split_days || [],
-    return_confirmed: row.return_confirmed, return_pattern: row.return_pattern,
-    flexible_working_request_linked: row.flexible_working_request_linked,
-    protected_period_start: d(row.protected_period_start), protected_period_end: d(row.protected_period_end),
-    status: row.status, notes: row.notes,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    leave_type: row.type,
-    start_date: d(row.leave_start_date),
-    end_date: d(row.leave_end_date),
-    expected_return: d(row.expected_return_date),
-    actual_return: d(row.actual_return_date),
-    kit_days_used: row.kit_days != null ? (Array.isArray(row.kit_days) ? row.kit_days.length : row.kit_days) : 0,
-    pay_type: row.statutory_pay_type,
-  };
-}
+const shapeFamilyLeave = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id', 'type',
+    'request_date', 'expected_due_date', 'actual_birth_date',
+    'mat_b1_received', 'mat_b1_date', 'paternity_week_choice', 'paternity_start_date',
+    'spl_total_weeks', 'spl_notice_received_date', 'spl_partner_employer', 'spl_booking_notices',
+    'matching_date', 'placement_date',
+    'upl_child_name', 'upl_child_dob', 'upl_weeks_requested', 'upl_weeks_used_total',
+    'bereavement_date', 'bereavement_relationship',
+    'leave_start_date', 'leave_end_date', 'expected_return_date', 'actual_return_date',
+    'statutory_pay_type', 'statutory_pay_start_date',
+    'enhanced_pay', 'enhanced_pay_weeks', 'enhanced_pay_rate',
+    'risk_assessment_date', 'risk_assessment_by', 'risks_identified', 'adjustments_made',
+    'risk_assessment_review_date',
+    'kit_days', 'split_days',
+    'return_confirmed', 'return_pattern', 'flexible_working_request_linked',
+    'protected_period_start', 'protected_period_end',
+    'status', 'notes', 'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'request_date', 'expected_due_date', 'actual_birth_date', 'mat_b1_date',
+    'paternity_start_date', 'spl_notice_received_date', 'matching_date', 'placement_date',
+    'upl_child_dob', 'bereavement_date',
+    'leave_start_date', 'leave_end_date', 'expected_return_date', 'actual_return_date',
+    'statutory_pay_start_date', 'risk_assessment_date', 'risk_assessment_review_date',
+    'protected_period_start', 'protected_period_end',
+  ],
+  floats: ['enhanced_pay_rate'],
+  jsonArrays: ['spl_booking_notices', 'kit_days', 'split_days'],
+  aliases: {
+    leave_type: 'type',
+    start_date: 'leave_start_date',
+    end_date: 'leave_end_date',
+    expected_return: 'expected_return_date',
+    actual_return: 'actual_return_date',
+    kit_days_used: (row) => row.kit_days != null ? (Array.isArray(row.kit_days) ? row.kit_days.length : row.kit_days) : 0,
+    pay_type: 'statutory_pay_type',
+  },
+});
 
 export async function findFamilyLeave(homeId, { staffId, type } = {}, client, pag) {
   const conn = client || pool;
@@ -776,7 +765,7 @@ export async function updateFamilyLeave(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'request_date', 'expected_due_date', 'actual_birth_date', 'mat_b1_received', 'mat_b1_date',
+    'type', 'request_date', 'expected_due_date', 'actual_birth_date', 'mat_b1_received', 'mat_b1_date',
     'paternity_week_choice', 'paternity_start_date',
     'spl_total_weeks', 'spl_notice_received_date', 'spl_partner_employer', 'spl_booking_notices',
     'matching_date', 'placement_date',
@@ -810,29 +799,24 @@ export async function updateFamilyLeave(id, homeId, data, client, version) {
 
 // ── Flexible Working ────────────────────────────────────────────────────────
 
-function shapeFlex(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id,
-    request_date: d(row.request_date), effective_date_requested: d(row.effective_date_requested),
-    current_pattern: row.current_pattern, requested_change: row.requested_change,
-    reason: row.reason, employee_assessment_of_impact: row.employee_assessment_of_impact,
-    decision_deadline: d(row.decision_deadline), meeting_date: d(row.meeting_date),
-    meeting_notes: row.meeting_notes,
-    decision: row.decision, decision_date: d(row.decision_date), decision_by: row.decision_by,
-    refusal_reason: row.refusal_reason, refusal_explanation: row.refusal_explanation,
-    approved_pattern: row.approved_pattern, approved_effective_date: d(row.approved_effective_date),
-    trial_period: row.trial_period, trial_period_end: d(row.trial_period_end),
-    contract_variation_id: row.contract_variation_id,
-    appeal_date: d(row.appeal_date), appeal_grounds: row.appeal_grounds,
-    appeal_outcome: row.appeal_outcome, appeal_outcome_date: d(row.appeal_outcome_date),
-    status: row.status, notes: row.notes,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    decision_reason: row.refusal_reason,
-  };
-}
+const shapeFlex = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id',
+    'request_date', 'effective_date_requested', 'current_pattern', 'requested_change',
+    'reason', 'employee_assessment_of_impact', 'decision_deadline', 'meeting_date', 'meeting_notes',
+    'decision', 'decision_date', 'decision_by', 'refusal_reason', 'refusal_explanation',
+    'approved_pattern', 'approved_effective_date', 'trial_period', 'trial_period_end',
+    'contract_variation_id',
+    'appeal_date', 'appeal_grounds', 'appeal_outcome', 'appeal_outcome_date',
+    'status', 'notes', 'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: [
+    'request_date', 'effective_date_requested', 'decision_deadline', 'meeting_date',
+    'decision_date', 'approved_effective_date', 'trial_period_end',
+    'appeal_date', 'appeal_outcome_date',
+  ],
+  aliases: { decision_reason: 'refusal_reason' },
+});
 
 export async function findFlexWorking(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
@@ -870,6 +854,7 @@ export async function updateFlexWorking(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'request_date', 'requested_change', 'decision_deadline', 'reason', 'current_pattern',
     'meeting_date', 'meeting_notes', 'decision', 'decision_date', 'decision_by',
     'refusal_reason', 'refusal_explanation',
     'approved_pattern', 'approved_effective_date', 'trial_period', 'trial_period_end',
@@ -894,31 +879,22 @@ export async function updateFlexWorking(id, homeId, data, client, version) {
 
 // ── EDI Records ─────────────────────────────────────────────────────────────
 
-function shapeEdi(row) {
-  if (!row) return null;
-  const f = v => v != null ? parseFloat(v) : null;
-  return {
-    id: row.id, home_id: row.home_id, record_type: row.record_type, staff_id: row.staff_id,
-    complaint_date: d(row.complaint_date), harassment_category: row.harassment_category,
-    third_party: row.third_party, third_party_type: row.third_party_type,
-    respondent_type: row.respondent_type, respondent_staff_id: row.respondent_staff_id,
-    respondent_name: row.respondent_name,
-    handling_route: row.handling_route, linked_case_id: row.linked_case_id,
-    reasonable_steps_evidence: row.reasonable_steps_evidence || [],
-    condition_description: row.condition_description, adjustments: row.adjustments || [],
-    oh_referral_id: row.oh_referral_id,
-    access_to_work_applied: row.access_to_work_applied,
-    access_to_work_reference: row.access_to_work_reference,
-    access_to_work_amount: f(row.access_to_work_amount),
-    description: row.description, status: row.status, outcome: row.outcome, notes: row.notes,
-    created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    date_recorded: d(row.complaint_date),
-    category: row.harassment_category,
-    respondent_role: row.respondent_type,
-  };
-}
+const shapeEdi = createShaper({
+  fields: [
+    'id', 'home_id', 'record_type', 'staff_id',
+    'complaint_date', 'harassment_category', 'third_party', 'third_party_type',
+    'respondent_type', 'respondent_staff_id', 'respondent_name',
+    'handling_route', 'linked_case_id', 'reasonable_steps_evidence',
+    'condition_description', 'adjustments', 'oh_referral_id',
+    'access_to_work_applied', 'access_to_work_reference', 'access_to_work_amount',
+    'description', 'status', 'outcome', 'notes',
+    'created_at', 'updated_at', 'version',
+  ],
+  dates: ['complaint_date'],
+  floats: ['access_to_work_amount'],
+  jsonArrays: ['reasonable_steps_evidence', 'adjustments'],
+  aliases: { date_recorded: 'complaint_date', category: 'harassment_category', respondent_role: 'respondent_type' },
+});
 
 export async function findEdi(homeId, { recordType, staffId } = {}, client, pag) {
   const conn = client || pool;
@@ -960,7 +936,7 @@ export async function updateEdi(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'harassment_category', 'third_party', 'third_party_type',
+    'record_type', 'complaint_date', 'harassment_category', 'third_party', 'third_party_type',
     'respondent_type', 'respondent_staff_id', 'respondent_name',
     'handling_route', 'linked_case_id', 'reasonable_steps_evidence',
     'condition_description', 'adjustments', 'oh_referral_id',
@@ -988,32 +964,28 @@ export async function updateEdi(id, homeId, data, client, version) {
 
 // ── TUPE Transfers ──────────────────────────────────────────────────────────
 
-function shapeTupe(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id,
-    transfer_type: row.transfer_type, transfer_date: d(row.transfer_date),
-    transferor_name: row.transferor_name, transferee_name: row.transferee_name,
-    employees: row.employees || [],
-    consultation_start_date: d(row.consultation_start_date),
-    consultation_end_date: d(row.consultation_end_date),
-    measures_letter_date: d(row.measures_letter_date), measures_description: row.measures_description,
-    employee_reps_consulted: row.employee_reps_consulted, rep_names: row.rep_names,
-    eli_received_date: d(row.eli_received_date), eli_complete: row.eli_complete,
-    eli_items: row.eli_items || {},
-    dd_notes: row.dd_notes, outstanding_claims: row.outstanding_claims,
-    outstanding_tribunal_claims: row.outstanding_tribunal_claims,
-    status: row.status, notes: row.notes,
-    created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases
-    staff_affected: Array.isArray(row.employees) ? row.employees.length : (row.employees?.count ?? null),
-    consultation_start: d(row.consultation_start_date),
-    consultation_end: d(row.consultation_end_date),
-    eli_sent_date: d(row.eli_received_date),
-    measures_proposed: row.measures_description,
-  };
-}
+const shapeTupe = createShaper({
+  fields: [
+    'id', 'home_id', 'transfer_type', 'transfer_date',
+    'transferor_name', 'transferee_name', 'employees',
+    'consultation_start_date', 'consultation_end_date',
+    'measures_letter_date', 'measures_description',
+    'employee_reps_consulted', 'rep_names',
+    'eli_received_date', 'eli_complete', 'eli_items',
+    'dd_notes', 'outstanding_claims', 'outstanding_tribunal_claims',
+    'status', 'notes', 'created_by', 'created_at', 'updated_at', 'version',
+  ],
+  dates: ['transfer_date', 'consultation_start_date', 'consultation_end_date', 'measures_letter_date', 'eli_received_date'],
+  jsonArrays: ['employees'],
+  jsonObjects: ['eli_items'],
+  aliases: {
+    staff_affected: (row) => Array.isArray(row.employees) ? row.employees.length : (row.employees?.count ?? null),
+    consultation_start: 'consultation_start_date',
+    consultation_end: 'consultation_end_date',
+    eli_sent_date: 'eli_received_date',
+    measures_proposed: 'measures_description',
+  },
+});
 
 export async function findTupe(homeId, client, pag) {
   const conn = client || pool;
@@ -1049,7 +1021,7 @@ export async function updateTupe(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'transfer_date', 'transferor_name', 'transferee_name', 'employees',
+    'transfer_type', 'transfer_date', 'transferor_name', 'transferee_name', 'employees',
     'consultation_start_date', 'consultation_end_date', 'measures_letter_date',
     'measures_description', 'employee_reps_consulted', 'rep_names',
     'eli_received_date', 'eli_complete', 'eli_items',
@@ -1076,28 +1048,23 @@ export async function updateTupe(id, homeId, data, client, version) {
 
 // ── RTW & DBS Renewals ──────────────────────────────────────────────────────
 
-function shapeRenewal(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, staff_id: row.staff_id, check_type: row.check_type,
-    dbs_certificate_number: row.dbs_certificate_number, dbs_disclosure_level: row.dbs_disclosure_level,
-    dbs_check_date: d(row.dbs_check_date), dbs_next_renewal_due: d(row.dbs_next_renewal_due),
-    dbs_update_service_registered: row.dbs_update_service_registered,
-    dbs_update_service_last_checked: d(row.dbs_update_service_last_checked),
-    dbs_barred_list_check: row.dbs_barred_list_check,
-    rtw_document_type: row.rtw_document_type, rtw_check_date: d(row.rtw_check_date),
-    rtw_document_expiry: d(row.rtw_document_expiry), rtw_next_check_due: d(row.rtw_next_check_due),
-    status: row.status, checked_by: row.checked_by, notes: row.notes,
-    created_at: ts(row.created_at), updated_at: ts(row.updated_at),
-    version: row.version,
-    // Frontend aliases (type-aware)
-    last_checked: d(row.check_type === 'dbs' ? row.dbs_check_date : row.rtw_check_date),
-    expiry_date: d(row.check_type === 'dbs' ? row.dbs_next_renewal_due : row.rtw_document_expiry),
-    reference: row.check_type === 'dbs' ? row.dbs_certificate_number : null,
-    certificate_number: row.dbs_certificate_number,
-    document_type: row.rtw_document_type,
-  };
-}
+const shapeRenewal = createShaper({
+  fields: [
+    'id', 'home_id', 'staff_id', 'check_type',
+    'dbs_certificate_number', 'dbs_disclosure_level', 'dbs_check_date', 'dbs_next_renewal_due',
+    'dbs_update_service_registered', 'dbs_update_service_last_checked', 'dbs_barred_list_check',
+    'rtw_document_type', 'rtw_check_date', 'rtw_document_expiry', 'rtw_next_check_due',
+    'status', 'checked_by', 'notes', 'created_at', 'updated_at', 'version',
+  ],
+  dates: ['dbs_check_date', 'dbs_next_renewal_due', 'dbs_update_service_last_checked', 'rtw_check_date', 'rtw_document_expiry', 'rtw_next_check_due'],
+  aliases: {
+    last_checked: (row, out) => out.check_type === 'dbs' ? out.dbs_check_date : out.rtw_check_date,
+    expiry_date: (row, out) => out.check_type === 'dbs' ? out.dbs_next_renewal_due : out.rtw_document_expiry,
+    reference: (row) => row.check_type === 'dbs' ? row.dbs_certificate_number : null,
+    certificate_number: 'dbs_certificate_number',
+    document_type: 'rtw_document_type',
+  },
+});
 
 export async function findRenewals(homeId, { staffId, checkType, status } = {}, client, pag) {
   const conn = client || pool;
@@ -1164,14 +1131,10 @@ export async function updateRenewal(id, homeId, data, client, version) {
 
 // ── Case Notes (shared across all HR case types) ────────────────────────────
 
-function shapeNote(row) {
-  if (!row) return null;
-  return {
-    id: row.id, home_id: row.home_id, case_type: row.case_type, case_id: row.case_id,
-    note_type: row.note_type, content: row.content, author: row.author,
-    created_at: ts(row.created_at),
-  };
-}
+const shapeNote = createShaper({
+  fields: ['id', 'home_id', 'case_type', 'case_id', 'note_type', 'content', 'author', 'created_at'],
+  timestamps: ['created_at'],
+});
 
 export async function findCaseNotes(homeId, caseType, caseId, client) {
   const conn = client || pool;
@@ -1190,6 +1153,47 @@ export async function createCaseNote(homeId, caseType, caseId, data, client) {
     [homeId, caseType, caseId, data.note_type || 'note', data.content, data.author]
   );
   return shapeNote(rows[0]);
+}
+
+// ── Absence / Bradford Factor queries ────────────────────────────────────────
+
+/**
+ * All SICK shift_overrides for a home since cutoff, ordered for Bradford Factor grouping.
+ */
+export async function findSickOverrides(homeId, cutoff, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT date, staff_id FROM shift_overrides
+     WHERE home_id = $1 AND shift = 'SICK' AND date >= $2
+     ORDER BY staff_id, date`,
+    [homeId, cutoff]
+  );
+  return rows;
+}
+
+/**
+ * SICK shift_overrides for a single staff member since cutoff.
+ */
+export async function findStaffSickOverrides(homeId, staffId, cutoff, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT date FROM shift_overrides
+     WHERE home_id = $1 AND staff_id = $2 AND shift = 'SICK' AND date >= $3
+     ORDER BY date`,
+    [homeId, staffId, cutoff]
+  );
+  return rows;
+}
+
+/**
+ * Home config (for absence_triggers lookup).
+ */
+export async function findHomeConfig(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT config FROM homes WHERE id = $1', [homeId]
+  );
+  return rows[0]?.config || {};
 }
 
 // ── Warning Register (calculated view) ──────────────────────────────────────
@@ -1259,22 +1263,13 @@ export async function getHrStats(homeId, client) {
 
 // ── File Attachments ────────────────────────────────────────────────────────
 
-function shapeAttachment(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    home_id: row.home_id,
-    case_type: row.case_type,
-    case_id: row.case_id,
-    original_name: row.original_name,
-    stored_name: row.stored_name,
-    mime_type: row.mime_type,
-    size_bytes: row.size_bytes,
-    description: row.description,
-    uploaded_by: row.uploaded_by,
-    created_at: ts(row.created_at),
-  };
-}
+const shapeAttachment = createShaper({
+  fields: [
+    'id', 'home_id', 'case_type', 'case_id', 'original_name', 'stored_name',
+    'mime_type', 'size_bytes', 'description', 'uploaded_by', 'created_at',
+  ],
+  timestamps: ['created_at'],
+});
 
 export async function findAttachments(caseType, caseId, homeId, client) {
   const conn = client || pool;
@@ -1315,27 +1310,16 @@ export async function deleteAttachment(id, homeId, client) {
 
 // ── Investigation Meetings ──────────────────────────────────────────────────
 
-function shapeMeeting(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    home_id: row.home_id,
-    case_type: row.case_type,
-    case_id: row.case_id,
-    meeting_date: d(row.meeting_date),
-    meeting_time: row.meeting_time,
-    meeting_type: row.meeting_type,
-    location: row.location,
-    attendees: row.attendees || [],
-    summary: row.summary,
-    key_points: row.key_points,
-    outcome: row.outcome,
-    recorded_by: row.recorded_by,
-    created_at: ts(row.created_at),
-    updated_at: ts(row.updated_at),
-    version: row.version,
-  };
-}
+const shapeMeeting = createShaper({
+  fields: [
+    'id', 'home_id', 'case_type', 'case_id',
+    'meeting_date', 'meeting_time', 'meeting_type', 'location', 'attendees',
+    'summary', 'key_points', 'outcome', 'recorded_by',
+    'created_at', 'updated_at', 'version',
+  ],
+  dates: ['meeting_date'],
+  jsonArrays: ['attendees'],
+});
 
 export async function findMeetings(caseType, caseId, homeId, client) {
   const conn = client || pool;

@@ -4,6 +4,8 @@ import { getAppraisalStatus, getAppraisalStats } from '../../lib/training.js';
 import { createAppraisal, updateAppraisal, deleteAppraisal } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
+import Modal from '../Modal.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -25,6 +27,8 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
   const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: '', notes: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  useDirtyGuard(showModal);
 
   const today = new Date();
   const todayStr = formatDate(today);
@@ -234,65 +238,60 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
       </div>
 
       {/* Appraisal Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={MODAL.panelLg}>
-            <h2 className={MODAL.title}>{modalData.existing ? 'Edit' : 'Record'} Appraisal</h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={INPUT.label}>Date</label>
-                  <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Appraiser</label>
-                  <input type="text" value={modalData.appraiser} onChange={e => setModalData({ ...modalData, appraiser: e.target.value })}
-                    className={INPUT.base} placeholder="Appraiser name" />
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Objectives</label>
-                <textarea value={modalData.objectives} onChange={e => setModalData({ ...modalData, objectives: e.target.value })}
-                  className={`${INPUT.base} h-20 resize-none`} placeholder="Performance objectives set..." />
-              </div>
-              <div>
-                <label className={INPUT.label}>Training Needs Identified</label>
-                <textarea value={modalData.training_needs} onChange={e => setModalData({ ...modalData, training_needs: e.target.value })}
-                  className={`${INPUT.base} h-16 resize-none`} placeholder="Training and development needs..." />
-              </div>
-              <div>
-                <label className={INPUT.label}>Development Plan</label>
-                <textarea value={modalData.development_plan} onChange={e => setModalData({ ...modalData, development_plan: e.target.value })}
-                  className={`${INPUT.base} h-16 resize-none`} placeholder="Personal development plan..." />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={INPUT.label}>Next Due (auto +12 months)</label>
-                  <input type="date" value={modalData.existing ? modalData.next_due : aprNextDue}
-                    onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Notes</label>
-                  <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
-                    className={INPUT.base} placeholder="Optional notes" />
-                </div>
-              </div>
-              {error && <p className="text-xs text-red-600">{error}</p>}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={modalData.existing ? 'Edit Appraisal' : 'Record Appraisal'} size="lg">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Date</label>
+              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
             </div>
-            <div className={MODAL.footer}>
-              {modalData.existing && (
-                <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
-              )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave}
-                disabled={!modalData.staffId || !modalData.date || saving}
-                className={`${BTN.primary} disabled:opacity-50`}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Appraiser</label>
+              <input type="text" value={modalData.appraiser} onChange={e => setModalData({ ...modalData, appraiser: e.target.value })}
+                className={INPUT.base} placeholder="Appraiser name" />
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>Objectives</label>
+            <textarea value={modalData.objectives} onChange={e => setModalData({ ...modalData, objectives: e.target.value })}
+              className={`${INPUT.base} h-20 resize-none`} placeholder="Performance objectives set..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Training Needs Identified</label>
+            <textarea value={modalData.training_needs} onChange={e => setModalData({ ...modalData, training_needs: e.target.value })}
+              className={`${INPUT.base} h-16 resize-none`} placeholder="Training and development needs..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Development Plan</label>
+            <textarea value={modalData.development_plan} onChange={e => setModalData({ ...modalData, development_plan: e.target.value })}
+              className={`${INPUT.base} h-16 resize-none`} placeholder="Personal development plan..." />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Next Due (auto +12 months)</label>
+              <input type="date" value={modalData.existing ? modalData.next_due : aprNextDue}
+                onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Notes</label>
+              <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+                className={INPUT.base} placeholder="Optional notes" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-      )}
+        <div className={MODAL.footer}>
+          {modalData.existing && (
+            <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+          )}
+          <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+          <button onClick={handleSave}
+            disabled={!modalData.staffId || !modalData.date || saving}
+            className={`${BTN.primary} disabled:opacity-50`}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }

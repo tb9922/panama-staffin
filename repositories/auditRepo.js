@@ -22,6 +22,14 @@ export async function getRecent(limit = 100) {
   }));
 }
 
+export async function countOlderThan(days) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
+    [days]
+  );
+  return parseInt(rows[0].count, 10);
+}
+
 export async function purgeOlderThan(days, client) {
   const conn = client || pool;
   const { rowCount } = await conn.query(
@@ -39,6 +47,24 @@ export async function getByHome(homeSlug, limit = 100) {
       ORDER BY ts DESC
       LIMIT $2`,
     [homeSlug, limit]
+  );
+  return rows.map(r => ({
+    ...r,
+    ts: r.ts instanceof Date ? r.ts.toISOString() : r.ts,
+  }));
+}
+
+/**
+ * Export HR audit entries for a home within a date range.
+ * Explicit column list — no SELECT * — so future columns don't auto-leak.
+ */
+export async function exportHrByHome(homeSlug, from, to) {
+  const { rows } = await pool.query(
+    `SELECT id, ts, action, home_slug, user_name, details
+       FROM audit_log
+      WHERE home_slug = $1 AND action LIKE 'hr_%' AND ts >= $2 AND ts <= $3
+      ORDER BY ts DESC`,
+    [homeSlug, from, to]
   );
   return rows.map(r => ({
     ...r,

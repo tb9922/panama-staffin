@@ -4,6 +4,7 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getHrTupe, createHrTupe, updateHrTupe } from '../lib/api.js';
 import { TUPE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import FileAttachments from '../components/FileAttachments.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const TRANSFER_TYPES = [
   { id: 'incoming', name: 'Incoming' },
@@ -25,20 +26,25 @@ export default function TupeManager() {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
 
   const home = getCurrentHome();
   useDirtyGuard(showModal);
+
+  const LIMIT = 50;
 
   const load = useCallback(async () => {
     if (!home) return;
     setLoading(true);
     try {
-      const res = await getHrTupe(home);
+      const res = await getHrTupe(home, { limit: LIMIT, offset });
       setItems(res?.rows || []);
+      setTotal(res?.total || 0);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [home]);
+  }, [home, offset]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -173,6 +179,7 @@ export default function TupeManager() {
           </table>
         </div>
       </div>
+      <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
 
       {/* Modal */}
       {showModal && (

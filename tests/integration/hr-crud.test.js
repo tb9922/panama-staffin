@@ -16,9 +16,12 @@ import * as hrRepo from '../../repositories/hrRepo.js';
 
 let homeA, homeB;
 const createdCaseIds = [];
+const testStaffIds = [];
 
 beforeAll(async () => {
   // Clean up any leftover test data from previous failed runs
+  await pool.query(`DELETE FROM hr_disciplinary_cases WHERE staff_id LIKE 'crud-test-%'`).catch(() => {});
+  await pool.query(`DELETE FROM staff WHERE id LIKE 'crud-test-%'`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'hr-crud-test-%'`);
 
   const { rows: [ha] } = await pool.query(
@@ -29,12 +32,30 @@ beforeAll(async () => {
   );
   homeA = ha.id;
   homeB = hb.id;
+
+  // Create test staff records (FK requires staff to exist)
+  const staffIds = [
+    'crud-test-01', 'crud-test-02', 'crud-test-10', 'crud-test-11',
+    'crud-test-12', 'crud-test-13', 'crud-test-14', 'crud-test-50', 'crud-test-60',
+  ];
+  for (const sid of staffIds) {
+    await pool.query(
+      `INSERT INTO staff (id, home_id, name, role, team, skill, hourly_rate, active, wtr_opt_out, al_carryover)
+       VALUES ($1, $2, $3, 'Carer', 'Day A', 1, 12.50, true, false, 0)`,
+      [sid, homeA, `Test Staff ${sid}`]
+    );
+    testStaffIds.push(sid);
+  }
 });
 
 afterAll(async () => {
   // Clean up cases created during tests
   for (const id of createdCaseIds) {
     await pool.query('DELETE FROM hr_disciplinary_cases WHERE id = $1', [id]).catch(() => {});
+  }
+  // Clean up test staff
+  for (const sid of testStaffIds) {
+    await pool.query('DELETE FROM staff WHERE id = $1', [sid]).catch(() => {});
   }
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
@@ -47,12 +68,13 @@ describe('HR CRUD: create and read disciplinary case', () => {
 
   it('creates a case with version=1', async () => {
     const created = await hrRepo.createDisciplinary(homeA, {
-      staff_id: 99901,
+      staff_id: 'crud-test-01',
       date_raised: '2026-02-01',
       raised_by: 'test-admin',
       category: 'misconduct',
       allegation_summary: 'Integration test case A',
       status: 'open',
+      created_by: 'test-runner',
     });
 
     caseId = created.id;
@@ -60,7 +82,7 @@ describe('HR CRUD: create and read disciplinary case', () => {
 
     expect(created).not.toBeNull();
     expect(created.version).toBe(1);
-    expect(created.staff_id).toBe(99901);
+    expect(created.staff_id).toBe('crud-test-01');
     expect(created.category).toBe('misconduct');
     expect(created.allegation_summary).toBe('Integration test case A');
     expect(created.status).toBe('open');
@@ -87,12 +109,13 @@ describe('HR CRUD: optimistic locking', () => {
 
   beforeAll(async () => {
     const created = await hrRepo.createDisciplinary(homeA, {
-      staff_id: 99902,
+      staff_id: 'crud-test-02',
       date_raised: '2026-02-02',
       raised_by: 'test-admin',
       category: 'attendance',
       allegation_summary: 'Version conflict test case',
       status: 'open',
+      created_by: 'test-runner',
     });
     caseId = created.id;
     createdCaseIds.push(caseId);
@@ -166,12 +189,13 @@ describe('HR CRUD: pagination', () => {
     // Create 5 cases for pagination testing
     for (let i = 0; i < 5; i++) {
       const created = await hrRepo.createDisciplinary(homeA, {
-        staff_id: 99910 + i,
+        staff_id: `crud-test-1${i}`,
         date_raised: `2026-03-0${i + 1}`,
         raised_by: 'test-admin',
         category: 'misconduct',
         allegation_summary: `Pagination test case ${i}`,
         status: 'open',
+        created_by: 'test-runner',
       });
       caseIds.push(created.id);
       createdCaseIds.push(created.id);
@@ -225,21 +249,20 @@ describe('HR CRUD: pagination', () => {
   });
 
   it('filters work with pagination', async () => {
-    // Create a case with a specific staff_id to filter on
-    const specificStaffId = 99950;
     const created = await hrRepo.createDisciplinary(homeA, {
-      staff_id: specificStaffId,
+      staff_id: 'crud-test-50',
       date_raised: '2026-03-10',
       raised_by: 'test-admin',
       category: 'capability',
       allegation_summary: 'Filter test case',
       status: 'open',
+      created_by: 'test-runner',
     });
     createdCaseIds.push(created.id);
 
-    const result = await hrRepo.findDisciplinary(homeA, { staffId: specificStaffId }, null, {});
+    const result = await hrRepo.findDisciplinary(homeA, { staffId: 'crud-test-50' }, null, {});
     expect(result.total).toBe(1);
-    expect(result.rows[0].staff_id).toBe(specificStaffId);
+    expect(result.rows[0].staff_id).toBe('crud-test-50');
   });
 
   it('returns empty result for other home', async () => {
@@ -256,12 +279,13 @@ describe('HR CRUD: soft delete', () => {
 
   beforeAll(async () => {
     const created = await hrRepo.createDisciplinary(homeA, {
-      staff_id: 99960,
+      staff_id: 'crud-test-60',
       date_raised: '2026-02-15',
       raised_by: 'test-admin',
       category: 'conduct',
       allegation_summary: 'Soft delete test',
       status: 'open',
+      created_by: 'test-runner',
     });
     caseId = created.id;
     createdCaseIds.push(caseId);
@@ -277,7 +301,7 @@ describe('HR CRUD: soft delete', () => {
     const byId = await hrRepo.findDisciplinaryById(caseId, homeA);
     expect(byId).toBeNull();
 
-    const list = await hrRepo.findDisciplinary(homeA, { staffId: 99960 });
+    const list = await hrRepo.findDisciplinary(homeA, { staffId: 'crud-test-60' });
     expect(list.rows).toHaveLength(0);
   });
 });

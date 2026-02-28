@@ -4,12 +4,16 @@ import { getFireDrillStatus } from '../../lib/training.js';
 import { createFireDrill, updateFireDrill, deleteFireDrill } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
+import Modal from '../Modal.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload }) {
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  useDirtyGuard(showModal);
 
   const today = new Date();
   const todayStr = formatDate(today);
@@ -172,87 +176,82 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload }
       )}
 
       {/* Fire Drill Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[85vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{modalData.existing ? 'Edit' : 'Record'} Fire Drill</h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={INPUT.label}>Date</label>
-                  <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Time</label>
-                  <input type="time" value={modalData.time} onChange={e => setModalData({ ...modalData, time: e.target.value })} className={INPUT.base} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Evacuation Time (seconds)</label>
-                  <input type="number" min="0" value={modalData.evacuation_time_seconds}
-                    onChange={e => setModalData({ ...modalData, evacuation_time_seconds: e.target.value })}
-                    className={INPUT.base} placeholder="e.g. 240" />
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Scenario</label>
-                <textarea value={modalData.scenario} onChange={e => setModalData({ ...modalData, scenario: e.target.value })}
-                  className={`${INPUT.base} h-16 resize-none`} placeholder="e.g. Kitchen fire — full evacuation" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={INPUT.label}>Residents Evacuated</label>
-                  <input type="number" min="0" value={modalData.residents_evacuated}
-                    onChange={e => setModalData({ ...modalData, residents_evacuated: e.target.value })}
-                    className={INPUT.base} placeholder="Number" />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Conducted By</label>
-                  <input type="text" value={modalData.conducted_by} onChange={e => setModalData({ ...modalData, conducted_by: e.target.value })}
-                    className={INPUT.base} placeholder="Fire Marshal name" />
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Staff Present ({modalData.staff_present.length} selected)</label>
-                <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
-                  {activeStaff.map(s => (
-                    <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 px-1.5 py-0.5 rounded">
-                      <input type="checkbox" checked={modalData.staff_present.includes(s.id)} onChange={() => toggleDrillStaff(s.id)} />
-                      <span>{s.name}</span>
-                      <span className="text-gray-400">({s.team})</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Issues Identified</label>
-                <textarea value={modalData.issues} onChange={e => setModalData({ ...modalData, issues: e.target.value })}
-                  className={`${INPUT.base} h-16 resize-none`} placeholder="Any issues observed during the drill..." />
-              </div>
-              <div>
-                <label className={INPUT.label}>Corrective Actions</label>
-                <textarea value={modalData.corrective_actions} onChange={e => setModalData({ ...modalData, corrective_actions: e.target.value })}
-                  className={`${INPUT.base} h-16 resize-none`} placeholder="Actions taken to address issues..." />
-              </div>
-              <div>
-                <label className={INPUT.label}>Notes</label>
-                <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
-                  className={INPUT.base} placeholder="Optional notes" />
-              </div>
-              {error && <p className="text-xs text-red-600">{error}</p>}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={modalData.existing ? 'Edit Fire Drill' : 'Record Fire Drill'} size="lg">
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={INPUT.label}>Date</label>
+              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
             </div>
-            <div className={MODAL.footer}>
-              {modalData.existing && (
-                <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
-              )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={!modalData.date || saving}
-                className={`${BTN.primary} disabled:opacity-50`}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Time</label>
+              <input type="time" value={modalData.time} onChange={e => setModalData({ ...modalData, time: e.target.value })} className={INPUT.base} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Evacuation Time (seconds)</label>
+              <input type="number" min="0" value={modalData.evacuation_time_seconds}
+                onChange={e => setModalData({ ...modalData, evacuation_time_seconds: e.target.value })}
+                className={INPUT.base} placeholder="e.g. 240" />
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>Scenario</label>
+            <textarea value={modalData.scenario} onChange={e => setModalData({ ...modalData, scenario: e.target.value })}
+              className={`${INPUT.base} h-16 resize-none`} placeholder="e.g. Kitchen fire — full evacuation" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Residents Evacuated</label>
+              <input type="number" min="0" value={modalData.residents_evacuated}
+                onChange={e => setModalData({ ...modalData, residents_evacuated: e.target.value })}
+                className={INPUT.base} placeholder="Number" />
+            </div>
+            <div>
+              <label className={INPUT.label}>Conducted By</label>
+              <input type="text" value={modalData.conducted_by} onChange={e => setModalData({ ...modalData, conducted_by: e.target.value })}
+                className={INPUT.base} placeholder="Fire Marshal name" />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Staff Present ({modalData.staff_present.length} selected)</label>
+            <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+              {activeStaff.map(s => (
+                <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 px-1.5 py-0.5 rounded">
+                  <input type="checkbox" checked={modalData.staff_present.includes(s.id)} onChange={() => toggleDrillStaff(s.id)} />
+                  <span>{s.name}</span>
+                  <span className="text-gray-400">({s.team})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Issues Identified</label>
+            <textarea value={modalData.issues} onChange={e => setModalData({ ...modalData, issues: e.target.value })}
+              className={`${INPUT.base} h-16 resize-none`} placeholder="Any issues observed during the drill..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Corrective Actions</label>
+            <textarea value={modalData.corrective_actions} onChange={e => setModalData({ ...modalData, corrective_actions: e.target.value })}
+              className={`${INPUT.base} h-16 resize-none`} placeholder="Actions taken to address issues..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+              className={INPUT.base} placeholder="Optional notes" />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-      )}
+        <div className={MODAL.footer}>
+          {modalData.existing && (
+            <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+          )}
+          <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+          <button onClick={handleSave} disabled={!modalData.date || saving}
+            className={`${BTN.primary} disabled:opacity-50`}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }

@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "audit:routes": "node scripts/audit-routes.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:integration": "bash scripts/test-integration.sh"
   },
   "dependencies": {
     "@sentry/node": "^10.40.0",
@@ -24,6 +25,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "file-type": "^21.3.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.0",

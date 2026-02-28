@@ -1,4 +1,4 @@
-import { formatDate, parseDate, CARE_ROLES } from './rotation.js';
+import { parseDate } from './rotation.js';
 
 // ── Onboarding Sections ──────────────────────────────────────────────────────
 
@@ -124,10 +124,10 @@ export function getStaffOnboardingProgress(staffId, onboardingData) {
 /**
  * Calculate days until a date string (positive = future, negative = past).
  */
-export function getDaysUntilExpiry(dateStr) {
+export function getDaysUntilExpiry(dateStr, asOfDate) {
   if (!dateStr) return null;
   const d = parseDate(dateStr);
-  const now = new Date();
+  const now = asOfDate ? new Date(asOfDate) : new Date();
   now.setUTCHours(0, 0, 0, 0);
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -137,7 +137,6 @@ export function getDaysUntilExpiry(dateStr) {
  */
 export function getOnboardingAlerts(activeStaff, onboardingData) {
   const alerts = [];
-  const todayStr = formatDate(new Date());
 
   for (const s of activeStaff) {
     const progress = getStaffOnboardingProgress(s.id, onboardingData);
