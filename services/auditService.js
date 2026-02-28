@@ -1,7 +1,13 @@
 import * as auditRepo from '../repositories/auditRepo.js';
 
 export async function log(action, homeSlug, username, details) {
-  await auditRepo.log(action, homeSlug, username, details);
+  try {
+    await auditRepo.log(action, homeSlug, username, details);
+  } catch (err) {
+    // Audit failures must never block the primary operation.
+    // Log to stderr so ops can detect persistent audit outages.
+    console.error('[AUDIT FAILURE]', { action, homeSlug, username, error: err.message });
+  }
 }
 
 export async function getRecent(limit = 100, homeSlug) {

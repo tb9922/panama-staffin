@@ -38,8 +38,10 @@ import careCertRouter from './routes/careCert.js';
 import onboardingRouter from './routes/onboarding.js';
 import staffRouter from './routes/staff.js';
 import schedulingRouter from './routes/scheduling.js';
+import usersRouter from './routes/users.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
+import { ensureSeedUsers } from './services/userService.js';
 
 const app = express();
 
@@ -99,6 +101,7 @@ app.use('/api/care-cert', careCertRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/scheduling', schedulingRouter);
+app.use('/api/users', usersRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
@@ -148,6 +151,10 @@ const server = app.listen(config.port, async () => {
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(() => {});
+  // Seed database users from env vars on first run (non-fatal)
+  await ensureSeedUsers().catch(err =>
+    logger.warn({ err: err?.message }, 'User seeding skipped')
+  );
   // Prune expired deny-list entries daily
   setInterval(
     () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),

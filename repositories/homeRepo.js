@@ -44,6 +44,20 @@ export async function listAll() {
 }
 
 /**
+ * List all homes with integer IDs for user access management.
+ * Returns [{id (integer PK), name}]
+ */
+export async function listAllWithIds() {
+  const { rows } = await pool.query(
+    'SELECT id, name, config FROM homes ORDER BY name'
+  );
+  return rows.map(r => ({
+    id: r.id,
+    name: r.config?.home_name || r.name,
+  }));
+}
+
+/**
  * Upsert a home by slug. Creates it if it doesn't exist.
  * Returns the home row.
  * @param {string} slug

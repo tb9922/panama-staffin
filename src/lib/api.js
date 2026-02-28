@@ -76,7 +76,7 @@ export async function login(username, password) {
   });
   if (!res.ok) throw new Error('Invalid credentials');
   const user = await res.json();
-  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role }));
+  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '' }));
   sessionStorage.setItem('token', user.token);
   return user;
 }
@@ -1367,4 +1367,52 @@ export async function upsertDayNote(homeSlug, date, note) {
     headers: authHeaders(),
     body: JSON.stringify({ date, note }),
   });
+}
+
+// ── User Management API ──────────────────────────────────────────────────────
+
+export async function listUsers() {
+  return apiFetch(`${API_BASE}/users`, { headers: authHeaders() });
+}
+
+export async function createUser(data) {
+  return apiFetch(`${API_BASE}/users`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function getUser(id) {
+  return apiFetch(`${API_BASE}/users/${id}`, { headers: authHeaders() });
+}
+
+export async function updateUser(id, data) {
+  return apiFetch(`${API_BASE}/users/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function resetUserPassword(id, newPassword) {
+  return apiFetch(`${API_BASE}/users/${id}/reset-password`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ newPassword }),
+  });
+}
+
+export async function changeOwnPassword(currentPassword, newPassword) {
+  return apiFetch(`${API_BASE}/users/change-password`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export async function getUserHomes(id) {
+  return apiFetch(`${API_BASE}/users/${id}/homes`, { headers: authHeaders() });
+}
+
+export async function setUserHomes(id, homeIds) {
+  return apiFetch(`${API_BASE}/users/${id}/homes`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ homeIds }),
+  });
+}
+
+export async function listAllHomesForAccess() {
+  return apiFetch(`${API_BASE}/users/all-homes`, { headers: authHeaders() });
 }

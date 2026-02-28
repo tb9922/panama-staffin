@@ -35,7 +35,7 @@ try {
 
 // Required variables — missing any of these is a fatal startup error.
 // Use console.error here; the logger hasn't been initialised yet.
-const REQUIRED_VARS = ['JWT_SECRET', 'ADMIN_PASSWORD_HASH', 'VIEWER_PASSWORD_HASH', 'DB_PASSWORD', 'ALLOWED_ORIGIN'];
+const REQUIRED_VARS = ['JWT_SECRET', 'DB_PASSWORD', 'ALLOWED_ORIGIN'];
 const missing = REQUIRED_VARS.filter(k => !process.env[k]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
@@ -60,11 +60,12 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: '12h',
 
-  // Users — the only place that reads password hashes from env
+  // Env-var users — fallback for pre-migration compatibility. Once the users
+  // table is populated these are ignored. Can be removed after first deployment.
   users: [
-    { username: 'admin', hash: process.env.ADMIN_PASSWORD_HASH, role: 'admin' },
-    { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' },
-  ],
+    process.env.ADMIN_PASSWORD_HASH  ? { username: 'admin',  hash: process.env.ADMIN_PASSWORD_HASH,  role: 'admin' }  : null,
+    process.env.VIEWER_PASSWORD_HASH ? { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' } : null,
+  ].filter(Boolean),
 
   // ── Paths ────────────────────────────────────────────────────────────────────
   dataDir: path.join(__dirname, 'homes'),
