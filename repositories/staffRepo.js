@@ -15,8 +15,8 @@ function shapeRow(row) {
     date_of_birth: row.date_of_birth ? row.date_of_birth.toISOString().slice(0, 10) : null,
     ni_number: row.ni_number || null,
     contract_hours: row.contract_hours != null ? parseFloat(row.contract_hours) : null,
-    al_entitlement: row.al_entitlement,
-    al_carryover: row.al_carryover,
+    al_entitlement: row.al_entitlement != null ? parseInt(row.al_entitlement, 10) : null,
+    al_carryover: row.al_carryover != null ? parseInt(row.al_carryover, 10) : 0,
     leaving_date: row.leaving_date ? row.leaving_date.toISOString().slice(0, 10) : null,
     version: row.version != null ? parseInt(row.version, 10) : undefined,
   };
@@ -50,12 +50,30 @@ export async function sync(homeId, staffArr, client) {
 
   const incomingIds = staffArr.map(s => s.id);
 
-  for (const s of staffArr) {
+  // Batch upsert — 16 per-row params, homeId shared as $1
+  const COLS_PER_ROW = 16;
+  const CHUNK = 50; // 50 × 16 = 800 params + 1 homeId = well within PG 65535 limit
+  for (let i = 0; i < staffArr.length; i += CHUNK) {
+    const chunk = staffArr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((s, j) => {
+      const base = j * COLS_PER_ROW + 2; // $1 is homeId
+      placeholders.push(
+        `($${base},$1,$${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15},NOW())`
+      );
+      values.push(
+        s.id, s.name, s.role, s.team, s.pref || null,
+        s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out ?? false,
+        s.start_date || null, s.date_of_birth || null, s.ni_number || null,
+        s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover ?? 0, s.leaving_date || null,
+      );
+    });
     await conn.query(
       `INSERT INTO staff
          (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
           start_date, date_of_birth, ni_number, contract_hours, al_entitlement, al_carryover, leaving_date, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+       VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
          name           = EXCLUDED.name,
          role           = EXCLUDED.role,
@@ -74,12 +92,7 @@ export async function sync(homeId, staffArr, client) {
          leaving_date   = EXCLUDED.leaving_date,
          updated_at     = NOW(),
          deleted_at     = NULL`,
-      [
-        s.id, homeId, s.name, s.role, s.team, s.pref || null,
-        s.skill ?? 1, s.hourly_rate, s.active !== false, s.wtr_opt_out ?? false,
-        s.start_date || null, s.date_of_birth || null, s.ni_number || null,
-        s.contract_hours ?? null, s.al_entitlement ?? null, s.al_carryover ?? 0, s.leaving_date || null,
-      ]
+      [homeId, ...values]
     );
   }
 

@@ -32,9 +32,11 @@ export async function assembleData(homeSlug, userRole) {
     day_notes: dayNotes,
   };
 
-  // Viewer role: strip staff PII
+  // Viewer role: allowlist — only scheduling-relevant fields pass through.
+  // Denylist is unsafe because new PII fields would leak until explicitly blocked.
   if (userRole !== 'admin') {
-    payload.staff = staff.map(s => ({ ...s, date_of_birth: null, ni_number: null, hourly_rate: null }));
+    payload.staff = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
+      ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
   }
 
   return payload;

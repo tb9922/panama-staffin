@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
@@ -11,22 +11,31 @@ import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 
 /**
  * Validate an AL override before allowing it.
  * Checks max_al_same_day and per-staff entitlement.
- * Returns error string or null if valid.
+ * @param {number} homeId
+ * @param {object} config
+ * @param {string} date   "YYYY-MM-DD"
+ * @param {string} staffId
+ * @param {object} [batchCtx]  In-batch counters for bulk validation:
+ *   { dayAL: { "YYYY-MM-DD": number }, staffAL: { staffId: number } }
+ * @param {object} [client]  Optional pg client for transaction
+ * @returns {string|null} error message or null if valid
  */
-async function validateALOverride(homeId, config, date, staffId) {
+async function validateALOverride(homeId, config, date, staffId, batchCtx, client) {
+  const conn = client || pool;
+
   // 1. Check max AL per day (excluding this staff's existing override on this date)
-  const maxAL = config?.max_al_same_day || 2;
-  const { rows: countRows } = await pool.query(
+  const maxAL = config?.max_al_same_day ?? 2;
+  const { rows: countRows } = await conn.query(
     `SELECT COUNT(*)::int AS cnt FROM shift_overrides
      WHERE home_id = $1 AND date = $2 AND shift = 'AL' AND staff_id != $3`,
     [homeId, date, staffId]
   );
-  if (countRows[0].cnt >= maxAL) {
+  const dayCount = countRows[0].cnt + (batchCtx?.dayAL?.[date] ?? 0);
+  if (dayCount >= maxAL) {
     return `Max AL per day (${maxAL}) already reached on ${date}`;
   }
 
@@ -50,22 +59,22 @@ async function validateALOverride(homeId, config, date, staffId) {
   }
 
   // Count existing AL for this staff in the leave year
-  const { rows: alRows } = await pool.query(
+  const { rows: alRows } = await conn.query(
     `SELECT COUNT(*)::int AS cnt FROM shift_overrides
      WHERE home_id = $1 AND staff_id = $2 AND shift = 'AL'
        AND date >= $3 AND date <= $4`,
     [homeId, staffId, lyStartStr, lyEndStr]
   );
-  const alUsed = alRows[0].cnt;
+  const alUsed = alRows[0].cnt + (batchCtx?.staffAL?.[staffId] ?? 0);
 
   // Get staff entitlement
-  const { rows: staffRows } = await pool.query(
+  const { rows: staffRows } = await conn.query(
     `SELECT al_entitlement, al_carryover FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
   if (staffRows.length === 0) return null; // agency/unknown staff — skip entitlement check
   const staff = staffRows[0];
-  const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days || 28);
+  const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days ?? 28);
   const entitlement = base + (staff.al_carryover ?? 0);
 
   if (alUsed >= entitlement) {
@@ -84,11 +93,18 @@ const VALID_SHIFTS = [
 const shiftSchema = z.enum(VALID_SHIFTS);
 
 // GET /api/scheduling?home=X — full scheduling bundle
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    // Rolling ±90-day window to avoid loading unbounded override history
+    const now = new Date();
+    const fromDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90))
+      .toISOString().slice(0, 10);
+    const toDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90))
+      .toISOString().slice(0, 10);
+
     const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([
       staffRepo.findByHome(req.home.id),
-      overrideRepo.findByHome(req.home.id),
+      overrideRepo.findByHome(req.home.id, fromDate, toDate),
       dayNoteRepo.findByHome(req.home.id),
       trainingRepo.findByHome(req.home.id),
       onboardingRepo.findByHome(req.home.id),
@@ -130,19 +146,30 @@ const overrideBodySchema = z.object({
   sleep_in: z.boolean().optional(),
 });
 
-router.put('/overrides', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, staffId, shift, reason, source, sleep_in } = parsed.data;
     if (shift === 'AL') {
-      const alError = await validateALOverride(req.home.id, req.home.config, date, staffId);
-      if (alError) return res.status(400).json({ error: alError });
+      // Validate + upsert in a single transaction to prevent concurrent overbooking
+      await withTransaction(async (client) => {
+        const alError = await validateALOverride(req.home.id, req.home.config, date, staffId, null, client);
+        if (alError) {
+          // Throw to trigger rollback; caught below to return 400
+          const err = new Error(alError);
+          err.isALValidation = true;
+          throw err;
+        }
+        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
+      });
+    } else {
+      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
     }
-    await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
     await auditService.log('override_upsert', req.home.slug, req.user.username, { date, staffId, shift });
     res.json({ ok: true });
   } catch (err) {
+    if (err.isALValidation) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
@@ -154,7 +181,7 @@ const overrideDeleteSchema = z.object({
   staffId: z.string().min(1).max(40),
 });
 
-router.delete('/overrides', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = overrideDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -178,20 +205,35 @@ const bulkBodySchema = z.object({
   })).min(1).max(500),
 });
 
-router.post('/overrides/bulk', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = bulkBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    // Validate AL overrides before bulk upsert
-    const alOverrides = parsed.data.overrides.filter(o => o.shift === 'AL');
-    for (const o of alOverrides) {
-      const alError = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId);
-      if (alError) return res.status(400).json({ error: alError });
-    }
-    await overrideRepo.upsertBulk(req.home.id, parsed.data.overrides);
+
+    // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
+    await withTransaction(async (client) => {
+      const alOverrides = parsed.data.overrides.filter(o => o.shift === 'AL');
+      if (alOverrides.length > 0) {
+        const batchCtx = { dayAL: {}, staffAL: {} };
+        for (const o of alOverrides) {
+          const alError = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId, batchCtx, client);
+          if (alError) {
+            const err = new Error(alError);
+            err.isALValidation = true;
+            throw err;
+          }
+          // Track in-batch counts so subsequent items see accumulated state
+          batchCtx.dayAL[o.date] = (batchCtx.dayAL[o.date] ?? 0) + 1;
+          batchCtx.staffAL[o.staffId] = (batchCtx.staffAL[o.staffId] ?? 0) + 1;
+        }
+      }
+      await overrideRepo.upsertBulk(req.home.id, parsed.data.overrides, client);
+    });
+
     await auditService.log('override_bulk_upsert', req.home.slug, req.user.username, { count: parsed.data.overrides.length });
     res.json({ ok: true, count: parsed.data.overrides.length });
   } catch (err) {
+    if (err.isALValidation) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
@@ -203,7 +245,7 @@ const monthDeleteSchema = z.object({
   toDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-router.delete('/overrides/month', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/overrides/month', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = monthDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -226,7 +268,7 @@ const dayNoteSchema = z.object({
   note: z.string().max(5000),
 });
 
-router.put('/day-notes', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/day-notes', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = dayNoteSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

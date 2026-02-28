@@ -7,12 +7,13 @@ import * as auditService from '../services/auditService.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { homeConfigSchema } from '../lib/zodHelpers.js';
 
 const router = Router();
 router.use(writeRateLimiter);
 
 const configBodySchema = z.object({
-  config: z.object({}).passthrough(),
+  config: homeConfigSchema,
 }).strict();
 
 router.get('/', requireAuth, requireAdmin, async (req, res, next) => {

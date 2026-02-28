@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
+import { homeConfigSchema } from '../lib/zodHelpers.js';
 
 const staffItemSchema = z.object({
   id: z.string().min(1).max(50),
@@ -12,7 +13,7 @@ const staffItemSchema = z.object({
 }).passthrough();
 
 const dataBodySchema = z.object({
-  config: z.object({}).passthrough(),
+  config: homeConfigSchema,
   staff: z.array(staffItemSchema).max(2000),
   overrides: z.object({}).passthrough(),
 }).passthrough();
@@ -79,16 +80,22 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
       return res.status(400).json({ error: 'Data integrity check failed', errors: criticalErrors });
     }
 
-    const warnings = validateAll(body);
     const username = req.user?.username || 'unknown';
     const result = await homeService.saveData(homeSlug, body, username);
 
-    await auditService.log('data_save', homeSlug, username, {
-      staffCount: body.staff.length,
-      warningCount: warnings.length,
-    });
+    // Respond immediately — validation is informational and doesn't block the save.
+    // Run validateAll() fire-and-forget so the 17 domain validators don't add
+    // latency to every save. Warning count is still logged for audit purposes.
+    res.json({ ok: true, backedUp: true, _updatedAt: result?.updatedAt });
 
-    res.json({ ok: true, warnings, backedUp: true, _updatedAt: result?.updatedAt });
+    // Fire-and-forget: validate + audit after response is sent
+    try {
+      const warnings = validateAll(body);
+      await auditService.log('data_save', homeSlug, username, {
+        staffCount: body.staff.length,
+        warningCount: warnings.length,
+      });
+    } catch (_) { /* validation/audit failure must not surface after response */ }
   } catch (err) {
     next(err);
   }

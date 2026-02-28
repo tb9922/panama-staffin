@@ -1,25 +1,37 @@
 import { pool } from '../db.js';
 
 /**
- * Return all overrides for a home, shaped as:
+ * Return overrides for a home, shaped as:
  * { "YYYY-MM-DD": { "staffId": { shift, reason, source } } }
+ *
+ * Optional date-range filter prevents loading years of history on every page load.
+ * Omit both to load all (backward-compatible for legacy data route).
+ *
  * @param {number} homeId
+ * @param {string} [fromDate]  "YYYY-MM-DD" inclusive lower bound
+ * @param {string} [toDate]    "YYYY-MM-DD" inclusive upper bound
  */
-export async function findByHome(homeId) {
-  const { rows } = await pool.query(
-    'SELECT date, staff_id, shift, reason, source, sleep_in FROM shift_overrides WHERE home_id = $1',
-    [homeId]
-  );
+export async function findByHome(homeId, fromDate, toDate) {
+  let sql = 'SELECT date, staff_id, shift, reason, source, sleep_in FROM shift_overrides WHERE home_id = $1';
+  const params = [homeId];
+  if (fromDate) {
+    params.push(fromDate);
+    sql += ` AND date >= $${params.length}`;
+  }
+  if (toDate) {
+    params.push(toDate);
+    sql += ` AND date <= $${params.length}`;
+  }
+  const { rows } = await pool.query(sql, params);
   const result = {};
   for (const row of rows) {
     const dateStr = row.date instanceof Date
-      ? row.date.toISOString().slice(0, 10)
+      ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
       : String(row.date).slice(0, 10);
     if (!result[dateStr]) result[dateStr] = {};
-    const entry = { shift: row.shift };
+    const entry = { shift: row.shift, sleep_in: !!row.sleep_in };
     if (row.reason) entry.reason = row.reason;
     if (row.source) entry.source = row.source;
-    if (row.sleep_in) entry.sleep_in = row.sleep_in;
     result[dateStr][row.staff_id] = entry;
   }
   return result;

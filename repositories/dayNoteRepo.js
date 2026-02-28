@@ -13,7 +13,7 @@ export async function findByHome(homeId) {
   const result = {};
   for (const row of rows) {
     const dateStr = row.date instanceof Date
-      ? row.date.toISOString().slice(0, 10)
+      ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
       : String(row.date).slice(0, 10);
     result[dateStr] = row.note;
   }

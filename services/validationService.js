@@ -39,8 +39,8 @@ function validateALEntitlement(data, warnings) {
   }
   for (const [staffId, used] of Object.entries(alUsed)) {
     const staff = data.staff.find(s => s.id === staffId);
-    const base = staff?.al_entitlement != null ? staff.al_entitlement : (data.config.al_entitlement_days || 28);
-    const entitlement = base + (staff?.al_carryover || 0);
+    const base = staff?.al_entitlement != null ? staff.al_entitlement : (data.config.al_entitlement_days ?? 28);
+    const entitlement = base + (staff?.al_carryover ?? 0);
     if (used > entitlement) {
       warnings.push(`${staff?.name || staffId}: ${used} AL days in leave year exceeds entitlement of ${entitlement}`);
     }
