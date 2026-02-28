@@ -4,8 +4,11 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as incidentRepo from '../repositories/incidentRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const addendumSchema = z.object({ content: z.string().min(1).max(5000) });
@@ -73,12 +76,13 @@ const incidentUpdateSchema = incidentBodySchema.partial();
 // GET /api/incidents?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const [incidents, staffRows] = await Promise.all([
+    const [incidentsResult, staffResult] = await Promise.all([
       incidentRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
+    const incidents = incidentsResult.rows;
     const incidentTypes = req.home.config?.incident_types || [];
-    const staff = staffRows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
+    const staff = staffResult.rows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
     res.json({ incidents, incidentTypes, staff });
   } catch (err) { next(err); }
 });
@@ -89,7 +93,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
-    await auditService.log('incident_create', req.home.slug, req.user.username, { incident_id: incident?.id });
+    await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident?.id });
     res.status(201).json(incident);
   } catch (err) { next(err); }
 });
@@ -106,8 +110,15 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
     );
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
-    const incident = await incidentRepo.update(idParsed.data, req.home.id, updates);
-    if (!incident) return res.status(404).json({ error: 'Incident not found or frozen' });
+    const existing = await incidentRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Incident not found or frozen' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const incident = await incidentRepo.update(idParsed.data, req.home.id, updates, version);
+    if (incident === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, incident);
+    await auditService.log('incident_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(incident);
   } catch (err) { next(err); }
 });
@@ -119,7 +130,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
     const deleted = await incidentRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Incident not found or frozen' });
-    await auditService.log('incident_delete', req.home.slug, req.user.username, { incident_id: idParsed.data });
+    await auditService.log('incident_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -131,7 +142,7 @@ router.post('/:id/freeze', requireAuth, requireAdmin, requireHomeAccess, async (
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
     const frozen = await incidentRepo.freeze(idParsed.data, req.home.id);
     if (!frozen) return res.status(404).json({ error: 'Incident not found or already frozen' });
-    await auditService.log('incident_freeze', req.home.slug, req.user.username, { incident_id: idParsed.data });
+    await auditService.log('incident_freeze', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -154,7 +165,7 @@ router.post('/:id/addenda', requireAuth, requireAdmin, requireHomeAccess, async 
     const parsed = addendumSchema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message });
     const addendum = await incidentRepo.addAddendum(idParsed.data, req.home.id, req.user.username, parsed.data.content);
-    await auditService.log('incident_addendum', req.home.slug, req.user.username, { incident_id: idParsed.data });
+    await auditService.log('incident_addendum', req.home.slug, req.user.username, { id: idParsed.data });
     res.json(addendum);
   } catch (err) { next(err); }
 });

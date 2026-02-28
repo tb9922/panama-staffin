@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import { withTransaction } from '../db.js';
 import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 
 const STAFF_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
@@ -51,8 +54,15 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
     const parsed = staffUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, parsed.data);
-    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+    const existing = await staffRepo.findById(req.home.id, idParsed.data);
+    if (!existing) return res.status(404).json({ error: 'Staff member not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, parsed.data, version);
+    if (staff === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, staff);
+    await auditService.log('staff_update', req.home.slug, req.user.username, { staff_id: idParsed.data, changes });
     res.json(staff);
   } catch (err) { next(err); }
 });
@@ -67,7 +77,7 @@ router.delete('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (
       if (!deleted) throw Object.assign(new Error('Staff member not found'), { status: 404 });
       await overrideRepo.deleteForStaff(req.home.id, idParsed.data, client);
     });
-    await auditService.log('staff_delete', req.home.slug, req.user.username, { staff_id: idParsed.data });
+    await auditService.log('staff_deactivate', req.home.slug, req.user.username, { staff_id: idParsed.data });
     res.json({ ok: true });
   } catch (err) {
     if (err.status === 404) return res.status(404).json({ error: err.message });

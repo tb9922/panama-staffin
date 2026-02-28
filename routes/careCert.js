@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { diffFields } from '../lib/audit.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -45,11 +48,11 @@ const careCertUpdateSchema = z.object({
 // GET /api/care-cert?home=X
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const [careCert, staffRows] = await Promise.all([
+    const [careCert, staffResult] = await Promise.all([
       careCertRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
-    const staff = staffRows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
+    const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
     res.json({ careCert, staff, config: req.home.config });
   } catch (err) { next(err); }
 });
@@ -91,7 +94,8 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
     if (!bodyParsed.success) return res.status(400).json({ error: 'Validation failed', issues: bodyParsed.error.issues });
     const updated = { ...currentRecord, ...bodyParsed.data };
     const result = await careCertRepo.upsertStaff(req.home.id, idParsed.data, updated);
-    await auditService.log('care_cert_update', req.home.slug, req.user.username, { staffId: idParsed.data });
+    const changes = diffFields(currentRecord, result);
+    await auditService.log('care_cert_update', req.home.slug, req.user.username, { staffId: idParsed.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });

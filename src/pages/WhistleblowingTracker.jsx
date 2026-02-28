@@ -11,6 +11,7 @@ import {
   CONCERN_CATEGORIES, CONCERN_SEVERITIES, CONCERN_STATUSES,
   CONCERN_OUTCOMES, REPORTER_ROLES,
 } from '../lib/whistleblowing.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const TABS = [
   { id: 'details', label: 'Concern Details' },
@@ -34,6 +35,7 @@ export default function WhistleblowingTracker() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');

@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import logger from '../logger.js';
+import { readRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(readRateLimiter);
 
 router.get('/', requireAuth, async (req, res, next) => {
   try {

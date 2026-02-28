@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as handoverRepo from '../repositories/handoverRepo.js';
+import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').nullable());
 const uuidSchema = z.string().uuid('Invalid entry ID');
@@ -27,8 +31,8 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const dateParam = dateSchema.safeParse(req.query.date);
     if (!dateParam.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
-    const entries = await handoverRepo.findByHomeAndDate(req.home.id, dateParam.data);
-    res.json(entries);
+    const result = await handoverRepo.findByHomeAndDate(req.home.id, dateParam.data);
+    res.json(result.rows);
   } catch (err) {
     next(err);
   }
@@ -40,6 +44,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = entryBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const entry = await handoverRepo.createEntry(req.home.id, parsed.data, req.user.username);
+    await auditService.log('handover_create', req.home.slug, req.user.username, { id: entry?.id });
     res.status(201).json(entry);
   } catch (err) {
     next(err);
@@ -55,6 +60,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const entry = await handoverRepo.updateEntry(idParam.data, req.home.id, parsed.data);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    await auditService.log('handover_update', req.home.slug, req.user.username, { id: idParam.data });
     res.json(entry);
   } catch (err) {
     next(err);
@@ -68,6 +74,7 @@ router.post('/:id/acknowledge', requireAuth, requireHomeAccess, async (req, res,
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
     const entry = await handoverRepo.acknowledgeEntry(idParam.data, req.home.id, req.user.username);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    await auditService.log('handover_acknowledge', req.home.slug, req.user.username, { id: idParam.data });
     res.json(entry);
   } catch (err) {
     next(err);
@@ -81,6 +88,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
     const deleted = await handoverRepo.deleteEntry(idParam.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Entry not found' });
+    await auditService.log('handover_delete', req.home.slug, req.user.username, { id: idParam.data });
     res.json({ ok: true });
   } catch (err) {
     next(err);

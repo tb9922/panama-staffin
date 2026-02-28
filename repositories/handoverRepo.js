@@ -24,17 +24,19 @@ function shapeRow(row) {
  * @param {number} homeId
  * @param {string} date  "YYYY-MM-DD"
  */
-export async function findByHomeAndDate(homeId, date) {
+export async function findByHomeAndDate(homeId, date, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT * FROM handover_entries
+    `SELECT *, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date = $2 AND deleted_at IS NULL
      ORDER BY
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
        CASE category WHEN 'clinical' THEN 1 WHEN 'safety' THEN 2 WHEN 'operational' THEN 3 WHEN 'admin' THEN 4 ELSE 5 END,
-       created_at`,
-    [homeId, date]
+       created_at
+     LIMIT $3 OFFSET $4`,
+    [homeId, date, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeRow(rest); }), total };
 }
 
 /**
@@ -43,16 +45,18 @@ export async function findByHomeAndDate(homeId, date) {
  * @param {string} fromDate  "YYYY-MM-DD"
  * @param {string} toDate    "YYYY-MM-DD"
  */
-export async function findByHomeAndDateRange(homeId, fromDate, toDate) {
+export async function findByHomeAndDateRange(homeId, fromDate, toDate, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT * FROM handover_entries
+    `SELECT *, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date BETWEEN $2 AND $3 AND deleted_at IS NULL
      ORDER BY entry_date,
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
-       created_at`,
-    [homeId, fromDate, toDate]
+       created_at
+     LIMIT $4 OFFSET $5`,
+    [homeId, fromDate, toDate, Math.min(limit, 2000), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeRow(rest); }), total };
 }
 
 /**
@@ -107,8 +111,7 @@ export async function acknowledgeEntry(id, homeId, username) {
 }
 
 /**
- * Soft-delete an entry by setting deleted_at. Returns true if soft-deleted, false if not found.
- * Assumes deleted_at column exists on handover_entries (requires migration if not present).
+ * Soft-delete an entry by setting deleted_at.
  * @param {string} id      UUID
  * @param {number} homeId  ownership check
  */

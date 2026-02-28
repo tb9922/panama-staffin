@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as dolsRepo from '../repositories/dolsRepo.js';
+import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -41,11 +45,11 @@ const mcaUpdateSchema = mcaBodySchema.partial();
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const [dols, mcaAssessments] = await Promise.all([
+    const [dolsResult, mcaResult] = await Promise.all([
       dolsRepo.findByHome(req.home.id),
       dolsRepo.findMcaByHome(req.home.id),
     ]);
-    res.json({ dols, mcaAssessments });
+    res.json({ dols: dolsResult.rows, mcaAssessments: mcaResult.rows });
   } catch (err) { next(err); }
 });
 
@@ -55,6 +59,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const record = await dolsRepo.upsertDols(req.home.id, parsed.data);
+    await auditService.log('dols_create', req.home.slug, req.user.username, { id: record?.id });
     res.status(201).json(record);
   } catch (err) { next(err); }
 });
@@ -66,8 +71,15 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = dolsUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data);
-    if (!record) return res.status(404).json({ error: 'Not found' });
+    const existing = await dolsRepo.findDolsById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data, version);
+    if (record === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, record);
+    await auditService.log('dols_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(record);
   } catch (err) { next(err); }
 });
@@ -79,6 +91,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await dolsRepo.softDeleteDols(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('dols_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -89,6 +102,7 @@ router.post('/mca', requireAuth, requireAdmin, requireHomeAccess, async (req, re
     const parsed = mcaBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const record = await dolsRepo.upsertMca(req.home.id, parsed.data);
+    await auditService.log('mca_create', req.home.slug, req.user.username, { id: record?.id });
     res.status(201).json(record);
   } catch (err) { next(err); }
 });
@@ -100,8 +114,15 @@ router.put('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (req,
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = mcaUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const record = await dolsRepo.updateMca(idParsed.data, req.home.id, parsed.data);
-    if (!record) return res.status(404).json({ error: 'Not found' });
+    const existing = await dolsRepo.findMcaById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const record = await dolsRepo.updateMca(idParsed.data, req.home.id, parsed.data, version);
+    if (record === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, record);
+    await auditService.log('mca_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(record);
   } catch (err) { next(err); }
 });
@@ -113,6 +134,7 @@ router.delete('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (r
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await dolsRepo.softDeleteMca(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('mca_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

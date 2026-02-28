@@ -28,12 +28,20 @@ function shapeMcaRow(row) {
   return shaped;
 }
 
-export async function findByHome(homeId) {
+function paginate(rows, shapeFn) {
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
+}
+
+export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM dols WHERE home_id = $1 AND deleted_at IS NULL ORDER BY application_date DESC NULLS LAST',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM dols
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY application_date DESC NULLS LAST
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeDolsRow);
+  return paginate(rows, shapeDolsRow);
 }
 
 export async function syncDols(homeId, arr, client) {
@@ -123,16 +131,18 @@ export async function upsertDols(homeId, data) {
   return rows[0] ? shapeDolsRow(rows[0]) : null;
 }
 
-export async function updateDols(id, homeId, data) {
+export async function updateDols(id, homeId, data, version) {
   const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
   if (fields.length === 0) return findDolsById(id, homeId);
   const mapped = fields.map(([k, v]) => [k, k === 'restrictions' ? JSON.stringify(v) : v]);
   const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const values = mapped.map(([_, v]) => v);
-  const { rows } = await pool.query(
-    `UPDATE dols SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    [id, homeId, ...values]
-  );
+  const params = [id, homeId, ...values];
+  let sql = `UPDATE dols SET ${setClause}, version = version + 1, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeDolsRow(rows[0]) : null;
 }
 
@@ -144,12 +154,15 @@ export async function softDeleteDols(id, homeId) {
   return rowCount > 0;
 }
 
-export async function findMcaByHome(homeId) {
+export async function findMcaByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM mca_assessments WHERE home_id = $1 AND deleted_at IS NULL ORDER BY assessment_date DESC NULLS LAST',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM mca_assessments
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY assessment_date DESC NULLS LAST
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeMcaRow);
+  return paginate(rows, shapeMcaRow);
 }
 
 export async function syncMca(homeId, arr, client) {
@@ -221,15 +234,17 @@ export async function upsertMca(homeId, data) {
   return rows[0] ? shapeMcaRow(rows[0]) : null;
 }
 
-export async function updateMca(id, homeId, data) {
+export async function updateMca(id, homeId, data, version) {
   const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
   if (fields.length === 0) return findMcaById(id, homeId);
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const values = fields.map(([_, v]) => v);
-  const { rows } = await pool.query(
-    `UPDATE mca_assessments SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    [id, homeId, ...values]
-  );
+  const params = [id, homeId, ...values];
+  let sql = `UPDATE mca_assessments SET ${setClause}, version = version + 1, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeMcaRow(rows[0]) : null;
 }
 

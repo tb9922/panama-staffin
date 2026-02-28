@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as supervisionRepo from '../repositories/supervisionRepo.js';
 import * as appraisalRepo from '../repositories/appraisalRepo.js';
@@ -10,6 +11,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const recordIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const staffIdSchema = z.string().min(1).max(20);
@@ -42,7 +44,7 @@ const trainingRecordSchema = z.object({
   certificate_ref: z.string().max(200).nullable().optional(),
   level:           z.string().max(50).nullable().optional(),
   notes:           z.string().max(5000).nullable().optional(),
-  _clientUpdatedAt: z.string().optional(),
+  _clientUpdatedAt: z.string().max(50).optional(),
 });
 
 const supervisionSchema = z.object({
@@ -53,7 +55,7 @@ const supervisionSchema = z.object({
   actions:    z.string().max(5000).nullable().optional(),
   next_due:   dateSchema.optional(),
   notes:      z.string().max(5000).nullable().optional(),
-  _clientUpdatedAt: z.string().optional(),
+  _clientUpdatedAt: z.string().max(50).optional(),
 });
 
 const appraisalSchema = z.object({
@@ -65,7 +67,7 @@ const appraisalSchema = z.object({
   development_plan: z.string().max(5000).nullable().optional(),
   next_due:         dateSchema.optional(),
   notes:            z.string().max(5000).nullable().optional(),
-  _clientUpdatedAt: z.string().optional(),
+  _clientUpdatedAt: z.string().max(50).optional(),
 });
 
 const fireDrillSchema = z.object({
@@ -79,20 +81,23 @@ const fireDrillSchema = z.object({
   corrective_actions:      z.string().max(5000).nullable().optional(),
   conducted_by:            z.string().max(200).nullable().optional(),
   notes:                   z.string().max(5000).nullable().optional(),
-  _clientUpdatedAt:        z.string().optional(),
+  _clientUpdatedAt:        z.string().max(50).optional(),
 });
 
 // GET /api/training?home=X — one-shot load for TrainingMatrix
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const [training, supervisions, appraisals, fireDrills, staffRows] = await Promise.all([
+    const [trainingResult, supervisionsResult, appraisalsResult, fireDrills, staffResult] = await Promise.all([
       trainingRepo.findByHome(req.home.id),
       supervisionRepo.findByHome(req.home.id),
       appraisalRepo.findByHome(req.home.id),
       fireDrillRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
-    const staff = staffRows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
+    const training = trainingResult.rows;
+    const supervisions = supervisionsResult.rows;
+    const appraisals = appraisalsResult.rows;
+    const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
     const trainingTypes = req.home.config?.training_types || [];
     const supervisionConfig = {
       supervision_frequency_probation: req.home.config?.supervision_frequency_probation ?? 30,

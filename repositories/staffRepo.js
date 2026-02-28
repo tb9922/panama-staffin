@@ -18,6 +18,7 @@ function shapeRow(row) {
     al_entitlement: row.al_entitlement,
     al_carryover: row.al_carryover,
     leaving_date: row.leaving_date ? row.leaving_date.toISOString().slice(0, 10) : null,
+    version: row.version != null ? parseInt(row.version, 10) : undefined,
   };
 }
 
@@ -25,12 +26,15 @@ function shapeRow(row) {
  * Return all non-deleted staff for a home, shaped for the frontend.
  * @param {number} homeId
  */
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 200, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM staff WHERE home_id = $1 AND deleted_at IS NULL ORDER BY name',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM staff
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY name LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 1000), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeRow(rest); }), total };
 }
 
 /**
@@ -88,6 +92,19 @@ export async function sync(homeId, staffArr, client) {
 }
 
 /**
+ * Find a single staff member by ID. Returns shaped row or null.
+ * @param {number} homeId
+ * @param {string} staffId
+ */
+export async function findById(homeId, staffId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL',
+    [homeId, staffId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
+}
+
+/**
  * Upsert a single staff member. Used by Mode 2 staff endpoints.
  * @param {number} homeId
  * @param {object} staff — staff object with all fields including id
@@ -125,61 +142,47 @@ export async function upsertOne(homeId, staff) {
 
 /**
  * Update a single staff member by ID. Only updates fields present in `fields`.
- * Uses COALESCE so omitted fields keep their existing values.
+ * Dynamic SET pattern — allows clearing fields to NULL (fixes COALESCE bug).
  * @param {number} homeId
  * @param {string} staffId
  * @param {object} fields — partial staff object (only fields to update)
- * @returns {object|null} shaped staff row, or null if not found
+ * @param {number} [version] — optimistic lock version (optional)
+ * @returns {object|null} shaped staff row, or null if not found / version conflict
  */
-export async function updateOne(homeId, staffId, fields) {
-  const { rows } = await pool.query(
-    `UPDATE staff SET
-       name           = COALESCE($3, name),
-       role           = COALESCE($4, role),
-       team           = COALESCE($5, team),
-       pref           = CASE WHEN $6::boolean THEN $7 ELSE pref END,
-       skill          = COALESCE($8, skill),
-       hourly_rate    = COALESCE($9, hourly_rate),
-       active         = COALESCE($10, active),
-       wtr_opt_out    = COALESCE($11, wtr_opt_out),
-       start_date     = CASE WHEN $12::boolean THEN $13::date ELSE start_date END,
-       date_of_birth  = CASE WHEN $14::boolean THEN $15::date ELSE date_of_birth END,
-       ni_number      = CASE WHEN $16::boolean THEN $17 ELSE ni_number END,
-       contract_hours = CASE WHEN $18::boolean THEN $19::numeric ELSE contract_hours END,
-       al_entitlement = CASE WHEN $20::boolean THEN $21::int ELSE al_entitlement END,
-       al_carryover   = COALESCE($22, al_carryover),
-       leaving_date   = CASE WHEN $23::boolean THEN $24::date ELSE leaving_date END,
-       updated_at     = NOW()
-     WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL
-     RETURNING *`,
-    [
-      homeId,
-      staffId,
-      fields.name !== undefined ? fields.name : null,
-      fields.role !== undefined ? fields.role : null,
-      fields.team !== undefined ? fields.team : null,
-      'pref' in fields,           // $6: flag — was pref provided?
-      fields.pref ?? null,        // $7: value (may be null to clear)
-      fields.skill !== undefined ? fields.skill : null,
-      fields.hourly_rate !== undefined ? fields.hourly_rate : null,
-      fields.active !== undefined ? fields.active : null,
-      fields.wtr_opt_out !== undefined ? fields.wtr_opt_out : null,
-      'start_date' in fields,     // $12: flag
-      fields.start_date ?? null,  // $13: value
-      'date_of_birth' in fields,  // $14: flag
-      fields.date_of_birth ?? null, // $15: value
-      'ni_number' in fields,      // $16: flag
-      fields.ni_number ?? null,   // $17: value
-      'contract_hours' in fields, // $18: flag
-      fields.contract_hours ?? null, // $19: value
-      'al_entitlement' in fields, // $20: flag
-      fields.al_entitlement ?? null, // $21: value
-      fields.al_carryover !== undefined ? fields.al_carryover : null,
-      'leaving_date' in fields,   // $23: flag
-      fields.leaving_date ?? null, // $24: value
-    ]
-  );
-  return rows.length > 0 ? shapeRow(rows[0]) : null;
+export async function updateOne(homeId, staffId, fields, version) {
+  const setClauses = [];
+  const params = [homeId, staffId];
+  const settable = {
+    name: 'name', role: 'role', team: 'team', pref: 'pref',
+    skill: 'skill', hourly_rate: 'hourly_rate', active: 'active',
+    wtr_opt_out: 'wtr_opt_out', start_date: 'start_date::date',
+    date_of_birth: 'date_of_birth::date', ni_number: 'ni_number',
+    contract_hours: 'contract_hours::numeric', al_entitlement: 'al_entitlement::int',
+    al_carryover: 'al_carryover', leaving_date: 'leaving_date::date',
+  };
+  for (const [key, cast] of Object.entries(settable)) {
+    if (key in fields) {
+      params.push(fields[key] ?? null);
+      const col = cast.includes('::') ? cast.split('::')[0] : cast;
+      const typeCast = cast.includes('::') ? '::' + cast.split('::')[1] : '';
+      setClauses.push(`${col} = $${params.length}${typeCast}`);
+    }
+  }
+  if (setClauses.length === 0) {
+    const { rows } = await pool.query(
+      'SELECT * FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL',
+      [homeId, staffId]
+    );
+    return rows[0] ? shapeRow(rows[0]) : null;
+  }
+  setClauses.push('updated_at = NOW()');
+  setClauses.push('version = version + 1');
+  let sql = `UPDATE staff SET ${setClauses.join(', ')} WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeRow(rows[0]) : null;
 }
 
 /**

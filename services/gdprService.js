@@ -542,33 +542,35 @@ export function assessBreachRisk(breachData) {
 
 // ── Passthrough to repo ──────────────────────────────────────────────────────
 
-export async function findRequests(homeId) { return gdprRepo.findRequests(homeId); }
+export async function findRequests(homeId) { const r = await gdprRepo.findRequests(homeId); return r.rows; }
 export async function findRequestById(id, homeId) { return gdprRepo.findRequestById(id, homeId); }
 export async function createRequest(homeId, data) { return gdprRepo.createRequest(homeId, data); }
-export async function updateRequest(id, homeId, data, client) { return gdprRepo.updateRequest(id, homeId, data, client); }
+export async function updateRequest(id, homeId, data, client, version) { return gdprRepo.updateRequest(id, homeId, data, client, version); }
 
-export async function findBreaches(homeId) { return gdprRepo.findBreaches(homeId); }
+export async function findBreaches(homeId) { const r = await gdprRepo.findBreaches(homeId); return r.rows; }
 export async function findBreachById(id, homeId) { return gdprRepo.findBreachById(id, homeId); }
 export async function createBreach(homeId, data) { return gdprRepo.createBreach(homeId, data); }
-export async function updateBreach(id, homeId, data) {
+export async function updateBreach(id, homeId, data, version) {
   if (data.status && ['resolved', 'closed'].includes(data.status)) {
     const current = await gdprRepo.findBreachById(id, homeId);
     if (current?.ico_notifiable && !current?.ico_notified) {
       throw new ValidationError('ICO must be notified before resolving a notifiable breach');
     }
   }
-  return gdprRepo.updateBreach(id, homeId, data);
+  return gdprRepo.updateBreach(id, homeId, data, null, version);
 }
 
 export async function getRetentionSchedule() { return gdprRepo.getRetentionSchedule(); }
 
-export async function findConsent(homeId) { return gdprRepo.findConsent(homeId); }
+export async function findConsent(homeId) { const r = await gdprRepo.findConsent(homeId); return r.rows; }
+export async function findConsentById(id, homeId) { return gdprRepo.findConsentById(id, homeId); }
 export async function createConsent(homeId, data) { return gdprRepo.createConsent(homeId, data); }
-export async function updateConsent(id, homeId, data) { return gdprRepo.updateConsent(id, homeId, data); }
+export async function updateConsent(id, homeId, data, version) { return gdprRepo.updateConsent(id, homeId, data, null, version); }
 
-export async function findDPComplaints(homeId) { return gdprRepo.findDPComplaints(homeId); }
+export async function findDPComplaints(homeId) { const r = await gdprRepo.findDPComplaints(homeId); return r.rows; }
+export async function findDPComplaintById(id, homeId) { return gdprRepo.findDPComplaintById(id, homeId); }
 export async function createDPComplaint(homeId, data) { return gdprRepo.createDPComplaint(homeId, data); }
-export async function updateDPComplaint(id, homeId, data) { return gdprRepo.updateDPComplaint(id, homeId, data); }
+export async function updateDPComplaint(id, homeId, data, version) { return gdprRepo.updateDPComplaint(id, homeId, data, null, version); }
 
 export async function getAccessLog({ limit = 100, offset = 0, homeSlug } = {}) {
   if (!homeSlug) {

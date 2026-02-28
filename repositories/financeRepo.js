@@ -20,6 +20,7 @@ function shapeResident(row) {
     top_up_amount: f(row.top_up_amount), top_up_payer: row.top_up_payer, top_up_contact: row.top_up_contact,
     last_fee_review: d(row.last_fee_review), next_fee_review: d(row.next_fee_review),
     status: row.status, notes: row.notes,
+    version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
 }
@@ -68,7 +69,7 @@ export async function createResident(homeId, data, client) {
   return shapeResident(rows[0]);
 }
 
-export async function updateResident(id, homeId, data, client) {
+export async function updateResident(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -86,10 +87,13 @@ export async function updateResident(id, homeId, data, client) {
     }
   }
   if (fields.length === 0) return findResidentById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE finance_residents SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    params);
-  return shapeResident(rows[0]);
+  fields.push('version = version + 1');
+  let sql = `UPDATE finance_residents SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeResident(rows[0]) : null;
 }
 
 export async function countActiveResidents(homeId, client) {
@@ -148,6 +152,7 @@ function shapeInvoice(row) {
     status: row.status, issue_date: d(row.issue_date), due_date: d(row.due_date),
     paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
     notes: row.notes,
+    version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
 }
@@ -219,7 +224,7 @@ export async function createInvoice(homeId, data, client) {
   return shapeInvoice(rows[0]);
 }
 
-export async function updateInvoice(id, homeId, data, client) {
+export async function updateInvoice(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -237,10 +242,13 @@ export async function updateInvoice(id, homeId, data, client) {
     }
   }
   if (fields.length === 0) return findInvoiceById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE finance_invoices SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    params);
-  return shapeInvoice(rows[0]);
+  fields.push('version = version + 1');
+  let sql = `UPDATE finance_invoices SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeInvoice(rows[0]) : null;
 }
 
 // ── Invoice Lines ─────────────────────────────────────────────────────────────
@@ -281,6 +289,7 @@ function shapeExpense(row) {
     paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
     recurring: row.recurring, recurrence_frequency: row.recurrence_frequency,
     notes: row.notes,
+    version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
 }
@@ -332,7 +341,7 @@ export async function createExpense(homeId, data, client) {
   return shapeExpense(rows[0]);
 }
 
-export async function updateExpense(id, homeId, data, client) {
+export async function updateExpense(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -350,10 +359,13 @@ export async function updateExpense(id, homeId, data, client) {
     }
   }
   if (fields.length === 0) return findExpenseById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE finance_expenses SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    params);
-  return shapeExpense(rows[0]);
+  fields.push('version = version + 1');
+  let sql = `UPDATE finance_expenses SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeExpense(rows[0]) : null;
 }
 
 // ── Summary Queries ───────────────────────────────────────────────────────────
@@ -573,6 +585,7 @@ function shapeSchedule(row) {
     next_due: d(row.next_due),
     auto_approve: row.auto_approve, on_hold: row.on_hold, hold_reason: row.hold_reason,
     notes: row.notes,
+    version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
 }
@@ -612,7 +625,7 @@ export async function createPaymentSchedule(homeId, data, client) {
   return shapeSchedule(rows[0]);
 }
 
-export async function updatePaymentSchedule(id, homeId, data, client) {
+export async function updatePaymentSchedule(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
@@ -625,10 +638,13 @@ export async function updatePaymentSchedule(id, homeId, data, client) {
     }
   }
   if (fields.length === 0) return findPaymentScheduleById(id, homeId, client);
-  const { rows } = await conn.query(
-    `UPDATE finance_payment_schedule SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    params);
-  return shapeSchedule(rows[0]);
+  fields.push('version = version + 1');
+  let sql = `UPDATE finance_payment_schedule SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeSchedule(rows[0]) : null;
 }
 
 export async function getUpcomingPayments(homeId, withinDate, client) {

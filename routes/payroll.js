@@ -17,6 +17,7 @@
 import { Router }   from 'express';
 import { z }        from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as payRateRulesRepo  from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo     from '../repositories/timesheetRepo.js';
@@ -27,11 +28,14 @@ import * as pensionRepo       from '../repositories/pensionRepo.js';
 import * as sspRepo           from '../repositories/sspRepo.js';
 import * as hmrcRepo          from '../repositories/hmrcRepo.js';
 import * as payrollService    from '../services/payrollService.js';
+import * as auditService      from '../services/auditService.js';
+import { diffFields }         from '../lib/audit.js';
 import { generatePayslipPDF }  from '../src/lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../src/lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -113,6 +117,7 @@ router.post('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     const parsed = ruleBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const rule = await payRateRulesRepo.create(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: rule.id, entity: 'rate_rule' });
     res.status(201).json(rule);
   } catch (err) { next(err); }
 });
@@ -126,6 +131,7 @@ router.put('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, async
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const rule = await payRateRulesRepo.update(ruleId.data, req.home.id, parsed.data);
     if (!rule) return res.status(404).json({ error: 'Rule not found or already closed' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: ruleId.data, entity: 'rate_rule' });
     res.json(rule);
   } catch (err) { next(err); }
 });
@@ -137,6 +143,7 @@ router.delete('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, as
     if (!ruleId.success) return res.status(400).json({ error: 'Invalid rule ID' });
     const ok = await payRateRulesRepo.deactivate(ruleId.data, req.home.id);
     if (!ok) return res.status(404).json({ error: 'Rule not found or already closed' });
+    await auditService.log('payroll_delete', req.home.slug, req.user.username, { id: ruleId.data, entity: 'rate_rule' });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -178,6 +185,7 @@ router.post('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (
     const parsed = timesheetBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const entry = await timesheetRepo.upsert(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: entry.id, entity: 'timesheet', staff_id: parsed.data.staff_id });
     res.status(201).json(entry);
   } catch (err) { next(err); }
 });
@@ -189,6 +197,7 @@ router.post('/timesheets/:id/approve', requireAuth, requireAdmin, requireHomeAcc
     if (!idP.success) return res.status(400).json({ error: 'Invalid timesheet ID' });
     const entry = await timesheetRepo.approve(idP.data, req.home.id, req.user.username);
     if (!entry) return res.status(404).json({ error: 'Entry not found or already locked' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'timesheet', action: 'approve' });
     res.json(entry);
   } catch (err) { next(err); }
 });
@@ -202,6 +211,7 @@ router.post('/timesheets/:id/dispute', requireAuth, requireAdmin, requireHomeAcc
     if (!reasonP.success) return res.status(400).json({ error: 'reason required (1-500 characters)' });
     const entry = await timesheetRepo.dispute(idP.data, req.home.id, reasonP.data);
     if (!entry) return res.status(404).json({ error: 'Entry not found or already locked' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'timesheet', action: 'dispute' });
     res.json(entry);
   } catch (err) { next(err); }
 });
@@ -212,6 +222,7 @@ router.post('/timesheets/bulk-approve', requireAuth, requireAdmin, requireHomeAc
     const dateP = dateSchema.safeParse(req.body.date);
     if (!dateP.success) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
     const count = await timesheetRepo.bulkApproveByDate(req.home.id, dateP.data, req.user.username);
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { entity: 'timesheet', action: 'bulk_approve', date: dateP.data, count });
     res.json({ approved: count });
   } catch (err) { next(err); }
 });
@@ -231,6 +242,7 @@ router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, requireHomeAc
     const results = await withTransaction(async (client) => {
       return timesheetRepo.bulkUpsert(req.home.id, parsed, client);
     });
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { entity: 'timesheet', action: 'batch_upsert', count: results.length });
     res.status(201).json(results);
   } catch (err) { next(err); }
 });
@@ -244,6 +256,7 @@ router.post('/timesheets/approve-range', requireAuth, requireAdmin, requireHomeA
     if (!staffIdP.success) return res.status(400).json({ error: 'staff_id required' });
     if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end dates required (YYYY-MM-DD)' });
     const count = await timesheetRepo.approveByStaffRange(req.home.id, staffIdP.data, startP.data, endP.data, req.user.username);
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { entity: 'timesheet', action: 'approve_range', staff_id: staffIdP.data, count });
     res.json({ approved: count });
   } catch (err) { next(err); }
 });
@@ -271,6 +284,7 @@ router.post('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, r
       return res.status(409).json({ error: 'A payroll run already exists that overlaps this period. Void the existing run first or adjust the dates.' });
     }
     const run = await payrollRunRepo.create(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: run.id, entity: 'run' });
     res.status(201).json(run);
   } catch (err) { next(err); }
 });
@@ -295,6 +309,7 @@ router.post('/runs/:runId/calculate', requireAuth, requireAdmin, requireHomeAcce
     await payrollService.calculateRun(runIdP.data, req.home.id, req.home.slug, req.user.username);
     const run   = await payrollRunRepo.findById(runIdP.data, req.home.id);
     const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', action: 'calculate' });
     res.json({ run, lines });
   } catch (err) { next(err); }
 });
@@ -306,6 +321,7 @@ router.post('/runs/:runId/approve', requireAuth, requireAdmin, requireHomeAccess
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     await payrollService.approveRun(runIdP.data, req.home.id, req.home.slug, req.user.username);
     const run = await payrollRunRepo.findById(runIdP.data, req.home.id);
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', action: 'approve' });
     res.json(run);
   } catch (err) { next(err); }
 });
@@ -369,6 +385,7 @@ router.post('/agency/providers', requireAuth, requireAdmin, requireHomeAccess, a
     const parsed = providerBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const provider = await agencyRepo.createProvider(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: provider.id, entity: 'agency_provider' });
     res.status(201).json(provider);
   } catch (err) { next(err); }
 });
@@ -382,6 +399,7 @@ router.put('/agency/providers/:id', requireAuth, requireAdmin, requireHomeAccess
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const provider = await agencyRepo.updateProvider(idP.data, req.home.id, parsed.data);
     if (!provider) return res.status(404).json({ error: 'Provider not found' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'agency_provider' });
     res.json(provider);
   } catch (err) { next(err); }
 });
@@ -404,6 +422,7 @@ router.post('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, asyn
     // Calculate total_cost server-side
     const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
     const shift = await agencyRepo.createShift(req.home.id, data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: shift.id, entity: 'agency_shift' });
     res.status(201).json(shift);
   } catch (err) { next(err); }
 });
@@ -418,6 +437,7 @@ router.put('/agency/shifts/:id', requireAuth, requireAdmin, requireHomeAccess, a
     const data = { ...parsed.data, total_cost: Math.round(parsed.data.hours * parsed.data.hourly_rate * 100) / 100 };
     const shift = await agencyRepo.updateShift(idP.data, req.home.id, data);
     if (!shift) return res.status(404).json({ error: 'Shift not found' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'agency_shift' });
     res.json(shift);
   } catch (err) { next(err); }
 });
@@ -457,7 +477,9 @@ router.post('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (r
   try {
     const parsed = taxCodeBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await taxRepo.upsertTaxCode(req.home.id, parsed.data));
+    const result = await taxRepo.upsertTaxCode(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'tax_code', staff_id: parsed.data.staff_id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -496,7 +518,9 @@ router.post('/pensions', requireAuth, requireAdmin, requireHomeAccess, async (re
   try {
     const parsed = enrolmentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await pensionRepo.upsertEnrolment(req.home.id, parsed.data));
+    const result = await pensionRepo.upsertEnrolment(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'pension_enrolment', staff_id: parsed.data.staff_id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -554,7 +578,9 @@ router.post('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async
   try {
     const parsed = sickPeriodBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await sspRepo.createSickPeriod(req.home.id, parsed.data));
+    const result = await sspRepo.createSickPeriod(req.home.id, parsed.data);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'sick_period', staff_id: parsed.data.staff_id });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -567,6 +593,7 @@ router.put('/sick-periods/:id', requireAuth, requireAdmin, requireHomeAccess, as
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const updated = await sspRepo.updateSickPeriod(idP.data, req.home.id, parsed.data);
     if (!updated) return res.status(404).json({ error: 'Sick period not found' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'sick_period' });
     res.json(updated);
   } catch (err) { next(err); }
 });
@@ -598,6 +625,7 @@ router.put('/hmrc/:id/paid', requireAuth, requireAdmin, requireHomeAccess, async
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const updated = await hmrcRepo.markPaid(idP.data, req.home.id, parsed.data.paid_date, parsed.data.paid_reference);
     if (!updated) return res.status(404).json({ error: 'Liability not found' });
+    await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'hmrc_liability', action: 'mark_paid' });
     res.json(updated);
   } catch (err) { next(err); }
 });

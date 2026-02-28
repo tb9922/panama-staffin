@@ -3,23 +3,53 @@ import { useNavigate } from 'react-router-dom';
 import { getCycleDates, getStaffForDay, formatDate, isWorkingShift, isCareRole } from '../lib/rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
-import { getTrainingTypes, getTrainingAlerts, buildComplianceMatrix, getComplianceStats, getSupervisionAlerts, getAppraisalAlerts, getFireDrillAlerts } from '../lib/training.js';
-import { getIncidentAlerts } from '../lib/incidents.js';
-import { getComplaintAlerts, getSurveyAlerts } from '../lib/complaints.js';
-import { getMaintenanceAlerts } from '../lib/maintenance.js';
-import { getIpcAlerts } from '../lib/ipc.js';
-import { getRiskAlerts } from '../lib/riskRegister.js';
-import { getPolicyAlerts } from '../lib/policyReview.js';
-import { getWhistleblowingAlerts } from '../lib/whistleblowing.js';
-import { getDolsAlerts } from '../lib/dols.js';
-import { getCareCertAlerts } from '../lib/careCertificate.js';
+import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getLoggedInUser } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
+function CoverageGauge({ period, cov }) {
+  if (!cov) return null;
+  const headPct = cov.coverage.required.heads > 0
+    ? Math.min((cov.coverage.headCount / cov.coverage.required.heads) * 100, 100) : 100;
+  const skillPct = cov.coverage.required.skill_points > 0
+    ? Math.min((cov.coverage.skillPoints / cov.coverage.required.skill_points) * 100, 100) : 100;
+  const esc = ESC_COLORS[cov.escalation.color] || ESC_COLORS.green;
+  return (
+    <div className={`border rounded-xl p-3.5 ${esc.card}`}>
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-sm font-semibold capitalize">{period}</span>
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${esc.badge}`}>
+          {cov.escalation.label}
+        </span>
+      </div>
+      <div className="space-y-2">
+        <div>
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>Heads</span>
+            <span className="font-mono font-bold">{cov.coverage.headCount}/{cov.coverage.required.heads}</span>
+          </div>
+          <div className="w-full bg-white/60 rounded-full h-2">
+            <div className={`h-full rounded-full transition-all duration-300 ${esc.bar}`} style={{ width: `${headPct}%` }} />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>Skill</span>
+            <span className="font-mono font-bold">{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</span>
+          </div>
+          <div className="w-full bg-white/60 rounded-full h-2">
+            <div className={`h-full rounded-full transition-all duration-300 ${esc.bar}`} style={{ width: `${skillPct}%` }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ data }) {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const isAdmin = useMemo(() => getLoggedInUser()?.role === 'admin', []);
   const navigate = useNavigate();
   // Reactive today — updates at midnight so shift-handover coverage is never stale
   const [today, setToday] = useState(() => new Date());
@@ -35,17 +65,23 @@ export default function Dashboard({ data }) {
   // Fetch HR stats + warnings from API (HR data lives in separate tables)
   const [hrData, setHrData] = useState({ stats: null, warnings: [] });
   const [financeAlerts, setFinanceAlerts] = useState([]);
+  const [summary, setSummary] = useState(null);
   useEffect(() => {
     const home = getCurrentHome();
     if (!home) return;
+    let cancelled = false;
     Promise.all([
       getHrStats(home).catch(() => null),
       getHrWarnings(home).catch(() => []),
       getFinanceAlerts(home).catch(() => []),
-    ]).then(([stats, warnings, finAlerts]) => {
+      getDashboardSummary(home).catch(() => null),
+    ]).then(([stats, warnings, finAlerts, dashSummary]) => {
+      if (cancelled) return;
       setHrData({ stats, warnings: warnings || [] });
       setFinanceAlerts(Array.isArray(finAlerts) ? finAlerts : []);
+      setSummary(dashSummary);
     });
+    return () => { cancelled = true; };
   }, [data.config?.home_name]);
 
   const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date, today]);
@@ -62,7 +98,7 @@ export default function Dashboard({ data }) {
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);
     return cycleData.findIndex(d => formatDate(d.date) === todayStr);
-  }, [cycleData]);
+  }, [cycleData, today]);
 
   const todayData = todayIdx >= 0 ? cycleData[todayIdx] : cycleData[0];
   const todayStaff = todayData.staffForDay;
@@ -91,7 +127,9 @@ export default function Dashboard({ data }) {
       });
     });
 
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
+    const activeCareStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+
+    activeCareStaff.forEach((s, idx) => {
       const fatigue = checkFatigueRisk(s, today, data.overrides, data.config);
       const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
       if (fatigue.exceeded) {
@@ -103,7 +141,7 @@ export default function Dashboard({ data }) {
 
     // NMW compliance check
     const nlwRate = data.config.nlw_rate || 12.21;
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
+    activeCareStaff.forEach((s, idx) => {
       if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
         list.push({ type: 'error', msg: `${label}: £${isAdmin ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below NLW £${nlwRate.toFixed(2)}` });
@@ -111,7 +149,7 @@ export default function Dashboard({ data }) {
     });
 
     // AL accrual overbooked check
-    data.staff.filter(s => s.active !== false && isCareRole(s.role)).forEach((s, idx) => {
+    activeCareStaff.forEach((s, idx) => {
       const acc = calculateAccrual(s, data.config, data.overrides, today);
       if (acc.remaining < 0) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
@@ -119,44 +157,14 @@ export default function Dashboard({ data }) {
       }
     });
 
-    // Training compliance alerts
-    const trainingTypes = getTrainingTypes(data.config);
-    const activeStaff = data.staff.filter(s => s.active !== false);
-    const trainingAlerts = getTrainingAlerts(activeStaff, trainingTypes, data.training || {}, today);
-    trainingAlerts.forEach(a => list.push(a));
-
-    // Incident alerts
-    getIncidentAlerts(data.incidents || []).forEach(a => list.push(a));
-
-    // Complaint & survey alerts
-    getComplaintAlerts(data.complaints || [], data.config).forEach(a => list.push(a));
-    getSurveyAlerts(data.complaint_surveys || [], data.config).forEach(a => list.push(a));
-
-    // Maintenance alerts
-    getMaintenanceAlerts(data.maintenance || [], formatDate(today)).forEach(a => list.push(a));
-
-    // IPC alerts — pass config so custom audit types are also checked
-    getIpcAlerts(data.ipc_audits || [], formatDate(today), data.config).forEach(a => list.push(a));
-
-    // Risk register alerts
-    getRiskAlerts(data.risk_register || [], formatDate(today)).forEach(a => list.push(a));
-
-    // Policy review alerts
-    getPolicyAlerts(data.policy_reviews || [], formatDate(today)).forEach(a => list.push(a));
-
-    // Whistleblowing alerts
-    getWhistleblowingAlerts(data.whistleblowing_concerns || []).forEach(a => list.push(a));
-
-    // DoLS/LPS alerts
-    getDolsAlerts(data.dols || [], data.mca_assessments || [], today).forEach(a => list.push(a));
-
-    // Care Certificate alerts
-    getCareCertAlerts(data.care_certificate || {}, activeStaff, data.config, today).forEach(a => list.push(a));
-
-    // Supervision, appraisal & fire drill alerts
-    getSupervisionAlerts(activeStaff, data.config, data.supervisions || {}, today).forEach(a => list.push(a));
-    getAppraisalAlerts(activeStaff, data.appraisals || {}, today).forEach(a => list.push(a));
-    getFireDrillAlerts(data.fire_drills || [], today).forEach(a => list.push(a));
+    // Compliance module alerts (computed server-side via /api/dashboard/summary)
+    if (summary?.alerts) {
+      summary.alerts.forEach(a => list.push({
+        type: a.type === 'info' ? 'warning' : a.type,
+        msg: a.message,
+        link: a.link,
+      }));
+    }
 
     // HR module alerts (fetched from API — separate tables)
     getHrAlerts(hrData.stats, hrData.warnings).forEach(a => {
@@ -167,47 +175,7 @@ export default function Dashboard({ data }) {
     getFinanceAlertsForDashboard(financeAlerts).forEach(a => list.push(a));
 
     return list.slice(0, 24);
-  }, [cycleData, data, hrData, financeAlerts]);
-
-  // Coverage gauge helper
-  const CoverageGauge = ({ period, cov }) => {
-    if (!cov) return null;
-    const headPct = cov.coverage.required.heads > 0
-      ? Math.min((cov.coverage.headCount / cov.coverage.required.heads) * 100, 100) : 100;
-    const skillPct = cov.coverage.required.skill_points > 0
-      ? Math.min((cov.coverage.skillPoints / cov.coverage.required.skill_points) * 100, 100) : 100;
-    const esc = ESC_COLORS[cov.escalation.color] || ESC_COLORS.green;
-    return (
-      <div className={`border rounded-xl p-3.5 ${esc.card}`}>
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="text-sm font-semibold capitalize">{period}</span>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${esc.badge}`}>
-            {cov.escalation.label}
-          </span>
-        </div>
-        <div className="space-y-2">
-          <div>
-            <div className="flex justify-between text-xs text-gray-600 mb-1">
-              <span>Heads</span>
-              <span className="font-mono font-bold">{cov.coverage.headCount}/{cov.coverage.required.heads}</span>
-            </div>
-            <div className="w-full bg-white/60 rounded-full h-2">
-              <div className={`h-full rounded-full transition-all duration-300 ${esc.bar}`} style={{ width: `${headPct}%` }} />
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs text-gray-600 mb-1">
-              <span>Skill</span>
-              <span className="font-mono font-bold">{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</span>
-            </div>
-            <div className="w-full bg-white/60 rounded-full h-2">
-              <div className={`h-full rounded-full transition-all duration-300 ${esc.bar}`} style={{ width: `${skillPct}%` }} />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  }, [cycleData, data, hrData, financeAlerts, summary, isAdmin, today]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

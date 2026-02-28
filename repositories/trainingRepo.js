@@ -5,14 +5,16 @@ import { pool } from '../db.js';
  * { "staffId": { "typeId": { completed, expiry, trainer, method, certificate_ref, level, notes } } }
  * @param {number} homeId
  */
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT staff_id, training_type_id, completed, expiry, trainer, method,
-            certificate_ref, level, notes, updated_at
+    `SELECT *, COUNT(*) OVER() AS _total
      FROM training_records
-     WHERE home_id = $1 AND deleted_at IS NULL`,
-    [homeId]
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY staff_id, training_type_id
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 2000), Math.max(offset, 0)]
   );
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
   const result = {};
   for (const row of rows) {
     if (!result[row.staff_id]) result[row.staff_id] = {};
@@ -27,7 +29,7 @@ export async function findByHome(homeId) {
       updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
     };
   }
-  return result;
+  return { rows: result, total };
 }
 
 /**

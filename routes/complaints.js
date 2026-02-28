@@ -4,8 +4,11 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -47,10 +50,12 @@ const surveyUpdateSchema = surveyBodySchema.partial();
 // GET /api/complaints?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const [complaints, surveys] = await Promise.all([
+    const [complaintsResult, surveysResult] = await Promise.all([
       complaintRepo.findByHome(req.home.id),
       complaintSurveyRepo.findByHome(req.home.id),
     ]);
+    const complaints = complaintsResult.rows;
+    const surveys = surveysResult.rows;
     const complaintCategories = req.home.config?.complaint_categories || [];
     res.json({ complaints, surveys, complaintCategories });
   } catch (err) { next(err); }
@@ -62,7 +67,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
-    await auditService.log('complaint.create', req.home.slug, req.user.username, { complaint_id: complaint?.id });
+    await auditService.log('complaint_create', req.home.slug, req.user.username, { id: complaint?.id });
     res.status(201).json(complaint);
   } catch (err) { next(err); }
 });
@@ -79,9 +84,15 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
     );
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
-    const complaint = await complaintRepo.update(idParsed.data, req.home.id, updates);
-    if (!complaint) return res.status(404).json({ error: 'Not found' });
-    await auditService.log('complaint.update', req.home.slug, req.user.username, { complaint_id: idParsed.data });
+    const existing = await complaintRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const complaint = await complaintRepo.update(idParsed.data, req.home.id, updates, version);
+    if (complaint === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, complaint);
+    await auditService.log('complaint_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(complaint);
   } catch (err) { next(err); }
 });
@@ -93,7 +104,7 @@ router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, a
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await complaintRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
-    await auditService.log('complaint.delete', req.home.slug, req.user.username, { complaint_id: idParsed.data });
+    await auditService.log('complaint_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -104,7 +115,7 @@ router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const survey = await complaintSurveyRepo.upsert(req.home.id, parsed.data);
-    await auditService.log('survey.create', req.home.slug, req.user.username, { survey_id: survey?.id });
+    await auditService.log('survey_create', req.home.slug, req.user.username, { id: survey?.id });
     res.status(201).json(survey);
   } catch (err) { next(err); }
 });
@@ -120,9 +131,15 @@ router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
     );
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
-    const survey = await complaintSurveyRepo.update(idParsed.data, req.home.id, updates);
-    if (!survey) return res.status(404).json({ error: 'Not found' });
-    await auditService.log('survey.update', req.home.slug, req.user.username, { survey_id: idParsed.data });
+    const existing = await complaintSurveyRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const survey = await complaintSurveyRepo.update(idParsed.data, req.home.id, updates, version);
+    if (survey === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, survey);
+    await auditService.log('survey_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(survey);
   } catch (err) { next(err); }
 });
@@ -134,7 +151,7 @@ router.delete('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await complaintSurveyRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
-    await auditService.log('survey.delete', req.home.slug, req.user.username, { survey_id: idParsed.data });
+    await auditService.log('survey_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

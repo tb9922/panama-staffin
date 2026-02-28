@@ -1130,6 +1130,9 @@ export async function getFinanceDashboard(homeSlug, from, to) {
 export async function getFinanceAlerts(homeSlug) {
   return apiFetch(`${API_BASE}/finance/alerts?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
+export async function getDashboardSummary(homeSlug) {
+  return apiFetch(`${API_BASE}/dashboard/summary?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
 
 // Chase log
 export async function getInvoiceChases(homeSlug, invoiceId) {

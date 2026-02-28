@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const SHIFTS = [
   { id: 'E', label: 'Early Shift' },
@@ -34,6 +35,7 @@ export default function HandoverNotes({ data, user }) {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
   const [modal, setModal]         = useState(null);   // null | 'add' | 'edit'
+  useDirtyGuard(!!modal);
   const [form, setForm]           = useState(EMPTY_FORM);
   const [editId, setEditId]       = useState(null);
   const [saving, setSaving]       = useState(false);

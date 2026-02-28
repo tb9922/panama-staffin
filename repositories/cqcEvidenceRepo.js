@@ -11,12 +11,20 @@ function shapeRow(row) {
   return shaped;
 }
 
-export async function findByHome(homeId) {
+function paginate(rows, shapeFn) {
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
+}
+
+export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM cqc_evidence WHERE home_id = $1 AND deleted_at IS NULL ORDER BY added_at DESC NULLS LAST',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM cqc_evidence
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY added_at DESC NULLS LAST
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  return paginate(rows, shapeRow);
 }
 
 export async function sync(homeId, arr, client) {
@@ -86,15 +94,17 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
-export async function update(id, homeId, data) {
+export async function update(id, homeId, data, version) {
   const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
   if (fields.length === 0) return findById(id, homeId);
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const values = fields.map(([_, v]) => v);
-  const { rows } = await pool.query(
-    `UPDATE cqc_evidence SET ${setClause} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    [id, homeId, ...values]
-  );
+  const params = [id, homeId, ...values];
+  let sql = `UPDATE cqc_evidence SET ${setClause}, version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 

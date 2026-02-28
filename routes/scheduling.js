@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
@@ -10,6 +11,7 @@ import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 
 /**
  * Validate an AL override before allowing it.
@@ -84,13 +86,15 @@ const shiftSchema = z.enum(VALID_SHIFTS);
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const [staff, overrides, dayNotes, training, onboarding] = await Promise.all([
+    const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([
       staffRepo.findByHome(req.home.id),
       overrideRepo.findByHome(req.home.id),
       dayNoteRepo.findByHome(req.home.id),
       trainingRepo.findByHome(req.home.id),
       onboardingRepo.findByHome(req.home.id),
     ]);
+    const staff = staffResult.rows;
+    const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
     let staffOut, onboardingOut;
@@ -145,7 +149,7 @@ router.put('/overrides', requireAuth, requireAdmin, requireHomeAccess, async (re
 
 // DELETE /api/scheduling/overrides?home=X&date=YYYY-MM-DD&staffId=X — delete single override
 const overrideDeleteSchema = z.object({
-  home:    z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  home:    z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
   date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   staffId: z.string().min(1).max(40),
 });
@@ -194,7 +198,7 @@ router.post('/overrides/bulk', requireAuth, requireAdmin, requireHomeAccess, asy
 
 // DELETE /api/scheduling/overrides/month?home=X&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — delete range
 const monthDeleteSchema = z.object({
-  home:     z.string().regex(/^[a-zA-Z0-9_-]+$/),
+  home:     z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
   fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   toDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -229,8 +233,10 @@ router.put('/day-notes', requireAuth, requireAdmin, requireHomeAccess, async (re
     const { date, note } = parsed.data;
     if (note.trim() === '') {
       await dayNoteRepo.deleteOne(req.home.id, date);
+      await auditService.log('day_note_delete', req.home.slug, req.user.username, { date });
     } else {
       await dayNoteRepo.upsertOne(req.home.id, date, note);
+      await auditService.log('day_note_upsert', req.home.slug, req.user.username, { date });
     }
     res.json({ ok: true });
   } catch (err) {

@@ -10,6 +10,7 @@ import {
   RISK_CATEGORIES, LIKELIHOOD_LABELS, IMPACT_LABELS,
   RISK_SCORE_BANDS, RISK_STATUSES,
 } from '../lib/riskRegister.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const TABS = [
   { id: 'details', label: 'Risk Details' },
@@ -39,6 +40,7 @@ export default function RiskRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');

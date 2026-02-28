@@ -7,6 +7,7 @@ import {
 } from '../lib/api.js';
 import { getStaffForDay, formatDate, addDays } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -31,6 +32,7 @@ export default function TimesheetManager({ data, user }) {
   const [editModal, setEditModal]       = useState(null); // { staff, entry? }
   const [editForm, setEditForm]         = useState({});
   const [saving, setSaving]             = useState(false);
+  useDirtyGuard(!!editModal);
   const [snapConfig]                    = useState({
     enabled: data?.config?.snap_enabled ?? true,
     window:  data?.config?.snap_window_minutes ?? 15,

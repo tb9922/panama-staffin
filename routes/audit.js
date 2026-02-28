@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
+import { readRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(readRateLimiter);
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100).optional();
 

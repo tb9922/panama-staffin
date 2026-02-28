@@ -9,6 +9,7 @@ const CATEGORY_MAP = {
   '/api/audit':      ['audit'],
   '/api/export':     ['staff', 'scheduling', 'overrides'],
   '/api/gdpr':       ['gdpr', 'personal_data'],
+  '/api/dashboard':  ['compliance', 'staffing'],
 };
 
 function classifyCategories(endpoint) {

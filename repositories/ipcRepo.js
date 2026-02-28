@@ -7,18 +7,22 @@ function shapeRow(row) {
   if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   if (shaped.overall_score != null) shaped.overall_score = parseFloat(shaped.overall_score);
   if (shaped.compliance_pct != null) shaped.compliance_pct = parseFloat(shaped.compliance_pct);
+  if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
   delete shaped.home_id;
   delete shaped.created_at;
   delete shaped.deleted_at;
   return shaped;
 }
 
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM ipc_audits WHERE home_id = $1 AND deleted_at IS NULL ORDER BY audit_date DESC NULLS LAST',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM ipc_audits
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY audit_date DESC NULLS LAST LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeRow(rest); }), total };
 }
 
 export async function sync(homeId, arr, client) {
@@ -93,17 +97,18 @@ export async function upsert(homeId, data) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
-export async function update(id, homeId, data) {
+export async function update(id, homeId, data, version) {
   const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
   if (fields.length === 0) return findById(id, homeId);
   const jsonCols = ['risk_areas', 'corrective_actions', 'outbreak'];
   const mapped = fields.map(([k, v]) => [k, jsonCols.includes(k) ? JSON.stringify(v) : v]);
+  const params = [id, homeId, ...mapped.map(([_, v]) => v)];
   const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
-  const values = mapped.map(([_, v]) => v);
-  const { rows } = await pool.query(
-    `UPDATE ipc_audits SET ${setClause}, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING *`,
-    [id, homeId, ...values]
-  );
+  let sql = `UPDATE ipc_audits SET ${setClause}, updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 

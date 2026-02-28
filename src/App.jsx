@@ -5,6 +5,7 @@ import { downloadXLSX } from './lib/excel.js';
 import { getStaffForDay, formatDate } from './lib/rotation.js';
 import { getDayCoverageStatus } from './lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from './lib/design.js';
+import RouteErrorBoundary from './components/RouteErrorBoundary.jsx';
 
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('./pages/DailyStatus.jsx'));
@@ -720,60 +721,60 @@ export default function App() {
         <CoverageAlertBanner data={data} />
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
         <Routes>
-          <Route path="/" element={<Dashboard data={data} updateData={safeUpdateData} />} />
-          <Route path="/day" element={<DailyStatus />} />
-          <Route path="/day/:date" element={<DailyStatus />} />
-          <Route path="/handover" element={<HandoverNotes data={data} user={user} />} />
-          <Route path="/rotation" element={<RotationGrid />} />
-          <Route path="/staff" element={<StaffRegister />} />
-          <Route path="/costs" element={<CostTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/leave" element={<AnnualLeave />} />
-          <Route path="/scenarios" element={<ScenarioModel data={data} />} />
-          <Route path="/fatigue" element={<FatigueTracker data={data} />} />
-          <Route path="/sick-trends" element={<SickTrends data={data} />} />
-          <Route path="/training" element={<TrainingMatrix />} />
-          <Route path="/onboarding" element={<OnboardingTracker />} />
-          <Route path="/cqc" element={<CQCEvidence data={data} />} />
-          <Route path="/incidents" element={<IncidentTracker />} />
-          <Route path="/complaints" element={<ComplaintsTracker />} />
-          <Route path="/maintenance" element={<MaintenanceTracker />} />
-          <Route path="/ipc" element={<IpcAuditTracker />} />
-          <Route path="/risks" element={<RiskRegister />} />
-          <Route path="/policies" element={<PolicyReviewTracker />} />
-          <Route path="/speak-up" element={<WhistleblowingTracker />} />
-          <Route path="/dols" element={<DolsTracker />} />
-          <Route path="/care-cert" element={<CareCertificateTracker />} />
-          <Route path="/budget" element={<BudgetTracker data={data} updateData={safeUpdateData} />} />
-          <Route path="/payroll/rates"      element={<PayRatesConfig data={data} updateData={safeUpdateData} user={user} />} />
-          <Route path="/payroll/timesheets" element={<TimesheetManager data={data} user={user} />} />
-          <Route path="/payroll/monthly-timesheet/:staffId?" element={<MonthlyTimesheet data={data} user={user} />} />
-          <Route path="/payroll/agency"     element={<AgencyTracker data={data} user={user} />} />
-          <Route path="/payroll/tax-codes"  element={<TaxCodeManager data={data} user={user} />} />
-          <Route path="/payroll/pensions"   element={<PensionManager data={data} user={user} />} />
-          <Route path="/payroll/sick-pay"   element={<SickPayTracker data={data} user={user} />} />
-          <Route path="/payroll/hmrc"       element={<HMRCDashboard data={data} user={user} />} />
-          <Route path="/payroll/:runId"     element={<PayrollDetail data={data} user={user} />} />
-          <Route path="/payroll"            element={<PayrollDashboard data={data} user={user} />} />
-          <Route path="/gdpr"              element={<GdprDashboard user={user} />} />
-          <Route path="/hr"                element={<HrDashboard />} />
-          <Route path="/hr/disciplinary"   element={<DisciplinaryTracker />} />
-          <Route path="/hr/grievance"      element={<GrievanceTracker />} />
-          <Route path="/hr/performance"    element={<PerformanceTracker />} />
-          <Route path="/hr/absence"        element={<AbsenceManager />} />
-          <Route path="/hr/contracts"      element={<ContractManager />} />
-          <Route path="/hr/family-leave"   element={<FamilyLeaveTracker />} />
-          <Route path="/hr/flex-working"   element={<FlexWorkingTracker />} />
-          <Route path="/hr/edi"            element={<EdiTracker />} />
-          <Route path="/hr/tupe"           element={<TupeManager />} />
-          <Route path="/hr/renewals"       element={<RtwDbsRenewals />} />
-          <Route path="/finance"             element={<FinanceDashboard user={user} />} />
-          <Route path="/finance/income"      element={<IncomeTracker user={user} />} />
-          <Route path="/finance/expenses"    element={<ExpenseTracker user={user} />} />
-          <Route path="/finance/receivables" element={<ReceivablesManager user={user} />} />
-          <Route path="/finance/payables"    element={<PayablesManager user={user} />} />
-          <Route path="/reports" element={<Reports data={data} />} />
-          <Route path="/audit" element={<AuditLog />} />
-          <Route path="/settings" element={<Config />} />
+          <Route path="/" element={<RouteErrorBoundary><Dashboard data={data} updateData={safeUpdateData} /></RouteErrorBoundary>} />
+          <Route path="/day" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
+          <Route path="/day/:date" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
+          <Route path="/handover" element={<RouteErrorBoundary><HandoverNotes data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/rotation" element={<RouteErrorBoundary><RotationGrid /></RouteErrorBoundary>} />
+          <Route path="/staff" element={<RouteErrorBoundary><StaffRegister /></RouteErrorBoundary>} />
+          <Route path="/costs" element={<RouteErrorBoundary><CostTracker data={data} updateData={safeUpdateData} /></RouteErrorBoundary>} />
+          <Route path="/leave" element={<RouteErrorBoundary><AnnualLeave /></RouteErrorBoundary>} />
+          <Route path="/scenarios" element={<RouteErrorBoundary><ScenarioModel data={data} /></RouteErrorBoundary>} />
+          <Route path="/fatigue" element={<RouteErrorBoundary><FatigueTracker data={data} /></RouteErrorBoundary>} />
+          <Route path="/sick-trends" element={<RouteErrorBoundary><SickTrends data={data} /></RouteErrorBoundary>} />
+          <Route path="/training" element={<RouteErrorBoundary><TrainingMatrix /></RouteErrorBoundary>} />
+          <Route path="/onboarding" element={<RouteErrorBoundary><OnboardingTracker /></RouteErrorBoundary>} />
+          <Route path="/cqc" element={<RouteErrorBoundary><CQCEvidence data={data} /></RouteErrorBoundary>} />
+          <Route path="/incidents" element={<RouteErrorBoundary><IncidentTracker /></RouteErrorBoundary>} />
+          <Route path="/complaints" element={<RouteErrorBoundary><ComplaintsTracker /></RouteErrorBoundary>} />
+          <Route path="/maintenance" element={<RouteErrorBoundary><MaintenanceTracker /></RouteErrorBoundary>} />
+          <Route path="/ipc" element={<RouteErrorBoundary><IpcAuditTracker /></RouteErrorBoundary>} />
+          <Route path="/risks" element={<RouteErrorBoundary><RiskRegister /></RouteErrorBoundary>} />
+          <Route path="/policies" element={<RouteErrorBoundary><PolicyReviewTracker /></RouteErrorBoundary>} />
+          <Route path="/speak-up" element={<RouteErrorBoundary><WhistleblowingTracker /></RouteErrorBoundary>} />
+          <Route path="/dols" element={<RouteErrorBoundary><DolsTracker /></RouteErrorBoundary>} />
+          <Route path="/care-cert" element={<RouteErrorBoundary><CareCertificateTracker /></RouteErrorBoundary>} />
+          <Route path="/budget" element={<RouteErrorBoundary><BudgetTracker data={data} updateData={safeUpdateData} /></RouteErrorBoundary>} />
+          <Route path="/payroll/rates"      element={<RouteErrorBoundary><PayRatesConfig data={data} updateData={safeUpdateData} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/timesheets" element={<RouteErrorBoundary><TimesheetManager data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><MonthlyTimesheet data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/agency"     element={<RouteErrorBoundary><AgencyTracker data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><TaxCodeManager data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/pensions"   element={<RouteErrorBoundary><PensionManager data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><SickPayTracker data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><HMRCDashboard data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll/:runId"     element={<RouteErrorBoundary><PayrollDetail data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/payroll"            element={<RouteErrorBoundary><PayrollDashboard data={data} user={user} /></RouteErrorBoundary>} />
+          <Route path="/gdpr"              element={<RouteErrorBoundary><GdprDashboard user={user} /></RouteErrorBoundary>} />
+          <Route path="/hr"                element={<RouteErrorBoundary><HrDashboard /></RouteErrorBoundary>} />
+          <Route path="/hr/disciplinary"   element={<RouteErrorBoundary><DisciplinaryTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/grievance"      element={<RouteErrorBoundary><GrievanceTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/performance"    element={<RouteErrorBoundary><PerformanceTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/absence"        element={<RouteErrorBoundary><AbsenceManager /></RouteErrorBoundary>} />
+          <Route path="/hr/contracts"      element={<RouteErrorBoundary><ContractManager /></RouteErrorBoundary>} />
+          <Route path="/hr/family-leave"   element={<RouteErrorBoundary><FamilyLeaveTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/flex-working"   element={<RouteErrorBoundary><FlexWorkingTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/edi"            element={<RouteErrorBoundary><EdiTracker /></RouteErrorBoundary>} />
+          <Route path="/hr/tupe"           element={<RouteErrorBoundary><TupeManager /></RouteErrorBoundary>} />
+          <Route path="/hr/renewals"       element={<RouteErrorBoundary><RtwDbsRenewals /></RouteErrorBoundary>} />
+          <Route path="/finance"             element={<RouteErrorBoundary><FinanceDashboard user={user} /></RouteErrorBoundary>} />
+          <Route path="/finance/income"      element={<RouteErrorBoundary><IncomeTracker user={user} /></RouteErrorBoundary>} />
+          <Route path="/finance/expenses"    element={<RouteErrorBoundary><ExpenseTracker user={user} /></RouteErrorBoundary>} />
+          <Route path="/finance/receivables" element={<RouteErrorBoundary><ReceivablesManager user={user} /></RouteErrorBoundary>} />
+          <Route path="/finance/payables"    element={<RouteErrorBoundary><PayablesManager user={user} /></RouteErrorBoundary>} />
+          <Route path="/reports" element={<RouteErrorBoundary><Reports data={data} /></RouteErrorBoundary>} />
+          <Route path="/audit" element={<RouteErrorBoundary><AuditLog /></RouteErrorBoundary>} />
+          <Route path="/settings" element={<RouteErrorBoundary><Config /></RouteErrorBoundary>} />
         </Routes>
         </Suspense>
       </main>

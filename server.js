@@ -14,6 +14,7 @@ if (config.sentryDsn) {
 }
 import authRouter from './routes/auth.js';
 import homesRouter from './routes/homes.js';
+import dashboardRouter from './routes/dashboard.js';
 import dataRouter from './routes/data.js';
 import exportRouter from './routes/export.js';
 import auditRouter from './routes/audit.js';
@@ -68,6 +69,7 @@ app.use(accessLog);
 
 app.use('/api/login', authRouter);
 app.use('/api/homes', homesRouter);
+app.use('/api/dashboard', dashboardRouter);
 app.use('/api/data', dataRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/audit', auditRouter);

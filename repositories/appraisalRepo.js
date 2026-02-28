@@ -19,18 +19,22 @@ function shapeRow(row) {
  * { "staffId": [{ id, date, appraiser, objectives, training_needs, development_plan, next_due, notes }] }
  * @param {number} homeId
  */
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at
-     FROM appraisals WHERE home_id = $1 AND deleted_at IS NULL ORDER BY staff_id, date`,
-    [homeId]
+    `SELECT id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at,
+            COUNT(*) OVER() AS _total
+     FROM appraisals WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY staff_id, date LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 2000), Math.max(offset, 0)]
   );
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
   const result = {};
   for (const row of rows) {
-    if (!result[row.staff_id]) result[row.staff_id] = [];
-    result[row.staff_id].push(shapeRow(row));
+    const { _total, ...rest } = row;
+    if (!result[rest.staff_id]) result[rest.staff_id] = [];
+    result[rest.staff_id].push(shapeRow(rest));
   }
-  return result;
+  return { rows: result, total };
 }
 
 /**

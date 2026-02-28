@@ -1,0 +1,8 @@
+node_modules
+homes
+backups
+.env
+.git
+.claude
+dist
+*.md

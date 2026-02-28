@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as financeService from '../services/financeService.js';
+import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 
 // ── Shared Schemas ────────────────────────────────────────────────────────────
 
@@ -157,7 +161,9 @@ router.post('/residents', requireAuth, requireAdmin, requireHomeAccess, async (r
   try {
     const parsed = residentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await financeService.createResident(req.home.id, { ...parsed.data, created_by: req.user.username }));
+    const result = await financeService.createResident(req.home.id, { ...parsed.data, created_by: req.user.username });
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'resident' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -177,8 +183,14 @@ router.put('/residents/:id', requireAuth, requireAdmin, requireHomeAccess, async
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
     const parsed = residentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await financeService.updateResident(idP.data, req.home.id, parsed.data, req.user.username);
-    if (!result) return res.status(404).json({ error: 'Resident not found' });
+    const existing = await financeService.findResidentById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Resident not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await financeService.updateResident(idP.data, req.home.id, parsed.data, req.user.username, version);
+    if (result === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'resident', changes: diffFields(existing, result) });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -189,6 +201,7 @@ router.delete('/residents/:id', requireAuth, requireAdmin, requireHomeAccess, as
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
     const deleted = await financeService.softDeleteResident(idP.data, req.home.id, req.user.username);
     if (!deleted) return res.status(404).json({ error: 'Resident not found' });
+    await auditService.log('finance_delete', req.home.slug, req.user.username, { id: idP.data, entity: 'resident' });
     res.json({ deleted: true });
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -224,6 +237,7 @@ router.post('/invoices', requireAuth, requireAdmin, requireHomeAccess, async (re
     const parsed = invoiceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.createInvoiceWithLines(req.home.id, parsed.data, req.user.username);
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'invoice' });
     res.status(201).json(result);
   } catch (err) {
     if (err.code === '23505' || err.code === '23503' || err.statusCode) return handleConstraintError(err, res);
@@ -247,8 +261,14 @@ router.put('/invoices/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const parsed = invoiceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, parsed.data, req.user.username);
-    if (!result) return res.status(404).json({ error: 'Invoice not found' });
+    const existing = await financeService.findInvoiceById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Invoice not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, parsed.data, req.user.username, version);
+    if (result === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'invoice', changes: diffFields(existing, result) });
     res.json(result);
   } catch (err) {
     if (err.code === '23505' || err.code === '23503' || err.statusCode) return handleConstraintError(err, res);
@@ -262,6 +282,7 @@ router.delete('/invoices/:id', requireAuth, requireAdmin, requireHomeAccess, asy
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const deleted = await financeService.softDeleteInvoice(idP.data, req.home.id, req.user.username);
     if (!deleted) return res.status(404).json({ error: 'Invoice not found' });
+    await auditService.log('finance_delete', req.home.slug, req.user.username, { id: idP.data, entity: 'invoice' });
     res.json({ deleted: true });
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -276,6 +297,7 @@ router.post('/invoices/:id/payment', requireAuth, requireAdmin, requireHomeAcces
     const parsed = paymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.recordPayment(idP.data, req.home.id, parsed.data, req.user.username);
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: idP.data, entity: 'payment', amount: parsed.data.amount });
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -301,7 +323,9 @@ router.post('/expenses', requireAuth, requireAdmin, requireHomeAccess, async (re
   try {
     const parsed = expenseBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await financeService.createExpense(req.home.id, { ...parsed.data, created_by: req.user.username }));
+    const result = await financeService.createExpense(req.home.id, { ...parsed.data, created_by: req.user.username });
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'expense' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -321,8 +345,14 @@ router.put('/expenses/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
     const parsed = expenseUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await financeService.updateExpense(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Expense not found' });
+    const existing = await financeService.findExpenseById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Expense not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await financeService.updateExpense(idP.data, req.home.id, parsed.data, version);
+    if (result === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'expense', changes: diffFields(existing, result) });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -333,6 +363,7 @@ router.delete('/expenses/:id', requireAuth, requireAdmin, requireHomeAccess, asy
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
     const deleted = await financeService.softDeleteExpense(idP.data, req.home.id, req.user.username);
     if (!deleted) return res.status(404).json({ error: 'Expense not found' });
+    await auditService.log('finance_delete', req.home.slug, req.user.username, { id: idP.data, entity: 'expense' });
     res.json({ deleted: true });
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -345,6 +376,7 @@ router.put('/expenses/:id/approve', requireAuth, requireAdmin, requireHomeAccess
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
     const result = await financeService.approveExpense(idP.data, req.home.id, req.user.username);
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'expense', action: 'approve' });
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -358,6 +390,7 @@ router.put('/expenses/:id/reject', requireAuth, requireAdmin, requireHomeAccess,
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : null;
     const result = await financeService.rejectExpense(idP.data, req.home.id, req.user.username, reason);
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'expense', action: 'reject' });
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
@@ -381,7 +414,9 @@ router.post('/invoices/:id/chases', requireAuth, requireAdmin, requireHomeAccess
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
     const parsed = chaseBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await financeService.createChase(req.home.id, { ...parsed.data, invoice_id: idP.data }, req.user.username));
+    const result = await financeService.createChase(req.home.id, { ...parsed.data, invoice_id: idP.data }, req.user.username);
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'chase', invoice_id: idP.data });
+    res.status(201).json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     next(err);
@@ -411,7 +446,9 @@ router.post('/payment-schedules', requireAuth, requireAdmin, requireHomeAccess, 
   try {
     const parsed = paymentScheduleBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await financeService.createPaymentSchedule(req.home.id, parsed.data, req.user.username));
+    const result = await financeService.createPaymentSchedule(req.home.id, parsed.data, req.user.username);
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: result.id, entity: 'payment_schedule' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -421,8 +458,14 @@ router.put('/payment-schedules/:id', requireAuth, requireAdmin, requireHomeAcces
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
     const parsed = paymentScheduleUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Payment schedule not found' });
+    const existing = await financeService.findPaymentScheduleById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Payment schedule not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, parsed.data, version);
+    if (result === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'payment_schedule', changes: diffFields(existing, result) });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -431,7 +474,9 @@ router.post('/payment-schedules/:id/process', requireAuth, requireAdmin, require
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
-    res.json(await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username));
+    const result = await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username);
+    await auditService.log('finance_create', req.home.slug, req.user.username, { id: idP.data, entity: 'payment_schedule', action: 'process' });
+    res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     next(err);
@@ -444,6 +489,7 @@ router.delete('/payment-schedules/:id', requireAuth, requireAdmin, requireHomeAc
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
     const deleted = await financeService.softDeletePaymentSchedule(idP.data, req.home.id, req.user.username);
     if (!deleted) return res.status(404).json({ error: 'Payment schedule not found' });
+    await auditService.log('finance_delete', req.home.slug, req.user.username, { id: idP.data, entity: 'payment_schedule' });
     res.json({ deleted: true });
   } catch (err) { next(err); }
 });

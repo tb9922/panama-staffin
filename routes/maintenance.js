@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
+import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -27,7 +31,8 @@ const maintenanceUpdateSchema = maintenanceBodySchema.partial();
 // GET /api/maintenance?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const checks = await maintenanceRepo.findByHome(req.home.id);
+    const checksResult = await maintenanceRepo.findByHome(req.home.id);
+    const checks = checksResult.rows;
     const maintenanceCategories = req.home.config?.maintenance_categories || [];
     res.json({ checks, maintenanceCategories });
   } catch (err) { next(err); }
@@ -39,6 +44,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = maintenanceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const check = await maintenanceRepo.upsert(req.home.id, parsed.data);
+    await auditService.log('maintenance_create', req.home.slug, req.user.username, { id: check?.id });
     res.status(201).json(check);
   } catch (err) { next(err); }
 });
@@ -55,8 +61,15 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
     );
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
-    const check = await maintenanceRepo.update(idParsed.data, req.home.id, updates);
-    if (!check) return res.status(404).json({ error: 'Not found' });
+    const existing = await maintenanceRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const check = await maintenanceRepo.update(idParsed.data, req.home.id, updates, version);
+    if (check === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, check);
+    await auditService.log('maintenance_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(check);
   } catch (err) { next(err); }
 });
@@ -68,6 +81,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await maintenanceRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('maintenance_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

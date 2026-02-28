@@ -1,8 +1,16 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
+import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
+
+const dataBodySchema = z.object({
+  config: z.object({}).passthrough(),
+  staff: z.array(z.object({}).passthrough()),
+  overrides: z.object({}).passthrough(),
+}).passthrough();
 
 const router = Router();
 
@@ -25,10 +33,11 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, async (req, res, next) => {
   try {
-    const body = req.body;
-    if (!body || typeof body !== 'object' || !Array.isArray(body.staff) || typeof body.config !== 'object') {
+    const parsed = dataBodySchema.safeParse(req.body);
+    if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid data shape — expected { config, staff, overrides }' });
     }
+    const body = req.body;
 
     const homeSlug = req.home.slug;
 
@@ -48,7 +57,13 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
     }
 
     const warnings = validateAll(body);
-    const result = await homeService.saveData(homeSlug, body, req.user?.username || 'unknown');
+    const username = req.user?.username || 'unknown';
+    const result = await homeService.saveData(homeSlug, body, username);
+
+    await auditService.log('data_save', homeSlug, username, {
+      staffCount: body.staff.length,
+      warningCount: warnings.length,
+    });
 
     res.json({ ok: true, warnings, backedUp: true, _updatedAt: result?.updatedAt });
   } catch (err) {

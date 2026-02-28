@@ -5,6 +5,7 @@ import {
   getAgencyShifts, createAgencyShift, updateAgencyShift,
   getAgencyMetrics, getCurrentHome,
 } from '../lib/api.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const SHIFT_OPTIONS = ['E', 'L', 'EL', 'N', 'AG-E', 'AG-L', 'AG-N'];
 
@@ -254,6 +255,7 @@ export default function AgencyTracker({ data, user }) {
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [editProvider, setEditProvider]   = useState(null);
   const [editShift, setEditShift]         = useState(null);
+  useDirtyGuard(showProvModal || showShiftModal);
 
   const loadProviders = useCallback(async () => {
     if (!homeSlug) return;

@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
 import { hasAccess } from '../repositories/userHomeRepo.js';
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -37,7 +40,7 @@ const breachBodySchema = z.object({
   title:                     z.string().min(1).max(300),
   description:               z.string().max(5000).nullable().optional(),
   discovered_date:           z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/),
-  data_categories:           z.array(z.string()).optional().default([]),
+  data_categories:           z.array(z.string().max(200)).max(50).optional().default([]),
   individuals_affected:      z.number().int().nonnegative().optional().default(0),
   severity:                  z.enum(['low', 'medium', 'high', 'critical']).optional().default('low'),
   risk_to_rights:            z.enum(['unlikely', 'possible', 'likely', 'high']).optional().default('unlikely'),
@@ -65,7 +68,7 @@ const consentBodySchema = z.object({
   subject_name:  z.string().max(200).nullable().optional(),
   purpose:       z.string().min(1).max(200),
   legal_basis:   z.enum(['consent', 'contract', 'legal_obligation', 'vital_interests', 'public_task', 'legitimate_interests']),
-  given:         z.string().nullable().optional(),
+  given:         z.string().max(100).nullable().optional(),
   notes:         z.string().max(2000).nullable().optional(),
 });
 
@@ -101,7 +104,9 @@ router.post('/requests', requireAuth, requireAdmin, requireHomeAccess, async (re
   try {
     const parsed = requestBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createRequest(req.home.id, parsed.data));
+    const result = await gdprService.createRequest(req.home.id, parsed.data);
+    await auditService.log('gdpr_create', req.home.slug, req.user.username, { id: result.id, entity: 'data_request' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -112,8 +117,13 @@ router.put('/requests/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const parsed = requestUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Request not found' });
+    const existing = await gdprService.findRequestById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Request not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data, null, version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const changes = diffFields(existing, result);
+    await auditService.log('gdpr_request_update', req.home.slug, req.user.username, { id: idP.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -169,7 +179,9 @@ router.post('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (re
   try {
     const parsed = breachBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createBreach(req.home.id, parsed.data));
+    const result = await gdprService.createBreach(req.home.id, parsed.data);
+    await auditService.log('gdpr_create', req.home.slug, req.user.username, { id: result.id, entity: 'data_breach' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -180,8 +192,13 @@ router.put('/breaches/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
     const parsed = breachUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Breach not found' });
+    const existing = await gdprService.findBreachById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Breach not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data, version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const changes = diffFields(existing, result);
+    await auditService.log('gdpr_breach_update', req.home.slug, req.user.username, { id: idP.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -199,6 +216,7 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, requireHomeAccess
       updates.ico_notification_deadline = assessment.icoDeadline;
     }
     await gdprService.updateBreach(idP.data, req.home.id, updates);
+    await auditService.log('gdpr_update', req.home.slug, req.user.username, { id: idP.data, entity: 'data_breach', action: 'risk_assessment' });
     res.json(assessment);
   } catch (err) { next(err); }
 });
@@ -235,7 +253,9 @@ router.post('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req
   try {
     const parsed = consentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createConsent(req.home.id, parsed.data));
+    const result = await gdprService.createConsent(req.home.id, parsed.data);
+    await auditService.log('gdpr_create', req.home.slug, req.user.username, { id: result.id, entity: 'consent_record' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -245,12 +265,17 @@ router.put('/consent/:id', requireAuth, requireAdmin, requireHomeAccess, async (
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid consent ID' });
     const parsed = z.object({
-      withdrawn: z.string().nullable().optional(),
+      withdrawn: z.string().max(100).nullable().optional(),
       notes: z.string().max(2000).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateConsent(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Consent record not found' });
+    const existing = await gdprService.findConsentById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Consent record not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await gdprService.updateConsent(idP.data, req.home.id, parsed.data, version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const changes = diffFields(existing, result);
+    await auditService.log('gdpr_consent_update', req.home.slug, req.user.username, { id: idP.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -269,7 +294,9 @@ router.post('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (
   try {
     const parsed = dpComplaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    res.status(201).json(await gdprService.createDPComplaint(req.home.id, parsed.data));
+    const result = await gdprService.createDPComplaint(req.home.id, parsed.data);
+    await auditService.log('gdpr_create', req.home.slug, req.user.username, { id: result.id, entity: 'dp_complaint' });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 
@@ -280,8 +307,13 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (!idP.success) return res.status(400).json({ error: 'Invalid complaint ID' });
     const parsed = dpComplaintUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await gdprService.updateDPComplaint(idP.data, req.home.id, parsed.data);
-    if (!result) return res.status(404).json({ error: 'Complaint not found' });
+    const existing = await gdprService.findDPComplaintById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Complaint not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const result = await gdprService.updateDPComplaint(idP.data, req.home.id, parsed.data, version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const changes = diffFields(existing, result);
+    await auditService.log('gdpr_complaint_update', req.home.slug, req.user.username, { id: idP.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });

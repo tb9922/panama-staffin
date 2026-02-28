@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { diffFields } from '../lib/audit.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 const sectionSchema = z.enum([
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
@@ -27,11 +30,11 @@ const onboardingSectionSchema = z.object({
 // GET /api/onboarding?home=X
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const [onboarding, staffRows] = await Promise.all([
+    const [onboarding, staffResult] = await Promise.all([
       onboardingRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
-    const staff = staffRows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
+    const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
     res.json({ onboarding, staff });
   } catch (err) { next(err); }
 });
@@ -46,8 +49,11 @@ router.put('/:staffId/:section', requireAuth, requireAdmin, requireHomeAccess, a
     }
     const bodyParsed = onboardingSectionSchema.safeParse(req.body);
     if (!bodyParsed.success) return res.status(400).json({ error: 'Validation failed', issues: bodyParsed.error.issues });
+    const allOnboarding = await onboardingRepo.findByHome(req.home.id);
+    const beforeSection = allOnboarding[staffIdParsed.data]?.[sectionParsed.data] ?? null;
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data);
-    await auditService.log('onboarding_upsert', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data });
+    const changes = diffFields(beforeSection, bodyParsed.data);
+    await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
     res.json(result);
   } catch (err) { next(err); }
 });

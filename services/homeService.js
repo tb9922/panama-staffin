@@ -16,11 +16,12 @@ export async function assembleData(homeSlug, userRole) {
   const home = await homeRepo.findBySlug(homeSlug);
   if (!home) throw new NotFoundError(`Home not found: ${homeSlug}`);
 
-  const [staff, overrides, dayNotes] = await Promise.all([
+  const [staffResult, overrides, dayNotes] = await Promise.all([
     staffRepo.findByHome(home.id),
     overrideRepo.findByHome(home.id),
     dayNoteRepo.findByHome(home.id),
   ]);
+  const staff = staffResult.rows;
 
   const payload = {
     _updatedAt: home.updated_at?.toISOString() || null,

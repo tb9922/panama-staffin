@@ -26,6 +26,7 @@ function shapeRun(row) {
     export_format: row.export_format,
     ytd_applied: !!row.ytd_applied,
     notes: row.notes,
+    version: row.version,
     created_at: toTs(row.created_at),
     updated_at: toTs(row.updated_at),
   };
@@ -71,10 +72,10 @@ export async function create(homeId, run, client) {
   return shapeRun(rows[0]);
 }
 
-export async function updateStatus(runId, homeId, status, extra, client) {
+export async function updateStatus(runId, homeId, status, extra, client, version) {
   const conn = client || pool;
   // extra: { approved_by, exported_at, export_format, calculated_at } — any combination
-  const sets = ['status = $1', 'updated_at = NOW()'];
+  const sets = ['status = $1', 'updated_at = NOW()', 'version = version + 1'];
   const params = [status, runId, homeId];
   if (extra?.approved_by !== undefined) {
     params.push(extra.approved_by);
@@ -89,23 +90,26 @@ export async function updateStatus(runId, homeId, status, extra, client) {
     sets.push(`exported_at = NOW()`);
     sets.push(`export_format = $${params.length}`);
   }
-  const { rows } = await conn.query(
-    `UPDATE payroll_runs SET ${sets.join(', ')} WHERE id = $2 AND home_id = $3 RETURNING *`,
-    params,
-  );
+  let sql = `UPDATE payroll_runs SET ${sets.join(', ')} WHERE id = $2 AND home_id = $3`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }
 
-export async function updateTotals(runId, homeId, totals, client) {
+export async function updateTotals(runId, homeId, totals, client, version) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    `UPDATE payroll_runs
+  const params = [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId, homeId];
+  let sql = `UPDATE payroll_runs
      SET total_gross = $1, total_enhancements = $2, total_sleep_ins = $3,
-         staff_count = $4, calculated_at = NOW(), status = 'calculated', updated_at = NOW()
-     WHERE id = $5 AND home_id = $6
-     RETURNING *`,
-    [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId, homeId],
-  );
+         staff_count = $4, calculated_at = NOW(), status = 'calculated', updated_at = NOW(),
+         version = version + 1
+     WHERE id = $5 AND home_id = $6`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }
 

@@ -4,6 +4,7 @@ import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
 } from '../lib/api.js';
 import { getCurrentHome } from '../lib/api.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const APPLIES_TO_LABELS = {
   night:        'Night Shifts',
@@ -36,6 +37,7 @@ export default function PayRatesConfig({ data, user }) {
   const [modal, setModal] = useState(null); // null | { mode: 'add' | 'edit', rule? }
   const [form, setForm] = useState(EMPTY_RULE);
   const [saving, setSaving] = useState(false);
+  useDirtyGuard(!!modal);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const load = useCallback(async () => {

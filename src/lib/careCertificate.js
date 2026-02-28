@@ -139,7 +139,7 @@ export function getCareCertAlerts(careCertData, activeStaff, config, asOfDate) {
 
   for (const [staffId, record] of Object.entries(cc)) {
     const staff = staffMap.get(staffId);
-    if (!staff) continue;
+    if (!staff || !record) continue;
 
     const result = getCareCertStatus(staffId, cc, record.start_date, asOfDate);
 

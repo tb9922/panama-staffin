@@ -714,8 +714,8 @@ function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapF
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
 router.get('/staff', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const staff = await staffRepo.findByHome(req.home.id);
-    res.json(staff.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
+    const staffResult = await staffRepo.findByHome(req.home.id);
+    res.json(staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
   } catch (err) { next(err); }
 });
 

@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as auditService from '../services/auditService.js';
+import { diffFields } from '../lib/audit.js';
+import { writeRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
+router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -20,8 +24,8 @@ const evidenceUpdateSchema = evidenceBodySchema.partial();
 // GET /api/cqc-evidence?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const evidence = await cqcEvidenceRepo.findByHome(req.home.id);
-    res.json({ evidence });
+    const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id);
+    res.json({ evidence: evidenceResult.rows });
   } catch (err) { next(err); }
 });
 
@@ -31,6 +35,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
     const parsed = evidenceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
     const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
+    await auditService.log('cqc_evidence_create', req.home.slug, req.user.username, { id: item?.id });
     res.status(201).json(item);
   } catch (err) { next(err); }
 });
@@ -42,8 +47,15 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = evidenceUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
-    const item = await cqcEvidenceRepo.update(idParsed.data, req.home.id, parsed.data);
-    if (!item) return res.status(404).json({ error: 'Not found' });
+    const existing = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const item = await cqcEvidenceRepo.update(idParsed.data, req.home.id, parsed.data, version);
+    if (item === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    const changes = diffFields(existing, item);
+    await auditService.log('cqc_evidence_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(item);
   } catch (err) { next(err); }
 });
@@ -55,6 +67,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const deleted = await cqcEvidenceRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
+    await auditService.log('cqc_evidence_delete', req.home.slug, req.user.username, { id: idParsed.data });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -57,24 +57,29 @@ function shapeRequest(row) {
     notes: row.notes,
     completed_date: d(row.completed_date),
     completed_by: row.completed_by,
+    version: row.version,
     created_at: ts(row.created_at),
     updated_at: ts(row.updated_at),
   };
 }
 
-export async function findRequests(homeId, client) {
+export async function findRequests(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_requests WHERE home_id = $1 ORDER BY date_received DESC`,
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM data_requests
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY date_received DESC
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeRequest);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeRequest(rest); }), total };
 }
 
 export async function findRequestById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_requests WHERE id = $1 AND home_id = $2`,
+    `SELECT * FROM data_requests WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRequest(rows[0]) : null;
@@ -92,7 +97,7 @@ export async function createRequest(homeId, data, client) {
   return shapeRequest(rows[0]);
 }
 
-export async function updateRequest(id, homeId, data, client) {
+export async function updateRequest(id, homeId, data, client, version) {
   const conn = client || pool;
   const ALLOWED = ['status', 'identity_verified', 'notes', 'completed_date', 'completed_by'];
   const fields = [];
@@ -106,10 +111,12 @@ export async function updateRequest(id, homeId, data, client) {
   }
   if (fields.length === 0) return null;
   fields.push('updated_at = NOW()');
-  const { rows } = await conn.query(
-    `UPDATE data_requests SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
-    values
-  );
+  fields.push('version = version + 1');
+  let sql = `UPDATE data_requests SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, values);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRequest(rows[0]) : null;
 }
 
@@ -135,24 +142,29 @@ function shapeBreach(row) {
     root_cause: row.root_cause,
     preventive_measures: row.preventive_measures,
     status: row.status,
+    version: row.version,
     created_at: ts(row.created_at),
     updated_at: ts(row.updated_at),
   };
 }
 
-export async function findBreaches(homeId, client) {
+export async function findBreaches(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_breaches WHERE home_id = $1 ORDER BY discovered_date DESC`,
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM data_breaches
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY discovered_date DESC
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeBreach);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeBreach(rest); }), total };
 }
 
 export async function findBreachById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_breaches WHERE id = $1 AND home_id = $2`,
+    `SELECT * FROM data_breaches WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeBreach(rows[0]) : null;
@@ -175,7 +187,7 @@ export async function createBreach(homeId, data, client) {
   return shapeBreach(rows[0]);
 }
 
-export async function updateBreach(id, homeId, data, client) {
+export async function updateBreach(id, homeId, data, client, version) {
   const conn = client || pool;
   const ALLOWED = [
     'title', 'description', 'severity', 'risk_to_rights',
@@ -193,10 +205,12 @@ export async function updateBreach(id, homeId, data, client) {
   }
   if (fields.length === 0) return null;
   fields.push('updated_at = NOW()');
-  const { rows } = await conn.query(
-    `UPDATE data_breaches SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
-    values
-  );
+  fields.push('version = version + 1');
+  let sql = `UPDATE data_breaches SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, values);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeBreach(rows[0]) : null;
 }
 
@@ -238,18 +252,32 @@ function shapeConsent(row) {
     given: ts(row.given),
     withdrawn: ts(row.withdrawn),
     notes: row.notes,
+    version: row.version,
     created_at: ts(row.created_at),
     updated_at: ts(row.updated_at),
   };
 }
 
-export async function findConsent(homeId, client) {
+export async function findConsent(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM consent_records WHERE home_id = $1 ORDER BY created_at DESC`,
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM consent_records
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeConsent);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeConsent(rest); }), total };
+}
+
+export async function findConsentById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM consent_records WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [id, homeId]
+  );
+  return rows[0] ? shapeConsent(rows[0]) : null;
 }
 
 export async function createConsent(homeId, data, client) {
@@ -264,7 +292,7 @@ export async function createConsent(homeId, data, client) {
   return shapeConsent(rows[0]);
 }
 
-export async function updateConsent(id, homeId, data, client) {
+export async function updateConsent(id, homeId, data, client, version) {
   const conn = client || pool;
   const setClauses = [];
   const values = [id, homeId];
@@ -281,11 +309,13 @@ export async function updateConsent(id, homeId, data, client) {
 
   if (setClauses.length === 0) return null;
   setClauses.push('updated_at = NOW()');
+  setClauses.push('version = version + 1');
 
-  const { rows } = await conn.query(
-    `UPDATE consent_records SET ${setClauses.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
-    values
-  );
+  let sql = `UPDATE consent_records SET ${setClauses.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, values);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeConsent(rows[0]) : null;
 }
 
@@ -305,18 +335,32 @@ function shapeDPComplaint(row) {
     status: row.status,
     resolution: row.resolution,
     resolution_date: d(row.resolution_date),
+    version: row.version,
     created_at: ts(row.created_at),
     updated_at: ts(row.updated_at),
   };
 }
 
-export async function findDPComplaints(homeId, client) {
+export async function findDPComplaints(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM dp_complaints WHERE home_id = $1 ORDER BY date_received DESC`,
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM dp_complaints
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY date_received DESC
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeDPComplaint);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeDPComplaint(rest); }), total };
+}
+
+export async function findDPComplaintById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM dp_complaints WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [id, homeId]
+  );
+  return rows[0] ? shapeDPComplaint(rows[0]) : null;
 }
 
 export async function createDPComplaint(homeId, data, client) {
@@ -331,7 +375,7 @@ export async function createDPComplaint(homeId, data, client) {
   return shapeDPComplaint(rows[0]);
 }
 
-export async function updateDPComplaint(id, homeId, data, client) {
+export async function updateDPComplaint(id, homeId, data, client, version) {
   const conn = client || pool;
   const ALLOWED = ['status', 'severity', 'ico_involved', 'ico_reference', 'resolution', 'resolution_date'];
   const fields = [];
@@ -345,9 +389,45 @@ export async function updateDPComplaint(id, homeId, data, client) {
   }
   if (fields.length === 0) return null;
   fields.push('updated_at = NOW()');
-  const { rows } = await conn.query(
-    `UPDATE dp_complaints SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
-    values
-  );
+  fields.push('version = version + 1');
+  let sql = `UPDATE dp_complaints SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await conn.query(sql, values);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeDPComplaint(rows[0]) : null;
+}
+
+// ── Soft Delete ─────────────────────────────────────────────────────────────
+
+export async function softDeleteRequest(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE data_requests SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}
+
+export async function softDeleteBreach(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE data_breaches SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}
+
+export async function softDeleteConsent(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE consent_records SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
+}
+
+export async function softDeleteDPComplaint(id, homeId) {
+  const { rowCount } = await pool.query(
+    'UPDATE dp_complaints SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [id, homeId]
+  );
+  return rowCount > 0;
 }

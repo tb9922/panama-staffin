@@ -21,16 +21,25 @@ function shapeRow(row) {
   return shaped;
 }
 
+function paginate(rows, shapeFn) {
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
+}
+
 /**
- * Return all non-deleted incidents for a home.
+ * Return all non-deleted incidents for a home (paginated).
  * @param {number} homeId
+ * @param {{ limit?: number, offset?: number }} [opts]
  */
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    'SELECT * FROM incidents WHERE home_id = $1 AND deleted_at IS NULL ORDER BY date DESC NULLS LAST',
-    [homeId]
+    `SELECT *, COUNT(*) OVER() AS _total FROM incidents
+     WHERE home_id = $1 AND deleted_at IS NULL
+     ORDER BY date DESC NULLS LAST
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return rows.map(shapeRow);
+  return paginate(rows, shapeRow);
 }
 
 /**
@@ -295,7 +304,7 @@ const ALLOWED_COLUMNS = new Set([
 // Fields that need JSON.stringify before binding
 const JSON_COLUMNS = new Set(['staff_involved', 'witnesses', 'corrective_actions']);
 
-export async function update(id, homeId, data) {
+export async function update(id, homeId, data, version) {
   const fields = Object.entries(data).filter(
     ([k, v]) => v !== undefined && ALLOWED_COLUMNS.has(k)
   );
@@ -303,12 +312,13 @@ export async function update(id, homeId, data) {
 
   const setClause = fields.map(([k], i) => `${k} = $${i + 3}`).join(', ');
   const values = fields.map(([k, v]) => JSON_COLUMNS.has(k) ? JSON.stringify(v) : v);
-  const { rows } = await pool.query(
-    `UPDATE incidents SET ${setClause}, updated_at = NOW()
-     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL AND frozen_at IS NULL
-     RETURNING *`,
-    [id, homeId, ...values]
-  );
+  const params = [id, homeId, ...values];
+  let sql = `UPDATE incidents SET ${setClause}, version = version + 1, updated_at = NOW()
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL AND frozen_at IS NULL`;
+  if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
+  sql += ' RETURNING *';
+  const { rows, rowCount } = await pool.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 

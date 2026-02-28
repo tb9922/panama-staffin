@@ -9,6 +9,7 @@ import {
 import {
   getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, getLoggedInUser,
 } from '../lib/api.js';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -34,6 +35,7 @@ export default function IpcAuditTracker() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  useDirtyGuard(showModal);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
