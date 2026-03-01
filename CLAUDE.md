@@ -97,7 +97,7 @@ src/
   pages/
     Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary, 24-item alert feed
     DailyStatus.jsx    Day view — staff list, shift overrides, coverage/escalation per period
-    RotationGrid.jsx   28-day roster grid with print support
+    RotationGrid.jsx   Calendar-month roster grid with cover arrows, absence/cover summary rows, print + CSV export
     StaffRegister.jsx  Staff CRUD — add/edit/deactivate, set team/role/rate/skill
     CostTracker.jsx    Daily cost breakdown (base/OT/agency/BH) with period totals
     AnnualLeave.jsx    AL booking with accrual tracking, calendar heatmap, leave year banner
@@ -167,7 +167,12 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
   }],
   overrides: {
     "YYYY-MM-DD": {
-      "staff-id": { shift: "AL", reason: "...", source: "al" }
+      "staff-id": {
+        shift: "AL", reason: "...", source: "al",
+        sleep_in: false,                   // Sleep-in flag (night shifts)
+        replaces_staff_id: "other-id",     // OC/AG shifts: who this covers (null if not covering)
+        override_hours: 4,                 // TRN/ADM on off-days: actual hours attended (null = use config)
+      }
     }
   },
   annual_leave: { ... },  // Legacy — overrides is the source of truth for AL
@@ -399,6 +404,23 @@ All schedule changes go through overrides. The `getActualShift()` function check
 1. Gets each active staff member's actual shift
 2. Auto-upgrades to BH-D/BH-N on bank holidays
 3. Includes virtual agency entries (overrides for IDs not in staff list)
+4. Passes through `replaces_staff_id` and `override_hours` from override data
+
+### Cover Arrows (replaces_staff_id)
+
+OC/AG overrides can link to the absent staff member they cover via `replaces_staff_id`. This enables:
+- **RotationGrid**: `→SP` arrow on cover person's cell, `←DJ` on absent person's cell, `←2` for split cover
+- **DailyStatus**: amber "covers {name}" badge on cover person's row
+- **Editor**: covers-for dropdown when assigning OC/AG shifts (filters to absent care staff)
+- **Backend validation**: self-cover blocked, shift-type restricted to OC/AG, Zod `.min(1)`
+- **Audit trail**: `replaces_staff_id` logged on `override_upsert`
+
+### TRN/ADM Pay Logic (override_hours)
+
+Training/admin shifts pay differently based on whether the day was scheduled as working:
+- **Working day** (E/L/EL/N): pay full scheduled shift hours (staff would have worked anyway)
+- **OFF day**: pay `override_hours` if set, otherwise fall back to config shift hours
+- Uses `??` (not `||`) to preserve `override_hours: 0` as valid
 
 ## API Endpoints (server.js)
 
@@ -411,6 +433,12 @@ All schedule changes go through overrides. The `getActualShift()` function check
 | GET | /api/audit | Last 100 audit entries |
 | GET | /api/export?home=X | Download home data as JSON |
 | GET | /api/bank-holidays | Proxy to GOV.UK API |
+| GET | /api/scheduling?home=X | Full scheduling bundle (staff, overrides, notes, training) |
+| PUT | /api/scheduling/overrides?home=X | Upsert single override (validates AL, cover links) |
+| POST | /api/scheduling/overrides/bulk?home=X | Bulk upsert overrides (batch AL validation) |
+| DELETE | /api/scheduling/overrides?home=X&date=D&staffId=S | Delete single override |
+| DELETE | /api/scheduling/overrides/month?home=X&fromDate=D&toDate=D | Delete range (revert month) |
+| PUT | /api/scheduling/day-notes?home=X | Upsert or delete day note |
 
 Server-side `validateOverrides()` checks max AL per day, entitlement per staff, NLW compliance, training compliance, and all 8 compliance module deadlines (complaints, maintenance, IPC, risks, policies, whistleblowing, DoLS, Care Certificate) on every save.
 
@@ -652,6 +680,7 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 - Shift swap feature discussed but not built (approach: swap staff `team` field)
 - Audit log only viewable in-app, not exportable
 - AL carryover is set manually — no automatic year-end rollover
+- No UI to set `override_hours` on TRN/ADM overrides (accepted by API, not yet exposed in editor)
 
 ## Design System
 
