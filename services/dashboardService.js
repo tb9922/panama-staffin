@@ -65,6 +65,17 @@ function buildAlerts(m) {
     `${n(m.dols, 'overdueReviews')} overdue DoLS/MCA review(s)`, '/dols');
   pushIf(alerts, n(m.careCertificate, 'overdue') > 0, 'warning', 'careCertificate',
     `${n(m.careCertificate, 'overdue')} overdue Care Certificate(s)`, '/care-cert');
+  // Bed occupancy alerts
+  pushIf(alerts, m.beds?.occupancyRate < 80, 'error', 'beds',
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% — significant revenue risk`, '/beds');
+  pushIf(alerts, n(m.beds, 'residentBedMismatch') > 0, 'warning', 'beds',
+    `${n(m.beds, 'residentBedMismatch')} bed(s) show occupied but resident discharged/deceased`, '/beds');
+  pushIf(alerts, n(m.beds, 'hospitalHoldExpiring') > 0, 'warning', 'beds',
+    `${n(m.beds, 'hospitalHoldExpiring')} hospital hold(s) expiring within 7 days`, '/beds');
+  pushIf(alerts, n(m.beds, 'staleReservations') > 0, 'warning', 'beds',
+    `${n(m.beds, 'staleReservations')} stale reservation(s) past expiry`, '/beds');
+  pushIf(alerts, m.beds?.occupancyRate >= 80 && m.beds?.occupancyRate < 90, 'warning', 'beds',
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% — below 90% target`, '/beds');
   pushIf(alerts, n(m.supervisions, 'noRecord') > 0, 'warning', 'supervisions',
     `${n(m.supervisions, 'noRecord')} staff with no supervision record`, '/training');
   pushIf(alerts, n(m.appraisals, 'noRecord') > 0, 'warning', 'appraisals',
@@ -85,6 +96,8 @@ function buildAlerts(m) {
     `${n(m.policies, 'dueSoon')} policy review(s) due soon`, '/policies');
   pushIf(alerts, n(m.fireDrills, 'drillsThisYear') < 4 && !b(m.fireDrills, 'overdue'), 'info', 'fireDrills',
     `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year — 4 required`, '/training');
+  pushIf(alerts, n(m.beds, 'available') > 0 && m.beds?.occupancyRate >= 90, 'info', 'beds',
+    `${n(m.beds, 'available')} bed(s) available`, '/beds');
 
   // Stable sort: errors first, then warnings, then info
   alerts.sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type]);
@@ -108,6 +121,9 @@ const DEFAULTS = {
   whistleblowing:  { open: 0, unacknowledged: 0 },
   dols:            { active: 0, expiringSoon: 0, overdueReviews: 0 },
   careCertificate: { inProgress: 0, overdue: 0 },
+  beds:            { total: 0, occupied: 0, available: 0, hospitalHold: 0, occupancyRate: 100,
+                     vacantBeds: 0, floorWeeklyLoss: 0, avgWeeklyLoss: 0,
+                     hospitalHoldExpiring: 0, staleReservations: 0, residentBedMismatch: 0 },
 };
 
 const MODULE_KEYS = Object.keys(DEFAULTS);
@@ -131,6 +147,7 @@ export async function getDashboardSummary(homeId) {
     dashboardRepo.getWhistleblowingCounts(homeId),
     dashboardRepo.getDolsCounts(homeId, today),
     dashboardRepo.getCareCertCounts(homeId, today),
+    dashboardRepo.getBedSummary(homeId, today),
   ]);
 
   const modules = {};
@@ -145,7 +162,7 @@ export async function getDashboardSummary(homeId) {
 
   const alerts = buildAlerts(modules);
 
-  logger.info({ homeId, alertCount: alerts.length }, 'Dashboard summary generated');
+  logger.info({ homeId, alertCount: alerts.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
 
   return { modules, alerts };
 }

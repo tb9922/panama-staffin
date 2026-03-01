@@ -1,4 +1,4 @@
-import { pool, toDateStr } from '../db.js';
+import { pool } from '../db.js';
 
 const int = (v) => parseInt(v ?? '0', 10);
 
@@ -229,7 +229,7 @@ export async function getFireDrillCounts(homeId, today) {
   );
   const r = rows[0];
   return {
-    lastDate: toDateStr(r.last_date),
+    lastDate: r.last_date ? r.last_date.toISOString().slice(0, 10) : null,
     drillsThisYear: r.drills_this_year,
     overdue: r.overdue ?? true,
   };
@@ -434,4 +434,113 @@ export async function getCareCertCounts(homeId, today) {
     inProgress: r.in_progress,
     overdue: r.overdue,
   };
+}
+
+// ── Beds & Occupancy ────────────────────────────────────────────────────────
+
+export async function getBedCounts(homeId) {
+  const { rows } = await pool.query(
+    `/* dashboardRepo – getBedCounts */
+     SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE status = 'occupied')::int AS occupied,
+       COUNT(*) FILTER (WHERE status = 'available')::int AS available,
+       COUNT(*) FILTER (WHERE status = 'hospital_hold')::int AS hospital_hold,
+       COUNT(*) FILTER (WHERE status = 'reserved')::int AS reserved,
+       COUNT(*) FILTER (WHERE status = 'deep_clean')::int AS deep_clean,
+       COUNT(*) FILTER (WHERE status = 'maintenance')::int AS maintenance,
+       COUNT(*) FILTER (WHERE status = 'decommissioned')::int AS decommissioned
+     FROM beds
+     WHERE home_id = $1`,
+    [homeId]
+  );
+  const r = rows[0];
+  const operational = r.total - r.decommissioned;
+  const occupancyRate = operational > 0
+    ? Math.round(100.0 * r.occupied / operational)
+    : 100;
+  return {
+    total: r.total,
+    occupied: r.occupied,
+    available: r.available,
+    hospitalHold: r.hospital_hold,
+    reserved: r.reserved,
+    deepClean: r.deep_clean,
+    maintenance: r.maintenance,
+    decommissioned: r.decommissioned,
+    occupancyRate,
+  };
+}
+
+export async function getBedVacancyCost(homeId) {
+  const { rows: bedRows } = await pool.query(
+    `/* dashboardRepo – getBedVacancyCost/beds */
+     SELECT COUNT(*)::int AS vacant_beds,
+       SUM(CURRENT_DATE - status_since)::int AS total_vacancy_days
+     FROM beds
+     WHERE home_id = $1 AND status = 'available'`,
+    [homeId]
+  );
+  const { rows: feeRows } = await pool.query(
+    `/* dashboardRepo – getBedVacancyCost/fees */
+     SELECT
+       COALESCE(MIN(weekly_fee), 0) AS floor_rate,
+       COALESCE(AVG(weekly_fee), 0) AS avg_rate
+     FROM finance_residents
+     WHERE home_id = $1 AND status = 'active' AND deleted_at IS NULL
+       AND weekly_fee IS NOT NULL AND weekly_fee > 0`,
+    [homeId]
+  );
+  const b = bedRows[0];
+  const f = feeRows[0];
+  return {
+    vacantBeds: b.vacant_beds,
+    totalVacancyDays: b.total_vacancy_days || 0,
+    floorWeeklyLoss: Math.round(parseFloat(f.floor_rate) * (b.vacant_beds || 0) * 100) / 100,
+    avgWeeklyLoss: Math.round(parseFloat(f.avg_rate) * (b.vacant_beds || 0) * 100) / 100,
+  };
+}
+
+export async function getBedAlerts(homeId, today) {
+  const [{ rows: holdRows }, { rows: reservedRows }, { rows: syncRows }] = await Promise.all([
+    pool.query(
+      `/* dashboardRepo – getBedAlerts/holds */
+       SELECT COUNT(*)::int AS count
+       FROM beds
+       WHERE home_id = $1 AND status = 'hospital_hold'
+         AND hold_expires IS NOT NULL AND hold_expires <= ($2::date + INTERVAL '7 days')`,
+      [homeId, today]
+    ),
+    pool.query(
+      `/* dashboardRepo – getBedAlerts/staleReservations */
+       SELECT COUNT(*)::int AS count
+       FROM beds
+       WHERE home_id = $1 AND status = 'reserved'
+         AND reserved_until IS NOT NULL AND reserved_until < $2`,
+      [homeId, today]
+    ),
+    pool.query(
+      `/* dashboardRepo – getBedAlerts/sync */
+       SELECT COUNT(*)::int AS count
+       FROM beds b
+       INNER JOIN finance_residents fr ON fr.id = b.resident_id
+       WHERE b.home_id = $1 AND b.status = 'occupied'
+         AND fr.status IN ('discharged', 'deceased')`,
+      [homeId]
+    ),
+  ]);
+  return {
+    hospitalHoldExpiring: holdRows[0].count,
+    staleReservations: reservedRows[0].count,
+    residentBedMismatch: syncRows[0].count,
+  };
+}
+
+export async function getBedSummary(homeId, today) {
+  const [counts, vacancy, alerts] = await Promise.all([
+    getBedCounts(homeId),
+    getBedVacancyCost(homeId),
+    getBedAlerts(homeId, today),
+  ]);
+  return { ...counts, ...vacancy, ...alerts };
 }

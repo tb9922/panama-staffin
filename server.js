@@ -39,6 +39,7 @@ import onboardingRouter from './routes/onboarding.js';
 import staffRouter from './routes/staff.js';
 import schedulingRouter from './routes/scheduling.js';
 import usersRouter from './routes/users.js';
+import bedsRouter from './routes/beds.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
@@ -106,6 +107,7 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/scheduling', schedulingRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/beds', bedsRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

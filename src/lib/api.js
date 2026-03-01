@@ -1385,3 +1385,51 @@ export async function setUserHomes(id, homeIds) {
 export async function listAllHomesForAccess() {
   return apiFetch(`${API_BASE}/users/all-homes`, { headers: authHeaders() });
 }
+
+// ── Beds & Occupancy ────────────────────────────────────────────────────────
+
+export async function getBeds(homeSlug) {
+  return apiFetch(`${API_BASE}/beds?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getBedSummary(homeSlug) {
+  return apiFetch(`${API_BASE}/beds/summary?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getBed(homeSlug, bedId) {
+  return apiFetch(`${API_BASE}/beds/${bedId}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getBedHistory(homeSlug, bedId) {
+  return apiFetch(`${API_BASE}/beds/${bedId}/history?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createBed(homeSlug, data) {
+  return apiFetch(`${API_BASE}/beds?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function setupBeds(homeSlug, beds) {
+  return apiFetch(`${API_BASE}/beds/setup?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(beds),
+  });
+}
+
+export async function transitionBedStatus(homeSlug, bedId, data) {
+  return apiFetch(`${API_BASE}/beds/${bedId}/status?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function revertBedTransition(homeSlug, bedId, reason) {
+  return apiFetch(`${API_BASE}/beds/${bedId}/revert?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ reason }),
+  });
+}
+
+export async function moveBedResident(homeSlug, fromBedId, toBedId) {
+  return apiFetch(`${API_BASE}/beds/move?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ fromBedId, toBedId }),
+  });
+}
