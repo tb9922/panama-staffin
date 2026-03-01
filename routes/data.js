@@ -55,7 +55,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid data shape — expected { config, staff, overrides }' });
     }
-    const body = req.body;
+    const body = parsed.data;
 
     const homeSlug = req.home.slug;
 

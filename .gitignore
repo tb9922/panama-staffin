@@ -15,6 +15,14 @@ dist-ssr
 # Secrets
 .env
 
+# Legacy data and development artifacts
+staffing_data.json
+*.xlsx
+extract_*.txt
+ds_part*.txt
+roster_*.txt
+excel_extract.txt
+
 # Runtime data
 homes/
 backups/

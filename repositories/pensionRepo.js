@@ -122,15 +122,16 @@ export async function insertContribution(homeId, data, client) {
   return shapeContribution(rows[0]);
 }
 
-export async function getContributionsByRun(runId, client) {
+export async function getContributionsByRun(homeId, runId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT pc.*
      FROM pension_contributions pc
      JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
-     WHERE pl.payroll_run_id = $1
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
      ORDER BY pc.staff_id`,
-    [runId]
+    [runId, homeId]
   );
   return rows.map(r => ({
     ...r,
