@@ -41,6 +41,7 @@ export default function DailyStatus() {
   const [swapTo, setSwapTo] = useState('');
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [gapPanelDate, setGapPanelDate] = useState(null);
+  const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
 
   // PIN unlock uses getCurrentHome() as the key to avoid timing dependency on data load
   const [unlockedDates, setUnlockedDates] = useState(() => {
@@ -135,12 +136,12 @@ export default function DailyStatus() {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }
 
-  async function applyOverride(staffId, shift, reason, source, sleepIn = false) {
+  async function applyOverride(staffId, shift, reason, source, sleepIn = false, replacesStaffId = null) {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     try {
-      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn });
+      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined });
       await loadData();
     } catch (e) {
       setError(e.message);
@@ -234,6 +235,7 @@ export default function DailyStatus() {
     if (projectedCoverage.overallLevel >= 1) {
       setShowGapPanel(true);
       setGapPanelDate(dateStr);
+      setGapPanelAbsentStaffId(staffId);
     }
   }
 
@@ -323,7 +325,7 @@ export default function DailyStatus() {
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
                         {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual')} disabled={saving} className={`${BTN.success} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
+                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual', false, gapPanelAbsentStaffId)} disabled={saving} className={`${BTN.success} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
                         ))}
                       </div>
                     </div>
@@ -345,7 +347,7 @@ export default function DailyStatus() {
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
                         {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot')} disabled={saving} className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
+                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot', false, gapPanelAbsentStaffId)} disabled={saving} className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
                         ))}
                       </div>
                     </div>
@@ -380,6 +382,10 @@ export default function DailyStatus() {
       <td className={TABLE.td}>
         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
         {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
+        {s.replaces_staff_id && (() => {
+          const replaced = staffForDay.find(m => m.id === s.replaces_staff_id);
+          return <span className={`${BADGE.amber} ml-1`} title={`Covers for ${replaced?.name || s.replaces_staff_id}`}>covers {replaced?.name?.split(' ')[0] || s.replaces_staff_id}</span>;
+        })()}
       </td>
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.skill}</td>
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
@@ -758,7 +764,7 @@ export default function DailyStatus() {
                     const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
                     setSaving(true);
                     try {
-                      await upsertOverride(getCurrentHome(), { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency' });
+                      await upsertOverride(getCurrentHome(), { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency', replaces_staff_id: gapPanelAbsentStaffId || undefined });
                       await loadData();
                     } catch (e) {
                       setError(e.message);

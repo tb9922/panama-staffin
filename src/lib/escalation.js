@@ -152,6 +152,13 @@ export function calculateDayCost(staffForDay, config) {
     }
   });
 
+  // AL cost estimate: staff on annual leave still cost money (holiday pay)
+  staffForDay.forEach(s => {
+    if (s.shift !== 'AL') return;
+    const dailyHours = (s.contract_hours || 37.5) / 5;
+    base += dailyHours * (s.hourly_rate || 0);
+  });
+
   const total = base + otPremium + agencyDay + agencyNight + bhPremium + sleepIn;
 
   return {

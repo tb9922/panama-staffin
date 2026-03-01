@@ -9,6 +9,7 @@ import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
+import { getCycleDay, getScheduledShift } from '../shared/rotation.js';
 
 const router = Router();
 
@@ -69,11 +70,19 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
 
   // Get staff entitlement
   const { rows: staffRows } = await conn.query(
-    `SELECT al_entitlement, al_carryover FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    `SELECT al_entitlement, al_carryover, team, pref, start_date FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
   if (staffRows.length === 0) return null; // agency/unknown staff — skip entitlement check
   const staff = staffRows[0];
+
+  // Reject AL on scheduled OFF days — only working days should use entitlement
+  const cycleDay = getCycleDay(date, config.cycle_start_date);
+  const staffObj = { id: staffId, team: staff.team, pref: staff.pref, start_date: staff.start_date };
+  const scheduled = getScheduledShift(staffObj, cycleDay, date);
+  if (scheduled === 'OFF') {
+    return `Cannot book AL on a scheduled OFF day (${date})`;
+  }
   const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days ?? 28);
   const entitlement = base + (staff.al_carryover ?? 0);
 
@@ -144,13 +153,14 @@ const overrideBodySchema = z.object({
   reason:   z.string().max(200).optional(),
   source:   z.string().max(30).optional(),
   sleep_in: z.boolean().optional(),
+  replaces_staff_id: z.string().max(40).optional(),
 });
 
 router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const { date, staffId, shift, reason, source, sleep_in } = parsed.data;
+    const { date, staffId, shift, reason, source, sleep_in, replaces_staff_id } = parsed.data;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
@@ -161,10 +171,10 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHom
           err.isALValidation = true;
           throw err;
         }
-        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
+        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id });
       });
     } else {
-      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in });
+      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id });
     }
     await auditService.log('override_upsert', req.home.slug, req.user.username, { date, staffId, shift });
     res.json({ ok: true });
@@ -202,6 +212,7 @@ const bulkBodySchema = z.object({
     reason:   z.string().max(200).optional(),
     source:   z.string().max(30).optional(),
     sleep_in: z.boolean().optional(),
+    replaces_staff_id: z.string().max(40).optional(),
   })).min(1).max(500),
 });
 

@@ -13,7 +13,7 @@ import { pool } from '../db.js';
  */
 export async function findByHome(homeId, fromDate, toDate, client) {
   const conn = client || pool;
-  let sql = 'SELECT date, staff_id, shift, reason, source, sleep_in FROM shift_overrides WHERE home_id = $1';
+  let sql = 'SELECT date, staff_id, shift, reason, source, sleep_in, replaces_staff_id FROM shift_overrides WHERE home_id = $1';
   const params = [homeId];
   if (fromDate) {
     params.push(fromDate);
@@ -33,6 +33,7 @@ export async function findByHome(homeId, fromDate, toDate, client) {
     const entry = { shift: row.shift, sleep_in: !!row.sleep_in };
     if (row.reason) entry.reason = row.reason;
     if (row.source) entry.source = row.source;
+    if (row.replaces_staff_id) entry.replaces_staff_id = row.replaces_staff_id;
     result[dateStr][row.staff_id] = entry;
   }
   return result;
@@ -55,7 +56,7 @@ export async function replace(homeId, overridesObj, client) {
   const rows = [];
   for (const [date, dayOverrides] of Object.entries(overridesObj)) {
     for (const [staffId, override] of Object.entries(dayOverrides)) {
-      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null, override.sleep_in ?? false]);
+      rows.push([homeId, date, staffId, override.shift, override.reason || null, override.source || null, override.sleep_in ?? false, override.replaces_staff_id ?? null]);
     }
   }
 
@@ -66,12 +67,12 @@ export async function replace(homeId, overridesObj, client) {
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     const values = chunk.map((_, idx) => {
-      const base = idx * 7;
-      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7})`;
+      const base = idx * 8;
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8})`;
     }).join(', ');
     const params = chunk.flat();
     await conn.query(
-      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in)
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in, replaces_staff_id)
        VALUES ${values}`,
       params
     );
@@ -98,17 +99,18 @@ export async function deleteForStaff(homeId, staffId, client) {
  * @param {number} homeId
  * @param {string} date  "YYYY-MM-DD"
  * @param {string} staffId
- * @param {{ shift, reason, source, sleep_in }} override
+ * @param {{ shift, reason, source, sleep_in, replaces_staff_id }} override
  */
-export async function upsertOne(homeId, date, staffId, { shift, reason, source, sleep_in }) {
+export async function upsertOne(homeId, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id }) {
   const { rows } = await pool.query(
-    `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+    `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in, replaces_staff_id, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
      ON CONFLICT (home_id, date, staff_id)
      DO UPDATE SET shift=EXCLUDED.shift, reason=EXCLUDED.reason,
-                   source=EXCLUDED.source, sleep_in=EXCLUDED.sleep_in, updated_at=NOW()
+                   source=EXCLUDED.source, sleep_in=EXCLUDED.sleep_in,
+                   replaces_staff_id=EXCLUDED.replaces_staff_id, updated_at=NOW()
      RETURNING home_id`,
-    [homeId, date, staffId, shift, reason ?? null, source ?? 'manual', sleep_in ?? false]
+    [homeId, date, staffId, shift, reason ?? null, source ?? 'manual', sleep_in ?? false, replaces_staff_id ?? null]
   );
   return rows[0];
 }
@@ -130,9 +132,9 @@ export async function deleteOne(homeId, date, staffId) {
 
 /**
  * Upsert multiple override rows in chunks of 100.
- * homeId is always $1; per-row params are date, staffId, shift, reason, source, sleep_in ($2..$7 for chunk row 0).
+ * homeId is always $1; per-row params are date, staffId, shift, reason, source, sleep_in, replaces_staff_id.
  * @param {number} homeId
- * @param {Array<{ date, staffId, shift, reason, source, sleep_in }>} rows
+ * @param {Array<{ date, staffId, shift, reason, source, sleep_in, replaces_staff_id }>} rows
  * @param {object} [client]
  */
 export async function upsertBulk(homeId, rows, client) {
@@ -143,19 +145,20 @@ export async function upsertBulk(homeId, rows, client) {
     const chunk = rows.slice(i, i + CHUNK);
     const values = [];
     const params = [];
-    chunk.forEach(({ date, staffId, shift, reason, source, sleep_in }, j) => {
-      const base = j * 6;
+    chunk.forEach(({ date, staffId, shift, reason, source, sleep_in, replaces_staff_id }, j) => {
+      const base = j * 7;
       params.push(
-        `($1,$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},NOW())`
+        `($1,$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},NOW())`
       );
-      values.push(date, staffId, shift, reason ?? null, source ?? 'manual', sleep_in ?? false);
+      values.push(date, staffId, shift, reason ?? null, source ?? 'manual', sleep_in ?? false, replaces_staff_id ?? null);
     });
     await db.query(
-      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in, updated_at)
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, reason, source, sleep_in, replaces_staff_id, updated_at)
        VALUES ${params.join(',')}
        ON CONFLICT (home_id, date, staff_id)
        DO UPDATE SET shift=EXCLUDED.shift, reason=EXCLUDED.reason,
-                     source=EXCLUDED.source, sleep_in=EXCLUDED.sleep_in, updated_at=NOW()`,
+                     source=EXCLUDED.source, sleep_in=EXCLUDED.sleep_in,
+                     replaces_staff_id=EXCLUDED.replaces_staff_id, updated_at=NOW()`,
       [homeId, ...values]
     );
   }

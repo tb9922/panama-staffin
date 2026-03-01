@@ -40,6 +40,7 @@ import {
   calculatePAYE,
   calculateNI,
   calculateStudentLoan,
+  assessPensionEligibility,
   calculatePensionContributions,
   getSSPConfig,
   calculateSSP,
@@ -118,7 +119,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     await payrollRunRepo.deleteLines(runId, homeId, client);
 
     const dates = eachDayInRange(run.period_start, run.period_end);
-    const activeStaff = allStaff.filter(s => s.active);
+    // Include staff who were active during any part of the period.
+    // A carer deactivated mid-period still needs paying for days worked.
+    const activeStaff = allStaff.filter(s =>
+      s.active || (s.leaving_date && s.leaving_date >= run.period_start)
+    );
 
     // Pre-load SSP configs once for the run (pick the right row per date inside the loop)
     const allSSPConfigs = await sspRepo.getAllSSPConfigs(client);
@@ -161,6 +166,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const nmwWarnings = [];
 
       for (const date of dates) {
+        // Skip dates after staff left (deactivated mid-period leavers)
+        if (s.leaving_date && date > s.leaving_date) continue;
+
         const actualShift = getActualShift(s, date, overrides, home.config.cycle_start_date);
         const { shift, sleep_in } = actualShift;
 
@@ -298,20 +306,36 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       }
       const niRates = niRatesCache.get(niCat);
 
+      // Build notes array early — pension auto-enrolment may append
+      const notesParts = [];
+      if (parsedCode.missingCode) notesParts.push('WARNING: No tax code found — defaulted to 1257L');
+      if (nmwWarnings.length > 0) notesParts.push(...nmwWarnings);
+
       // Gross for deductions = base pay + enhancements + holiday pay + SSP
       const grossForTax = round2(acc.gross_pay + acc.holiday_pay + acc.ssp_amount);
 
       const { tax, isRefund: _isRefund } = calculatePAYE(grossForTax, parsedCode, payPeriod, periodsInYear, priorYTD, taxBands);
-      // tax may be negative (refund) — clamp to 0 for payment; record actual value for YTD accuracy
-      const taxDeducted = round2(tax);
+      const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
 
       const { employeeNI, employerNI } = calculateNI(grossForTax, run.pay_frequency, niThresholds, niRates);
 
       const planStr    = taxCodeRow?.student_loan_plan || null;
       const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
 
-      // Pension contributions
-      const enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      // Pension contributions — auto-enrol if eligible (Pensions Act 2008)
+      let enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
+        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
+        if (eligibility.shouldAutoEnrol) {
+          await pensionRepo.upsertEnrolment(homeId, {
+            staff_id: s.id, status: 'eligible_enrolled',
+            enrolment_date: run.period_end, opt_in_date: null,
+          }, client);
+          // Set enrolment in-memory — calculatePensionContributions only needs .status
+          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolment_date: run.period_end };
+          notesParts.push('AUTO-ENROLLED: Pension auto-enrolment triggered');
+        }
+      }
       let pensionEmployee = 0, pensionEmployer = 0;
       if (pensionConf && enrolment && ['eligible_enrolled', 'opt_in_enrolled'].includes(enrolment.status)) {
         const pr = calculatePensionContributions(grossForTax, run.pay_frequency, pensionConf, enrolment);
@@ -329,12 +353,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         }
       }
 
-      const netPay = round2(grossForTax - Math.max(0, taxDeducted) - employeeNI - pensionEmployee - studentLoan);
-
-      // Build notes: include missing tax code warning + NMW warnings
-      const notesParts = [];
-      if (parsedCode.missingCode) notesParts.push('WARNING: No tax code found — defaulted to 1257L');
-      if (nmwWarnings.length > 0) notesParts.push(...nmwWarnings);
+      // taxDeducted may be negative (refund) — subtracting a negative increases net pay.
+      // HMRC requires PAYE refunds to be paid through the payroll, not clamped to zero.
+      const netPay = round2(grossForTax - taxDeducted - employeeNI - pensionEmployee - studentLoan);
 
       await payrollRunRepo.updateLine(line.id, homeId, {
         ...acc,
@@ -518,6 +539,10 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
  *
  * Uses a single aggregating SQL query — not a per-week loop — for performance at scale.
  * Index on payroll_line_shifts(payroll_line_id, date) added in migration 029.
+ *
+ * Note: The lookback includes all paid shifts, including overtime. Per Harpur Trust v Brazel
+ * (2022), holiday pay should include regular overtime and shift premiums. Including occasional
+ * OT is the safe position — excluding it risks underpayment claims. Accepted behaviour.
  *
  * Falls back to (contract_hours/5) × hourly_rate if fewer than 12 paid weeks of history.
  */
