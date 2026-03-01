@@ -105,7 +105,7 @@ export default function Residents() {
 
       {toast && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex justify-between items-center">
-          <span dangerouslySetInnerHTML={{ __html: toast }} />
+          <span>{toast}</span>
           <button className="text-blue-500 hover:text-blue-700" onClick={() => setToast(null)}>Dismiss</button>
         </div>
       )}
@@ -161,7 +161,7 @@ export default function Residents() {
           onClose={() => setShowAdmit(false)}
           onSaved={() => {
             load();
-            showToast('Resident admitted. <a href="/beds" class="underline font-medium">Assign a bed in Bed Manager &rarr;</a>', 10000);
+            showToast(<>Resident admitted. <a href="/beds" className="underline font-medium">Assign a bed in Bed Manager &rarr;</a></>, 10000);
           }}
         />
       )}
@@ -184,7 +184,7 @@ export default function Residents() {
           onSaved={(hadBed, roomNumber) => {
             load();
             if (hadBed) {
-              showToast(`Resident discharged. Room ${roomNumber} still occupied &mdash; <a href="/beds" class="underline font-medium">update in Bed Manager &rarr;</a>`, 10000);
+              showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <a href="/beds" className="underline font-medium">update in Bed Manager &rarr;</a></>, 10000);
             } else {
               showToast('Resident discharged.');
             }

@@ -124,13 +124,16 @@ export async function getTrainingCounts(homeId, today) {
   const { rows } = await pool.query(
     `/* dashboardRepo – getTrainingCounts */
      SELECT
-       COUNT(*) FILTER (WHERE expiry < $2)::int AS expired,
+       COUNT(*) FILTER (WHERE tr.expiry < $2)::int AS expired,
        COUNT(*) FILTER (
-         WHERE expiry >= $2 AND expiry <= ($2::date + INTERVAL '30 days')
+         WHERE tr.expiry >= $2 AND tr.expiry <= ($2::date + INTERVAL '30 days')
        )::int AS expiring_soon
-     FROM training_records
-     WHERE home_id = $1
-       AND expiry IS NOT NULL`,
+     FROM training_records tr
+     JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
+     WHERE tr.home_id = $1
+       AND tr.deleted_at IS NULL
+       AND s.deleted_at IS NULL AND s.active = true
+       AND tr.expiry IS NOT NULL`,
     [homeId, today]
   );
   const r = rows[0];

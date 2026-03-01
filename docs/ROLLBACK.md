@@ -28,21 +28,29 @@ curl -s https://panama.yourdomain.com/health | jq .
 
 If a new migration caused issues:
 
+> **Note:** The migration runner does NOT have an automatic `--down` flag.
+> Each migration file contains a commented `-- DOWN` section with the
+> reverse SQL. You must run the down SQL manually.
+
 ```bash
-# Find the problematic migration number
+# 1. Find the problematic migration and open it
 ls migrations/
+cat migrations/090_create_beds.sql   # look for the "-- DOWN" section
 
-# Run the DOWN section (drops the table/changes)
-node scripts/migrate.js --down 067
+# 2. Run the DOWN SQL manually against the database
+psql -h localhost -U panama -d panama_dev -c "DROP TABLE IF EXISTS bed_transitions; DROP TABLE IF EXISTS beds;"
 
-# Revert code to before the migration was added
+# 3. Remove the migration record so it can be re-run later
+psql -h localhost -U panama -d panama_dev -c "DELETE FROM schema_migrations WHERE filename = '090_create_beds.sql'"
+
+# 4. Revert code to before the migration was added
 git checkout <previous-commit> -- .
 npm ci --omit=dev
 npm run build
 pm2 restart panama
 ```
 
-**Time to recover:** ~3 minutes
+**Time to recover:** ~5 minutes
 
 ---
 
