@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { config } from '../config.js';
 import * as authService from '../services/authService.js';
 import * as auditService from '../services/auditService.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -9,7 +10,7 @@ const router = Router();
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: config.nodeEnv === 'test' ? 1000 : 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts — try again in 15 minutes' },

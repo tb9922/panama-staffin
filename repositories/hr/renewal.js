@@ -41,17 +41,19 @@ export async function createRenewal(homeId, data, client) {
     `INSERT INTO hr_rtw_dbs_renewals
        (home_id, staff_id, check_type,
         dbs_certificate_number, dbs_disclosure_level, dbs_check_date, dbs_next_renewal_due,
-        dbs_update_service_registered, dbs_barred_list_check,
+        dbs_update_service_registered, dbs_update_service_last_checked, dbs_barred_list_check,
         rtw_document_type, rtw_check_date, rtw_document_expiry, rtw_next_check_due,
-        status, checked_by, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+        status, checked_by, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
     [homeId, data.staff_id, data.check_type,
      data.dbs_certificate_number || null, data.dbs_disclosure_level || null,
      data.dbs_check_date || null, data.dbs_next_renewal_due || null,
-     data.dbs_update_service_registered ?? false, data.dbs_barred_list_check ?? true,
+     data.dbs_update_service_registered ?? false, data.dbs_update_service_last_checked || null,
+     data.dbs_barred_list_check ?? true,
      data.rtw_document_type || null, data.rtw_check_date || null,
      data.rtw_document_expiry || null, data.rtw_next_check_due || null,
-     data.status ?? 'current', data.checked_by || null, data.notes || null]
+     data.status ?? 'current', data.checked_by || null, data.notes || null,
+     data.created_by || null]
   );
   return shapeRenewal(rows[0]);
 }

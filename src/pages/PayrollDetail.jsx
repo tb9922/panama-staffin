@@ -4,6 +4,7 @@ import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
+  getSchedulingData, getLoggedInUser,
 } from '../lib/api.js';
 
 const STATUS_BADGE = {
@@ -51,12 +52,13 @@ async function downloadWithAuth(url, filename) {
   URL.revokeObjectURL(href);
 }
 
-export default function PayrollDetail({ data, user }) {
+export default function PayrollDetail() {
   const { runId } = useParams();
   const homeSlug  = getCurrentHome();
-  const isAdmin   = user?.role === 'admin';
+  const isAdmin   = getLoggedInUser()?.role === 'admin';
   const navigate  = useNavigate();
 
+  const [schedData, setSchedData]         = useState(null);
   const [run, setRun]                     = useState(null);
   const [lines, setLines]                 = useState([]);
   const [payslips, setPayslips]           = useState([]);   // keyed by staff_id after load
@@ -66,9 +68,15 @@ export default function PayrollDetail({ data, user }) {
   const [expanded, setExpanded]           = useState({});   // staffId → bool
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
-  // staffMap from props for name/role lookup
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
+
+  // staffMap from scheduling API for name/role lookup
   const staffMap = {};
-  (data?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
 
   const load = useCallback(async () => {
     if (!homeSlug || !runId) return;

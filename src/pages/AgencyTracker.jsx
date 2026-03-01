@@ -3,7 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
-  getAgencyMetrics, getCurrentHome,
+  getAgencyMetrics, getCurrentHome, getLoggedInUser,
 } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 
@@ -232,9 +232,9 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function AgencyTracker({ _data, user }) {
+export default function AgencyTracker() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
 
   // Default last 12 weeks
   const defaultEnd   = new Date().toISOString().slice(0, 10);

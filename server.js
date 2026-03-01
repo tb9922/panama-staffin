@@ -148,7 +148,12 @@ app.use((err, req, res, next) => {
 
 // ── Server startup ────────────────────────────────────────────────────────────
 
-const server = app.listen(config.port, async () => {
+// Export app for testing (supertest)
+export { app };
+
+// Only listen when run directly (not when imported by tests)
+const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+const server = isMainModule ? app.listen(config.port, async () => {
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(() => {});
@@ -166,11 +171,12 @@ const server = app.listen(config.port, async () => {
     () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
     24 * 60 * 60 * 1000
   ).unref();
-});
+}) : null;
 
 // Graceful shutdown — drain in-flight requests then close DB pool
 function shutdown(signal) {
   logger.info({ signal }, 'shutdown signal received');
+  if (!server) { process.exit(0); return; }
   server.close(async () => {
     logger.info('HTTP server closed');
     await pool.end();

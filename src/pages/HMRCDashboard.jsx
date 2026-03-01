@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
+import { getHMRCLiabilities, markHMRCPaid, getCurrentHome, getLoggedInUser } from '../lib/api.js';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -37,9 +37,9 @@ function currentTaxYear() {
   return now.getFullYear() - 1;
 }
 
-export default function HMRCDashboard({ _data, user }) {
+export default function HMRCDashboard() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
 
   const [liabilities, setLiabilities] = useState([]);
   const [loading, setLoading]         = useState(true);

@@ -10,7 +10,7 @@ import AppRoutes from './AppRoutes.jsx';
 
 export default function AppLayout() {
   const { user, isViewer, logout } = useAuth();
-  const { data, loading, error, conflictError, homes, activeHome, undo, redo, undoCount, redoCount, switchHome, clearError } = useData();
+  const { loading, error, homes, activeHome, switchHome, clearError } = useData();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
@@ -25,7 +25,7 @@ export default function AppLayout() {
     </div>
   );
 
-  if (error && !data) return (
+  if (error && homes.length === 0) return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
       <div className="bg-white border border-red-200 rounded-2xl shadow-lg p-6 max-w-md mx-4">
         <div className="flex items-center gap-2 mb-3">
@@ -44,26 +44,6 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen bg-slate-50">
-      {/* Concurrent-save conflict modal */}
-      {conflictError && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white border border-amber-300 rounded-2xl shadow-2xl p-6 max-w-md mx-4 text-center">
-            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Save conflict</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Another user saved changes while you were editing. Reload the page to see the latest version, then reapply your changes.
-            </p>
-            <button onClick={() => window.location.reload()} className={BTN.primary}>
-              Reload Page
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Mobile top bar */}
       <div className="mobile-topbar hidden bg-gray-900 text-white items-center justify-between px-3 py-2.5 print:hidden">
         <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white p-1">
@@ -196,20 +176,10 @@ export default function AppLayout() {
         </nav>
         {sidebarOpen && (
           <div className="p-3 border-t border-gray-800">
-            {!isViewer && (
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <button onClick={undo} disabled={undoCount === 0}
-                  className="flex-1 text-[10px] py-1.5 rounded-md bg-gray-800 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Undo (Ctrl+Z)">Undo ({undoCount})</button>
-                <button onClick={redo} disabled={redoCount === 0}
-                  className="flex-1 text-[10px] py-1.5 rounded-md bg-gray-800 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Redo (Ctrl+Y)">Redo ({redoCount})</button>
-              </div>
-            )}
             <div className="flex items-center justify-between">
               <div className="text-[10px] text-gray-500 leading-relaxed">
                 <span className="text-gray-300 font-medium">{user.displayName || user.username}</span> ({user.role})<br />
-                {data?.config?.home_name}
+                {homes.find(h => h.id === activeHome)?.name}
               </div>
               <div className="flex flex-col items-end gap-0.5">
                 <button onClick={() => setChangePwOpen(true)}
@@ -243,7 +213,7 @@ export default function AppLayout() {
             <button onClick={clearError} className="text-amber-600 hover:text-amber-800 text-xs font-medium">Dismiss</button>
           </div>
         )}
-        <CoverageAlertBanner data={data} />
+        <CoverageAlertBanner />
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
           <AppRoutes />
         </Suspense>

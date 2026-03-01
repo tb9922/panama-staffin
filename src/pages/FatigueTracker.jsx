@@ -6,8 +6,12 @@ import {
 import { checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, BTN } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 
-export default function FatigueTracker({ data }) {
+export default function FatigueTracker() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   // Reactive today — updates at midnight so fatigue data is never stale
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
@@ -19,19 +23,36 @@ export default function FatigueTracker({ data }) {
     return () => clearTimeout(timer);
   }, [today]);
 
-  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date, today]);
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug)
+      .then(setSchedData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const activeStaff = useMemo(() => data.staff.filter(s => s.active !== false && isCareRole(s.role)), [data.staff]);
-  const maxConsec = data.config.max_consecutive_days;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading fatigue data...</div>;
+  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+
+  return <FatigueTrackerInner schedData={schedData} today={today} />;
+}
+
+function FatigueTrackerInner({ schedData, today }) {
+  const config = schedData.config;
+  const cycleDates = useMemo(() => getCycleDates(config.cycle_start_date, today, 28), [config.cycle_start_date, today]);
+
+  const activeStaff = useMemo(() => schedData.staff.filter(s => s.active !== false && isCareRole(s.role)), [schedData.staff]);
+  const maxConsec = config.max_consecutive_days;
 
   // Calculate fatigue data for each staff member
   const fatigueData = useMemo(() => {
     return activeStaff.map(s => {
-      const fatigue = checkFatigueRisk(s, today, data.overrides, data.config);
+      const fatigue = checkFatigueRisk(s, today, schedData.overrides, config);
 
       // Build working pattern for the 28-day cycle
       const pattern = cycleDates.map(date => {
-        const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
+        const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date);
         return { date, shift: actual.shift, working: isWorkingShift(actual.shift) };
       });
 
@@ -60,7 +81,7 @@ export default function FatigueTracker({ data }) {
         avgWeeklyShifts: totalWorking / 4,
       };
     }).sort((a, b) => b.fatigue.consecutive - a.fatigue.consecutive);
-  }, [activeStaff, cycleDates, data.overrides, data.config, today]);
+  }, [activeStaff, cycleDates, schedData.overrides, config, today]);
 
   const exceeded = fatigueData.filter(s => s.fatigue.exceeded);
   const atRisk = fatigueData.filter(s => s.fatigue.atRisk && !s.fatigue.exceeded);
@@ -68,13 +89,13 @@ export default function FatigueTracker({ data }) {
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);
     return cycleDates.findIndex(d => formatDate(d) === todayStr);
-  }, [cycleDates]);
+  }, [cycleDates, today]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Fatigue Tracker</h1>
+        <h1 className="text-xl font-bold">{config.home_name} — Fatigue Tracker</h1>
         <p className="text-xs text-gray-500">Max consecutive days: {maxConsec} | {activeStaff.length} staff | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -92,7 +113,7 @@ export default function FatigueTracker({ data }) {
               s.totalOff,
               parseFloat(s.avgWeeklyShifts.toFixed(1)),
             ]);
-            downloadXLSX(`fatigue_${data.config.home_name}`, [{ name: 'Fatigue Tracker', headers, rows }]);
+            downloadXLSX(`fatigue_${config.home_name}`, [{ name: 'Fatigue Tracker', headers, rows }]);
           }} className={BTN.secondary}>Export Excel</button>
           <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
         </div>

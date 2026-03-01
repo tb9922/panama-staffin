@@ -1,12 +1,20 @@
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStaffForDay, parseDate } from '../lib/rotation.js';
 import { getDayCoverageStatus } from '../lib/escalation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
+import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 
-export default function CoverageAlertBanner({ data }) {
+export default function CoverageAlertBanner() {
   const navigate = useNavigate();
   const today = useLiveDate();
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setData).catch(() => {});
+  }, [today]);
 
   const todayCoverage = useMemo(() => {
     if (!data) return null;

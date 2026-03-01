@@ -39,15 +39,15 @@ export async function createEdi(homeId, data, client) {
     `INSERT INTO hr_edi_records
        (home_id, record_type, staff_id, complaint_date, harassment_category,
         third_party, third_party_type, respondent_type, respondent_staff_id, respondent_name,
-        handling_route, condition_description, adjustments, description, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        handling_route, condition_description, adjustments, description, status, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [homeId, data.record_type, data.staff_id || null, data.complaint_date || null,
      data.harassment_category || null, data.third_party ?? false,
      data.third_party_type || null, data.respondent_type || null,
      data.respondent_staff_id || null, data.respondent_name || null,
      data.handling_route || null, data.condition_description || null,
      JSON.stringify(data.adjustments || []), data.description || null,
-     data.status ?? 'open']
+     data.status ?? 'open', data.created_by || null]
   );
   return shapeEdi(rows[0]);
 }

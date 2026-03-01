@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome } from '../lib/api.js';
+import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
 const STATUS_BADGE = {
@@ -47,10 +47,11 @@ function fmtPct(n) {
   return `${(parseFloat(n) * 100).toFixed(1)}%`;
 }
 
-export default function PensionManager({ data, user }) {
+export default function PensionManager() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
 
+  const [schedData, setSchedData]   = useState(null);
   const [enrolments, setEnrolments] = useState([]);
   const [config, setConfig]         = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -60,10 +61,16 @@ export default function PensionManager({ data, user }) {
   const [form, setForm]             = useState(EMPTY_FORM);
   const [editStaffId, setEditStaffId] = useState(null);
 
-  const staffMap = {};
-  (data?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
 
-  const activeStaff = (data?.staff || []).filter(s => s.active !== false);
+  const staffMap = {};
+  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
+
+  const activeStaff = (schedData?.staff || []).filter(s => s.active !== false);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

@@ -62,10 +62,11 @@ export async function listAll() {
  */
 export async function listAllWithIds() {
   const { rows } = await pool.query(
-    'SELECT id, name, config FROM homes ORDER BY name'
+    'SELECT id, slug, name, config FROM homes ORDER BY name'
   );
   return rows.map(r => ({
     id: r.id,
+    slug: r.slug,
     name: r.config?.home_name || r.name,
   }));
 }

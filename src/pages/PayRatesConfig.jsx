@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
+  getCurrentHome, getLoggedInUser,
 } from '../lib/api.js';
-import { getCurrentHome } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const APPLIES_TO_LABELS = {
@@ -26,9 +26,9 @@ const EMPTY_RULE = {
   name: '', rate_type: 'percentage', amount: '', applies_to: 'night', priority: 0,
 };
 
-export default function PayRatesConfig({ data, user }) {
-  const homeSlug = data?.config?.home_name ? getCurrentHome() : null;
-  const isAdmin = user?.role === 'admin';
+export default function PayRatesConfig() {
+  const homeSlug = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
 
   const [rules, setRules] = useState([]);
   const [nmwRates, setNmwRates] = useState([]);

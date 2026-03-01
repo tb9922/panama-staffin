@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getTimesheets, upsertTimesheet, approveTimesheet, bulkApproveTimesheets,
-  getCurrentHome,
+  getCurrentHome, getSchedulingData, getLoggedInUser,
 } from '../lib/api.js';
 import { getStaffForDay, formatDate, addDays } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
@@ -20,10 +20,17 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TimesheetManager({ data, user }) {
+export default function TimesheetManager() {
   const navigate = useNavigate();
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
+
+  const [schedData, setSchedData] = useState(null);
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
 
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [entries, setEntries]           = useState([]);
@@ -34,16 +41,16 @@ export default function TimesheetManager({ data, user }) {
   const [saving, setSaving]             = useState(false);
   useDirtyGuard(!!editModal);
   const [snapConfig]                    = useState({
-    enabled: data?.config?.snap_enabled ?? true,
-    window:  data?.config?.snap_window_minutes ?? 15,
+    enabled: schedData?.config?.snap_enabled ?? true,
+    window:  schedData?.config?.snap_window_minutes ?? 15,
   });
 
   // Staff scheduled for the selected date (from rota)
   const scheduledStaff = useMemo(() => {
-    if (!data?.staff) return [];
-    const staffForDay = getStaffForDay(data.staff, selectedDate, data.overrides || {}, data.config);
+    if (!schedData?.staff) return [];
+    const staffForDay = getStaffForDay(schedData.staff, selectedDate, schedData?.overrides || {}, schedData?.config);
     return staffForDay.filter(s => s.shift !== 'OFF' && s.shift !== 'AVL' && s.id && !s.id.startsWith('ag-'));
-  }, [data, selectedDate]);
+  }, [schedData, selectedDate]);
 
   const loadEntries = useCallback(async () => {
     if (!homeSlug) return;
@@ -66,11 +73,11 @@ export default function TimesheetManager({ data, user }) {
     const entryMap = Object.fromEntries(entries.map(e => [e.staff_id, e]));
     return scheduledStaff.map(s => {
       const entry = entryMap[s.id] || null;
-      const shiftStart = getShiftStart(s.shift, data?.config);
-      const shiftEnd   = getShiftEnd(s.shift, data?.config);
+      const shiftStart = getShiftStart(s.shift, schedData?.config);
+      const shiftEnd   = getShiftEnd(s.shift, schedData?.config);
       return { staff: s, entry, shiftStart, shiftEnd };
     });
-  }, [scheduledStaff, entries, data]);
+  }, [scheduledStaff, entries, schedData]);
 
   // Summary stats
   const stats = useMemo(() => {

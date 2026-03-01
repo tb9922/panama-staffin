@@ -1,8 +1,6 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { useAuth } from '../contexts/AuthContext.jsx';
-import { useData } from '../contexts/DataContext.jsx';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -60,25 +58,22 @@ const PayablesManager = lazy(() => import('../pages/PayablesManager.jsx'));
 const AuditLog = lazy(() => import('../pages/AuditLog.jsx'));
 
 export default function AppRoutes() {
-  const { user } = useAuth();
-  const { data, updateData } = useData();
-
   return (
     <Routes>
-      <Route path="/" element={<RouteErrorBoundary><Dashboard data={data} updateData={updateData} /></RouteErrorBoundary>} />
+      <Route path="/" element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
       <Route path="/day" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
       <Route path="/day/:date" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
-      <Route path="/handover" element={<RouteErrorBoundary><HandoverNotes data={data} user={user} /></RouteErrorBoundary>} />
+      <Route path="/handover" element={<RouteErrorBoundary><HandoverNotes /></RouteErrorBoundary>} />
       <Route path="/rotation" element={<RouteErrorBoundary><RotationGrid /></RouteErrorBoundary>} />
       <Route path="/staff" element={<RouteErrorBoundary><StaffRegister /></RouteErrorBoundary>} />
-      <Route path="/costs" element={<RouteErrorBoundary><CostTracker data={data} updateData={updateData} /></RouteErrorBoundary>} />
+      <Route path="/costs" element={<RouteErrorBoundary><CostTracker /></RouteErrorBoundary>} />
       <Route path="/leave" element={<RouteErrorBoundary><AnnualLeave /></RouteErrorBoundary>} />
-      <Route path="/scenarios" element={<RouteErrorBoundary><ScenarioModel data={data} /></RouteErrorBoundary>} />
-      <Route path="/fatigue" element={<RouteErrorBoundary><FatigueTracker data={data} /></RouteErrorBoundary>} />
-      <Route path="/sick-trends" element={<RouteErrorBoundary><SickTrends data={data} /></RouteErrorBoundary>} />
+      <Route path="/scenarios" element={<RouteErrorBoundary><ScenarioModel /></RouteErrorBoundary>} />
+      <Route path="/fatigue" element={<RouteErrorBoundary><FatigueTracker /></RouteErrorBoundary>} />
+      <Route path="/sick-trends" element={<RouteErrorBoundary><SickTrends /></RouteErrorBoundary>} />
       <Route path="/training" element={<RouteErrorBoundary><TrainingMatrix /></RouteErrorBoundary>} />
       <Route path="/onboarding" element={<RouteErrorBoundary><OnboardingTracker /></RouteErrorBoundary>} />
-      <Route path="/cqc" element={<RouteErrorBoundary><CQCEvidence data={data} /></RouteErrorBoundary>} />
+      <Route path="/cqc" element={<RouteErrorBoundary><CQCEvidence /></RouteErrorBoundary>} />
       <Route path="/incidents" element={<RouteErrorBoundary><IncidentTracker /></RouteErrorBoundary>} />
       <Route path="/complaints" element={<RouteErrorBoundary><ComplaintsTracker /></RouteErrorBoundary>} />
       <Route path="/maintenance" element={<RouteErrorBoundary><MaintenanceTracker /></RouteErrorBoundary>} />
@@ -88,18 +83,18 @@ export default function AppRoutes() {
       <Route path="/speak-up" element={<RouteErrorBoundary><WhistleblowingTracker /></RouteErrorBoundary>} />
       <Route path="/dols" element={<RouteErrorBoundary><DolsTracker /></RouteErrorBoundary>} />
       <Route path="/care-cert" element={<RouteErrorBoundary><CareCertificateTracker /></RouteErrorBoundary>} />
-      <Route path="/budget" element={<RouteErrorBoundary><BudgetTracker data={data} updateData={updateData} /></RouteErrorBoundary>} />
-      <Route path="/payroll/rates"      element={<RouteErrorBoundary><PayRatesConfig data={data} updateData={updateData} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/timesheets" element={<RouteErrorBoundary><TimesheetManager data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><MonthlyTimesheet data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/agency"     element={<RouteErrorBoundary><AgencyTracker data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><TaxCodeManager data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/pensions"   element={<RouteErrorBoundary><PensionManager data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><SickPayTracker data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><HMRCDashboard data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll/:runId"     element={<RouteErrorBoundary><PayrollDetail data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/payroll"            element={<RouteErrorBoundary><PayrollDashboard data={data} user={user} /></RouteErrorBoundary>} />
-      <Route path="/gdpr"              element={<RouteErrorBoundary><GdprDashboard user={user} /></RouteErrorBoundary>} />
+      <Route path="/budget" element={<RouteErrorBoundary><BudgetTracker /></RouteErrorBoundary>} />
+      <Route path="/payroll/rates"      element={<RouteErrorBoundary><PayRatesConfig /></RouteErrorBoundary>} />
+      <Route path="/payroll/timesheets" element={<RouteErrorBoundary><TimesheetManager /></RouteErrorBoundary>} />
+      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><MonthlyTimesheet /></RouteErrorBoundary>} />
+      <Route path="/payroll/agency"     element={<RouteErrorBoundary><AgencyTracker /></RouteErrorBoundary>} />
+      <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><TaxCodeManager /></RouteErrorBoundary>} />
+      <Route path="/payroll/pensions"   element={<RouteErrorBoundary><PensionManager /></RouteErrorBoundary>} />
+      <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><SickPayTracker /></RouteErrorBoundary>} />
+      <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><HMRCDashboard /></RouteErrorBoundary>} />
+      <Route path="/payroll/:runId"     element={<RouteErrorBoundary><PayrollDetail /></RouteErrorBoundary>} />
+      <Route path="/payroll"            element={<RouteErrorBoundary><PayrollDashboard /></RouteErrorBoundary>} />
+      <Route path="/gdpr"              element={<RouteErrorBoundary><GdprDashboard /></RouteErrorBoundary>} />
       <Route path="/hr"                element={<RouteErrorBoundary><HrDashboard /></RouteErrorBoundary>} />
       <Route path="/hr/disciplinary"   element={<RouteErrorBoundary><DisciplinaryTracker /></RouteErrorBoundary>} />
       <Route path="/hr/grievance"      element={<RouteErrorBoundary><GrievanceTracker /></RouteErrorBoundary>} />
@@ -111,12 +106,12 @@ export default function AppRoutes() {
       <Route path="/hr/edi"            element={<RouteErrorBoundary><EdiTracker /></RouteErrorBoundary>} />
       <Route path="/hr/tupe"           element={<RouteErrorBoundary><TupeManager /></RouteErrorBoundary>} />
       <Route path="/hr/renewals"       element={<RouteErrorBoundary><RtwDbsRenewals /></RouteErrorBoundary>} />
-      <Route path="/finance"             element={<RouteErrorBoundary><FinanceDashboard user={user} /></RouteErrorBoundary>} />
-      <Route path="/finance/income"      element={<RouteErrorBoundary><IncomeTracker user={user} /></RouteErrorBoundary>} />
-      <Route path="/finance/expenses"    element={<RouteErrorBoundary><ExpenseTracker user={user} /></RouteErrorBoundary>} />
-      <Route path="/finance/receivables" element={<RouteErrorBoundary><ReceivablesManager user={user} /></RouteErrorBoundary>} />
-      <Route path="/finance/payables"    element={<RouteErrorBoundary><PayablesManager user={user} /></RouteErrorBoundary>} />
-      <Route path="/reports" element={<RouteErrorBoundary><Reports data={data} /></RouteErrorBoundary>} />
+      <Route path="/finance"             element={<RouteErrorBoundary><FinanceDashboard /></RouteErrorBoundary>} />
+      <Route path="/finance/income"      element={<RouteErrorBoundary><IncomeTracker /></RouteErrorBoundary>} />
+      <Route path="/finance/expenses"    element={<RouteErrorBoundary><ExpenseTracker /></RouteErrorBoundary>} />
+      <Route path="/finance/receivables" element={<RouteErrorBoundary><ReceivablesManager /></RouteErrorBoundary>} />
+      <Route path="/finance/payables"    element={<RouteErrorBoundary><PayablesManager /></RouteErrorBoundary>} />
+      <Route path="/reports" element={<RouteErrorBoundary><Reports /></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><AuditLog /></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><UserManagement /></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><Config /></RouteErrorBoundary>} />

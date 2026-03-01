@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -14,14 +15,39 @@ function getMonthDates(year, month) {
   return dates;
 }
 
-export default function BudgetTracker({ data, updateData }) {
+export default function BudgetTracker() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [editingBudget, setEditingBudget] = useState(null);
   const [budgetInput, setBudgetInput] = useState('');
   const [agencyCapInput, setAgencyCapInput] = useState('');
 
-  const defaultBudget = data.config.monthly_staff_budget || 0;
-  const defaultAgencyCap = data.config.monthly_agency_cap || 0;
-  const budgetOverrides = data.config.budget_overrides || {};
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
+    const now = new Date();
+    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0)).toISOString().slice(0, 10);
+    getSchedulingData(homeSlug, { from, to })
+      .then(setSchedData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading budget data...</div>;
+  if (error) return <div className="p-6 text-red-600">Error: {error}</div>;
+  if (!schedData) return null;
+
+  return <BudgetTrackerInner schedData={schedData} setSchedData={setSchedData} editingBudget={editingBudget} setEditingBudget={setEditingBudget} budgetInput={budgetInput} setBudgetInput={setBudgetInput} agencyCapInput={agencyCapInput} setAgencyCapInput={setAgencyCapInput} />;
+}
+
+function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditingBudget, budgetInput, setBudgetInput, agencyCapInput, setAgencyCapInput }) {
+  const config = schedData.config;
+  const defaultBudget = config.monthly_staff_budget || 0;
+  const defaultAgencyCap = config.monthly_agency_cap || 0;
+  const budgetOverrides = config.budget_overrides || {};
 
   // 12-month rolling view: 6 months back, current, 5 months forward
   const months = useMemo(() => {
@@ -49,8 +75,8 @@ export default function BudgetTracker({ data, updateData }) {
       let total = 0, agency = 0, base = 0, ot = 0, bh = 0;
 
       dates.forEach(date => {
-        const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
-        const cost = calculateDayCost(staffForDay, data.config);
+        const staffForDay = getStaffForDay(schedData.staff, date, schedData.overrides, config);
+        const cost = calculateDayCost(staffForDay, config);
         total += cost.total;
         agency += cost.agency;
         base += cost.base;
@@ -79,7 +105,7 @@ export default function BudgetTracker({ data, updateData }) {
         days: dates.length,
       };
     });
-  }, [months, data, defaultBudget, defaultAgencyCap, budgetOverrides]);
+  }, [months, schedData, config, defaultBudget, defaultAgencyCap, budgetOverrides]);
 
   // YTD calculations (Jan to current month of current year)
   const ytd = useMemo(() => {
@@ -103,38 +129,41 @@ export default function BudgetTracker({ data, updateData }) {
     return { avgMonthly, projected, annualBudget, remaining: remainingMonths };
   }, [monthData, ytd, defaultBudget]);
 
-  // SVG chart
-  const chartW = 700;
-  const chartH = 200;
-  const maxVal = Math.max(...monthData.map(m => Math.max(m.actual, m.budget)), 1);
-  const barW = (chartW / months.length) - 8;
+  async function patchConfig(patch) {
+    const newConfig = { ...config, ...patch };
+    try {
+      await saveConfig(getCurrentHome(), newConfig);
+      setSchedData(prev => ({ ...prev, config: newConfig }));
+    } catch (e) {
+      alert(`Save failed: ${e.message}`);
+    }
+  }
 
   function saveBudgetOverride(monthKey) {
     const val = parseFloat(budgetInput);
     if (isNaN(val) || val <= 0) return;
-    const newOverrides = { ...budgetOverrides, [monthKey]: val };
-    updateData({
-      ...data,
-      config: { ...data.config, budget_overrides: newOverrides },
-    });
+    patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
     setEditingBudget(null);
   }
 
   function saveDefaultBudget() {
     const total = parseFloat(budgetInput) || 0;
     const agCap = parseFloat(agencyCapInput) || 0;
-    updateData({
-      ...data,
-      config: { ...data.config, monthly_staff_budget: total, monthly_agency_cap: agCap },
-    });
+    patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
     setEditingBudget(null);
   }
+
+  // SVG chart
+  const chartW = 700;
+  const chartH = 200;
+  const maxVal = Math.max(...monthData.map(m => Math.max(m.actual, m.budget)), 1);
+  const barW = (chartW / months.length) - 8;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Budget vs Actual</h1>
+        <h1 className="text-xl font-bold">{config.home_name} — Budget vs Actual</h1>
         <p className="text-xs text-gray-500">12-month rolling view | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -164,7 +193,7 @@ export default function BudgetTracker({ data, updateData }) {
               Math.round(m.agency),
               Math.round(m.bh),
             ]);
-            downloadXLSX(`budget_${data.config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
+            downloadXLSX(`budget_${config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
           }} className={BTN.secondary}>Export Excel</button>
           <button onClick={() => window.print()}
             className={BTN.secondary}>Print</button>
@@ -393,7 +422,7 @@ export default function BudgetTracker({ data, updateData }) {
                 // Reset to default
                 const newOverrides = { ...budgetOverrides };
                 delete newOverrides[editingBudget];
-                updateData({ ...data, config: { ...data.config, budget_overrides: newOverrides } });
+                patchConfig({ budget_overrides: newOverrides });
                 setEditingBudget(null);
               }} className={BTN.secondary}>Use Default</button>
               <button onClick={() => saveBudgetOverride(editingBudget)} className={BTN.primary}>Save</button>

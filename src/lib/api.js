@@ -36,38 +36,6 @@ export async function loadHomes() {
   return apiFetch(`${API_BASE}/homes`, { headers: authHeaders() });
 }
 
-export async function loadData(homeId) {
-  const home = homeId || currentHome;
-  const url = home ? `${API_BASE}/data?home=${encodeURIComponent(home)}` : `${API_BASE}/data`;
-  return apiFetch(url, { headers: authHeaders() });
-}
-
-export async function saveData(data, homeId, clientUpdatedAt) {
-  const home = homeId || currentHome;
-  const url = home ? `${API_BASE}/data?home=${encodeURIComponent(home)}` : `${API_BASE}/data`;
-  // Inject clientUpdatedAt separately from the data blob — it's server metadata used for
-  // optimistic locking only. Sync functions on the server ignore unknown top-level keys.
-  const body = clientUpdatedAt ? { ...data, _clientUpdatedAt: clientUpdatedAt } : data;
-  const res = await fetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
-  if (res.status === 401) {
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (res.status === 409) {
-    const payload = await res.json().catch(() => ({}));
-    const err = new Error(payload.message || 'Conflict: data was modified by another user');
-    err.status = 409;
-    err.serverUpdatedAt = payload.serverUpdatedAt;
-    throw err;
-  }
-  if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
-    throw new Error(payload.error || `Request failed (${res.status})`);
-  }
-  return res.json();
-}
-
 export async function login(username, password) {
   const res = await fetch(`${API_BASE}/login`, {
     method: 'POST',
@@ -1323,10 +1291,11 @@ export async function saveConfig(homeSlug, config) {
 
 // ── Scheduling (Phase 2d) ─────────────────────────────────────────────────────
 
-export async function getSchedulingData(homeSlug) {
-  return apiFetch(`${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`, {
-    headers: authHeaders(),
-  });
+export async function getSchedulingData(homeSlug, { from, to } = {}) {
+  let url = `${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`;
+  if (from) url += `&from=${encodeURIComponent(from)}`;
+  if (to) url += `&to=${encodeURIComponent(to)}`;
+  return apiFetch(url, { headers: authHeaders() });
 }
 
 export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in }) {

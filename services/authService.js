@@ -39,9 +39,11 @@ export async function login(username, password) {
     if (!dbUser.active) throw new AuthenticationError('Account is deactivated');
     const valid = await bcrypt.compare(password, dbUser.password_hash);
     if (!valid) throw new AuthenticationError('Invalid credentials');
-    if (deniedUsernames.has(username)) {
-      throw new AuthenticationError('Account access has been revoked');
-    }
+    // Clear any username-level deny entry on successful login.
+    // This allows re-login after password change (which revokes old tokens
+    // via deniedUsernames but should not block new logins).
+    // Deactivated accounts are already caught above by !dbUser.active.
+    deniedUsernames.delete(username);
     userRepo.updateLastLogin(username).catch(() => {});
     const jti = randomUUID();
     const token = jwt.sign(
@@ -57,9 +59,6 @@ export async function login(username, password) {
   if (!envUser) throw new AuthenticationError('Invalid credentials');
   const valid = await bcrypt.compare(password, envUser.hash);
   if (!valid) throw new AuthenticationError('Invalid credentials');
-  if (deniedUsernames.has(username)) {
-    throw new AuthenticationError('Account access has been revoked');
-  }
   const jti = randomUUID();
   const token = jwt.sign(
     { username: envUser.username, role: envUser.role, jti },

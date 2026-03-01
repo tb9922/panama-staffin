@@ -4,7 +4,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, loadData, createStaff, updateStaffMember, deleteStaffMember, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember, getLoggedInUser } from '../lib/api.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -57,7 +57,7 @@ export default function StaffRegister() {
       try {
         setLoading(true);
         setError(null);
-        const d = await loadData(homeSlug);
+        const d = await getSchedulingData(homeSlug);
         if (!stale) { setAllStaff(d.staff || []); setConfig(d.config || {}); setOverrides(d.overrides || {}); }
       } catch (e) { if (!stale) setError(e.message); }
       finally { if (!stale) setLoading(false); }

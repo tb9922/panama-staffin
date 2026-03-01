@@ -406,6 +406,7 @@ export const flexWorkingBodySchema = z.object({
 export const flexWorkingUpdateSchema = z.object({
   request_date:       dateSchema.optional(),
   requested_change:   z.string().min(1).max(2000).optional(),
+  effective_date_requested: dateSchema.nullable().optional(),
   decision_deadline:  dateSchema.optional(),
   status:             z.enum(['pending','meeting_scheduled','decided','implemented','appealed','withdrawn']).optional(),
   reason:             z.string().max(2000).nullable().optional(),

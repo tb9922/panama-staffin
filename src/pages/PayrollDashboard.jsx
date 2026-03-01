@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getPayrollRuns, createPayrollRun, getCurrentHome } from '../lib/api.js';
+import { getPayrollRuns, createPayrollRun, getCurrentHome, getLoggedInUser } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
 
 const STATUS_BADGE = {
@@ -26,9 +26,9 @@ const FREQ_LABEL = {
   monthly:      'Monthly',
 };
 
-export default function PayrollDashboard({ _data, user }) {
+export default function PayrollDashboard() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
   const navigate = useNavigate();
 
   const [runs, setRuns]         = useState([]);

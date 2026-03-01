@@ -3,7 +3,7 @@ import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getLoggedInUser } from '../lib/api.js';
+import { getLoggedInUser, getCurrentHome, getSchedulingData } from '../lib/api.js';
 
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -26,8 +26,10 @@ function getMonthDates(year, month) {
   return dates;
 }
 
-export default function CostTracker({ data }) {
+export default function CostTracker() {
   const isAdmin = getLoggedInUser()?.role === 'admin';
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [monthOffset, setMonthOffset] = useState(0);
 
   // Reactive today — updates at midnight so "today" highlighting stays accurate
@@ -41,37 +43,14 @@ export default function CostTracker({ data }) {
     return () => clearTimeout(timer);
   }, [today]);
 
-  const { monthDates, monthLabel } = useMemo(() => {
-    if (!isAdmin) return { monthDates: [], monthLabel: '' };
-    const now = new Date();
-    const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const dates = getMonthDates(target.getFullYear(), target.getMonth());
-    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-    return { monthDates: dates, monthLabel: label };
-  }, [monthOffset, isAdmin]);
-
-  const dayData = useMemo(() => {
-    if (!isAdmin) return [];
-    let cumulative = 0;
-    return monthDates.map((date, i) => {
-      const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
-      const cost = calculateDayCost(staffForDay, data.config);
-      const workingStaff = staffForDay.filter(s => isWorkingShift(s.shift));
-      cumulative += cost.total;
-      return { date, cost, staffCount: workingStaff.length, cumulative, dayNum: i + 1 };
-    });
-  }, [data.staff, data.overrides, data.config, monthDates, isAdmin]);
-
-  const totals = useMemo(() => dayData.reduce((acc, d) => ({
-    base: acc.base + d.cost.base,
-    otPremium: acc.otPremium + d.cost.otPremium,
-    agencyDay: acc.agencyDay + d.cost.agencyDay,
-    agencyNight: acc.agencyNight + d.cost.agencyNight,
-    bhPremium: acc.bhPremium + d.cost.bhPremium,
-    sleepIn: acc.sleepIn + (d.cost.sleepIn || 0),
-    total: acc.total + d.cost.total,
-    agency: acc.agency + d.cost.agency,
-  }), { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, sleepIn: 0, total: 0, agency: 0 }), [dayData]);
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug)
+      .then(setSchedData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   if (!isAdmin) {
     return (
@@ -84,6 +63,45 @@ export default function CostTracker({ data }) {
     );
   }
 
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading cost data...</div>;
+  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+
+  return <CostTrackerInner schedData={schedData} monthOffset={monthOffset} setMonthOffset={setMonthOffset} today={today} />;
+}
+
+function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
+  const config = schedData.config;
+
+  const { monthDates, monthLabel } = useMemo(() => {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    const dates = getMonthDates(target.getFullYear(), target.getMonth());
+    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    return { monthDates: dates, monthLabel: label };
+  }, [monthOffset]);
+
+  const dayData = useMemo(() => {
+    let cumulative = 0;
+    return monthDates.map((date, i) => {
+      const staffForDay = getStaffForDay(schedData.staff, date, schedData.overrides, config);
+      const cost = calculateDayCost(staffForDay, config);
+      const workingStaff = staffForDay.filter(s => isWorkingShift(s.shift));
+      cumulative += cost.total;
+      return { date, cost, staffCount: workingStaff.length, cumulative, dayNum: i + 1 };
+    });
+  }, [schedData, config, monthDates]);
+
+  const totals = useMemo(() => dayData.reduce((acc, d) => ({
+    base: acc.base + d.cost.base,
+    otPremium: acc.otPremium + d.cost.otPremium,
+    agencyDay: acc.agencyDay + d.cost.agencyDay,
+    agencyNight: acc.agencyNight + d.cost.agencyNight,
+    bhPremium: acc.bhPremium + d.cost.bhPremium,
+    sleepIn: acc.sleepIn + (d.cost.sleepIn || 0),
+    total: acc.total + d.cost.total,
+    agency: acc.agency + d.cost.agency,
+  }), { base: 0, otPremium: 0, agencyDay: 0, agencyNight: 0, bhPremium: 0, sleepIn: 0, total: 0, agency: 0 }), [dayData]);
+
   const days = monthDates.length;
   const monthlyProj = totals.total / days * 30.44;
   const annualProj = totals.total / days * 365;
@@ -94,7 +112,7 @@ export default function CostTracker({ data }) {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Cost Tracker: {monthLabel}</h1>
+        <h1 className="text-xl font-bold">{config.home_name} — Cost Tracker: {monthLabel}</h1>
         <p className="text-xs text-gray-500">{days} days | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -158,7 +176,7 @@ export default function CostTracker({ data }) {
           ['Monthly Proj', `£${Math.round(monthlyProj).toLocaleString()}`, 'border-l-emerald-500 bg-emerald-50 text-emerald-800'],
           ['Annual Proj', `£${Math.round(annualProj).toLocaleString()}`, 'border-l-purple-500 bg-purple-50 text-purple-800'],
           ['Agency Total', `£${Math.round(totals.agency).toLocaleString()}`, 'border-l-red-500 bg-red-50 text-red-800'],
-          ['Agency %', `${agencyPct.toFixed(1)}%`, agencyPct <= (data.config.agency_target_pct || 0.05) * 100 ? 'border-l-emerald-500 bg-emerald-50 text-emerald-800' : 'border-l-red-500 bg-red-50 text-red-800'],
+          ['Agency %', `${agencyPct.toFixed(1)}%`, agencyPct <= (config.agency_target_pct || 0.05) * 100 ? 'border-l-emerald-500 bg-emerald-50 text-emerald-800' : 'border-l-red-500 bg-red-50 text-red-800'],
         ].map(([label, value, color]) => (
           <div key={label} className={`rounded-xl p-3.5 border-l-4 ${color}`}>
             <div className="text-xs font-medium opacity-70">{label}</div>
@@ -264,8 +282,8 @@ export default function CostTracker({ data }) {
           <div className="text-3xl font-bold text-red-600">£{Math.round(totals.agency).toLocaleString()}</div>
           <div className="text-sm text-gray-500 mt-1">agency spend this month</div>
           <div className="mt-4 space-y-1 text-sm">
-            <div className="text-gray-600">Target: {((data.config.agency_target_pct || 0.05) * 100).toFixed(0)}% max</div>
-            <div className={`font-medium ${agencyPct > (data.config.agency_target_pct || 0.05) * 100 ? 'text-red-600' : 'text-green-600'}`}>
+            <div className="text-gray-600">Target: {((config.agency_target_pct || 0.05) * 100).toFixed(0)}% max</div>
+            <div className={`font-medium ${agencyPct > (config.agency_target_pct || 0.05) * 100 ? 'text-red-600' : 'text-green-600'}`}>
               Actual: {agencyPct.toFixed(1)}%
             </div>
           </div>
