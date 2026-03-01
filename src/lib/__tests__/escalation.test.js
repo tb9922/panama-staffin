@@ -225,29 +225,29 @@ describe('calculateDayCost', () => {
     expect(cost.total).toBe(408);
   });
 
-  it('includes AL cost in base using EL hours × staff hourly_rate', () => {
+  it('AL cost uses staff pref shift hours (day staff, pref EL)', () => {
     const staff = [
-      { ...makeCarer('S1', 'AL', 1, 'Day A', 'Carer', 13), contract_hours: 37.5 },
+      { ...makeCarer('S1', 'AL', 1, 'Day A', 'Carer', 13), pref: 'EL' },
     ];
     const cost = calculateDayCost(staff, config);
-    // AL daily cost = EL hours (12) × 13 = 156
+    // AL = EL hours (12) × 13 = 156
     expect(cost.base).toBe(156);
     expect(cost.total).toBe(156);
   });
 
-  it('AL cost uses EL hours for night staff too (night = day complement)', () => {
+  it('AL cost uses N hours for night staff', () => {
     const staff = [
       makeCarer('S1', 'AL', 1, 'Night A', 'Night Carer', 13),
     ];
     const cost = calculateDayCost(staff, config);
-    // Night AL also uses EL hours (12) × 13 = 156
-    expect(cost.base).toBe(156);
+    // Night AL = N hours (10) × 13 = 130
+    expect(cost.base).toBe(130);
   });
 
   it('AL cost adds to working staff base', () => {
     const staff = [
       makeCarer('S1', 'E', 1, 'Day A', 'Carer', 13),      // 8 × 13 = 104
-      { ...makeCarer('S2', 'AL', 1, 'Day A', 'Carer', 13), contract_hours: 37.5 }, // 12 × 13 = 156
+      { ...makeCarer('S2', 'AL', 1, 'Day A', 'Carer', 13), pref: 'EL' }, // 12 × 13 = 156
     ];
     const cost = calculateDayCost(staff, config);
     expect(cost.base).toBe(260); // 104 + 156
