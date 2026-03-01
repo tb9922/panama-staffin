@@ -1,4 +1,3 @@
-import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { DataProvider } from './contexts/DataContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
@@ -16,10 +15,8 @@ function AppInner() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppInner />
-      </AuthProvider>
-    </BrowserRouter>
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
