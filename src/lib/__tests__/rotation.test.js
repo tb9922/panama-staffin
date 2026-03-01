@@ -355,13 +355,13 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     expect(result.totalPay).toBe(result.alPay);
   });
 
-  it('AL pay uses contract_hours/5 × hourly_rate', () => {
+  it('AL pay uses EL hours × staff hourly_rate for day staff', () => {
     const staffWithContract = { ...staff, contract_hours: 37.5 };
     const dates = [addDays('2025-01-06', 0)];
     const overrides = { [formatDate(dates[0])]: { S1: { shift: 'AL' } } };
     const result = calculateStaffPeriodHours(staffWithContract, dates, overrides, config);
-    const expectedDaily = (37.5 / 5) * 13;
-    expect(result.alPay).toBe(expectedDaily);
+    // EL hours (12) × hourly_rate (13) = 156
+    expect(result.alPay).toBe(156);
   });
 
   it('totalPay includes AL pay alongside working pay', () => {

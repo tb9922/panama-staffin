@@ -96,6 +96,25 @@ export async function updateSickPeriod(id, homeId, data, client) {
   return rows[0] ? shapePeriod(rows[0]) : null;
 }
 
+/**
+ * Find the most recent closed sick period that ended within `daysGap` days
+ * before `startDate`. Used for SSP linking — if a previous period ended within
+ * 56 days (8 weeks), waiting days don't restart (SSP Regs 1982, Reg 2).
+ */
+export async function findRecentClosedPeriod(homeId, staffId, startDate, daysGap, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM sick_periods
+     WHERE home_id = $1 AND staff_id = $2
+       AND end_date IS NOT NULL
+       AND end_date >= $3::date - INTERVAL '1 day' * $4
+       AND end_date < $3::date
+     ORDER BY end_date DESC LIMIT 1`,
+    [homeId, staffId, startDate, daysGap],
+  );
+  return rows[0] ? shapePeriod(rows[0]) : null;
+}
+
 // ─── Enhanced Sick Config ─────────────────────────────────────────────────────
 
 export async function getEnhancedSickConfig(homeId, client) {

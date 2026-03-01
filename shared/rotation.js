@@ -269,7 +269,7 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     // AL tracking: separate from totalHours (would break WTR avg) but included in totalPay
     if (shift === 'AL') {
       alDays += 1;
-      alPay += ((staff.contract_hours || 37.5) / 5) * staff.hourly_rate;
+      alPay += getShiftHours('EL', config) * staff.hourly_rate;
     }
   });
 

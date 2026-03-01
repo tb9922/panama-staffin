@@ -578,6 +578,16 @@ router.post('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async
   try {
     const parsed = sickPeriodBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    // Auto-link if previous sick period ended within 56 days (SSP Regs: no new waiting period within 8 weeks)
+    if (!parsed.data.linked_to_period_id) {
+      const previous = await sspRepo.findRecentClosedPeriod(
+        req.home.id, parsed.data.staff_id, parsed.data.start_date, 56,
+      );
+      if (previous) {
+        parsed.data.linked_to_period_id = previous.id;
+        parsed.data.waiting_days_served = 3;
+      }
+    }
     const result = await sspRepo.createSickPeriod(req.home.id, parsed.data);
     await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'sick_period', staff_id: parsed.data.staff_id });
     res.status(201).json(result);
