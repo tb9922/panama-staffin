@@ -26,8 +26,9 @@ function shapeRow(row) {
  * Return all non-deleted staff for a home, shaped for the frontend.
  * @param {number} homeId
  */
-export async function findByHome(homeId, { limit = 200, offset = 0 } = {}) {
-  const { rows } = await pool.query(
+export async function findByHome(homeId, { limit = 200, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT *, COUNT(*) OVER() AS _total FROM staff
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY name LIMIT $2 OFFSET $3`,

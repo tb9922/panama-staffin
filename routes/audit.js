@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
-import { hasAccess } from '../repositories/userHomeRepo.js';
+import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
@@ -22,8 +22,12 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
       if (!home) return res.status(404).json({ error: 'Home not found' });
       const allowed = await hasAccess(req.user.username, home.id);
       if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
+      const entries = await auditService.getRecent(limit, homeP.data);
+      return res.json(entries);
     }
-    const entries = await auditService.getRecent(limit, homeP.data);
+    // No home specified — return entries only for homes the user can access
+    const slugs = await findHomeSlugsForUser(req.user.username);
+    const entries = await auditService.getRecentForSlugs(limit, slugs);
     res.json(entries);
   } catch (err) {
     next(err);

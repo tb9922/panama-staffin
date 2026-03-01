@@ -5,7 +5,7 @@ import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as authService from './authService.js';
 import logger from '../logger.js';
 
-const BCRYPT_ROUNDS = 12;
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 const PASSWORD_MIN = 10;
 const PASSWORD_MAX = 200;
 

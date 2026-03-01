@@ -33,10 +33,9 @@ function fmtHrs(n) {
   return `${parseFloat(n).toFixed(2)}h`;
 }
 
-// Fetch blob with auth header, trigger download
+// Fetch blob with cookie auth, trigger download
 async function downloadWithAuth(url, filename) {
-  const token = (() => { try { return sessionStorage.getItem('token') || ''; } catch { return ''; } })();
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, { credentials: 'same-origin' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Export failed (${res.status})`);

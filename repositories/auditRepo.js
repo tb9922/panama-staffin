@@ -60,6 +60,22 @@ export async function getByHome(homeSlug, limit = 100) {
   }));
 }
 
+export async function getByHomeSlugs(slugs, limit = 100) {
+  if (!slugs || slugs.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT id, ts, action, home_slug, user_name, details
+       FROM audit_log
+      WHERE home_slug = ANY($1)
+      ORDER BY ts DESC
+      LIMIT $2`,
+    [slugs, limit]
+  );
+  return rows.map(r => ({
+    ...r,
+    ts: r.ts instanceof Date ? r.ts.toISOString() : r.ts,
+  }));
+}
+
 /**
  * Export HR audit entries for a home within a date range.
  * Explicit column list — no SELECT * — so future columns don't auto-leak.

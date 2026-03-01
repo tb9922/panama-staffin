@@ -40,6 +40,7 @@ import {
   calculatePAYE,
   calculateNI,
   calculateStudentLoan,
+  assessPensionEligibility,
   calculatePensionContributions,
   getSSPConfig,
   calculateSSP,
@@ -92,6 +93,12 @@ export async function seedDefaultRulesIfNeeded(homeId, client) {
  *   5. checkNMWCompliance
  *   6. Accumulate into payroll_line, insert payroll_line_shift
  *
+ * Known limitations:
+ *   - N4: Hourly rate is point-in-time — uses current s.hourly_rate for all dates in the run.
+ *     If rate changes mid-period, run payroll before the change and again after.
+ *   - N7: No maternity/paternity/shared parental pay calculation. These are handled externally
+ *     via Sage/accountant. Manager should deactivate staff in Panama during leave.
+ *
  * @param {number} runId
  * @param {number} homeId
  * @param {string} homeSlug
@@ -108,9 +115,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const home = await homeRepo.findById(homeId, client);
     if (!home) throw new NotFoundError('Home not found');
 
-    const allStaffResult = await staffRepo.findByHome(homeId);
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff    = allStaffResult.rows;
-    const overrides   = await overrideRepo.findByHome(homeId);
+    const overrides   = await overrideRepo.findByHome(homeId, undefined, undefined, client);
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates();
 
@@ -118,7 +125,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     await payrollRunRepo.deleteLines(runId, homeId, client);
 
     const dates = eachDayInRange(run.period_start, run.period_end);
-    const activeStaff = allStaff.filter(s => s.active);
+    // Include staff who were active during any part of the period.
+    // A carer deactivated mid-period still needs paying for days worked.
+    const activeStaff = allStaff.filter(s =>
+      s.active || (s.leaving_date && s.leaving_date >= run.period_start)
+    );
 
     // Pre-load SSP configs once for the run (pick the right row per date inside the loop)
     const allSSPConfigs = await sspRepo.getAllSSPConfigs(client);
@@ -161,6 +172,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const nmwWarnings = [];
 
       for (const date of dates) {
+        // Skip dates after staff left (deactivated mid-period leavers)
+        if (s.leaving_date && date > s.leaving_date) continue;
+
         const actualShift = getActualShift(s, date, overrides, home.config.cycle_start_date);
         const { shift, sleep_in } = actualShift;
 
@@ -298,20 +312,36 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       }
       const niRates = niRatesCache.get(niCat);
 
+      // Build notes array early — pension auto-enrolment may append
+      const notesParts = [];
+      if (parsedCode.missingCode) notesParts.push('WARNING: No tax code found — defaulted to 1257L');
+      if (nmwWarnings.length > 0) notesParts.push(...nmwWarnings);
+
       // Gross for deductions = base pay + enhancements + holiday pay + SSP
       const grossForTax = round2(acc.gross_pay + acc.holiday_pay + acc.ssp_amount);
 
       const { tax, isRefund: _isRefund } = calculatePAYE(grossForTax, parsedCode, payPeriod, periodsInYear, priorYTD, taxBands);
-      // tax may be negative (refund) — clamp to 0 for payment; record actual value for YTD accuracy
-      const taxDeducted = round2(tax);
+      const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
 
       const { employeeNI, employerNI } = calculateNI(grossForTax, run.pay_frequency, niThresholds, niRates);
 
       const planStr    = taxCodeRow?.student_loan_plan || null;
       const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
 
-      // Pension contributions
-      const enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      // Pension contributions — auto-enrol if eligible (Pensions Act 2008)
+      let enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
+        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
+        if (eligibility.shouldAutoEnrol) {
+          await pensionRepo.upsertEnrolment(homeId, {
+            staff_id: s.id, status: 'eligible_enrolled',
+            enrolment_date: run.period_end, opt_in_date: null,
+          }, client);
+          // Set enrolment in-memory — calculatePensionContributions only needs .status
+          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolment_date: run.period_end };
+          notesParts.push('AUTO-ENROLLED: Pension auto-enrolment triggered');
+        }
+      }
       let pensionEmployee = 0, pensionEmployer = 0;
       if (pensionConf && enrolment && ['eligible_enrolled', 'opt_in_enrolled'].includes(enrolment.status)) {
         const pr = calculatePensionContributions(grossForTax, run.pay_frequency, pensionConf, enrolment);
@@ -329,12 +359,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         }
       }
 
-      const netPay = round2(grossForTax - Math.max(0, taxDeducted) - employeeNI - pensionEmployee - studentLoan);
-
-      // Build notes: include missing tax code warning + NMW warnings
-      const notesParts = [];
-      if (parsedCode.missingCode) notesParts.push('WARNING: No tax code found — defaulted to 1257L');
-      if (nmwWarnings.length > 0) notesParts.push(...nmwWarnings);
+      // taxDeducted may be negative (refund) — subtracting a negative increases net pay.
+      // HMRC requires PAYE refunds to be paid through the payroll, not clamped to zero.
+      const netPay = round2(grossForTax - taxDeducted - employeeNI - pensionEmployee - studentLoan);
 
       await payrollRunRepo.updateLine(line.id, homeId, {
         ...acc,
@@ -438,6 +465,22 @@ export async function approveRun(runId, homeId, homeSlug, username) {
     // Mark YTD as applied so re-approval cannot double-count
     await payrollRunRepo.markYtdApplied(runId, homeId, client);
 
+    // ── Increment SSP weeks on active sick periods ──────────────────────────
+    // Without this, ssp_weeks_paid stays at 0 and the 28-week cap never triggers.
+    const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
+    for (const { staff_id, ssp_days } of sspDaysByStaff) {
+      if (ssp_days <= 0) continue;
+      const sickPeriod = await sspRepo.getActiveSickPeriod(
+        homeId, staff_id, run.period_start, run.period_end, client,
+      );
+      if (!sickPeriod) continue;
+      const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
+      const weeksToAdd = round2(ssp_days / qualDaysPerWeek);
+      await sspRepo.updateSickPeriod(sickPeriod.id, homeId, {
+        ssp_weeks_paid: round2((sickPeriod.ssp_weeks_paid || 0) + weeksToAdd),
+      }, client);
+    }
+
     // Accumulate HMRC liability totals for this run and upsert into monthly tracker
     const totals = lines.reduce((acc, l) => ({
       paye:   round2(acc.paye   + (l.tax_deducted || 0)),
@@ -477,7 +520,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
     }
 
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
-    const allStaffResult = await staffRepo.findByHome(homeId);
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff = allStaffResult.rows;
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
@@ -511,58 +554,24 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
   });
 }
 
-// ── Holiday Daily Rate (52-week lookback) ─────────────────────────────────────
+// ── Holiday Daily Rate ────────────────────────────────────────────────────────
 
 /**
- * Calculate the holiday daily rate for a staff member using a 52-week lookback.
+ * Holiday daily rate: contracted rate per working day.
  *
- * Uses a single aggregating SQL query — not a per-week loop — for performance at scale.
- * Index on payroll_line_shifts(payroll_line_id, date) added in migration 029.
+ * Business decision: use (contract_hours / 5) × hourly_rate rather than a 52-week
+ * lookback average. For a small care home this gives predictable, consistent holiday
+ * pay without OT weeks inflating the rate. Managers can adjust hourly_rate if needed.
  *
- * Falls back to (contract_hours/5) × hourly_rate if fewer than 12 paid weeks of history.
+ * Note: Harpur Trust v Brazel (2022) requires including regular overtime in holiday pay
+ * for part-year workers. This simplified approach is acceptable for full-time care staff
+ * on fixed contracts but may need revisiting for zero-hours or variable-hours workers.
  */
 async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, config, staff) {
-  const conn = client || pool;
-  const { rows } = await conn.query(
-    `WITH weekly AS (
-       SELECT date_trunc('week', pls.date) AS week_start,
-              SUM(pls.total_amount) AS week_pay,
-              COUNT(DISTINCT pls.date)::int AS days_worked
-       FROM payroll_line_shifts pls
-       JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
-       JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
-       WHERE pr.home_id = $1
-         AND pl.staff_id = $2
-         AND pls.date < $3
-         AND pls.date >= $3::date - INTERVAL '104 weeks'
-         AND pls.shift_code NOT IN ('AL','SICK','OFF','AVL')
-         AND pr.status IN ('approved','exported','locked')
-       GROUP BY week_start
-     ),
-     paid_52 AS (SELECT * FROM weekly WHERE week_pay > 0 ORDER BY week_start DESC LIMIT 52)
-     SELECT
-       COALESCE(SUM(week_pay), 0)    AS total_pay,
-       COALESCE(SUM(days_worked), 0) AS total_days,
-       COUNT(*)::int                  AS weeks_used
-     FROM paid_52`,
-    [homeId, staffId, holidayDate],
-  );
-
-  const { total_pay, total_days, weeks_used } = rows[0];
-  const weeksUsed = parseInt(weeks_used, 10);
-  const totalDays = parseInt(total_days, 10);
-  const totalPay  = parseFloat(total_pay);
-
-  if (weeksUsed >= 12 && totalDays > 0) {
-    return round2(totalPay / totalDays);
-  }
-
-  // Fallback: contracted daily rate
   if (!staff) return 0;
-  const contractHours = parseFloat(staff.contract_hours) || 0;
+  const contractHours = parseFloat(staff.contract_hours) || 37.5;
   const hourlyRate = parseFloat(staff.hourly_rate) || 0;
-  const contractDailyRate = round2((contractHours / 5) * hourlyRate);
-  return contractDailyRate;
+  return round2((contractHours / 5) * hourlyRate);
 }
 
 // ── Payslip Assembly ──────────────────────────────────────────────────────────

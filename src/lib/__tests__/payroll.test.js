@@ -291,6 +291,20 @@ describe('calculateShiftPay', () => {
     // Saturday but no rules → no enhancement
     expect(result.totalEnhancement).toBe(0);
   });
+
+  it('picks lowest-priority rule even when array is reversed', () => {
+    // Two night rules: priority 0 = 15%, priority 10 = 50%
+    // Reversed array order — .find() without sort would pick priority 10 (wrong)
+    const rulesReversed = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 50, name: 'High Priority Night', priority: 10 },
+      { applies_to: 'night', rate_type: 'percentage', amount: 15, name: 'Normal Night',       priority: 0 },
+    ];
+    // 2025-06-03 is a Tuesday — night shift
+    const result = calculateShiftPay('N', '2025-06-03', staff, rulesReversed, BASE_CONFIG, false, false);
+    expect(result.enhancements.length).toBe(1);
+    expect(result.enhancements[0].ruleName).toBe('Normal Night');
+    expect(result.enhancements[0].amount).toBe(15);
+  });
 });
 
 // ── snapToShift ───────────────────────────────────────────────────────────────
@@ -366,6 +380,25 @@ describe('calculatePayableHours', () => {
     expect(calculatePayableHours(null, '19:00', 0)).toBe(0);
     expect(calculatePayableHours('07:00', null, 0)).toBe(0);
   });
+
+  it('same clock-in/out returns 0, not 24', () => {
+    expect(calculatePayableHours('07:00', '07:00', 0)).toBe(0);
+    expect(calculatePayableHours('21:00', '21:00', 0)).toBe(0);
+  });
+
+  it('DST-aware: normal night shift with date (no DST)', () => {
+    // 2025-06-15 is a normal day (BST, no transition)
+    // 20:00-06:00 = 10h, minus 30min = 9.5h — same as without date
+    expect(calculatePayableHours('20:00', '06:00', 30, '2025-06-15')).toBe(9.5);
+  });
+
+  it('DST-aware: standard day shift with date', () => {
+    expect(calculatePayableHours('07:00', '19:00', 30, '2025-06-15')).toBe(11.5);
+  });
+
+  it('backward compat: without date, cross-midnight still works', () => {
+    expect(calculatePayableHours('20:00', '06:00', 30)).toBe(9.5);
+  });
 });
 
 // ── suggestNextPeriod ─────────────────────────────────────────────────────────
@@ -437,5 +470,93 @@ describe('buildSageCSV', () => {
     const specialMap = new Map([['S001', { name: 'Smith, Jane', hourly_rate: 12 }]]);
     const csv = buildSageCSV(lines, specialMap, run);
     expect(csv).toContain('"Smith, Jane"');
+  });
+
+  it('Total_Gross_Pay includes holiday_pay and ssp_amount', () => {
+    const linesWithHoliday = [{
+      ...lines[0],
+      gross_pay: 1000,
+      holiday_pay: 200,
+      ssp_amount: 50,
+      holiday_days: 2,
+      ssp_days: 1,
+    }];
+    const csv = buildSageCSV(linesWithHoliday, staffMap, run);
+    const [header, dataRow] = csv.split('\r\n');
+    const cols = header.split(',');
+    const totalIdx = cols.indexOf('Total_Gross_Pay');
+    const values = dataRow.split(',');
+    // Total should be 1000 + 200 + 50 = 1250.00
+    expect(values[totalIdx]).toBe('1250.00');
+  });
+
+  it('Total_Gross_Pay handles missing holiday_pay/ssp_amount gracefully', () => {
+    const linesNoExtras = [{
+      ...lines[0],
+      gross_pay: 1000,
+      holiday_pay: undefined,
+      ssp_amount: undefined,
+    }];
+    const csv = buildSageCSV(linesNoExtras, staffMap, run);
+    const [header, dataRow] = csv.split('\r\n');
+    const cols = header.split(',');
+    const totalIdx = cols.indexOf('Total_Gross_Pay');
+    const values = dataRow.split(',');
+    expect(values[totalIdx]).toBe('1000.00');
+  });
+});
+
+// ── calculateShiftPay — rule date filtering ─────────────────────────────────
+
+describe('calculateShiftPay — rule date filtering', () => {
+  const staff = makeStaff({ hourly_rate: 12.00 });
+
+  it('does not apply rule before its effective_from date', () => {
+    const rulesWithDate = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 15, name: 'Night Enh', priority: 0, effective_from: '2025-07-01' },
+    ];
+    // Shift on 2025-06-15 — rule not yet effective
+    const result = calculateShiftPay('N', '2025-06-15', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(result.enhancements.length).toBe(0);
+    expect(result.totalEnhancement).toBe(0);
+  });
+
+  it('applies rule on its effective_from date', () => {
+    const rulesWithDate = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 15, name: 'Night Enh', priority: 0, effective_from: '2025-06-04' },
+    ];
+    // 2025-06-04 is a Wednesday — rule effective from this date
+    const result = calculateShiftPay('N', '2025-06-04', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(result.enhancements.length).toBe(1);
+  });
+
+  it('does not apply rule after its effective_to date', () => {
+    const rulesWithDate = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 15, name: 'Night Enh', priority: 0, effective_from: '2025-01-01', effective_to: '2025-06-01' },
+    ];
+    // Shift on 2025-06-15 — rule expired
+    const result = calculateShiftPay('N', '2025-06-15', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(result.enhancements.length).toBe(0);
+  });
+
+  it('applies rule when effective_to is null (open-ended)', () => {
+    const rulesWithDate = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 15, name: 'Night Enh', priority: 0, effective_from: '2025-01-01', effective_to: null },
+    ];
+    const result = calculateShiftPay('N', '2025-06-04', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(result.enhancements.length).toBe(1);
+  });
+
+  it('old rule replaced by new rule mid-period', () => {
+    const rulesWithDate = [
+      { applies_to: 'night', rate_type: 'percentage', amount: 10, name: 'Old Night', priority: 0, effective_from: '2025-01-01', effective_to: '2025-06-14' },
+      { applies_to: 'night', rate_type: 'percentage', amount: 20, name: 'New Night', priority: 0, effective_from: '2025-06-15' },
+    ];
+    // Before changeover: old rule (10%)
+    const r1 = calculateShiftPay('N', '2025-06-04', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(r1.enhancements[0].amount).toBe(10);
+    // After changeover: new rule (20%)
+    const r2 = calculateShiftPay('N', '2025-06-18', staff, rulesWithDate, BASE_CONFIG, false, false);
+    expect(r2.enhancements[0].amount).toBe(20);
   });
 });

@@ -182,7 +182,11 @@ export default function RotationGrid() {
     });
 
     if (wtrAfter === 'BREACH' && wtrBefore !== 'BREACH') {
-      errors.push(`WTR BREACH: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk (max 48)`);
+      if (staff.wtr_opt_out) {
+        warnings.push(`WTR: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk (opted out)`);
+      } else {
+        errors.push(`WTR BREACH: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk (max 48)`);
+      }
     } else if (wtrAfter === 'HIGH' && wtrBefore !== 'HIGH') {
       warnings.push(`WTR HIGH: avg ${statsAfter.avgWeeklyHours.toFixed(1)} hrs/wk`);
     }
@@ -298,7 +302,7 @@ export default function RotationGrid() {
           return actual.shift;
         }),
         stats?.totalHours.toFixed(1) ?? '',
-        stats?.grossPay.toFixed(0) ?? '',
+        stats?.totalPay.toFixed(0) ?? '',
         stats?.otHours > 0 ? stats.otHours.toFixed(1) : '0',
         stats?.wtrStatus ?? '',
       ];
@@ -479,7 +483,7 @@ export default function RotationGrid() {
                     );
                   })}
                   <td className="py-1 px-2 text-right font-mono">{stats?.totalHours.toFixed(1)}</td>
-                  <td className="py-1 px-2 text-right font-mono">£{stats?.grossPay.toFixed(0)}</td>
+                  <td className="py-1 px-2 text-right font-mono">£{stats?.totalPay.toFixed(0)}</td>
                   <td className="py-1 px-2 text-right font-mono text-orange-600">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
                   <td className="py-1 px-2 text-center">
                     <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
@@ -657,7 +661,7 @@ export default function RotationGrid() {
                         <div className="flex justify-between">
                           <span className="text-gray-500">Pay:</span>
                           <span className="font-medium">
-                            £{impact.statsBefore.grossPay.toFixed(0)} &rarr; £{impact.statsAfter.grossPay.toFixed(0)}
+                            £{impact.statsBefore.totalPay.toFixed(0)} &rarr; £{impact.statsAfter.totalPay.toFixed(0)}
                           </span>
                         </div>
                         <div className="flex justify-between">

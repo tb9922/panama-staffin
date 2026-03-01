@@ -7,6 +7,8 @@ import {
   addDays,
   isBankHoliday,
   getStaffForDay,
+  getShiftHours,
+  calculateStaffPeriodHours,
 } from '../rotation.js';
 
 // ── getCycleDay ────────────────────────────────────────────────────────────────
@@ -231,5 +233,176 @@ describe('getStaffForDay — bank holiday upgrade', () => {
     const result = getStaffForDay(agencyStaff, '2025-12-25', overrides, config);
     const ag = result.find(s => s.id === 'S3');
     expect(ag?.shift).toBe('AG-E'); // no upgrade for agency
+  });
+});
+
+// ── getShiftHours — ADM/TRN configurable hours ────────────────────────────────
+
+describe('getShiftHours — ADM/TRN configurable hours', () => {
+  const baseConfig = {
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+  };
+
+  it('returns EL hours when ADM/TRN not in config (fallback)', () => {
+    expect(getShiftHours('ADM', baseConfig)).toBe(12);
+    expect(getShiftHours('TRN', baseConfig)).toBe(12);
+  });
+
+  it('returns configured ADM hours when set', () => {
+    const config = { shifts: { ...baseConfig.shifts, ADM: { hours: 8 } } };
+    expect(getShiftHours('ADM', config)).toBe(8);
+  });
+
+  it('returns configured TRN hours when set', () => {
+    const config = { shifts: { ...baseConfig.shifts, TRN: { hours: 4 } } };
+    expect(getShiftHours('TRN', config)).toBe(4);
+  });
+
+  it('ADM config does not affect TRN and vice versa', () => {
+    const config = { shifts: { ...baseConfig.shifts, ADM: { hours: 6 }, TRN: { hours: 3 } } };
+    expect(getShiftHours('ADM', config)).toBe(6);
+    expect(getShiftHours('TRN', config)).toBe(3);
+  });
+
+  it('regular shifts still work correctly', () => {
+    expect(getShiftHours('E', baseConfig)).toBe(8);
+    expect(getShiftHours('N', baseConfig)).toBe(10);
+    expect(getShiftHours('EL', baseConfig)).toBe(12);
+  });
+});
+
+// ── calculateStaffPeriodHours — agency shifts skipped ─────────────────────────
+
+describe('calculateStaffPeriodHours — agency shift exclusion', () => {
+  const config = {
+    cycle_start_date: '2025-01-06',
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+    ot_premium: 5,
+    bh_premium_multiplier: 2,
+  };
+
+  const staff = { id: 'S1', team: 'Day A', pref: 'E', skill: 1, hourly_rate: 13, active: true, wtr_opt_out: false };
+
+  it('does not count AG-E in staff totalHours', () => {
+    // Override all 7 days to AG-E — should NOT count as this staff member's hours
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      const key = formatDate(d);
+      overrides[key] = { S1: { shift: 'AG-E' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(0);
+  });
+
+  it('counts regular working shifts in totalHours', () => {
+    // Override first day to E (working), rest to OFF
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      const key = formatDate(d);
+      overrides[key] = { S1: { shift: i === 0 ? 'E' : 'OFF' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(8); // One E shift = 8h
+  });
+
+  it('counts OT shifts in both totalHours and otHours', () => {
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      const key = formatDate(d);
+      overrides[key] = { S1: { shift: i === 0 ? 'OC-E' : 'OFF' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(8);
+    expect(result.otHours).toBe(8);
+  });
+
+  it('excludes all agency shift variants (AG-E, AG-L, AG-N)', () => {
+    const dates = [];
+    const overrides = {};
+    const agencyShifts = ['AG-E', 'AG-L', 'AG-N'];
+    for (let i = 0; i < 3; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      overrides[formatDate(d)] = { S1: { shift: agencyShifts[i] } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(0);
+  });
+
+  it('tracks AL days and pay separately from totalHours', () => {
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      overrides[formatDate(d)] = { S1: { shift: i < 2 ? 'AL' : 'OFF' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.alDays).toBe(2);
+    expect(result.alPay).toBeGreaterThan(0);
+    // AL should NOT be in totalHours (would break WTR)
+    expect(result.totalHours).toBe(0);
+    // AL pay should be in totalPay
+    expect(result.totalPay).toBe(result.alPay);
+  });
+
+  it('AL pay uses EL hours × staff hourly_rate for day staff', () => {
+    const staffWithContract = { ...staff, contract_hours: 37.5 };
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'AL' } } };
+    const result = calculateStaffPeriodHours(staffWithContract, dates, overrides, config);
+    // EL hours (12) × hourly_rate (13) = 156
+    expect(result.alPay).toBe(156);
+  });
+
+  it('totalPay includes AL pay alongside working pay', () => {
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      overrides[formatDate(d)] = { S1: { shift: i === 0 ? 'E' : i === 1 ? 'AL' : 'OFF' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(8); // 1 E shift
+    expect(result.alDays).toBe(1);
+    expect(result.totalPay).toBe(result.grossPay + result.otPay + result.bhPay + result.alPay);
+  });
+});
+
+// ── getShiftHours — crash-safe with incomplete config ────────────────────────
+
+describe('getShiftHours — crash-safe with incomplete config', () => {
+  it('returns 0 when config is null', () => {
+    expect(getShiftHours('E', null)).toBe(0);
+  });
+
+  it('returns 0 when config.shifts is undefined', () => {
+    expect(getShiftHours('E', {})).toBe(0);
+  });
+
+  it('returns 0 when specific shift is missing from config', () => {
+    expect(getShiftHours('E', { shifts: {} })).toBe(0);
+  });
+
+  it('returns 0 for OC-E when E is missing from config', () => {
+    expect(getShiftHours('OC-E', { shifts: { L: { hours: 8 } } })).toBe(0);
+  });
+
+  it('ADM falls back to EL hours when ADM not defined', () => {
+    expect(getShiftHours('ADM', { shifts: { EL: { hours: 12 } } })).toBe(12);
+  });
+
+  it('ADM returns 0 when neither ADM nor EL defined', () => {
+    expect(getShiftHours('ADM', { shifts: {} })).toBe(0);
   });
 });

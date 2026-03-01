@@ -365,3 +365,20 @@ export async function findShiftsByRun(runId, homeId) {
   );
   return rows.map(r => ({ ...shapeLineShift(r), staff_id: r.staff_id }));
 }
+
+/** Count SSP-paid sick days per staff in a run (for incrementing ssp_weeks_paid on approval). */
+export async function getSSPDaysByRun(runId, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT pl.staff_id,
+            COUNT(*) FILTER (WHERE pls.total_amount > 0)::int AS ssp_days
+     FROM payroll_line_shifts pls
+     JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+     WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
+       AND pls.shift_code = 'SICK'
+     GROUP BY pl.staff_id`,
+    [runId, homeId],
+  );
+  return rows.map(r => ({ staff_id: r.staff_id, ssp_days: parseInt(r.ssp_days, 10) }));
+}

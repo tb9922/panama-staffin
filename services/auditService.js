@@ -15,6 +15,10 @@ export async function getRecent(limit = 100, homeSlug) {
   return auditRepo.getRecent(limit);
 }
 
+export async function getRecentForSlugs(limit = 100, slugs) {
+  return auditRepo.getByHomeSlugs(slugs, limit);
+}
+
 export async function purgeOlderThan(days, homeSlug) {
   return auditRepo.purgeOlderThan(days, homeSlug);
 }

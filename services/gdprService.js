@@ -388,12 +388,18 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
+    await client.query(
+      `UPDATE shift_overrides SET reason = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
     // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
-    // - shift_overrides: operational scheduling data, no PII beyond staff_id
+    // - shift_overrides: dates/shift codes retained as operational data, reason cleared above
     // - hr_contracts, hr_family_leave, hr_flexible_working: retained per Limitation Act (6 years)
     // - hr_rtw_dbs_renewals: retained for compliance audit trail
 

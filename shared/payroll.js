@@ -168,9 +168,18 @@ export function calculateShiftPay(shift, date, staff, rules, config, isSleepIn, 
 
   const applicableTypes = classifyShiftEnhancements(shift, date, isBankHoliday, isSleepIn);
 
+  // Sort by priority (lower = wins). DB returns this order, but defend against caller reordering.
+  const sorted = [...rules].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+
+  // Filter rules by shift date — a rule effective from Jan 15 must not apply to Jan 1-14
+  const dateStr = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+  const dateRules = sorted.filter(r =>
+    (!r.effective_from || r.effective_from <= dateStr) && (!r.effective_to || r.effective_to >= dateStr)
+  );
+
   const enhancements = [];
   for (const type of applicableTypes) {
-    const rule = rules.find(r => r.applies_to === type);
+    const rule = dateRules.find(r => r.applies_to === type);
     if (!rule) continue;
     const enhancementAmount = calculateEnhancement(rule, hours, baseRate);
     enhancements.push({
@@ -235,19 +244,39 @@ export function snapToShift(scheduledTime, actualTime, snapWindowMinutes, isEnab
  * Calculate payable hours from snapped start/end times, minus break.
  * Handles cross-midnight (night shifts): if snappedEnd < snappedStart,
  * adds 24 hours to snappedEnd.
+ *
+ * When `date` is provided ("YYYY-MM-DD"), uses real Date objects so JS handles
+ * DST transitions correctly (spring forward = 1h less, autumn fallback = 1h more).
+ * Without `date`, falls back to string HH:MM math (no DST awareness).
+ *
  * Returns decimal hours rounded to 2dp.
  */
-export function calculatePayableHours(snappedStart, snappedEnd, breakMinutes) {
+export function calculatePayableHours(snappedStart, snappedEnd, breakMinutes, date) {
   if (!snappedStart || !snappedEnd) return 0;
+  if (snappedStart === snappedEnd) return 0; // Same clock-in/out = 0, not 24
 
-  let startMins = parseTimeMinutes(snappedStart);
-  let endMins = parseTimeMinutes(snappedEnd);
-
-  // Cross-midnight detection
-  if (endMins <= startMins) {
-    endMins += 24 * 60;
+  if (date) {
+    // DST-aware path: construct local-time Date objects
+    const startDate = new Date(`${date}T${snappedStart}:00`);
+    let endDate = new Date(`${date}T${snappedEnd}:00`);
+    if (endDate <= startDate) {
+      // Cross-midnight: end is next calendar day
+      const next = new Date(startDate);
+      next.setDate(next.getDate() + 1);
+      const y = next.getFullYear();
+      const m = String(next.getMonth() + 1).padStart(2, '0');
+      const d = String(next.getDate()).padStart(2, '0');
+      endDate = new Date(`${y}-${m}-${d}T${snappedEnd}:00`);
+    }
+    const realMinutes = (endDate - startDate) / (1000 * 60);
+    const payable = Math.max(0, realMinutes - (breakMinutes || 0));
+    return round2(payable / 60);
   }
 
+  // Fallback: string HH:MM math (no DST awareness, backward compat)
+  let startMins = parseTimeMinutes(snappedStart);
+  let endMins = parseTimeMinutes(snappedEnd);
+  if (endMins <= startMins) endMins += 24 * 60;
   const payableMinutes = Math.max(0, endMins - startMins - (breakMinutes || 0));
   return round2(payableMinutes / 60);
 }
@@ -365,7 +394,7 @@ export function buildSageCSV(payrollLines, staffMap, run, ytdMap = null) {
       (line.holiday_pay || 0).toFixed(2),
       line.ssp_days || 0,
       (line.ssp_amount || 0).toFixed(2),
-      (line.gross_pay || 0).toFixed(2),
+      ((line.gross_pay || 0) + (line.holiday_pay || 0) + (line.ssp_amount || 0)).toFixed(2),
       (line.tax_deducted || 0).toFixed(2),
       (line.employee_ni || 0).toFixed(2),
       (line.employer_ni || 0).toFixed(2),

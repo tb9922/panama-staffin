@@ -140,7 +140,7 @@ export function parseTaxCode(taxCode) {
   // Determine country prefix
   let country = 'england_wales';
   if (code.startsWith('S')) { country = 'scotland'; code = code.slice(1); }
-  else if (code.startsWith('C')) { country = 'wales'; code = code.slice(1); }
+  else if (code.startsWith('C')) { country = 'england_wales'; code = code.slice(1); }
 
   // Special codes
   if (code === 'NT')  return { type: 'nt',  country, annualAllowance: Infinity, basis: 'cumulative' };

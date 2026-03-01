@@ -64,7 +64,7 @@ export async function findHomeSlugsForUser(username) {
 export async function grantAllHomes(username) {
   await pool.query(
     `INSERT INTO user_home_access (username, home_id)
-       SELECT $1, id FROM homes
+       SELECT $1, id FROM homes FOR SHARE
        ON CONFLICT DO NOTHING`,
     [username]
   );

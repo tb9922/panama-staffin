@@ -218,7 +218,7 @@ export default function MonthlyTimesheet() {
       updated.snapped_end        = snapEnd.snapped;
       updated.snap_applied       = snapStart.applied || snapEnd.applied;
       updated.snap_minutes_saved = snapStart.savedMinutes + snapEnd.savedMinutes;
-      updated.payable_hours      = calculatePayableHours(snapStart.snapped, snapEnd.snapped, updated.break_minutes);
+      updated.payable_hours      = calculatePayableHours(snapStart.snapped, snapEnd.snapped, updated.break_minutes, updated.date || editModal?.row?.dateStr);
       return updated;
     });
   }
@@ -230,7 +230,7 @@ export default function MonthlyTimesheet() {
     try {
       const snapStart = snapToShift(editForm.scheduled_start, editForm.actual_start, snapConfig.window, snapConfig.enabled);
       const snapEnd   = snapToShift(editForm.scheduled_end,   editForm.actual_end,   snapConfig.window, snapConfig.enabled);
-      const payable   = calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes);
+      const payable   = calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes, editForm.date || editModal?.row?.dateStr);
 
       await upsertTimesheet(homeSlug, {
         ...editForm,
@@ -477,8 +477,8 @@ export default function MonthlyTimesheet() {
     if (!editForm.actual_start || !editForm.actual_end) return null;
     const snapStart = snapToShift(editForm.scheduled_start, editForm.actual_start, snapConfig.window, snapConfig.enabled);
     const snapEnd   = snapToShift(editForm.scheduled_end,   editForm.actual_end,   snapConfig.window, snapConfig.enabled);
-    return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes);
-  }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
+    return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes, editForm.date);
+  }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.date, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
 
   if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
 

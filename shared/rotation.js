@@ -152,23 +152,14 @@ export function isBHShift(shift) {
 
 // Get hours for a shift code from config
 export function getShiftHours(shift, config) {
+  const s = config?.shifts;
+  if (!s) return 0;
   const map = {
-    E: config.shifts.E.hours,
-    L: config.shifts.L.hours,
-    EL: config.shifts.EL.hours,
-    N: config.shifts.N.hours,
-    'OC-E': config.shifts.E.hours,
-    'OC-L': config.shifts.L.hours,
-    'OC-EL': config.shifts.EL.hours,
-    'OC-N': config.shifts.N.hours,
-    'AG-E': config.shifts.E.hours,
-    'AG-L': config.shifts.L.hours,
-    'AG-EL': config.shifts.EL.hours,
-    'AG-N': config.shifts.N.hours,
-    'BH-D': config.shifts.EL.hours,
-    'BH-N': config.shifts.N.hours,
-    ADM: config.shifts.EL.hours,
-    TRN: config.shifts.EL.hours,
+    E: s.E?.hours, L: s.L?.hours, EL: s.EL?.hours, N: s.N?.hours,
+    'OC-E': s.E?.hours, 'OC-L': s.L?.hours, 'OC-EL': s.EL?.hours, 'OC-N': s.N?.hours,
+    'AG-E': s.E?.hours, 'AG-L': s.L?.hours, 'AG-EL': s.EL?.hours, 'AG-N': s.N?.hours,
+    'BH-D': s.EL?.hours, 'BH-N': s.N?.hours,
+    ADM: s.ADM?.hours ?? s.EL?.hours, TRN: s.TRN?.hours ?? s.EL?.hours,
   };
   return map[shift] || 0;
 }
@@ -217,6 +208,7 @@ export function getStaffForDay(staff, date, overrides, config) {
       source: actual.source || 'scheduled',
       sleep_in: actual.sleep_in || false,
       isOverride: shift !== scheduled,
+      replaces_staff_id: actual.replaces_staff_id || null,
     });
   }
 
@@ -244,6 +236,7 @@ export function getStaffForDay(staff, date, overrides, config) {
         source: override.source || 'agency',
         isOverride: true,
         isVirtualAgency: true,
+        replaces_staff_id: override.replaces_staff_id || null,
       });
     }
   }
@@ -256,6 +249,8 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
   let totalHours = 0;
   let otHours = 0;
   let bhHours = 0;
+  let alDays = 0;
+  let alPay = 0;
   const numWeeks = Math.max(1, Math.ceil(dates.length / 7));
   const weekHours = new Array(numWeeks).fill(0);
 
@@ -263,13 +258,19 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     const actual = getActualShift(staff, date, overrides, config.cycle_start_date);
     const shift = actual.shift;
     const hours = getShiftHours(shift, config);
-    if (isWorkingShift(shift)) {
+    // Agency shifts on real staff = agency is working, not this staff member
+    if (isWorkingShift(shift) && !isAgencyShift(shift)) {
       totalHours += hours;
       const weekIdx = Math.floor(i / 7);
       if (weekIdx < numWeeks) weekHours[weekIdx] += hours;
     }
     if (isOTShift(shift)) otHours += hours;
     if (isBHShift(shift)) bhHours += hours;
+    // AL tracking: separate from totalHours (would break WTR avg) but included in totalPay
+    if (shift === 'AL') {
+      alDays += 1;
+      alPay += getShiftHours('EL', config) * staff.hourly_rate;
+    }
   });
 
   const grossPay = totalHours * staff.hourly_rate;
@@ -286,9 +287,9 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
                     weekHours[1] < weekHours[0] ? 'Short W2' : 'Balanced';
 
   return {
-    totalHours, grossPay, otHours, otPay, bhHours, bhPay,
+    totalHours, grossPay, otHours, otPay, bhHours, bhPay, alDays, alPay,
     weekHours, avgWeeklyHours, wtrStatus, shortWeek,
-    totalPay: grossPay + otPay + bhPay,
+    totalPay: grossPay + otPay + bhPay + alPay,
   };
 }
 

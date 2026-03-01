@@ -113,7 +113,7 @@ export default function TimesheetManager() {
       updated.snapped_end         = snapEnd.snapped;
       updated.snap_applied        = snapStart.applied || snapEnd.applied;
       updated.snap_minutes_saved  = snapStart.savedMinutes + snapEnd.savedMinutes;
-      updated.payable_hours       = calculatePayableHours(snapStart.snapped, snapEnd.snapped, updated.break_minutes);
+      updated.payable_hours       = calculatePayableHours(snapStart.snapped, snapEnd.snapped, updated.break_minutes, updated.date || selectedDate);
       return updated;
     });
   }
@@ -124,7 +124,7 @@ export default function TimesheetManager() {
       // Recalculate snap + hours on save (defensive)
       const snapStart = snapToShift(editForm.scheduled_start, editForm.actual_start, snapConfig.window, snapConfig.enabled);
       const snapEnd   = snapToShift(editForm.scheduled_end, editForm.actual_end, snapConfig.window, snapConfig.enabled);
-      const payable   = calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes);
+      const payable   = calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes, editForm.date || selectedDate);
 
       await upsertTimesheet(homeSlug, {
         ...editForm,
@@ -191,7 +191,7 @@ export default function TimesheetManager() {
           snap_applied:       false,
           snap_minutes_saved: 0,
           break_minutes:      30,
-          payable_hours:      calculatePayableHours(start, end, 30),
+          payable_hours:      calculatePayableHours(start, end, 30, selectedDate),
           status:             'pending',
           notes:              'Confirmed as scheduled',
         });

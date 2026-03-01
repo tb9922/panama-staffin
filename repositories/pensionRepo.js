@@ -96,7 +96,9 @@ function shapeEnrolment(row) {
 
 function shapeContribution(row) {
   return {
-    ...row,
+    id: row.id,
+    payroll_line_id: row.payroll_line_id,
+    staff_id: row.staff_id,
     qualifying_pay:  f(row.qualifying_pay),
     employee_amount: f(row.employee_amount),
     employer_amount: f(row.employer_amount),
@@ -133,10 +135,5 @@ export async function getContributionsByRun(homeId, runId, client) {
      ORDER BY pc.staff_id`,
     [runId, homeId]
   );
-  return rows.map(r => ({
-    ...r,
-    qualifying_pay: f(r.qualifying_pay),
-    employee_amount: f(r.employee_amount),
-    employer_amount: f(r.employer_amount),
-  }));
+  return rows.map(shapeContribution);
 }
