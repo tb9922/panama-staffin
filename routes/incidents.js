@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -6,6 +7,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -76,14 +78,15 @@ const incidentUpdateSchema = incidentBodySchema.partial();
 // GET /api/incidents?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [incidentsResult, staffResult] = await Promise.all([
-      incidentRepo.findByHome(req.home.id),
+      incidentRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       staffRepo.findByHome(req.home.id),
     ]);
     const incidents = incidentsResult.rows;
     const incidentTypes = req.home.config?.incident_types || [];
     const staff = staffResult.rows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
-    res.json({ incidents, incidentTypes, staff });
+    res.json({ incidents, incidentTypes, staff, _total: incidentsResult.total });
   } catch (err) { next(err); }
 });
 
@@ -91,7 +94,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
     await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident?.id });
     res.status(201).json(incident);
@@ -104,7 +107,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
     const parsed = incidentUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = Object.fromEntries(
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)

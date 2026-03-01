@@ -5,6 +5,7 @@ import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
   upsertTimesheet, approveTimesheet, disputeTimesheet,
+  getSchedulingData, getLoggedInUser,
 } from '../lib/api.js';
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
@@ -42,15 +43,22 @@ function getShiftTimes(shift, config) {
   }
 }
 
-export default function MonthlyTimesheet({ data, user }) {
+export default function MonthlyTimesheet() {
   const { staffId: urlStaffId } = useParams();
   const navigate = useNavigate();
   const homeSlug = getCurrentHome();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = getLoggedInUser()?.role === 'admin';
+
+  const [schedData, setSchedData] = useState(null);
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
 
   const activeStaff = useMemo(
-    () => (data?.staff || []).filter(s => s.active),
-    [data?.staff],
+    () => (schedData?.staff || []).filter(s => s.active),
+    [schedData?.staff],
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState(urlStaffId || '');
@@ -69,11 +77,11 @@ export default function MonthlyTimesheet({ data, user }) {
   const [disputeModal, setDisputeModal] = useState(null); // { entry }
   const [disputeReason, setDisputeReason] = useState('');
 
-  // Snap config from data
+  // Snap config from schedData
   const snapConfig = useMemo(() => ({
-    enabled: data?.config?.snap_to_shift !== false,
-    window: data?.config?.snap_window_minutes ?? 7,
-  }), [data?.config]);
+    enabled: schedData?.config?.snap_to_shift !== false,
+    window: schedData?.config?.snap_window_minutes ?? 7,
+  }), [schedData?.config]);
 
   // Default to first active staff if none selected
   useEffect(() => {
@@ -116,7 +124,7 @@ export default function MonthlyTimesheet({ data, user }) {
 
   // Build rows: one per day of month
   const rows = useMemo(() => {
-    if (!staff || !data?.config) return [];
+    if (!staff || !schedData?.config) return [];
     const numDays = daysInMonth(year, month);
     const result = [];
 
@@ -126,10 +134,10 @@ export default function MonthlyTimesheet({ data, user }) {
       const dayOfWeek = dateObj.getDay();
 
       // Roster: what should they be doing?
-      const actual = getActualShift(staff, dateObj, data.overrides || {}, data.config.cycle_start_date);
+      const actual = getActualShift(staff, dateObj, schedData?.overrides || {}, schedData?.config.cycle_start_date);
       const rosterShift = typeof actual === 'string' ? actual : actual?.shift || 'OFF';
       const overrideReason = typeof actual === 'object' ? actual.reason : null;
-      const rosterHours = WORKING_SHIFTS.includes(rosterShift) ? getShiftHours(rosterShift, data.config) : 0;
+      const rosterHours = WORKING_SHIFTS.includes(rosterShift) ? getShiftHours(rosterShift, schedData?.config) : 0;
 
       // Timesheet entry (if exists)
       const entry = entries.find(e => e.date === dateStr);
@@ -158,7 +166,7 @@ export default function MonthlyTimesheet({ data, user }) {
       });
     }
     return result;
-  }, [staff, data, entries, year, month]);
+  }, [staff, schedData, entries, year, month]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -187,7 +195,7 @@ export default function MonthlyTimesheet({ data, user }) {
   // ── Per-row actions ──────────────────────────────────────────────────────────
 
   function openEdit(row) {
-    const times = getShiftTimes(row.rosterShift, data.config);
+    const times = getShiftTimes(row.rosterShift, schedData?.config);
     setEditForm({
       staff_id:        selectedStaffId,
       date:            row.dateStr,
@@ -281,7 +289,7 @@ export default function MonthlyTimesheet({ data, user }) {
     setSaving(true);
     setError(null);
     try {
-      const times = getShiftTimes(row.rosterShift, data.config);
+      const times = getShiftTimes(row.rosterShift, schedData?.config);
       await upsertTimesheet(homeSlug, {
         staff_id: selectedStaffId,
         date: row.dateStr,
@@ -308,14 +316,14 @@ export default function MonthlyTimesheet({ data, user }) {
   // ── Bulk actions ─────────────────────────────────────────────────────────────
 
   async function handleConfirmAll() {
-    if (!staff || !data?.config || saving) return;
+    if (!staff || !schedData?.config || saving) return;
     setSaving(true);
     setError(null);
     try {
       const entriesToCreate = [];
       for (const row of rows) {
         if (row.rowType === 'missing' || (row.rowType === 'future' && WORKING_SHIFTS.includes(row.rosterShift) && !row.entry)) {
-          const times = getShiftTimes(row.rosterShift, data.config);
+          const times = getShiftTimes(row.rosterShift, schedData?.config);
           entriesToCreate.push({
             staff_id: selectedStaffId,
             date: row.dateStr,
@@ -472,7 +480,7 @@ export default function MonthlyTimesheet({ data, user }) {
     return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes);
   }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
 
-  if (!data) return <div className={PAGE.container}><p>Loading data...</p></div>;
+  if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
 
   const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 

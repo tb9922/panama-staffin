@@ -3,7 +3,7 @@ import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, loadData, saveConfig } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 
 export default function Config() {
   const homeSlug = getCurrentHome();
@@ -24,7 +24,7 @@ export default function Config() {
     try {
       setLoading(true);
       setLoadError(null);
-      const d = await loadData(homeSlug);
+      const d = await getSchedulingData(homeSlug);
       setConfig(JSON.parse(JSON.stringify(d.config || {})));
       setStaff(d.staff || []);
     } catch (e) {

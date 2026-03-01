@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -6,6 +7,7 @@ import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -50,14 +52,15 @@ const surveyUpdateSchema = surveyBodySchema.partial();
 // GET /api/complaints?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [complaintsResult, surveysResult] = await Promise.all([
-      complaintRepo.findByHome(req.home.id),
-      complaintSurveyRepo.findByHome(req.home.id),
+      complaintRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      complaintSurveyRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
     const complaints = complaintsResult.rows;
     const surveys = surveysResult.rows;
     const complaintCategories = req.home.config?.complaint_categories || [];
-    res.json({ complaints, surveys, complaintCategories });
+    res.json({ complaints, surveys, complaintCategories, _total: complaintsResult.total });
   } catch (err) { next(err); }
 });
 
@@ -65,7 +68,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
     await auditService.log('complaint_create', req.home.slug, req.user.username, { id: complaint?.id });
     res.status(201).json(complaint);
@@ -78,7 +81,7 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = complaintUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = Object.fromEntries(
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
@@ -113,7 +116,7 @@ router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, a
 router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const survey = await complaintSurveyRepo.upsert(req.home.id, parsed.data);
     await auditService.log('survey_create', req.home.slug, req.user.username, { id: survey?.id });
     res.status(201).json(survey);
@@ -126,7 +129,7 @@ router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = surveyUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const updates = Object.fromEntries(
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)
     );

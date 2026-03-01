@@ -57,13 +57,13 @@ const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0
 // ── Default Pay Rate Rules (seeded once per home on first payroll access) ──────
 
 const DEFAULT_RULES = [
-  { name: 'Night Enhancement',     rate_type: 'percentage',    amount: 15,   applies_to: 'night',       priority: 0 },
-  { name: 'Saturday Enhancement',  rate_type: 'percentage',    amount: 10,   applies_to: 'weekend_sat', priority: 0 },
-  { name: 'Sunday Enhancement',    rate_type: 'percentage',    amount: 20,   applies_to: 'weekend_sun', priority: 0 },
-  { name: 'Bank Holiday Premium',  rate_type: 'percentage',    amount: 50,   applies_to: 'bank_holiday',priority: 0 },
-  { name: 'Sleep-in Flat Rate',    rate_type: 'flat_per_shift',amount: 50,   applies_to: 'sleep_in',    priority: 0 },
-  { name: 'Overtime Premium',      rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'overtime',    priority: 0 },
-  { name: 'On-Call Premium',       rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0 },
+  { name: 'Night Enhancement',     rate_type: 'percentage',    amount: 15,   applies_to: 'night',       priority: 0, effective_from: '2020-01-01' },
+  { name: 'Saturday Enhancement',  rate_type: 'percentage',    amount: 10,   applies_to: 'weekend_sat', priority: 0, effective_from: '2020-01-01' },
+  { name: 'Sunday Enhancement',    rate_type: 'percentage',    amount: 20,   applies_to: 'weekend_sun', priority: 0, effective_from: '2020-01-01' },
+  { name: 'Bank Holiday Premium',  rate_type: 'percentage',    amount: 50,   applies_to: 'bank_holiday',priority: 0, effective_from: '2020-01-01' },
+  { name: 'Sleep-in Flat Rate',    rate_type: 'flat_per_shift',amount: 50,   applies_to: 'sleep_in',    priority: 0, effective_from: '2020-01-01' },
+  { name: 'Overtime Premium',      rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'overtime',    priority: 0, effective_from: '2020-01-01' },
+  { name: 'On-Call Premium',       rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0, effective_from: '2020-01-01' },
 ];
 
 /**
@@ -99,7 +99,7 @@ export async function seedDefaultRulesIfNeeded(homeId, client) {
  */
 export async function calculateRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (!['draft', 'calculated'].includes(run.status)) {
       throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
@@ -370,7 +370,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       total_enhancements: round2(totalEnhancements),
       total_sleep_ins:    round2(totalSleepIns),
       staff_count:        activeStaff.length,
-    }, client);
+    }, client, run.version);
 
     await auditRepo.log('payroll_calculate', homeSlug, username, `Run ID ${runId}`, client);
   });
@@ -384,7 +384,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
  */
 export async function approveRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'calculated') {
       throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
@@ -398,7 +398,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       );
     }
 
-    await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client);
+    await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client, run.version);
 
     // Lock all approved timesheets for the period (prevents further edits)
     await timesheetRepo.lockByPeriod(homeId, run.period_start, run.period_end, client);

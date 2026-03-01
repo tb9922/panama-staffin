@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getCurrentHome, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
+import { getCurrentHome, getLoggedInUser, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 
 const BUCKETS = [
@@ -12,8 +12,8 @@ const BUCKETS = [
   { id: '90+', label: '90+ days', key: 'days_90_plus', min: 91, max: Infinity },
 ];
 
-export default function ReceivablesManager({ user }) {
-  const isAdmin = user?.role === 'admin';
+export default function ReceivablesManager() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

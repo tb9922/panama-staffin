@@ -1,5 +1,6 @@
 // All 17 domain validators moved verbatim from server.js.
 // No logic changes — these are pure functions operating on the assembled data object.
+import { RIDDOR_CATEGORIES } from '../src/lib/incidents.js';
 
 function validateALPerDay(data, warnings) {
   const maxAL = data.config.max_al_same_day || 2;
@@ -210,7 +211,6 @@ function validateIncidents(data, warnings, todayStr) {
   if (!data.incidents?.length) return;
   const now = new Date();
   let overdueCqc = 0, overdueRiddor = 0, staleInvestigations = 0, overdueDoc = 0, overdueActions = 0;
-  const riddorDeadlineDays = { death: 1, specified_injury: 1, dangerous_occurrence: 1, over_7_day: 15 };
 
   for (const inc of data.incidents) {
     if (inc.cqc_notifiable && !inc.cqc_notified && inc.date) {
@@ -219,7 +219,9 @@ function validateIncidents(data, warnings, todayStr) {
       if (now > deadline) overdueCqc++;
     }
     if (inc.riddor_reportable && !inc.riddor_reported && inc.date) {
-      const days = riddorDeadlineDays[inc.riddor_category] ?? 1;
+      const cat = RIDDOR_CATEGORIES.find(r => r.id === inc.riddor_category);
+      // deadlineDays=0 means "immediate" — give 1 day grace, same logic as incidents.js isRiddorOverdue
+      const days = cat ? (cat.deadlineDays === 0 ? 1 : cat.deadlineDays) : 1;
       const deadline = new Date(new Date(inc.date + 'T00:00:00Z').getTime() + days * 86400000);
       if (now > deadline) overdueRiddor++;
     }

@@ -6,7 +6,7 @@ import {
   getRetentionSchedule, scanRetention,
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
-  getAccessLog, getCurrentHome,
+  getAccessLog, getCurrentHome, getLoggedInUser,
 } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
@@ -25,8 +25,8 @@ const TABS = [
   { id: 'access',     label: 'Access Log' },
 ];
 
-export default function GdprDashboard({ user }) {
-  const isAdmin = user?.role === 'admin';
+export default function GdprDashboard() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

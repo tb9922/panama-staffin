@@ -49,3 +49,14 @@ export class ConflictError extends AppError {
     super(message, 409, code);
   }
 }
+
+/**
+ * Send a sanitized 400 response for Zod validation failures.
+ * Returns only path + message per issue — never raw Zod internals.
+ */
+export function zodError(res, parsed) {
+  return res.status(400).json({
+    error: parsed.error.issues[0]?.message || 'Validation failed',
+    details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
+  });
+}

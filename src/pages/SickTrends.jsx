@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getLoggedInUser } from '../lib/api.js';
+import { getLoggedInUser, getCurrentHome, getSchedulingData } from '../lib/api.js';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -31,11 +31,35 @@ function getDatesInRange(start, end) {
   return dates;
 }
 
-export default function SickTrends({ data }) {
+export default function SickTrends() {
   const isAdmin = getLoggedInUser()?.role === 'admin';
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    // SickTrends shows 6 months back — request wider override window
+    const now = new Date();
+    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+    getSchedulingData(homeSlug, { from, to })
+      .then(setSchedData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading sick trend data...</div>;
+  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+
+  return <SickTrendsInner schedData={schedData} isAdmin={isAdmin} />;
+}
+
+function SickTrendsInner({ schedData, isAdmin }) {
+  const config = schedData.config;
   const MONTHS_BACK = 6;
   const months = useMemo(() => getMonthRange(MONTHS_BACK), []);
-  const activeStaff = useMemo(() => data.staff.filter(s => s.active !== false && isCareRole(s.role)), [data.staff]);
+  const activeStaff = useMemo(() => schedData.staff.filter(s => s.active !== false && isCareRole(s.role)), [schedData.staff]);
   const [filterStaff, setFilterStaff] = useState('All');
   const [filterMonth, setFilterMonth] = useState('All');
 
@@ -53,7 +77,7 @@ export default function SickTrends({ data }) {
       const monthDetails = months.map(m => {
         const sickDates = [];
         m.dates.forEach(date => {
-          const actual = getActualShift(s, date, data.overrides, data.config.cycle_start_date);
+          const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date);
           if (actual.shift === 'SICK') {
             sickDates.push({
               date: formatDate(date),
@@ -72,7 +96,7 @@ export default function SickTrends({ data }) {
       const trend = secondHalf > firstHalf + 0.5 ? 'worsening' : secondHalf < firstHalf - 0.5 ? 'improving' : 'stable';
       return { ...s, monthCounts, monthDetails, total, trend };
     }).sort((a, b) => b.total - a.total);
-  }, [activeStaff, months, data.overrides, data.config.cycle_start_date]);
+  }, [activeStaff, months, schedData.overrides, config.cycle_start_date]);
 
   // Totals per month
   const monthTotals = useMemo(() => {
@@ -142,7 +166,7 @@ export default function SickTrends({ data }) {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Sick Trend Analytics</h1>
+        <h1 className="text-xl font-bold">{config.home_name} — Sick Trend Analytics</h1>
         <p className="text-xs text-gray-500">Last {MONTHS_BACK} months | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
@@ -161,7 +185,7 @@ export default function SickTrends({ data }) {
             const logRows = sickLog.map(e => [
               e.date, e.dayOfWeek, isAdmin ? e.staffName : staffLabel({ id: e.staffId }), e.team, e.role, e.reason || '',
             ]);
-            downloadXLSX(`sick_trends_${data.config.home_name}`, [
+            downloadXLSX(`sick_trends_${config.home_name}`, [
               { name: 'Monthly Summary', headers: summaryHeaders, rows: summaryRows },
               { name: 'Sick Log', headers: logHeaders, rows: logRows },
             ]);

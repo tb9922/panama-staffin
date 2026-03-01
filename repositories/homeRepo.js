@@ -28,6 +28,19 @@ export async function findBySlug(slug) {
 }
 
 /**
+ * Lock + fetch a home row within a transaction (SELECT ... FOR UPDATE).
+ * The second concurrent save blocks until the first commits, then sees
+ * the new updated_at and correctly 409s via optimistic locking.
+ */
+export async function findBySlugForUpdate(slug, client) {
+  const { rows } = await client.query(
+    'SELECT * FROM homes WHERE slug = $1 FOR UPDATE',
+    [slug]
+  );
+  return rows[0] || null;
+}
+
+/**
  * List all homes with config metadata for the homes list endpoint.
  * Returns [{id, slug, name, beds, type}]
  */
@@ -40,6 +53,21 @@ export async function listAll() {
     name: r.config?.home_name || r.name,
     beds: r.config?.registered_beds,
     type: r.config?.care_type,
+  }));
+}
+
+/**
+ * List all homes with integer IDs for user access management.
+ * Returns [{id (integer PK), name}]
+ */
+export async function listAllWithIds() {
+  const { rows } = await pool.query(
+    'SELECT id, slug, name, config FROM homes ORDER BY name'
+  );
+  return rows.map(r => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.config?.home_name || r.name,
   }));
 }
 

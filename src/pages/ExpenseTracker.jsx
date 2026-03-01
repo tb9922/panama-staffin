@@ -9,7 +9,7 @@ import {
   getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 
-export default function ExpenseTracker({ user: userProp }) {
+export default function ExpenseTracker() {
   const [expenses, setExpenses] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export default function ExpenseTracker({ user: userProp }) {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const home = getCurrentHome();
-  const user = userProp || getLoggedInUser();
+  const user = getLoggedInUser();
   const isAdmin = user?.role === 'admin';
 
   const load = useCallback(async () => {

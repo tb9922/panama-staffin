@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -5,6 +6,7 @@ import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -31,10 +33,11 @@ const maintenanceUpdateSchema = maintenanceBodySchema.partial();
 // GET /api/maintenance?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const checksResult = await maintenanceRepo.findByHome(req.home.id);
+    const pg = paginationSchema.parse(req.query);
+    const checksResult = await maintenanceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const checks = checksResult.rows;
     const maintenanceCategories = req.home.config?.maintenance_categories || [];
-    res.json({ checks, maintenanceCategories });
+    res.json({ checks, maintenanceCategories, _total: checksResult.total });
   } catch (err) { next(err); }
 });
 
@@ -42,7 +45,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = maintenanceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const check = await maintenanceRepo.upsert(req.home.id, parsed.data);
     await auditService.log('maintenance_create', req.home.slug, req.user.username, { id: check?.id });
     res.status(201).json(check);
@@ -55,7 +58,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = maintenanceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = Object.fromEntries(
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)

@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -5,6 +6,7 @@ import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -24,8 +26,9 @@ const evidenceUpdateSchema = evidenceBodySchema.partial();
 // GET /api/cqc-evidence?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id);
-    res.json({ evidence: evidenceResult.rows });
+    const pg = paginationSchema.parse(req.query);
+    const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
+    res.json({ evidence: evidenceResult.rows, _total: evidenceResult.total });
   } catch (err) { next(err); }
 });
 
@@ -33,7 +36,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = evidenceBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
     await auditService.log('cqc_evidence_create', req.home.slug, req.user.username, { id: item?.id });
     res.status(201).json(item);
@@ -46,7 +49,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = evidenceUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const existing = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;

@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -5,6 +6,7 @@ import * as whistleblowingRepo from '../repositories/whistleblowingRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -38,7 +40,8 @@ const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial(
 // GET /api/whistleblowing?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const concernsResult = await whistleblowingRepo.findByHome(req.home.id);
+    const pg = paginationSchema.parse(req.query);
+    const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const concerns = concernsResult.rows;
     // Strip raised_by_role from anonymous concerns to prevent de-anonymisation
     const safe = concerns.map(c => {
@@ -48,7 +51,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
       }
       return c;
     });
-    res.json({ concerns: safe });
+    res.json({ concerns: safe, _total: concernsResult.total });
   } catch (err) { next(err); }
 });
 
@@ -56,7 +59,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = concernBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const createData = { ...parsed.data };
     // Strip identifying info when concern is anonymous
     if (createData.anonymous) {
@@ -75,7 +78,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = concernUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const existing = await whistleblowingRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;

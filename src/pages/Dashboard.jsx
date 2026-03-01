@@ -5,7 +5,7 @@ import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib
 import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getLoggedInUser } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 
@@ -48,7 +48,31 @@ function CoverageGauge({ period, cov }) {
   );
 }
 
-export default function Dashboard({ data }) {
+export default function Dashboard() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug)
+      .then(setSchedData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading dashboard...</div>;
+  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+
+  return <DashboardInner schedData={schedData} />;
+}
+
+function DashboardInner({ schedData }) {
+  const config = schedData.config;
+  const staff = schedData.staff;
+  const overrides = schedData.overrides;
+  const training = schedData.training || {};
+
   const isAdmin = useMemo(() => getLoggedInUser()?.role === 'admin', []);
   const navigate = useNavigate();
   // Reactive today — updates at midnight so shift-handover coverage is never stale
@@ -82,18 +106,18 @@ export default function Dashboard({ data }) {
       setSummary(dashSummary);
     });
     return () => { cancelled = true; };
-  }, [data.config?.home_name]);
+  }, []);
 
-  const cycleDates = useMemo(() => getCycleDates(data.config.cycle_start_date, today, 28), [data.config.cycle_start_date, today]);
+  const cycleDates = useMemo(() => getCycleDates(config.cycle_start_date, today, 28), [config.cycle_start_date, today]);
 
   const cycleData = useMemo(() => {
     return cycleDates.map(date => {
-      const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
-      const coverage = getDayCoverageStatus(staffForDay, data.config);
-      const cost = calculateDayCost(staffForDay, data.config);
+      const staffForDay = getStaffForDay(staff, date, overrides, config);
+      const coverage = getDayCoverageStatus(staffForDay, config);
+      const cost = calculateDayCost(staffForDay, config);
       return { date, staffForDay, coverage, cost };
     });
-  }, [data.staff, data.overrides, data.config, cycleDates]);
+  }, [staff, overrides, config, cycleDates]);
 
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);
@@ -127,20 +151,20 @@ export default function Dashboard({ data }) {
       });
     });
 
-    const activeCareStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
+    const activeCareStaff = staff.filter(s => s.active !== false && isCareRole(s.role));
 
     activeCareStaff.forEach((s, idx) => {
-      const fatigue = checkFatigueRisk(s, today, data.overrides, data.config);
+      const fatigue = checkFatigueRisk(s, today, overrides, config);
       const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
       if (fatigue.exceeded) {
-        list.push({ type: 'error', msg: `${label}: ${fatigue.consecutive} consecutive days (max ${data.config.max_consecutive_days})` });
+        list.push({ type: 'error', msg: `${label}: ${fatigue.consecutive} consecutive days (max ${config.max_consecutive_days})` });
       } else if (fatigue.atRisk) {
         list.push({ type: 'warning', msg: `${label}: ${fatigue.consecutive} consecutive days — at limit` });
       }
     });
 
     // NMW compliance check
-    const nlwRate = data.config.nlw_rate || 12.21;
+    const nlwRate = config.nlw_rate || 12.21;
     activeCareStaff.forEach((s, idx) => {
       if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
@@ -150,7 +174,7 @@ export default function Dashboard({ data }) {
 
     // AL accrual overbooked check
     activeCareStaff.forEach((s, idx) => {
-      const acc = calculateAccrual(s, data.config, data.overrides, today);
+      const acc = calculateAccrual(s, config, overrides, today);
       if (acc.remaining < 0) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
         list.push({ type: 'warning', msg: `${label}: ${Math.abs(acc.remaining).toFixed(1)} AL days over earned balance` });
@@ -175,21 +199,21 @@ export default function Dashboard({ data }) {
     getFinanceAlertsForDashboard(financeAlerts).forEach(a => list.push(a));
 
     return list.slice(0, 24);
-  }, [cycleData, data.staff, data.overrides, data.config, hrData, financeAlerts, summary, isAdmin, today]);
+  }, [cycleData, staff, overrides, config, hrData, financeAlerts, summary, isAdmin, today]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
-        <h1 className="text-xl font-bold">{data.config.home_name} — Dashboard</h1>
+        <h1 className="text-xl font-bold">{config.home_name} — Dashboard</h1>
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl p-5 mb-6 flex items-center justify-between shadow-lg shadow-blue-900/20">
         <div>
-          <h1 className="text-xl font-bold">{data.config.home_name}</h1>
-          <p className="text-blue-200 text-sm">{data.config.registered_beds} beds — {data.config.care_type}</p>
+          <h1 className="text-xl font-bold">{config.home_name}</h1>
+          <p className="text-blue-200 text-sm">{config.registered_beds} beds — {config.care_type}</p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold">{today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
@@ -234,7 +258,7 @@ export default function Dashboard({ data }) {
               ['Annual Leave', al.length, al.length > 0 ? 'text-yellow-600' : 'text-gray-400', 'border-l-yellow-500'],
               ['Float Deployed', floatDeployed.length, floatDeployed.length > 0 ? 'text-orange-600' : 'text-gray-400', 'border-l-orange-500'],
               ['Agency', agencyToday.length, agencyToday.length > 0 ? 'text-red-600' : 'text-gray-400', 'border-l-pink-500'],
-              ['Total Staff', data.staff.filter(s => s.active !== false).length, 'text-gray-700', 'border-l-blue-500'],
+              ['Total Staff', staff.filter(s => s.active !== false).length, 'text-gray-700', 'border-l-blue-500'],
             ].map(([label, count, color, accent]) => (
               <div key={label} className={`border rounded-xl p-3 text-center border-l-4 ${accent}`}>
                 <div className={`text-2xl font-bold ${color}`}>{count}</div>
@@ -267,7 +291,7 @@ export default function Dashboard({ data }) {
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="text-gray-600 text-sm">Agency %:</span>
-              <span className={agencyPct <= (data.config.agency_target_pct || 0.05) * 100 ? BADGE.green : BADGE.red}>
+              <span className={agencyPct <= (config.agency_target_pct || 0.05) * 100 ? BADGE.green : BADGE.red}>
                 {agencyPct.toFixed(1)}%
               </span>
             </div>
@@ -310,9 +334,9 @@ export default function Dashboard({ data }) {
 
         {/* Training Compliance */}
         {(() => {
-          const trainingTypes = getTrainingTypes(data.config);
-          const activeStaff = data.staff.filter(s => s.active !== false);
-          const matrix = buildComplianceMatrix(activeStaff, trainingTypes, data.training || {}, today);
+          const trainingTypes = getTrainingTypes(config);
+          const activeStaff = staff.filter(s => s.active !== false);
+          const matrix = buildComplianceMatrix(activeStaff, trainingTypes, training, today);
           const stats = getComplianceStats(matrix);
           const pctColor = stats.compliancePct >= 90 ? 'text-emerald-600' : stats.compliancePct >= 70 ? 'text-amber-600' : 'text-red-600';
           return (

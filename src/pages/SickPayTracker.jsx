@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome } from '../lib/api.js';
+import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
 const EMPTY_CREATE = {
@@ -23,10 +23,11 @@ function needsFitNote(period) {
   return daysOpen(period.start_date, period.end_date) >= 7;
 }
 
-export default function SickPayTracker({ data, user }) {
+export default function SickPayTracker() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
 
+  const [schedData, setSchedData] = useState(null);
   const [periods, setPeriods]     = useState([]);
   const [sspConfig, setSSPConfig] = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -38,9 +39,14 @@ export default function SickPayTracker({ data, user }) {
   const [updateForm, setUpdateForm] = useState(EMPTY_UPDATE);
   const [staffFilter, setStaffFilter] = useState('');
 
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
+
   const staffMap = {};
-  (data?.staff || []).forEach(s => { staffMap[s.id] = s; });
-  const _activeStaff = (data?.staff || []).filter(s => s.active !== false);
+  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

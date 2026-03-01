@@ -95,11 +95,11 @@ const shiftSchema = z.enum(VALID_SHIFTS);
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    // Rolling ±90-day window to avoid loading unbounded override history
+    // Default ±90-day rolling window; callers may widen with ?from=&to= query params.
     const now = new Date();
-    const fromDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90))
+    const fromDate = req.query.from || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90))
       .toISOString().slice(0, 10);
-    const toDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90))
+    const toDate = req.query.to || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90))
       .toISOString().slice(0, 10);
 
     const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([

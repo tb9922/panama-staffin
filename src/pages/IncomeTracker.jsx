@@ -3,7 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
-  recordFinancePayment,
+  recordFinancePayment, getLoggedInUser,
 } from '../lib/api.js';
 import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
@@ -15,8 +15,8 @@ const TABS = [
   { id: 'invoices', label: 'Invoices' },
 ];
 
-export default function IncomeTracker({ user }) {
-  const isAdmin = user?.role === 'admin';
+export default function IncomeTracker() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [tab, setTab] = useState('residents');
   const home = getCurrentHome();
 

@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -87,10 +89,11 @@ const fireDrillSchema = z.object({
 // GET /api/training?home=X — one-shot load for TrainingMatrix
 router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
+    const pg = paginationSchema.parse(req.query);
     const [trainingResult, supervisionsResult, appraisalsResult, fireDrills, staffResult] = await Promise.all([
-      trainingRepo.findByHome(req.home.id),
-      supervisionRepo.findByHome(req.home.id),
-      appraisalRepo.findByHome(req.home.id),
+      trainingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      supervisionRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
+      appraisalRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       fireDrillRepo.findByHome(req.home.id),
       staffRepo.findByHome(req.home.id),
     ]);
@@ -112,7 +115,7 @@ router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, n
 router.put('/config/types', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = trainingTypesArraySchema.safeParse(req.body?.trainingTypes);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const updatedConfig = { ...req.home.config, training_types: parsed.data };
     const { updateConfig } = await import('../repositories/homeRepo.js');
     await updateConfig(req.home.id, updatedConfig);
@@ -125,7 +128,7 @@ router.put('/config/types', requireAuth, requireAdmin, requireHomeAccess, async 
 router.post('/supervisions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = supervisionSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `sup-${randomUUID()}` };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -139,7 +142,7 @@ router.put('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess, as
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = supervisionSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -163,7 +166,7 @@ router.delete('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess,
 router.post('/appraisals', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = appraisalSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `apr-${randomUUID()}` };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
@@ -177,7 +180,7 @@ router.put('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = appraisalSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -201,7 +204,7 @@ router.delete('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, a
 router.post('/fire-drills', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = fireDrillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `fd-${randomUUID()}` };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_create', req.home.slug, req.user.username, { id: record.id });
@@ -215,7 +218,7 @@ router.put('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, asy
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = fireDrillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });
@@ -244,7 +247,7 @@ router.put('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, as
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);
     if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
     const parsed = trainingRecordSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const record = await trainingRepo.upsertRecord(req.home.id, staffParsed.data, typeParsed.data, parsed.data);
     await auditService.log('training_record_upsert', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
     res.json(record);

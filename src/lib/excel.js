@@ -1,3 +1,11 @@
+// Guard against Excel formula injection — strings starting with =, +, -, @, \t, \r
+// are interpreted as formulas by Excel. Prefix with a single quote to force text.
+function sanitizeCell(value) {
+  if (typeof value !== 'string') return value;
+  if (/^[=+\-@\t\r]/.test(value)) return "'" + value;
+  return value;
+}
+
 /**
  * Download one or more sheets as an .xlsx file.
  * @param {string} filename - e.g. 'costs_June_2025.xlsx'
@@ -8,8 +16,8 @@ export async function downloadXLSX(filename, sheets) {
   const wb = new ExcelJS.Workbook();
   sheets.forEach(({ name, headers, rows }) => {
     const ws = wb.addWorksheet(name.slice(0, 31)); // Excel sheet name max 31 chars
-    ws.addRow(headers);
-    rows.forEach(row => ws.addRow(row));
+    ws.addRow(headers.map(sanitizeCell));
+    rows.forEach(row => ws.addRow(row.map(sanitizeCell)));
   });
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

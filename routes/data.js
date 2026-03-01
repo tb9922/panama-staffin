@@ -59,21 +59,6 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
 
     const homeSlug = req.home.slug;
 
-    // Optimistic locking — detect concurrent saves before writing
-    // Client sends _clientUpdatedAt (the server timestamp from when it last loaded data).
-    // If the DB timestamp has moved on, someone else saved in the meantime — return 409.
-    const clientUpdatedAt = body._clientUpdatedAt;
-    if (clientUpdatedAt && req.home.updated_at) {
-      const serverUpdatedAt = req.home.updated_at.toISOString();
-      if (serverUpdatedAt !== clientUpdatedAt) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'This home was modified by someone else since you last loaded it.',
-          serverUpdatedAt,
-        });
-      }
-    }
-
     // Block save on data-corruption issues
     const criticalErrors = detectCriticalErrors(body);
     if (criticalErrors.length > 0) {
@@ -81,7 +66,10 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, asyn
     }
 
     const username = req.user?.username || 'unknown';
-    const result = await homeService.saveData(homeSlug, body, username);
+    // Optimistic locking + row-level lock handled inside saveData's transaction.
+    // SELECT ... FOR UPDATE serialises concurrent saves per home.
+    const clientUpdatedAt = body._clientUpdatedAt || null;
+    const result = await homeService.saveData(homeSlug, body, username, clientUpdatedAt);
 
     // Respond immediately — validation is informational and doesn't block the save.
     // Run validateAll() fire-and-forget so the 17 domain validators don't add

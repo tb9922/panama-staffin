@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getTaxCodes, upsertTaxCode, getCurrentHome } from '../lib/api.js';
+import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
@@ -19,10 +19,11 @@ function fmt(n) {
   return `£${parseFloat(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function TaxCodeManager({ data, user }) {
+export default function TaxCodeManager() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = getLoggedInUser()?.role === 'admin';
 
+  const [schedData, setSchedData] = useState(null);
   const [codes, setCodes]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -31,10 +32,16 @@ export default function TaxCodeManager({ data, user }) {
   const [form, setForm]         = useState(EMPTY_FORM);
   const [editStaffId, setEditStaffId] = useState(null); // null = new, else = editing
 
-  const staffMap = {};
-  (data?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getSchedulingData(h).then(setSchedData).catch(() => {});
+  }, []);
 
-  const activeStaff = (data?.staff || []).filter(s => s.active !== false);
+  const staffMap = {};
+  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
+
+  const activeStaff = (schedData?.staff || []).filter(s => s.active !== false);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

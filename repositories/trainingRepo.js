@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 /**
  * Return all training records for a home, shaped as:
@@ -19,8 +19,8 @@ export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
   for (const row of rows) {
     if (!result[row.staff_id]) result[row.staff_id] = {};
     result[row.staff_id][row.training_type_id] = {
-      completed: row.completed ? row.completed.toISOString().slice(0, 10) : null,
-      expiry:    row.expiry    ? row.expiry.toISOString().slice(0, 10)    : null,
+      completed: toDateStr(row.completed),
+      expiry:    toDateStr(row.expiry),
       trainer:   row.trainer   ?? undefined,
       method:    row.method    ?? undefined,
       certificate_ref: row.certificate_ref ?? undefined,
@@ -92,8 +92,8 @@ export async function upsertRecord(homeId, staffId, typeId, record) {
   );
   const r = rows[0];
   return {
-    completed: r.completed ? r.completed.toISOString().slice(0, 10) : null,
-    expiry:    r.expiry    ? r.expiry.toISOString().slice(0, 10)    : null,
+    completed: toDateStr(r.completed),
+    expiry:    toDateStr(r.expiry),
     trainer:   r.trainer   ?? undefined,
     method:    r.method    ?? undefined,
     certificate_ref: r.certificate_ref ?? undefined,

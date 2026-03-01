@@ -1,0 +1,55 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getStaffForDay, parseDate } from '../lib/rotation.js';
+import { getDayCoverageStatus } from '../lib/escalation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
+import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+
+export default function CoverageAlertBanner() {
+  const navigate = useNavigate();
+  const today = useLiveDate();
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setData).catch(() => {});
+  }, [today]);
+
+  const todayCoverage = useMemo(() => {
+    if (!data) return null;
+    const staffForDay = getStaffForDay(data.staff, parseDate(today), data.overrides, data.config);
+    return getDayCoverageStatus(staffForDay, data.config);
+  }, [data, today]);
+
+  if (!todayCoverage || todayCoverage.overallLevel < 3) return null;
+
+  const isCritical = todayCoverage.overallLevel >= 4;
+  return (
+    <div className={`px-4 py-2.5 text-sm flex items-center justify-between print:hidden ${
+      isCritical ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+    }`}>
+      <div className="flex items-center gap-2">
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isCritical
+            ? 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z'
+            : 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+          } />
+        </svg>
+        <span className="font-semibold">
+          {isCritical ? 'CRITICAL' : 'ALERT'}:
+        </span>
+        <span>Today's coverage is at {
+          todayCoverage.overallLevel >= 5 ? 'UNSAFE' :
+          todayCoverage.overallLevel >= 4 ? 'SHORT-STAFFED' : 'Agency Required'
+        } level</span>
+        {['early', 'late', 'night'].map(p => {
+          const esc = todayCoverage[p]?.escalation;
+          if (!esc || esc.level < 3) return null;
+          return <span key={p} className="px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-medium capitalize">{p}: {esc.label}</span>;
+        })}
+      </div>
+      <button onClick={() => navigate(`/day/${today}`)} className="text-xs font-medium underline hover:no-underline">View Details</button>
+    </div>
+  );
+}

@@ -35,7 +35,12 @@ echo "[$(date --iso-8601=seconds)] Starting backup: ${FILENAME}"
 
 # ── Dump ──────────────────────────────────────────────────────────────────────
 
-PGPASSWORD="${DB_PASSWORD}" pg_dump \
+export PGPASSFILE="$(mktemp)"
+echo "${DB_HOST}:${DB_PORT}:${DB_NAME}:${DB_USER}:${DB_PASSWORD}" > "$PGPASSFILE"
+chmod 600 "$PGPASSFILE"
+trap 'rm -f "$PGPASSFILE"' EXIT
+
+pg_dump \
   -h "${DB_HOST}" \
   -p "${DB_PORT}" \
   -U "${DB_USER}" \

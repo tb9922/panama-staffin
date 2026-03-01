@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
-import { getCurrentHome, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
+import { getCurrentHome, getLoggedInUser, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 
-export default function PayablesManager({ user }) {
-  const isAdmin = user?.role === 'admin';
+export default function PayablesManager() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [schedules, setSchedules] = useState([]);
   const [_total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

@@ -6,7 +6,10 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getCqcEvidence, createCqcEvidence,
+  getCurrentHome, getSchedulingData, getTrainingData,
+  getIncidents, getComplaints, getMaintenance, getIpcAudits,
+  getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
+  getCqcEvidence, createCqcEvidence,
   deleteCqcEvidence, getLoggedInUser,
 } from '../lib/api.js';
 import {
@@ -40,8 +43,64 @@ function metricColor(value, lowerIsBetter) {
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
 }
 
-// Hybrid: keeps data prop for score computation; evidence CRUD goes through API
-export default function CQCEvidence({ data }) {
+export default function CQCEvidence() {
+  const [moduleData, setModuleData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    // CQC scoring needs up to 365 days of overrides for the 1-year view
+    const now = new Date();
+    const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
+      .toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7))
+      .toISOString().slice(0, 10);
+
+    Promise.all([
+      getSchedulingData(homeSlug, { from, to }),
+      getTrainingData(homeSlug),
+      getIncidents(homeSlug).catch(() => ({ incidents: [] })),
+      getComplaints(homeSlug).catch(() => ({ complaints: [], surveys: [] })),
+      getMaintenance(homeSlug).catch(() => ({ checks: [] })),
+      getIpcAudits(homeSlug).catch(() => ({ audits: [] })),
+      getRisks(homeSlug).catch(() => ({ risks: [] })),
+      getPolicies(homeSlug).catch(() => ({ policies: [] })),
+      getWhistleblowingConcerns(homeSlug).catch(() => ({ concerns: [] })),
+      getDols(homeSlug).catch(() => ({ dols: [], mcaAssessments: [] })),
+      getCareCertData(homeSlug).catch(() => ({ careCert: {} })),
+    ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
+      setModuleData({
+        config: sched.config,
+        staff: sched.staff,
+        overrides: sched.overrides,
+        training: train.training || sched.training || {},
+        supervisions: train.supervisions || {},
+        appraisals: train.appraisals || {},
+        fire_drills: train.fireDrills || [],
+        incidents: inc.incidents || [],
+        complaints: comp.complaints || [],
+        complaint_surveys: comp.surveys || [],
+        maintenance: maint.checks || [],
+        ipc_audits: ipc.audits || [],
+        risk_register: risks.risks || [],
+        policy_reviews: pol.policies || [],
+        whistleblowing_concerns: wb.concerns || [],
+        dols: dols.dols || [],
+        mca_assessments: dols.mcaAssessments || [],
+        care_certificate: cc.careCert || {},
+      });
+    }).catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading CQC data...</div>;
+  if (!moduleData) return <div className="p-6 text-red-600">Failed to load CQC data</div>;
+
+  return <CQCEvidenceInner data={moduleData} />;
+}
+
+function CQCEvidenceInner({ data }) {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);

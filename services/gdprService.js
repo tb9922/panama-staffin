@@ -36,12 +36,11 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
          JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
          WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM ssp_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+      conn.query(`SELECT * FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
       conn.query(
         `SELECT pc.* FROM pension_contributions pc
-         JOIN pension_enrolments pe ON pe.id = pc.enrolment_id
-         WHERE pe.home_id = $1 AND pe.staff_id = $2`, [homeId, subjectId]),
+         WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
       conn.query(`SELECT * FROM access_log WHERE user_name = (
         SELECT name FROM staff WHERE home_id = $1 AND id = $2
       ) ORDER BY ts DESC LIMIT 500`, [homeId, subjectId]),
@@ -118,7 +117,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         timesheet_entries: timesheets.rows,
         payroll_lines: payrollLines.rows,
         tax_codes: taxCodes.rows,
-        ssp_periods: sspPeriods.rows,
+        sick_periods: sspPeriods.rows,
         pension_enrolment: pensionEnrolment.rows,
         pension_contributions: pensionContributions.rows,
         access_log: accessLog.rows,
@@ -239,7 +238,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
 
     // Clear SSP period notes (special category health data)
     await client.query(
-      `UPDATE ssp_periods SET notes = NULL WHERE home_id = $1 AND staff_id = $2`,
+      `UPDATE sick_periods SET notes = NULL WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
 
@@ -383,7 +382,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
-    // - ssp_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
+    // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
     // - shift_overrides: operational scheduling data, no PII beyond staff_id
     // - hr_contracts, hr_family_leave, hr_flexible_working: retained per Limitation Act (6 years)
@@ -413,7 +412,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
  */
 // Tables allowed in retention scan queries — prevents SQL injection via applies_to_table
 const RETENTION_ALLOWED_TABLES = new Set([
-  'staff', 'ssp_periods', 'training_records', 'onboarding', 'payroll_runs',
+  'staff', 'sick_periods', 'training_records', 'onboarding', 'payroll_runs',
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
   'retention_schedule',
@@ -429,6 +428,9 @@ const GLOBAL_TABLES = new Set(['retention_schedule', 'access_log', 'audit_log'])
 // Tables that use 'ts' instead of 'created_at' for date column
 const TS_TABLES = new Set(['access_log', 'audit_log']);
 
+// Tables that use 'updated_at' instead of 'created_at'
+const UPDATED_AT_TABLES = new Set(['onboarding', 'pension_enrolments']);
+
 export async function scanRetention(homeId) {
   const schedule = await gdprRepo.getRetentionSchedule();
 
@@ -439,7 +441,7 @@ export async function scanRetention(homeId) {
 
     const table = rule.applies_to_table;
     const isGlobal = GLOBAL_TABLES.has(table);
-    const dateCol = TS_TABLES.has(table) ? 'ts' : 'created_at';
+    const dateCol = TS_TABLES.has(table) ? 'ts' : UPDATED_AT_TABLES.has(table) ? 'updated_at' : 'created_at';
     let count = 0;
     let expiredCount = 0;
 

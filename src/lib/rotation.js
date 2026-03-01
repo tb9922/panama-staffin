@@ -47,7 +47,8 @@ export const SHIFT_COLORS = {
   'BH-N': 'bg-pink-100 text-pink-700 border border-pink-200',
 };
 
-// Date utilities
+// Date utilities — use local-time getters so both local-midnight and UTC-midnight
+// Date objects resolve to the correct calendar day in UK timezones (GMT/BST).
 export function formatDate(date) {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -58,7 +59,7 @@ export function formatDate(date) {
 
 export function parseDate(str) {
   const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 export function addDays(date, days) {

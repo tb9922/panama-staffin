@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -5,6 +6,7 @@ import * as riskRepo from '../repositories/riskRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -42,8 +44,9 @@ const riskUpdateSchema = riskBodySchema.partial();
 // GET /api/risk-register?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const risksResult = await riskRepo.findByHome(req.home.id);
-    res.json({ risks: risksResult.rows });
+    const pg = paginationSchema.parse(req.query);
+    const risksResult = await riskRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
+    res.json({ risks: risksResult.rows, _total: risksResult.total });
   } catch (err) { next(err); }
 });
 
@@ -51,7 +54,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = riskBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const risk = await riskRepo.upsert(req.home.id, parsed.data);
     await auditService.log('risk_create', req.home.slug, req.user.username, { id: risk?.id });
     res.status(201).json(risk);
@@ -64,7 +67,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = riskUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const existing = await riskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;

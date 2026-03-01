@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -5,6 +6,7 @@ import * as ipcRepo from '../repositories/ipcRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
 router.use(writeRateLimiter);
@@ -46,10 +48,11 @@ const ipcUpdateSchema = ipcBodySchema.partial();
 // GET /api/ipc?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const auditsResult = await ipcRepo.findByHome(req.home.id);
+    const pg = paginationSchema.parse(req.query);
+    const auditsResult = await ipcRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const audits = auditsResult.rows;
     const auditTypes = req.home.config?.ipc_audit_types || [];
-    res.json({ audits, auditTypes });
+    res.json({ audits, auditTypes, _total: auditsResult.total });
   } catch (err) { next(err); }
 });
 
@@ -57,7 +60,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = ipcBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const audit = await ipcRepo.upsert(req.home.id, parsed.data);
     await auditService.log('ipc_create', req.home.slug, req.user.username, { id: audit?.id });
     res.status(201).json(audit);
@@ -70,7 +73,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = ipcUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     // Only send fields that were actually provided in the request body
     const updates = Object.fromEntries(
       Object.entries(parsed.data).filter(([_, v]) => v !== undefined)

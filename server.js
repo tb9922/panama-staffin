@@ -38,8 +38,12 @@ import careCertRouter from './routes/careCert.js';
 import onboardingRouter from './routes/onboarding.js';
 import staffRouter from './routes/staff.js';
 import schedulingRouter from './routes/scheduling.js';
+import usersRouter from './routes/users.js';
+import bedsRouter from './routes/beds.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
+import { ensureSeedUsers } from './services/userService.js';
+import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
 
 const app = express();
 
@@ -51,7 +55,10 @@ if (config.nodeEnv === 'production') {
 
 // ── Security middleware ───────────────────────────────────────────────────────
 
-app.use(helmet());
+app.use(helmet({
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  contentSecurityPolicy: false,  // CSP handled by nginx in production
+}));
 app.use(cors({ origin: config.allowedOrigin }));
 app.use(express.json({ limit: config.requestBodyLimit }));
 
@@ -99,16 +106,22 @@ app.use('/api/care-cert', careCertRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/scheduling', schedulingRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/beds', bedsRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
-  try { await pool.query('SELECT 1'); dbOk = true; } catch { /* no-op */ }
-  const status = dbOk ? 200 : 503;
-  res.status(status).json({
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    dbOk = true;
+  } catch { /* no-op */ }
+  res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',
-    uptime: Math.round(process.uptime()),
   });
 });
 
@@ -144,20 +157,39 @@ app.use((err, req, res, next) => {
 
 // ── Server startup ────────────────────────────────────────────────────────────
 
-const server = app.listen(config.port, async () => {
+// Export app for testing (supertest)
+export { app };
+
+// Only listen when run directly (not when imported by tests)
+const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+const server = isMainModule ? app.listen(config.port, async () => {
+  // Request + connection timeouts
+  server.setTimeout(30000);        // 30s max request duration
+  server.keepAliveTimeout = 65000; // slightly above typical LB idle (60s)
+  server.headersTimeout = 66000;   // must exceed keepAliveTimeout
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(() => {});
+  // Seed database users from env vars on first run (non-fatal)
+  await ensureSeedUsers().catch(err =>
+    logger.warn({ err: err?.message }, 'User seeding skipped')
+  );
   // Prune expired deny-list entries daily
   setInterval(
     () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
     24 * 60 * 60 * 1000
   ).unref();
-});
+  // Purge audit entries past 7-year retention daily
+  setInterval(
+    () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
+    24 * 60 * 60 * 1000
+  ).unref();
+}) : null;
 
 // Graceful shutdown — drain in-flight requests then close DB pool
 function shutdown(signal) {
   logger.info({ signal }, 'shutdown signal received');
+  if (!server) { process.exit(0); return; }
   server.close(async () => {
     logger.info('HTTP server closed');
     await pool.end();

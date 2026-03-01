@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
@@ -8,16 +8,16 @@ function shapeRow(row) {
     home_id: row.home_id,
     tax_year: row.tax_year,
     tax_month: row.tax_month,
-    period_start: row.period_start ? row.period_start.toISOString().slice(0, 10) : null,
-    period_end: row.period_end ? row.period_end.toISOString().slice(0, 10) : null,
+    period_start: toDateStr(row.period_start),
+    period_end: toDateStr(row.period_end),
     total_paye: f(row.total_paye),
     total_employee_ni: f(row.total_employee_ni),
     total_employer_ni: f(row.total_employer_ni),
     employment_allowance_offset: f(row.employment_allowance_offset),
     total_due: f(row.total_due),
-    payment_due_date: row.payment_due_date ? row.payment_due_date.toISOString().slice(0, 10) : null,
+    payment_due_date: toDateStr(row.payment_due_date),
     status: row.status,
-    paid_date: row.paid_date ? row.paid_date.toISOString().slice(0, 10) : null,
+    paid_date: toDateStr(row.paid_date),
     paid_reference: row.paid_reference || null,
     created_at: row.created_at,
     updated_at: row.updated_at,

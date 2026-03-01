@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
-import { getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 
 function getMonday(date) {
   const d = new Date(date);
@@ -11,7 +11,27 @@ function getMonday(date) {
   return d;
 }
 
-export default function Reports({ data }) {
+export default function Reports() {
+  const [schedData, setSchedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const homeSlug = getCurrentHome();
+    if (!homeSlug) return;
+    // Cost report may need a full month of overrides; default ±90 day window is sufficient
+    getSchedulingData(homeSlug)
+      .then(setSchedData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading report data...</div>;
+  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+
+  return <ReportsInner data={schedData} />;
+}
+
+function ReportsInner({ data }) {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [generating, setGenerating] = useState(null);
   const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));

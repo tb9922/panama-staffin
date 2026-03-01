@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -40,7 +41,7 @@ const staffUpdateSchema = staffBodySchema.partial();
 router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = staffBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const staff = await staffRepo.upsertOne(req.home.id, parsed.data);
     await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: parsed.data.id });
     res.status(201).json(staff);
@@ -53,7 +54,7 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
     const parsed = staffUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;

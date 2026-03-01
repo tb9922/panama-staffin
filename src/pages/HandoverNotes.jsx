@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
-import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry } from '../lib/api.js';
+import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getLoggedInUser, getIncidents } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 
@@ -25,13 +25,10 @@ const PRIORITIES = [
 
 const EMPTY_FORM = { shift: 'E', category: 'clinical', priority: 'info', content: '', incident_id: '' };
 
-function homeSlug(data) {
-  return data?.config?.home_name?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
-}
-
-export default function HandoverNotes({ data, user }) {
+export default function HandoverNotes() {
   const [dateStr, setDateStr]     = useState(formatDate(new Date()));
   const [entries, setEntries]     = useState([]);
+  const [incidents, setIncidents] = useState([]);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
   const [modal, setModal]         = useState(null);   // null | 'add' | 'edit'
@@ -40,8 +37,8 @@ export default function HandoverNotes({ data, user }) {
   const [editId, setEditId]       = useState(null);
   const [saving, setSaving]       = useState(false);
 
-  const isAdmin = user?.role === 'admin';
-  const slug = homeSlug(data);
+  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const slug = getCurrentHome();
   const todayStr = formatDate(new Date());
 
   useEffect(() => {
@@ -54,6 +51,12 @@ export default function HandoverNotes({ data, user }) {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [slug, dateStr]);
+
+  useEffect(() => {
+    const h = getCurrentHome();
+    if (!h) return;
+    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(() => {});
+  }, []);
 
   function goDay(delta) {
     setDateStr(formatDate(addDays(parseDate(dateStr), delta)));
@@ -139,11 +142,11 @@ export default function HandoverNotes({ data, user }) {
   }
 
   // Display helpers
-  const incidentMap = Object.fromEntries((data?.incidents || []).map(i => [i.id, i]));
+  const incidentMap = Object.fromEntries(incidents.map(i => [i.id, i]));
   const dateObj = parseDate(dateStr);
   const displayDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-  const todayIncidents = (data?.incidents || []).filter(i => i.date === dateStr);
+  const todayIncidents = incidents.filter(i => i.date === dateStr);
 
   return (
     <div className={PAGE.container}>
