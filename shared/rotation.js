@@ -209,6 +209,7 @@ export function getStaffForDay(staff, date, overrides, config) {
       sleep_in: actual.sleep_in || false,
       isOverride: shift !== scheduled,
       replaces_staff_id: actual.replaces_staff_id || null,
+      override_hours: actual.override_hours ?? null,
     });
   }
 
@@ -257,7 +258,17 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
   dates.forEach((date, i) => {
     const actual = getActualShift(staff, date, overrides, config.cycle_start_date);
     const shift = actual.shift;
-    const hours = getShiftHours(shift, config);
+    let hours = getShiftHours(shift, config);
+    // TRN/ADM: on-shift = full scheduled hours, off-day = override_hours or config
+    if (shift === 'TRN' || shift === 'ADM') {
+      const cycleDay = getCycleDay(date, config.cycle_start_date);
+      const scheduled = getScheduledShift(staff, cycleDay, date);
+      if (isWorkingShift(scheduled)) {
+        hours = getShiftHours(scheduled, config);
+      } else {
+        hours = actual.override_hours ?? getShiftHours(shift, config);
+      }
+    }
     // Agency shifts on real staff = agency is working, not this staff member
     if (isWorkingShift(shift) && !isAgencyShift(shift)) {
       totalHours += hours;

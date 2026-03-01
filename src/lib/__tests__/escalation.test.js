@@ -252,4 +252,49 @@ describe('calculateDayCost', () => {
     const cost = calculateDayCost(staff, config);
     expect(cost.base).toBe(260); // 104 + 156
   });
+
+  it('TRN on working day pays full scheduled shift hours', () => {
+    const staff = [
+      { ...makeCarer('S1', 'TRN', 1, 'Day A', 'Carer', 13), scheduledShift: 'E' },
+    ];
+    const cost = calculateDayCost(staff, config);
+    // Scheduled E (8h) × £13 = £104, NOT TRN default hours
+    expect(cost.base).toBe(104);
+  });
+
+  it('TRN on OFF day with override_hours pays actual hours', () => {
+    const staff = [
+      { ...makeCarer('S1', 'TRN', 1, 'Day A', 'Carer', 13), scheduledShift: 'OFF', override_hours: 4 },
+    ];
+    const cost = calculateDayCost(staff, config);
+    // 4h × £13 = £52
+    expect(cost.base).toBe(52);
+  });
+
+  it('TRN on OFF day without override_hours falls back to config hours', () => {
+    const staff = [
+      { ...makeCarer('S1', 'TRN', 1, 'Day A', 'Carer', 13), scheduledShift: 'OFF' },
+    ];
+    const cost = calculateDayCost(staff, config);
+    // No override_hours, no config.shifts.TRN → EL fallback (12h) × £13 = £156
+    expect(cost.base).toBe(156);
+  });
+
+  it('ADM on working day pays full scheduled shift hours', () => {
+    const staff = [
+      { ...makeCarer('S1', 'ADM', 1, 'Day A', 'Carer', 13), scheduledShift: 'EL' },
+    ];
+    const cost = calculateDayCost(staff, config);
+    // Scheduled EL (12h) × £13 = £156
+    expect(cost.base).toBe(156);
+  });
+
+  it('ADM on OFF day with override_hours pays actual hours', () => {
+    const staff = [
+      { ...makeCarer('S1', 'ADM', 1, 'Day A', 'Carer', 13), scheduledShift: 'OFF', override_hours: 3 },
+    ];
+    const cost = calculateDayCost(staff, config);
+    // 3h × £13 = £39
+    expect(cost.base).toBe(39);
+  });
 });

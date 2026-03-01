@@ -9,7 +9,7 @@ import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
-import { getCycleDay, getScheduledShift } from '../shared/rotation.js';
+import { getCycleDay, getScheduledShift, isOTShift, isAgencyShift } from '../shared/rotation.js';
 
 const router = Router();
 
@@ -153,14 +153,26 @@ const overrideBodySchema = z.object({
   reason:   z.string().max(200).optional(),
   source:   z.string().max(30).optional(),
   sleep_in: z.boolean().optional(),
-  replaces_staff_id: z.string().max(40).optional(),
+  replaces_staff_id: z.string().min(1).max(40).optional(),
+  override_hours: z.number().min(0).max(24).optional(),
 });
 
 router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const { date, staffId, shift, reason, source, sleep_in, replaces_staff_id } = parsed.data;
+    const { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours } = parsed.data;
+
+    // Validate replaces_staff_id constraints
+    if (replaces_staff_id) {
+      if (replaces_staff_id === staffId) {
+        return res.status(400).json({ error: 'Staff cannot cover themselves' });
+      }
+      if (!isOTShift(shift) && !isAgencyShift(shift)) {
+        return res.status(400).json({ error: 'Cover link only valid for OC/AG shifts' });
+      }
+    }
+
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
@@ -171,12 +183,15 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHom
           err.isALValidation = true;
           throw err;
         }
-        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id });
+        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id, override_hours });
       });
     } else {
-      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id });
+      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id, override_hours });
     }
-    await auditService.log('override_upsert', req.home.slug, req.user.username, { date, staffId, shift });
+    await auditService.log('override_upsert', req.home.slug, req.user.username, {
+      date, staffId, shift,
+      ...(replaces_staff_id && { replaces_staff_id }),
+    });
     res.json({ ok: true });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
@@ -212,7 +227,8 @@ const bulkBodySchema = z.object({
     reason:   z.string().max(200).optional(),
     source:   z.string().max(30).optional(),
     sleep_in: z.boolean().optional(),
-    replaces_staff_id: z.string().max(40).optional(),
+    replaces_staff_id: z.string().min(1).max(40).optional(),
+    override_hours: z.number().min(0).max(24).optional(),
   })).min(1).max(500),
 });
 
@@ -220,6 +236,18 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireAdmin, requ
   try {
     const parsed = bulkBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+    // Validate replaces_staff_id constraints on all rows before opening DB transaction
+    for (const o of parsed.data.overrides) {
+      if (o.replaces_staff_id) {
+        if (o.replaces_staff_id === o.staffId) {
+          return res.status(400).json({ error: `Staff ${o.staffId} cannot cover themselves on ${o.date}` });
+        }
+        if (!isOTShift(o.shift) && !isAgencyShift(o.shift)) {
+          return res.status(400).json({ error: `Cover link only valid for OC/AG shifts (${o.date} / ${o.staffId})` });
+        }
+      }
+    }
 
     // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
     await withTransaction(async (client) => {

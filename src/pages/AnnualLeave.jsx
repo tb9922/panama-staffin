@@ -107,7 +107,7 @@ export default function AnnualLeave() {
       const dateKey = formatDate(d);
       const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
       const scheduled = getScheduledShift(staff, cycleDay, d);
-      if (scheduled === 'OFF' || scheduled === 'AVL') {
+      if (scheduled === 'OFF') {
         skippedOff++;
         d = addDays(d, 1);
         continue;

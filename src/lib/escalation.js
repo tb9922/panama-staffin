@@ -125,8 +125,17 @@ export function calculateDayCost(staffForDay, config) {
     if (s.sleep_in) sleepIn += config.sleep_in_rate || 0;
     const shift = s.shift;
     if (!isWorkingShift(shift)) return;
-    const hours = getShiftHours(shift, config);
+    let hours = getShiftHours(shift, config);
     const rate = s.hourly_rate || 0;
+
+    // TRN/ADM: on a working day pay full scheduled shift; on OFF day pay override_hours
+    if (shift === 'TRN' || shift === 'ADM') {
+      if (isWorkingShift(s.scheduledShift)) {
+        hours = getShiftHours(s.scheduledShift, config);
+      } else {
+        hours = s.override_hours ?? hours;
+      }
+    }
 
     // Agency shifts use agency rates, not staff rates
     if (isAgencyShift(shift)) {

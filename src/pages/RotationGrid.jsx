@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
-  getScheduledShift, isCareRole,
+  getScheduledShift, isCareRole, isAgencyShift, isOTShift,
   calculateStaffPeriodHours, SHIFT_COLORS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
@@ -16,6 +16,16 @@ import {
   bulkUpsertOverrides,
   revertMonthOverrides,
 } from '../lib/api.js';
+
+/** Resolve staff ID → two-char initials for compact grid display. */
+function getInitials(staffMap, staffId) {
+  const name = staffMap.get(staffId)?.name;
+  if (!name) return '??';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return '??';
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -77,6 +87,7 @@ export default function RotationGrid() {
   const [editing, setEditing] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [bulkModal, setBulkModal] = useState(null);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   const loadData = useCallback(async () => {
     const homeSlug = getCurrentHome();
@@ -111,6 +122,14 @@ export default function RotationGrid() {
     return list;
   }, [schedData, filterTeam]);
 
+  // O(1) lookup for ALL staff — cover arrows need to resolve IDs for staff
+  // on other teams (filtered out), agency virtual staff, or leavers.
+  const staffMap = useMemo(() => {
+    const m = new Map();
+    schedData?.staff?.forEach(s => m.set(s.id, s));
+    return m;
+  }, [schedData?.staff]);
+
   const staffStats = useMemo(() => {
     if (!schedData) return {};
     const map = {};
@@ -119,6 +138,60 @@ export default function RotationGrid() {
     });
     return map;
   }, [activeStaff, monthDates, schedData]);
+
+  // Reverse lookup: given an absent person + date, who covered them?
+  // Array values support split cover (e.g. agency covers Early, Dave covers Late).
+  const coverMap = useMemo(() => {
+    const map = {};
+    if (!schedData?.overrides) return map;
+    for (const [dateStr, dayOverrides] of Object.entries(schedData.overrides)) {
+      for (const [staffId, override] of Object.entries(dayOverrides)) {
+        if (override.replaces_staff_id) {
+          if (!map[dateStr]) map[dateStr] = {};
+          if (!map[dateStr][override.replaces_staff_id]) {
+            map[dateStr][override.replaces_staff_id] = [];
+          }
+          map[dateStr][override.replaces_staff_id].push({
+            coveredBy: staffId,
+            shift: override.shift,
+          });
+        }
+      }
+    }
+    return map;
+  }, [schedData?.overrides]);
+
+  // Per-day absence & cover summaries for the summary rows
+  const daySummaries = useMemo(() => {
+    if (!schedData) return {};
+    const map = {};
+    const staffById = {};
+    schedData.staff.forEach(s => { staffById[s.id] = s; });
+
+    monthDates.forEach(date => {
+      const dateKey = formatDate(date);
+      const staffForDay = getStaffForDay(schedData.staff, date, schedData.overrides, schedData.config);
+      const absences = [];
+      const covers = [];
+
+      staffForDay.forEach(s => {
+        if (s.shift === 'AL' || s.shift === 'SICK') {
+          absences.push({ id: s.id, name: s.name, shift: s.shift });
+        }
+        if (s.replaces_staff_id) {
+          const replaced = staffById[s.replaces_staff_id];
+          covers.push({
+            id: s.id, name: s.name, shift: s.shift,
+            replacesId: s.replaces_staff_id,
+            replacesName: replaced?.name || s.replaces_staff_id,
+          });
+        }
+      });
+
+      map[dateKey] = { absences, covers };
+    });
+    return map;
+  }, [schedData, monthDates]);
 
   // Impact preview
   const impact = useMemo(() => {
@@ -213,13 +286,17 @@ export default function RotationGrid() {
   }, [editing, schedData, monthDates]);
 
   function openEditor(staffId, dateStr) {
-    const actual = schedData.overrides[dateStr]?.[staffId]?.shift;
+    const existingOverride = schedData.overrides[dateStr]?.[staffId];
+    const actual = existingOverride?.shift;
     const staff = schedData.staff.find(s => s.id === staffId);
     const date = parseLocalDate(dateStr);
     const cycleDay = getCycleDay(date, schedData.config.cycle_start_date);
     const scheduled = getScheduledShift(staff, cycleDay, date);
     const currentShift = actual || scheduled;
-    setEditing({ staffId, dateStr, currentShift, proposedShift: currentShift });
+    setEditing({
+      staffId, dateStr, currentShift, proposedShift: currentShift,
+      replacesStaffId: existingOverride?.replaces_staff_id || null,
+    });
   }
 
   async function applyChange() {
@@ -229,12 +306,23 @@ export default function RotationGrid() {
     const date = parseLocalDate(dateStr);
     const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date);
 
+    // Guard: only persist cover link for OC/AG shifts.
+    // Without this, changing from OC-EL → E could save a stale replaces_staff_id
+    // because not all editor mutation paths clear it (e.g. "Revert to Scheduled").
+    const replacesId = editing.replacesStaffId
+      && (isOTShift(proposedShift) || isAgencyShift(proposedShift))
+      ? editing.replacesStaffId : undefined;
+
     setSaving(true);
     try {
       if (proposedShift === scheduled) {
         await deleteOverride(getCurrentHome(), dateStr, staffId);
       } else {
-        await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift: proposedShift, reason: 'Manual edit', source: 'manual' });
+        await upsertOverride(getCurrentHome(), {
+          date: dateStr, staffId, shift: proposedShift,
+          reason: 'Manual edit', source: 'manual',
+          ...(replacesId && { replaces_staff_id: replacesId }),
+        });
       }
       await loadData();
     } catch (e) {
@@ -472,12 +560,36 @@ export default function RotationGrid() {
                         <button
                           onClick={() => openEditor(s.id, dateKey)}
                           disabled={saving}
-                          className={`inline-block w-full px-0.5 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
+                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
                           } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'} disabled:cursor-not-allowed`}
-                          title={`${s.name} — ${shift}${isOverride ? ' (override)' : ''}${schedData.overrides[dateKey]?.[s.id]?.sleep_in ? ' +SI' : ''}\nClick to change`}>
+                          title={[
+                            `${s.name} — ${shift}${isOverride ? ' (override)' : ''}`,
+                            schedData.overrides[dateKey]?.[s.id]?.sleep_in ? '+Sleep In' : '',
+                            actual.replaces_staff_id
+                              ? `Covers: ${staffMap.get(actual.replaces_staff_id)?.name || actual.replaces_staff_id}`
+                              : '',
+                            ...(coverMap[dateKey]?.[s.id]?.map(c =>
+                              `Covered by: ${staffMap.get(c.coveredBy)?.name || '?'} (${c.shift})`
+                            ) || []),
+                            'Click to change',
+                          ].filter(Boolean).join('\n')}>
                           {shift === 'OFF' ? '-' : shift}
                           {schedData.overrides[dateKey]?.[s.id]?.sleep_in && <span className="text-[7px]"> SI</span>}
+                          {actual.replaces_staff_id && (
+                            <span className="text-[7px] block leading-none opacity-70"
+                              aria-label={`covers ${staffMap.get(actual.replaces_staff_id)?.name || 'another staff member'}`}>
+                              →{getInitials(staffMap, actual.replaces_staff_id)}
+                            </span>
+                          )}
+                          {coverMap[dateKey]?.[s.id] && (
+                            <span className="text-[7px] block leading-none opacity-70"
+                              aria-label={`covered by ${coverMap[dateKey][s.id].map(c => staffMap.get(c.coveredBy)?.name || '?').join(', ')}`}>
+                              {coverMap[dateKey][s.id].length === 1
+                                ? `←${getInitials(staffMap, coverMap[dateKey][s.id][0].coveredBy)}`
+                                : `←${coverMap[dateKey][s.id].length}`}
+                            </span>
+                          )}
                         </button>
                       </td>
                     );
@@ -494,6 +606,51 @@ export default function RotationGrid() {
                 </tr>
               ];
             })}
+            {/* Absence & Cover summary rows */}
+            <tr className="bg-amber-50 border-t-2 border-gray-300 cursor-pointer select-none"
+                onClick={() => setSummaryExpanded(e => !e)}>
+              <td className="py-1 px-2 font-semibold text-[10px] text-amber-800 sticky left-0 bg-amber-50 z-10 border-r whitespace-nowrap">
+                {summaryExpanded ? '▾' : '▸'} Absent
+              </td>
+              <td></td>
+              {monthDates.map((date, i) => {
+                const ds = daySummaries[formatDate(date)];
+                const abs = ds?.absences || [];
+                if (abs.length === 0) return <td key={i} className="py-0.5 px-0.5 text-center text-[9px] text-gray-300">-</td>;
+                const counts = {};
+                abs.forEach(a => { counts[a.shift] = (counts[a.shift] || 0) + 1; });
+                const collapsed = Object.entries(counts).map(([s, n]) => `${n}${s}`).join(' ');
+                const expanded = abs.map(a => `${a.name} (${a.shift})`).join('\n');
+                return (
+                  <td key={i} className="py-0.5 px-0.5 text-center text-[9px]" title={expanded}>
+                    <span className="text-amber-700 font-medium">{summaryExpanded ? abs.map((a, j) => <div key={j}>{a.name.split(' ')[0]}</div>) : collapsed}</span>
+                  </td>
+                );
+              })}
+              <td colSpan={4}></td>
+            </tr>
+            <tr className="bg-blue-50 cursor-pointer select-none"
+                onClick={() => setSummaryExpanded(e => !e)}>
+              <td className="py-1 px-2 font-semibold text-[10px] text-blue-800 sticky left-0 bg-blue-50 z-10 border-r whitespace-nowrap">
+                {summaryExpanded ? '▾' : '▸'} Cover
+              </td>
+              <td></td>
+              {monthDates.map((date, i) => {
+                const ds = daySummaries[formatDate(date)];
+                const cov = ds?.covers || [];
+                if (cov.length === 0) return <td key={i} className="py-0.5 px-0.5 text-center text-[9px] text-gray-300">-</td>;
+                const counts = {};
+                cov.forEach(c => { counts[c.shift] = (counts[c.shift] || 0) + 1; });
+                const collapsed = Object.entries(counts).map(([s, n]) => `${n}${s}`).join(' ');
+                const expanded = cov.map(c => `${c.name} → ${c.replacesName} (${c.shift})`).join('\n');
+                return (
+                  <td key={i} className="py-0.5 px-0.5 text-center text-[9px]" title={expanded}>
+                    <span className="text-blue-700 font-medium">{summaryExpanded ? cov.map((c, j) => <div key={j}>{c.name.split(' ')[0]}</div>) : collapsed}</span>
+                  </td>
+                );
+              })}
+              <td colSpan={4}></td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -556,7 +713,16 @@ export default function RotationGrid() {
                 <label className={INPUT.label}>Change shift to:</label>
                 <select
                   value={editing.proposedShift}
-                  onChange={e => setEditing({ ...editing, proposedShift: e.target.value })}
+                  onChange={e => {
+                    const newShift = e.target.value;
+                    setEditing({
+                      ...editing,
+                      proposedShift: newShift,
+                      // Clear cover link when shifting away from OC/AG — prevents stale
+                      // replacesStaffId persisting when the picker disappears from view
+                      ...( !(isOTShift(newShift) || isAgencyShift(newShift)) && { replacesStaffId: null } ),
+                    });
+                  }}
                   className={`${INPUT.select} font-medium`}>
                   <optgroup label="Standard">
                     {SHIFT_OPTIONS.filter(o => o.group === 'Standard').map(o => (
@@ -585,6 +751,45 @@ export default function RotationGrid() {
                   </optgroup>
                 </select>
               </div>
+
+              {/* Covers-for picker — only visible for OC/AG shifts */}
+              {(isOTShift(editing.proposedShift) || isAgencyShift(editing.proposedShift)) && (
+                <div className="mb-4">
+                  <label className={INPUT.label}>Covers for (optional):</label>
+                  <select
+                    value={editing.replacesStaffId || ''}
+                    onChange={e => setEditing({ ...editing, replacesStaffId: e.target.value || null })}
+                    className={INPUT.select}>
+                    <option value="">— None —</option>
+                    {schedData.staff
+                      .filter(st => {
+                        if (st.id === editing.staffId) return false;           // can't cover yourself
+                        if (st.active === false) return false;                  // skip inactive
+                        if (!isCareRole(st.role)) return false;                 // only care staff
+                        const stActual = getActualShift(
+                          st, parseLocalDate(editing.dateStr),
+                          schedData.overrides, schedData.config.cycle_start_date
+                        );
+                        // Staff on these shifts are 'absent' for cover purposes
+                        // (OFF/AVL are rest days — don't need covering)
+                        return ['AL', 'SICK', 'ADM', 'TRN'].includes(stActual.shift);
+                      })
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(st => {
+                        const stShift = getActualShift(
+                          st, parseLocalDate(editing.dateStr),
+                          schedData.overrides, schedData.config.cycle_start_date
+                        ).shift;
+                        return (
+                          <option key={st.id} value={st.id}>
+                            {st.name} ({stShift})
+                          </option>
+                        );
+                      })
+                    }
+                  </select>
+                </div>
+              )}
 
               {/* Impact Preview */}
               {impact ? (
@@ -700,7 +905,7 @@ export default function RotationGrid() {
                   <button onClick={() => {
                     const staff = schedData.staff.find(s => s.id === editing.staffId);
                     const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr));
-                    setEditing({ ...editing, proposedShift: scheduled });
+                    setEditing({ ...editing, proposedShift: scheduled, replacesStaffId: null });
                   }} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-blue-600 disabled:opacity-50`}>
                     Revert to Scheduled
                   </button>
