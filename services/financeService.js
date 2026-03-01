@@ -8,6 +8,10 @@ export async function findResidents(homeId, filters) {
   return financeRepo.findResidents(homeId, filters);
 }
 
+export async function findResidentsWithBeds(homeId, filters) {
+  return financeRepo.findResidentsWithBeds(homeId, filters);
+}
+
 export async function findResidentById(id, homeId) {
   return financeRepo.findResidentById(id, homeId);
 }

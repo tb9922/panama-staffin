@@ -57,11 +57,13 @@ const ReceivablesManager = lazy(() => import('../pages/ReceivablesManager.jsx'))
 const PayablesManager = lazy(() => import('../pages/PayablesManager.jsx'));
 const AuditLog = lazy(() => import('../pages/AuditLog.jsx'));
 const BedManager = lazy(() => import('../pages/BedManager.jsx'));
+const Residents = lazy(() => import('../pages/Residents.jsx'));
 
 export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
+      <Route path="/residents" element={<RouteErrorBoundary><Residents /></RouteErrorBoundary>} />
       <Route path="/beds" element={<RouteErrorBoundary><BedManager /></RouteErrorBoundary>} />
       <Route path="/day" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
       <Route path="/day/:date" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />

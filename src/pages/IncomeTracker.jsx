@@ -109,7 +109,7 @@ function ResidentsTab({ home, isAdmin }) {
     if (!form.resident_name) return;
     try {
       if (editing?.id) {
-        await updateFinanceResident(home, editing.id, form);
+        await updateFinanceResident(home, editing.id, { ...form, _version: editing.version });
       } else {
         await createFinanceResident(home, form);
       }
@@ -386,7 +386,7 @@ function InvoicesTab({ home, isAdmin }) {
     try {
       const payload = { ...form, lines: lines.map(l => ({ ...l, amount: parseFloat(l.amount) || (parseFloat(l.quantity) * parseFloat(l.unit_price)) || 0 })) };
       if (editing?.id) {
-        await updateFinanceInvoice(home, editing.id, payload);
+        await updateFinanceInvoice(home, editing.id, { ...payload, _version: editing.version });
       } else {
         await createFinanceInvoice(home, payload);
       }

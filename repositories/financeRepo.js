@@ -39,6 +39,41 @@ export async function findResidents(homeId, { status, fundingType, limit = 100, 
   return { rows: rows.map(shapeResident), total };
 }
 
+function shapeResidentWithBed(row) {
+  const resident = shapeResident(row);
+  if (!resident) return null;
+  resident.bed = row.bed_id ? {
+    id: row.bed_id,
+    room_number: row.bed_room,
+    room_type: row.bed_room_type,
+    floor: row.bed_floor,
+    status: row.bed_status,
+  } : null;
+  return resident;
+}
+
+export async function findResidentsWithBeds(homeId, { status, fundingType, search, limit = 200, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  let sql = `
+    SELECT fr.*, COUNT(*) OVER() AS _total,
+      b.id AS bed_id, b.room_number AS bed_room, b.room_type AS bed_room_type,
+      b.floor AS bed_floor, b.status AS bed_status
+    FROM finance_residents fr
+    LEFT JOIN beds b ON b.resident_id = fr.id AND b.home_id = fr.home_id
+      AND b.status IN ('occupied', 'hospital_hold')
+    WHERE fr.home_id = $1 AND fr.deleted_at IS NULL`;
+  const params = [homeId];
+  if (status) { params.push(status); sql += ` AND fr.status = $${params.length}`; }
+  if (fundingType) { params.push(fundingType); sql += ` AND fr.funding_type = $${params.length}`; }
+  if (search) { params.push(`%${search}%`); sql += ` AND fr.resident_name ILIKE $${params.length}`; }
+  sql += ' ORDER BY fr.room_number ASC, fr.resident_name ASC';
+  params.push(Math.min(limit, 500)); sql += ` LIMIT $${params.length}`;
+  params.push(offset); sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total) : 0;
+  return { rows: rows.map(shapeResidentWithBed), total };
+}
+
 export async function findResidentById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

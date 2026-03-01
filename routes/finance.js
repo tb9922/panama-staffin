@@ -147,6 +147,18 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial();
 
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
+// Residents with bed assignments — used by standalone Residents page
+router.get('/residents/with-beds', requireAuth, requireHomeAccess, async (req, res, next) => {
+  try {
+    const filters = {};
+    if (req.query.status) filters.status = req.query.status;
+    if (req.query.funding_type) filters.fundingType = req.query.funding_type;
+    if (req.query.search) filters.search = req.query.search;
+    const result = await financeService.findResidentsWithBeds(req.home.id, filters);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 router.get('/residents', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
