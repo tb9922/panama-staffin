@@ -30,8 +30,8 @@ import * as hmrcRepo          from '../repositories/hmrcRepo.js';
 import * as payrollService    from '../services/payrollService.js';
 import * as auditService      from '../services/auditService.js';
 
-import { generatePayslipPDF }  from '../src/lib/payslipPdf.js';
-import { generateSummaryPDF }  from '../src/lib/payrollSummary.js';
+import { generatePayslipPDF }  from '../lib/payslipPdf.js';
+import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 
 const router = Router();

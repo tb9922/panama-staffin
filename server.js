@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { randomUUID } from 'crypto';
 import { config } from './config.js';
@@ -59,7 +60,8 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   contentSecurityPolicy: false,  // CSP handled by nginx in production
 }));
-app.use(cors({ origin: config.allowedOrigin }));
+app.use(cors({ origin: config.allowedOrigin, credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: config.requestBodyLimit }));
 
 // ── Request ID + structured request logging ───────────────────────────────────

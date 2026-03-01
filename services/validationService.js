@@ -1,6 +1,6 @@
 // All 17 domain validators moved verbatim from server.js.
 // No logic changes — these are pure functions operating on the assembled data object.
-import { RIDDOR_CATEGORIES } from '../src/lib/incidents.js';
+import { RIDDOR_CATEGORIES } from '../shared/incidents.js';
 
 function validateALPerDay(data, warnings) {
   const maxAL = data.config.max_al_same_day || 2;

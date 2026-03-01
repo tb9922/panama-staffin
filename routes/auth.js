@@ -30,6 +30,19 @@ router.post('/', loginLimiter, async (req, res, next) => {
     const { username, password } = parsed.data;
     const result = await authService.login(username, password);
     auditService.log('login', '-', username, null).catch(() => {});
+
+    // Set JWT as HttpOnly cookie — not accessible to JavaScript, immune to XSS token theft.
+    // SameSite=Strict blocks cross-origin sends; Secure requires HTTPS in production.
+    res.cookie('panama_token', result.token, {
+      httpOnly: true,
+      secure: config.nodeEnv === 'production',
+      sameSite: 'strict',
+      path: '/api',
+      maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
+    });
+
+    // Token is also in body for API clients and integration tests.
+    // The frontend ignores it — the HttpOnly cookie is the auth mechanism.
     res.json(result);
   } catch (err) {
     // Log failed login attempt for brute-force detection
@@ -37,6 +50,13 @@ router.post('/', loginLimiter, async (req, res, next) => {
     await auditService.log('login_failure', '-', username, null).catch(() => {});
     next(err);
   }
+});
+
+// ── Logout (clear cookie) ───────────────────────────────────────────────────
+
+router.post('/logout', (req, res) => {
+  res.clearCookie('panama_token', { path: '/api' });
+  res.json({ ok: true });
 });
 
 // ── Token revocation ──────────────────────────────────────────────────────────

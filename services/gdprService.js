@@ -11,174 +11,183 @@ import logger from '../logger.js';
  * Used for Subject Access Requests. Returns a structured object.
  */
 export async function gatherPersonalData(subjectType, subjectId, homeId, client, subjectName) {
-  const conn = client || pool;
-
-  if (subjectType === 'staff') {
-    const [
-      staff, overrides, training, supervisions, appraisals,
-      timesheets, payrollLines, taxCodes, sspPeriods,
-      pensionEnrolment, pensionContributions, accessLog,
-      incidents, fireDrills, handoverEntries,
-      // HR module tables (GDPR special category — employee relations data)
-      hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
-      hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
-      hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
-      onboarding, careCertificates, complaints, incidentAddenda,
-    ] = await Promise.all([
-      conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM appraisals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(
-        `SELECT pl.* FROM payroll_lines pl
-         JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
-         WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(
-        `SELECT pc.* FROM pension_contributions pc
-         WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM access_log WHERE user_name = (
-        SELECT name FROM staff WHERE home_id = $1 AND id = $2
-      ) ORDER BY ts DESC LIMIT 500`, [homeId, subjectId]),
-      // Staff appears in incident staff_involved JSONB array
-      conn.query(
-        `SELECT * FROM incidents WHERE home_id = $1 AND staff_involved @> jsonb_build_array($2::text) AND deleted_at IS NULL`,
-        [homeId, subjectId]),
-      // Staff appears in fire drill staff_present JSONB array
-      conn.query(
-        `SELECT * FROM fire_drills WHERE home_id = $1 AND staff_present @> jsonb_build_array($2::text)`,
-        [homeId, subjectId]),
-      // Handover entries authored by this staff member (matched via staff name)
-      conn.query(
-        `SELECT * FROM handover_entries WHERE home_id = $1 AND author = (
-          SELECT name FROM staff WHERE home_id = $1 AND id = $2
-        )`, [homeId, subjectId]),
-      // HR module — disciplinary, grievance, performance cases
-      conn.query(`SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(
-        `SELECT ga.* FROM hr_grievance_actions ga
-         JOIN hr_grievance_cases gc ON gc.id = ga.grievance_id
-         WHERE gc.home_id = $1 AND gc.staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // HR module — absence management
-      conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // HR module — contracts, family leave, flexible working, EDI
-      conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // HR module — TUPE: employees JSONB array has no guaranteed staff_id field.
-      // We filter on home_id only and return home-level TUPE records. TUPE data is
-      // relatively non-sensitive (employer/transferor details) and contains no health
-      // or special-category data. The SAR response notes this is home-scoped.
-      conn.query(`SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]),
-      // HR module — DBS/RTW renewals
-      conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // HR module — case notes authored by this staff member (matched by name, not staff_id)
-      conn.query(
-        `SELECT cn.* FROM hr_case_notes cn
-         WHERE cn.home_id = $1 AND cn.author = (
-           SELECT name FROM staff WHERE home_id = $1 AND id = $2
-         )`, [homeId, subjectId]),
-      // Onboarding data (DBS, RTW, references, etc.)
-      conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // Care Certificate progress
-      conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-      // Complaints where staff is the complainant (name-based match)
-      conn.query(
-        `SELECT * FROM complaints WHERE home_id = $1 AND deleted_at IS NULL AND raised_by_name = (
-           SELECT name FROM staff WHERE home_id = $1 AND id = $2
-         )`, [homeId, subjectId]),
-      // Post-freeze addenda authored by this staff member
-      conn.query(
-        `SELECT * FROM incident_addenda WHERE home_id = $1 AND author = (
-           SELECT name FROM staff WHERE home_id = $1 AND id = $2
-         ) ORDER BY created_at ASC`,
-        [homeId, subjectId]
-      ),
-    ]);
-
-    return {
-      subject_type: 'staff',
-      subject_id: subjectId,
-      gathered_at: new Date().toISOString(),
-      data: {
-        staff: staff.rows,
-        shift_overrides: overrides.rows,
-        training_records: training.rows,
-        supervisions: supervisions.rows,
-        appraisals: appraisals.rows,
-        timesheet_entries: timesheets.rows,
-        payroll_lines: payrollLines.rows,
-        tax_codes: taxCodes.rows,
-        sick_periods: sspPeriods.rows,
-        pension_enrolment: pensionEnrolment.rows,
-        pension_contributions: pensionContributions.rows,
-        access_log: accessLog.rows,
-        incidents: incidents.rows,
-        fire_drills: fireDrills.rows,
-        handover_entries: handoverEntries.rows,
-        // HR module — employee relations (GDPR special category)
-        hr_disciplinary_cases: hrDisciplinary.rows,
-        hr_grievance_cases: hrGrievance.rows,
-        hr_grievance_actions: hrGrievanceActions.rows,
-        hr_performance_cases: hrPerformance.rows,
-        hr_rtw_interviews: hrRtwInterviews.rows,
-        hr_oh_referrals: hrOhReferrals.rows,
-        hr_contracts: hrContracts.rows,
-        hr_family_leave: hrFamilyLeave.rows,
-        hr_flexible_working: hrFlexWorking.rows,
-        hr_edi_records: hrEdi.rows,
-        hr_tupe_transfers: hrTupe.rows,
-        tupe_note: 'TUPE records are home-level only; verify manually if subject was involved in a transfer',
-        hr_rtw_dbs_renewals: hrRenewals.rows,
-        hr_case_notes: hrCaseNotes.rows,
-        onboarding: onboarding.rows,
-        care_certificates: careCertificates.rows,
-        complaints: complaints.rows,
-        incident_addenda: incidentAddenda.rows,
-      },
-    };
-  }
-
-  if (subjectType === 'resident') {
-    const queries = [
-      conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-      conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-    ];
-    // Name-based queries only run when subject_name is provided (residents have no stable ID across tables)
-    if (subjectName) {
-      queries.push(
-        conn.query(
-          `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
-          [homeId, subjectName]),
-        conn.query(
-          `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
-          [homeId, subjectName]),
+  // Use a single dedicated client to avoid exhausting the pool (31 queries for staff SAR).
+  // If caller already provided a client (e.g. inside a transaction), reuse it.
+  const ownClient = !client;
+  const conn = client || await pool.connect();
+  try {
+    if (subjectType === 'staff') {
+      // Resolve staff name once — avoids 6 redundant subqueries
+      const { rows: [staffRow] } = await conn.query(
+        `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]
       );
-    }
-    const results = await Promise.all(queries);
-    return {
-      subject_type: 'resident',
-      subject_id: subjectId,
-      gathered_at: new Date().toISOString(),
-      incomplete: !subjectName ? 'subject_name not provided — incidents and complaints not searched' : undefined,
-      data: {
-        dols: results[0].rows,
-        mca_assessments: results[1].rows,
-        incidents: results[2]?.rows || [],
-        complaints: results[3]?.rows || [],
-      },
-    };
-  }
+      const staffName = staffRow?.name;
 
-  return { subject_type: subjectType, subject_id: subjectId, data: {} };
+      const [
+        staff, overrides, training, supervisions, appraisals,
+        timesheets, payrollLines, taxCodes, sspPeriods,
+        pensionEnrolment, pensionContributions, accessLog,
+        incidents, fireDrills, handoverEntries,
+        // HR module tables (GDPR special category — employee relations data)
+        hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
+        hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
+        hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
+        onboarding, careCertificates, complaints, incidentAddenda,
+      ] = await Promise.all([
+        conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM appraisals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(
+          `SELECT pl.* FROM payroll_lines pl
+           JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+           WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(
+          `SELECT pc.* FROM pension_contributions pc
+           WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
+        // Name-based queries use pre-resolved staffName (no subquery)
+        staffName
+          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 ORDER BY ts DESC LIMIT 500`, [staffName])
+          : { rows: [] },
+        // Staff appears in incident staff_involved JSONB array
+        conn.query(
+          `SELECT * FROM incidents WHERE home_id = $1 AND staff_involved @> jsonb_build_array($2::text) AND deleted_at IS NULL`,
+          [homeId, subjectId]),
+        // Staff appears in fire drill staff_present JSONB array
+        conn.query(
+          `SELECT * FROM fire_drills WHERE home_id = $1 AND staff_present @> jsonb_build_array($2::text)`,
+          [homeId, subjectId]),
+        staffName
+          ? conn.query(`SELECT * FROM handover_entries WHERE home_id = $1 AND author = $2`, [homeId, staffName])
+          : { rows: [] },
+        // HR module — disciplinary, grievance, performance cases
+        conn.query(`SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(
+          `SELECT ga.* FROM hr_grievance_actions ga
+           JOIN hr_grievance_cases gc ON gc.id = ga.grievance_id
+           WHERE gc.home_id = $1 AND gc.staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // HR module — absence management
+        conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // HR module — contracts, family leave, flexible working, EDI
+        conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // HR module — TUPE: employees JSONB array has no guaranteed staff_id field.
+        // We filter on home_id only and return home-level TUPE records. TUPE data is
+        // relatively non-sensitive (employer/transferor details) and contains no health
+        // or special-category data. The SAR response notes this is home-scoped.
+        conn.query(`SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]),
+        // HR module — DBS/RTW renewals
+        conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // HR module — case notes authored by this staff member (pre-resolved name)
+        staffName
+          ? conn.query(`SELECT * FROM hr_case_notes WHERE home_id = $1 AND author = $2`, [homeId, staffName])
+          : { rows: [] },
+        // Onboarding data (DBS, RTW, references, etc.)
+        conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // Care Certificate progress
+        conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // Complaints where staff is the complainant (pre-resolved name)
+        staffName
+          ? conn.query(
+              `SELECT * FROM complaints WHERE home_id = $1 AND deleted_at IS NULL AND raised_by_name = $2`,
+              [homeId, staffName])
+          : { rows: [] },
+        // Post-freeze addenda authored by this staff member (pre-resolved name)
+        staffName
+          ? conn.query(
+              `SELECT * FROM incident_addenda WHERE home_id = $1 AND author = $2 ORDER BY created_at ASC`,
+              [homeId, staffName])
+          : { rows: [] },
+      ]);
+
+      return {
+        subject_type: 'staff',
+        subject_id: subjectId,
+        gathered_at: new Date().toISOString(),
+        data: {
+          staff: staff.rows,
+          shift_overrides: overrides.rows,
+          training_records: training.rows,
+          supervisions: supervisions.rows,
+          appraisals: appraisals.rows,
+          timesheet_entries: timesheets.rows,
+          payroll_lines: payrollLines.rows,
+          tax_codes: taxCodes.rows,
+          sick_periods: sspPeriods.rows,
+          pension_enrolment: pensionEnrolment.rows,
+          pension_contributions: pensionContributions.rows,
+          access_log: accessLog.rows,
+          incidents: incidents.rows,
+          fire_drills: fireDrills.rows,
+          handover_entries: handoverEntries.rows,
+          // HR module — employee relations (GDPR special category)
+          hr_disciplinary_cases: hrDisciplinary.rows,
+          hr_grievance_cases: hrGrievance.rows,
+          hr_grievance_actions: hrGrievanceActions.rows,
+          hr_performance_cases: hrPerformance.rows,
+          hr_rtw_interviews: hrRtwInterviews.rows,
+          hr_oh_referrals: hrOhReferrals.rows,
+          hr_contracts: hrContracts.rows,
+          hr_family_leave: hrFamilyLeave.rows,
+          hr_flexible_working: hrFlexWorking.rows,
+          hr_edi_records: hrEdi.rows,
+          hr_tupe_transfers: hrTupe.rows,
+          tupe_note: 'TUPE records are home-level only; verify manually if subject was involved in a transfer',
+          hr_rtw_dbs_renewals: hrRenewals.rows,
+          hr_case_notes: hrCaseNotes.rows,
+          onboarding: onboarding.rows,
+          care_certificates: careCertificates.rows,
+          complaints: complaints.rows,
+          incident_addenda: incidentAddenda.rows,
+        },
+      };
+    }
+
+    if (subjectType === 'resident') {
+      const queries = [
+        conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+      ];
+      // Name-based queries only run when subject_name is provided (residents have no stable ID across tables)
+      if (subjectName) {
+        queries.push(
+          conn.query(
+            `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
+            [homeId, subjectName]),
+          conn.query(
+            `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
+            [homeId, subjectName]),
+        );
+      }
+      const results = await Promise.all(queries);
+      return {
+        subject_type: 'resident',
+        subject_id: subjectId,
+        gathered_at: new Date().toISOString(),
+        incomplete: !subjectName ? 'subject_name not provided — incidents and complaints not searched' : undefined,
+        data: {
+          dols: results[0].rows,
+          mca_assessments: results[1].rows,
+          incidents: results[2]?.rows || [],
+          complaints: results[3]?.rows || [],
+        },
+      };
+    }
+
+    return { subject_type: subjectType, subject_id: subjectId, data: {} };
+  } finally {
+    if (ownClient) conn.release();
+  }
 }
 
 // ── Erasure (Anonymisation) ──────────────────────────────────────────────────
