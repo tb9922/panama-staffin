@@ -185,11 +185,11 @@ export default function BedManager() {
     setTransitionBed(bed);
     setTransitionTarget(target);
     const meta = {};
-    if (target === 'reserved') meta.reserved_until = defaultDate(7);
-    if (target === 'hospital_hold') meta.hold_expires = defaultDate(14);
-    if (target === 'vacating') meta.vacating_reason = 'discharged';
+    if (target === 'reserved') meta.reservedUntil = defaultDate(7);
+    if (target === 'hospital_hold') meta.holdExpires = defaultDate(14);
+    if (target === 'vacating') meta.reason = 'discharged';
     // releasing reservation
-    if (bed.status === 'reserved' && target === 'available') meta.release_reason = 'family_declined';
+    if (bed.status === 'reserved' && target === 'available') meta.releaseReason = 'family_declined';
     setTransitionMeta(meta);
     if (target === 'occupied') loadResidents();
     setShowTransitionModal(true);
@@ -200,7 +200,7 @@ export default function BedManager() {
     setSubmitting(true);
     try {
       const home = getCurrentHome();
-      const data = { status: transitionTarget, ...transitionMeta };
+      const data = { status: transitionTarget, clientUpdatedAt: transitionBed.updated_at, ...transitionMeta };
       await transitionBedStatus(home, transitionBed.id, data);
       setShowTransitionModal(false);
       setTransitionBed(null);
@@ -246,7 +246,7 @@ export default function BedManager() {
     try {
       const home = getCurrentHome();
       const result = await getBedHistory(home, bed.id);
-      setHistory(result.history || result || []);
+      setHistory(result.transitions || result.history || []);
     } catch (err) {
       setError(err.message);
     }
@@ -458,8 +458,8 @@ export default function BedManager() {
             {transitionTarget === 'occupied' && (
               <div>
                 <label className={INPUT.label}>Resident *</label>
-                <select className={INPUT.select} required value={transitionMeta.resident_id || ''}
-                  onChange={e => setTransitionMeta(m => ({ ...m, resident_id: e.target.value }))}>
+                <select className={INPUT.select} required value={transitionMeta.residentId || ''}
+                  onChange={e => setTransitionMeta(m => ({ ...m, residentId: parseInt(e.target.value) || undefined }))}>
                   <option value="">Select resident...</option>
                   {residents.map(r => (
                     <option key={r.id} value={r.id}>{r.name || r.resident_name}</option>
@@ -472,8 +472,8 @@ export default function BedManager() {
             {transitionTarget === 'reserved' && (
               <div>
                 <label className={INPUT.label}>Reserved Until</label>
-                <input type="date" className={INPUT.base} value={transitionMeta.reserved_until || ''}
-                  onChange={e => setTransitionMeta(m => ({ ...m, reserved_until: e.target.value }))} />
+                <input type="date" className={INPUT.base} value={transitionMeta.reservedUntil || ''}
+                  onChange={e => setTransitionMeta(m => ({ ...m, reservedUntil: e.target.value }))} />
               </div>
             )}
 
@@ -481,8 +481,8 @@ export default function BedManager() {
             {transitionTarget === 'hospital_hold' && (
               <div>
                 <label className={INPUT.label}>Hold Expires *</label>
-                <input type="date" className={INPUT.base} required value={transitionMeta.hold_expires || ''}
-                  onChange={e => setTransitionMeta(m => ({ ...m, hold_expires: e.target.value }))} />
+                <input type="date" className={INPUT.base} required value={transitionMeta.holdExpires || ''}
+                  onChange={e => setTransitionMeta(m => ({ ...m, holdExpires: e.target.value }))} />
               </div>
             )}
 
@@ -490,8 +490,8 @@ export default function BedManager() {
             {transitionTarget === 'vacating' && (
               <div>
                 <label className={INPUT.label}>Reason *</label>
-                <select className={INPUT.select} required value={transitionMeta.vacating_reason || ''}
-                  onChange={e => setTransitionMeta(m => ({ ...m, vacating_reason: e.target.value }))}>
+                <select className={INPUT.select} required value={transitionMeta.reason || ''}
+                  onChange={e => setTransitionMeta(m => ({ ...m, reason: e.target.value }))}>
                   <option value="">Select reason...</option>
                   {VACATING_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
@@ -502,8 +502,8 @@ export default function BedManager() {
             {transitionBed?.status === 'reserved' && transitionTarget === 'available' && (
               <div>
                 <label className={INPUT.label}>Release Reason *</label>
-                <select className={INPUT.select} required value={transitionMeta.release_reason || ''}
-                  onChange={e => setTransitionMeta(m => ({ ...m, release_reason: e.target.value }))}>
+                <select className={INPUT.select} required value={transitionMeta.releaseReason || ''}
+                  onChange={e => setTransitionMeta(m => ({ ...m, releaseReason: e.target.value }))}>
                   <option value="">Select reason...</option>
                   {RELEASE_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
@@ -513,8 +513,8 @@ export default function BedManager() {
             {/* Generic reason/notes */}
             <div>
               <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={transitionMeta.reason || ''}
-                onChange={e => setTransitionMeta(m => ({ ...m, reason: e.target.value }))} />
+              <textarea className={INPUT.base} rows={2} value={transitionMeta.notes || ''}
+                onChange={e => setTransitionMeta(m => ({ ...m, notes: e.target.value }))} />
             </div>
           </div>
           <div className={MODAL.footer}>
