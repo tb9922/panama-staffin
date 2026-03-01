@@ -2,7 +2,7 @@ import { pool, createShaper, paginate } from './shared.js';
 
 const shapeTupe = createShaper({
   fields: [
-    'id', 'home_id', 'transfer_type', 'transfer_date',
+    'id', 'home_id', 'transfer_type', 'transfer_date', 'signed_date',
     'transferor_name', 'transferee_name', 'employees',
     'consultation_start_date', 'consultation_end_date',
     'measures_letter_date', 'measures_description',
@@ -11,7 +11,7 @@ const shapeTupe = createShaper({
     'dd_notes', 'outstanding_claims', 'outstanding_tribunal_claims',
     'status', 'notes', 'created_by', 'created_at', 'updated_at', 'version',
   ],
-  dates: ['transfer_date', 'consultation_start_date', 'consultation_end_date', 'measures_letter_date', 'eli_received_date'],
+  dates: ['transfer_date', 'signed_date', 'consultation_start_date', 'consultation_end_date', 'measures_letter_date', 'eli_received_date'],
   jsonArrays: ['employees'],
   jsonObjects: ['eli_items'],
   aliases: {
@@ -41,10 +41,10 @@ export async function createTupe(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO hr_tupe_transfers
-       (home_id, transfer_type, transfer_date, transferor_name, transferee_name,
+       (home_id, transfer_type, transfer_date, signed_date, transferor_name, transferee_name,
         employees, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-    [homeId, data.transfer_type, data.transfer_date,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    [homeId, data.transfer_type, data.transfer_date, data.signed_date || null,
      data.transferor_name, data.transferee_name,
      JSON.stringify(data.employees || []), data.status ?? 'planned',
      data.notes || null, data.created_by || null]
@@ -57,7 +57,7 @@ export async function updateTupe(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'transfer_type', 'transfer_date', 'transferor_name', 'transferee_name', 'employees',
+    'transfer_type', 'transfer_date', 'signed_date', 'transferor_name', 'transferee_name', 'employees',
     'consultation_start_date', 'consultation_end_date', 'measures_letter_date',
     'measures_description', 'employee_reps_consulted', 'rep_names',
     'eli_received_date', 'eli_complete', 'eli_items',

@@ -50,8 +50,8 @@ export async function createContract(homeId, data, client) {
         contract_start_date, contract_end_date, job_title, reporting_to, place_of_work,
         hours_per_week, working_pattern, hourly_rate, pay_frequency, annual_leave_days,
         notice_period_employer, notice_period_employee,
-        probation_period_months, probation_start_date, probation_end_date, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+        probation_period_months, probation_start_date, probation_end_date, status, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
     [homeId, data.staff_id, data.statement_issued ?? false,
      data.statement_issued_date || null, data.contract_type,
      data.contract_start_date, data.contract_end_date || null,
@@ -60,7 +60,7 @@ export async function createContract(homeId, data, client) {
      data.hourly_rate ?? null, data.pay_frequency || null, data.annual_leave_days ?? 28,
      data.notice_period_employer || null, data.notice_period_employee || null,
      data.probation_period_months ?? null, data.probation_start_date || null,
-     data.probation_end_date || null, data.status ?? 'active']
+     data.probation_end_date || null, data.status ?? 'active', data.created_by || null]
   );
   return shapeContract(rows[0]);
 }
