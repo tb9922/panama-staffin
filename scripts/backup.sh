@@ -40,7 +40,10 @@ if [ -z "${DATABASE_URL:-}" ]; then
   DB_PORT="${DB_PORT:-5432}"
   DB_NAME="${DB_NAME:-panama_dev}"
   DB_USER="${DB_USER:-panama}"
-  export PGPASSWORD="${DB_PASSWORD:?DB_PASSWORD is required}"
+  export PGPASSFILE="$(mktemp)"
+  echo "${DB_HOST}:${DB_PORT}:${DB_NAME}:${DB_USER}:${DB_PASSWORD:?DB_PASSWORD is required}" > "$PGPASSFILE"
+  chmod 600 "$PGPASSFILE"
+  trap 'rm -f "$PGPASSFILE"' EXIT
   PG_ARGS="-h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME"
 else
   PG_ARGS="$DATABASE_URL"
