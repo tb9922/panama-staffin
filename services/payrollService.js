@@ -99,7 +99,7 @@ export async function seedDefaultRulesIfNeeded(homeId, client) {
  */
 export async function calculateRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (!['draft', 'calculated'].includes(run.status)) {
       throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
@@ -370,7 +370,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       total_enhancements: round2(totalEnhancements),
       total_sleep_ins:    round2(totalSleepIns),
       staff_count:        activeStaff.length,
-    }, client);
+    }, client, run.version);
 
     await auditRepo.log('payroll_calculate', homeSlug, username, `Run ID ${runId}`, client);
   });
@@ -384,7 +384,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
  */
 export async function approveRun(runId, homeId, homeSlug, username) {
   return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
     if (!run) throw new NotFoundError('Payroll run not found');
     if (run.status !== 'calculated') {
       throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
@@ -398,7 +398,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       );
     }
 
-    await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client);
+    await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client, run.version);
 
     // Lock all approved timesheets for the period (prevents further edits)
     await timesheetRepo.lockByPeriod(homeId, run.period_start, run.period_end, client);

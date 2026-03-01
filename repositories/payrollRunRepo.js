@@ -49,6 +49,16 @@ export async function findById(runId, homeId, client) {
   return rows.length > 0 ? shapeRun(rows[0]) : null;
 }
 
+/** Lock the row for the duration of the transaction — prevents concurrent calculate/approve races. */
+export async function findByIdForUpdate(runId, homeId, client) {
+  if (!client) throw new Error('findByIdForUpdate requires a transaction client');
+  const { rows } = await client.query(
+    `SELECT * FROM payroll_runs WHERE id = $1 AND home_id = $2 FOR UPDATE`,
+    [runId, homeId],
+  );
+  return rows.length > 0 ? shapeRun(rows[0]) : null;
+}
+
 /** Check if any non-voided run overlaps the given date range for this home. */
 export async function hasOverlap(homeId, periodStart, periodEnd, client) {
   const conn = client || pool;
