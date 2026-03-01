@@ -201,6 +201,7 @@ export default function BedManager() {
     try {
       const home = getCurrentHome();
       const data = { status: transitionTarget, clientUpdatedAt: transitionBed.updated_at, ...transitionMeta };
+      if (transitionBed.status === 'available' && transitionTarget === 'occupied') data.skipReservation = true;
       await transitionBedStatus(home, transitionBed.id, data);
       setShowTransitionModal(false);
       setTransitionBed(null);
