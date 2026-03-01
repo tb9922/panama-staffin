@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -61,7 +62,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
 router.post('/', writeRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const parsed = createUserSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const { username, password, role, displayName } = parsed.data;
     const user = await userService.createUser(username, password, role, displayName, req.user.username);
     await auditService.log('user_create', '-', req.user.username, { username, role });
@@ -78,7 +79,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, async (req, res, n
 router.post('/change-password', writeRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const parsed = changePasswordSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     await userService.changeOwnPassword(req.user.username, parsed.data.currentPassword, parsed.data.newPassword);
     await auditService.log('user_password_change', '-', req.user.username, null);
     res.json({ ok: true });
@@ -106,7 +107,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, async (req, res,
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = updateUserSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
 
     // Map frontend field names to DB columns
     const fields = {};
@@ -130,7 +131,7 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireAdmin, 
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = resetPasswordSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     await userService.resetPassword(id.data, parsed.data.newPassword, req.user.username);
     await auditService.log('user_password_reset', '-', req.user.username, { userId: id.data });
     res.json({ ok: true });
@@ -160,7 +161,7 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requireAdmin, async (req
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = setHomesSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Validation failed', issues: parsed.error.issues });
+    if (!parsed.success) return zodError(res, parsed);
     const user = await userRepo.findById(id.data);
     if (!user) return res.status(404).json({ error: 'User not found' });
 

@@ -154,7 +154,8 @@ describe('POST /api/staff — create', () => {
       .send({ id: 'ST002' })
       .expect(400);
 
-    expect(res.body.error).toMatch(/validation/i);
+    expect(res.body.error).toBeTruthy();
+    expect(res.body.details).toBeDefined();
   });
 
   it('rejects invalid role', async () => {
