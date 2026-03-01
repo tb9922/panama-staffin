@@ -58,7 +58,7 @@ export const config = {
 
   // ── Authentication ───────────────────────────────────────────────────────────
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: '12h',
+  jwtExpiresIn: '4h',
 
   // Env-var users — fallback for pre-migration compatibility. Once the users
   // table is populated these are ignored. Can be removed after first deployment.
@@ -76,7 +76,7 @@ export const config = {
   // ── Data management ──────────────────────────────────────────────────────────
   backupRetentionCount: 20,
   auditLogMaxEntries: 500,
-  requestBodyLimit: '10mb',
+  requestBodyLimit: '1mb',
 
   // ── Database ─────────────────────────────────────────────────────────────────
   db: {

@@ -49,22 +49,29 @@ if [ "${DB_NAME}" = "panama_dev" ] || [ "${DB_NAME}" = "panama_prod" ]; then
   fi
 fi
 
+# ── Auth — use .pgpass instead of PGPASSWORD to avoid /proc leak ─────────────
+
+export PGPASSFILE="$(mktemp)"
+echo "${DB_HOST}:${DB_PORT}:*:${DB_USER}:${DB_PASSWORD:?DB_PASSWORD is required}" > "$PGPASSFILE"
+chmod 600 "$PGPASSFILE"
+trap 'rm -f "$PGPASSFILE"' EXIT
+
 # ── Drop and recreate ────────────────────────────────────────────────────────
 
 echo "[$(date --iso-8601=seconds)] Dropping ${DB_NAME} (if exists)..."
-PGPASSWORD="${DB_PASSWORD}" dropdb \
+dropdb \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   --if-exists "${DB_NAME}"
 
 echo "[$(date --iso-8601=seconds)] Creating ${DB_NAME}..."
-PGPASSWORD="${DB_PASSWORD}" createdb \
+createdb \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   "${DB_NAME}"
 
 # ── Restore ───────────────────────────────────────────────────────────────────
 
 echo "[$(date --iso-8601=seconds)] Restoring from ${BACKUP_FILE}..."
-gzip -dc "${BACKUP_FILE}" | PGPASSWORD="${DB_PASSWORD}" psql \
+gzip -dc "${BACKUP_FILE}" | psql \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" \
   --quiet \
@@ -73,12 +80,12 @@ gzip -dc "${BACKUP_FILE}" | PGPASSWORD="${DB_PASSWORD}" psql \
 # ── Verify ────────────────────────────────────────────────────────────────────
 
 echo "[$(date --iso-8601=seconds)] Verifying..."
-TABLES=$(PGPASSWORD="${DB_PASSWORD}" psql \
+TABLES=$(psql \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" -t -c \
   "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
 
-STAFF=$(PGPASSWORD="${DB_PASSWORD}" psql \
+STAFF=$(psql \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   -d "${DB_NAME}" -t -c \
   "SELECT COUNT(*) FROM staff" 2>/dev/null || echo "  0")
