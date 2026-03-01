@@ -2,9 +2,9 @@
  * payrollService.js — Business logic for payroll calculation, approval, export, and seeding.
  *
  * Import chain:
- *   routes/payroll.js → payrollService → repos + rotation.js + payroll.js
+ *   routes/payroll.js → payrollService → repos + shared/rotation.js + shared/payroll.js
  *
- * CRITICAL: rotation.js is pure ESM with no browser/React deps. Import it server-side safely.
+ * Shared libs (rotation, payroll, payrollTax) live in shared/ — pure ESM, no browser/React deps.
  */
 
 import { pool, withTransaction } from '../db.js';
@@ -25,7 +25,7 @@ import {
   isBankHoliday,
   isWorkingShift,
   isAgencyShift,
-} from '../src/lib/rotation.js';
+} from '../shared/rotation.js';
 
 import {
   calculateShiftPay,
@@ -33,7 +33,7 @@ import {
   getDefaultShiftHours,
   buildSageCSV,
   buildGenericCSV,
-} from '../src/lib/payroll.js';
+} from '../shared/payroll.js';
 
 import {
   parseTaxCode,
@@ -47,7 +47,7 @@ import {
   getTaxYear,
   getHMRCTaxMonth,
   getHMRCPaymentDueDate,
-} from '../src/lib/payrollTax.js';
+} from '../shared/payrollTax.js';
 
 import { NotFoundError, ValidationError } from '../errors.js';
 

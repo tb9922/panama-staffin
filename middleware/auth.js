@@ -6,10 +6,22 @@ import { z } from 'zod';
 const homeSlugSchema = z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/i, 'Invalid home slug');
 
 export function requireAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorised' });
+  // Read JWT from HttpOnly cookie first, fall back to Authorization header
+  // for backwards compatibility with API clients / integration tests.
+  const token = req.cookies?.panama_token
+    || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
+  if (!token) return res.status(401).json({ error: 'Unauthorised' });
+
+  // CSRF protection: cookie-authenticated requests must include X-Requested-With header.
+  // Custom headers can't be sent cross-origin without CORS preflight, so this
+  // blocks cross-site form submissions and simple requests from foreign origins.
+  // Skip for Authorization header (API clients handle their own CSRF) and health checks.
+  if (req.cookies?.panama_token && !req.headers['x-requested-with']) {
+    return res.status(403).json({ error: 'Missing CSRF header' });
+  }
+
   try {
-    const decoded = verifyToken(auth.slice(7));
+    const decoded = verifyToken(token);
     if (isTokenDenied(decoded)) {
       return res.status(401).json({ error: 'Token has been revoked' });
     }

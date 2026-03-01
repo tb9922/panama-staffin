@@ -10,16 +10,16 @@ export function getCurrentHome() {
   return currentHome;
 }
 
-function getToken() {
-  try { return sessionStorage.getItem('token') || ''; } catch { return ''; }
-}
-
 function authHeaders(extra = {}) {
-  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...extra };
+  return {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest', // CSRF protection for cookie-based auth
+    ...extra,
+  };
 }
 
 async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
+  const res = await fetch(url, { credentials: 'same-origin', ...options });
   if (res.status === 401) {
     const err = new Error('Session expired — please log in again');
     err.status = 401;
@@ -39,13 +39,14 @@ export async function loadHomes() {
 export async function login(username, password) {
   const res = await fetch(`${API_BASE}/login`, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) throw new Error('Invalid credentials');
   const user = await res.json();
+  // JWT is now in HttpOnly cookie (set by server) — only store display info
   sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '' }));
-  sessionStorage.setItem('token', user.token);
   return user;
 }
 
@@ -60,7 +61,8 @@ export function getLoggedInUser() {
 
 export function logout() {
   sessionStorage.removeItem('user');
-  sessionStorage.removeItem('token');
+  // Clear HttpOnly cookie via server endpoint (fire-and-forget)
+  fetch(`${API_BASE}/login/logout`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
 }
 
 export async function loadAuditLog(limit = 100) {
