@@ -4,7 +4,7 @@ const SAFE_COLUMNS = 'id, username, role, display_name, active, created_at, upda
 
 export async function findByUsername(username) {
   const { rows } = await pool.query(
-    'SELECT id, username, password_hash, role, display_name, active, last_login_at FROM users WHERE username = $1',
+    'SELECT id, username, password_hash, role, display_name, active, last_login_at, failed_login_count, locked_until FROM users WHERE username = $1',
     [username]
   );
   return rows[0] || null;
@@ -83,4 +83,21 @@ export async function existsByUsername(username) {
     [username]
   );
   return rows.length > 0;
+}
+
+export async function incrementFailedLogin(username) {
+  await pool.query(
+    `UPDATE users SET failed_login_count = failed_login_count + 1,
+       locked_until = CASE WHEN failed_login_count + 1 >= 5
+         THEN NOW() + INTERVAL '30 minutes' ELSE locked_until END
+     WHERE username = $1`,
+    [username]
+  );
+}
+
+export async function resetFailedLogin(username) {
+  await pool.query(
+    'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username = $1',
+    [username]
+  );
 }

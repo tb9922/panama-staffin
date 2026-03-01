@@ -37,12 +37,17 @@ export async function login(username, password) {
 
   if (dbUser) {
     if (!dbUser.active) throw new AuthenticationError('Account is deactivated');
+    // Account lockout — reject if locked and lockout hasn't expired
+    if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
+      throw new AuthenticationError('Account is temporarily locked due to too many failed attempts');
+    }
     const valid = await bcrypt.compare(password, dbUser.password_hash);
-    if (!valid) throw new AuthenticationError('Invalid credentials');
-    // Clear any username-level deny entry on successful login.
-    // This allows re-login after password change (which revokes old tokens
-    // via deniedUsernames but should not block new logins).
-    // Deactivated accounts are already caught above by !dbUser.active.
+    if (!valid) {
+      await userRepo.incrementFailedLogin(username);
+      throw new AuthenticationError('Invalid credentials');
+    }
+    // Successful login — reset failed counter and clear deny entry
+    await userRepo.resetFailedLogin(username);
     deniedUsernames.delete(username);
     userRepo.updateLastLogin(username).catch(() => {});
     const jti = randomUUID();

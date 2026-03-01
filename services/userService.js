@@ -12,6 +12,9 @@ const PASSWORD_MAX = 200;
 export function validatePassword(password) {
   if (!password || password.length < PASSWORD_MIN) return `Password must be at least ${PASSWORD_MIN} characters`;
   if (password.length > PASSWORD_MAX) return `Password must be at most ${PASSWORD_MAX} characters`;
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
   return null;
 }
 
@@ -93,9 +96,13 @@ export async function updateUser(id, fields, actorUsername) {
     await authService.revokeUser(target.username);
   }
 
-  // If role upgraded to admin, grant all homes
-  if (fields.role === 'admin' && target.role !== 'admin') {
-    await userHomeRepo.grantAllHomes(target.username);
+  // If role changed, force re-login so new JWT has correct role
+  if (fields.role && fields.role !== target.role) {
+    await authService.revokeUser(target.username);
+    // If upgraded to admin, grant all homes
+    if (fields.role === 'admin') {
+      await userHomeRepo.grantAllHomes(target.username);
+    }
   }
 
   return updated;
