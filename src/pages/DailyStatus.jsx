@@ -167,6 +167,8 @@ export default function DailyStatus() {
           reason: existing.reason,
           source: existing.source,
           sleep_in: !existing.sleep_in,
+          replaces_staff_id: existing.replaces_staff_id,
+          override_hours: existing.override_hours,
         });
       } else {
         const s = staffForDay.find(m => m.id === staffId);

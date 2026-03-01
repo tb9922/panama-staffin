@@ -379,6 +379,75 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
   });
 });
 
+// ── calculateStaffPeriodHours — TRN/ADM pay logic ────────────────────────────
+
+describe('calculateStaffPeriodHours — TRN/ADM pay logic', () => {
+  const config = {
+    cycle_start_date: '2025-01-06',
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+    ot_premium: 5,
+    bh_premium_multiplier: 2,
+  };
+
+  // Day A staff, pref E — working on 2025-01-06 (cycle day 0, A-team works)
+  const staff = { id: 'S1', team: 'Day A', pref: 'E', skill: 1, hourly_rate: 13, active: true, wtr_opt_out: false };
+
+  it('TRN on a working day pays full scheduled shift hours', () => {
+    // 2025-01-06 is cycle day 0 → Day A works → scheduled E (8h)
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'TRN' } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    // Should pay E hours (8) × rate (13) = 104, not TRN default
+    expect(result.totalHours).toBe(8);
+    expect(result.grossPay).toBe(104);
+  });
+
+  it('TRN on OFF day with override_hours pays actual training hours', () => {
+    // 2025-01-08 is cycle day 2 → Day A OFF
+    const dates = [addDays('2025-01-06', 2)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'TRN', override_hours: 4 } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    // Should pay 4h × rate (13) = 52
+    expect(result.totalHours).toBe(4);
+    expect(result.grossPay).toBe(52);
+  });
+
+  it('TRN on OFF day without override_hours falls back to config TRN hours', () => {
+    const dates = [addDays('2025-01-06', 2)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'TRN' } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    // No override_hours, no config.shifts.TRN → falls back to EL hours (12) × rate (13)
+    expect(result.totalHours).toBe(12);
+    expect(result.grossPay).toBe(156);
+  });
+
+  it('ADM on a working day pays full scheduled shift hours (same as TRN)', () => {
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'ADM' } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(8);
+    expect(result.grossPay).toBe(104);
+  });
+
+  it('ADM on OFF day with override_hours pays actual admin hours', () => {
+    const dates = [addDays('2025-01-06', 2)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'ADM', override_hours: 3 } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(3);
+    expect(result.grossPay).toBe(39);
+  });
+
+  it('Night staff TRN on working day pays N hours', () => {
+    const nightStaff = { ...staff, team: 'Night A', pref: 'N' };
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'TRN' } } };
+    const result = calculateStaffPeriodHours(nightStaff, dates, overrides, config);
+    // Night A works on day 0, scheduled N (10h) × rate (13) = 130
+    expect(result.totalHours).toBe(10);
+    expect(result.grossPay).toBe(130);
+  });
+});
+
 // ── getShiftHours — crash-safe with incomplete config ────────────────────────
 
 describe('getShiftHours — crash-safe with incomplete config', () => {
