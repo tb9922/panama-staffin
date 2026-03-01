@@ -54,7 +54,10 @@ if (config.nodeEnv === 'production') {
 
 // ── Security middleware ───────────────────────────────────────────────────────
 
-app.use(helmet());
+app.use(helmet({
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  contentSecurityPolicy: false,  // CSP handled by nginx in production
+}));
 app.use(cors({ origin: config.allowedOrigin }));
 app.use(express.json({ limit: config.requestBodyLimit }));
 
@@ -107,12 +110,16 @@ app.use('/api/users', usersRouter);
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
-  try { await pool.query('SELECT 1'); dbOk = true; } catch { /* no-op */ }
-  const status = dbOk ? 200 : 503;
-  res.status(status).json({
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    dbOk = true;
+  } catch { /* no-op */ }
+  res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',
-    uptime: Math.round(process.uptime()),
   });
 });
 
@@ -154,6 +161,10 @@ export { app };
 // Only listen when run directly (not when imported by tests)
 const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 const server = isMainModule ? app.listen(config.port, async () => {
+  // Request + connection timeouts
+  server.setTimeout(30000);        // 30s max request duration
+  server.keepAliveTimeout = 65000; // slightly above typical LB idle (60s)
+  server.headersTimeout = 66000;   // must exceed keepAliveTimeout
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
   await loadDenyList().catch(() => {});

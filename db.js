@@ -20,6 +20,19 @@ pool.on('error', (err) => {
   logger.error({ error: err.message }, 'Unexpected database pool error');
 });
 
+// Set per-connection statement timeout so no query runs forever
+pool.on('connect', (client) => {
+  client.query('SET statement_timeout = 30000').catch(() => {});
+});
+
+// Periodic pool stats — warn when clients are waiting for connections
+setInterval(() => {
+  const { totalCount, idleCount, waitingCount } = pool;
+  if (waitingCount > 0) {
+    logger.warn({ totalCount, idleCount, waitingCount }, 'DB pool has waiting clients');
+  }
+}, 300000).unref();
+
 /**
  * Run a function inside a transaction. Rolls back on error.
  * @param {(client: import('pg').PoolClient) => Promise<any>} fn
