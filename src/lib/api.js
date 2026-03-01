@@ -1031,6 +1031,20 @@ export async function getFinanceFeeHistory(homeSlug, residentId) {
   return apiFetch(`${API_BASE}/finance/residents/${residentId}/fee-history?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
+// Residents with beds (standalone Residents page)
+export async function getResidentsWithBeds(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.funding_type) params.set('funding_type', filters.funding_type);
+  if (filters.search) params.set('search', filters.search);
+  return apiFetch(`${API_BASE}/finance/residents/with-beds?${params}`, { headers: authHeaders() });
+}
+export async function deleteFinanceResident(homeSlug, id) {
+  return apiFetch(`${API_BASE}/finance/residents/${id}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
 // Invoices
 export async function getFinanceInvoices(homeSlug, filters = {}) {
   const params = new URLSearchParams({ home: homeSlug });
