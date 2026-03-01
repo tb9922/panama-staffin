@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function shapeRow(row) {
   return {
@@ -11,13 +11,13 @@ function shapeRow(row) {
     hourly_rate: parseFloat(row.hourly_rate),
     active: row.active,
     wtr_opt_out: row.wtr_opt_out,
-    start_date: row.start_date ? row.start_date.toISOString().slice(0, 10) : null,
-    date_of_birth: row.date_of_birth ? row.date_of_birth.toISOString().slice(0, 10) : null,
+    start_date: toDateStr(row.start_date),
+    date_of_birth: toDateStr(row.date_of_birth),
     ni_number: row.ni_number || null,
     contract_hours: row.contract_hours != null ? parseFloat(row.contract_hours) : null,
     al_entitlement: row.al_entitlement != null ? parseInt(row.al_entitlement, 10) : null,
     al_carryover: row.al_carryover != null ? parseInt(row.al_carryover, 10) : 0,
-    leaving_date: row.leaving_date ? row.leaving_date.toISOString().slice(0, 10) : null,
+    leaving_date: toDateStr(row.leaving_date),
     version: row.version != null ? parseInt(row.version, 10) : undefined,
   };
 }

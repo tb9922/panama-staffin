@@ -17,7 +17,7 @@ const policyBodySchema = z.object({
   policy_name:            z.string().min(1).max(500),
   policy_ref:             z.string().max(100).nullable().optional(),
   category:               z.string().max(200).nullable().optional(),
-  version:                z.string().max(50).nullable().optional(),
+  doc_version:            z.string().max(50).nullable().optional(),
   last_reviewed:          dateSchema.optional(),
   next_review_due:        dateSchema.optional(),
   review_frequency_months: z.coerce.number().int().min(1).max(60).nullable().optional(),

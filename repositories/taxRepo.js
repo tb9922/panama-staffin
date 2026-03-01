@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
@@ -70,7 +70,7 @@ function shapeCode(row) {
     tax_code: row.tax_code,
     basis: row.basis,
     ni_category: row.ni_category,
-    effective_from: row.effective_from ? row.effective_from.toISOString().slice(0, 10) : null,
+    effective_from: toDateStr(row.effective_from),
     previous_pay: f(row.previous_pay),
     previous_tax: f(row.previous_tax),
     student_loan_plan: row.student_loan_plan || null,

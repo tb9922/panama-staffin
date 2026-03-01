@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
@@ -22,7 +22,7 @@ export async function getPensionConfig(payDate, client) {
 function shapeConfig(row) {
   return {
     id: row.id,
-    effective_from: row.effective_from ? row.effective_from.toISOString().slice(0, 10) : null,
+    effective_from: toDateStr(row.effective_from),
     lower_qualifying_weekly: f(row.lower_qualifying_weekly),
     upper_qualifying_weekly: f(row.upper_qualifying_weekly),
     trigger_annual: f(row.trigger_annual),
@@ -83,10 +83,10 @@ function shapeEnrolment(row) {
     home_id: row.home_id,
     staff_id: row.staff_id,
     status: row.status,
-    enrolled_date: row.enrolled_date ? row.enrolled_date.toISOString().slice(0, 10) : null,
-    opted_out_date: row.opted_out_date ? row.opted_out_date.toISOString().slice(0, 10) : null,
-    postponed_until: row.postponed_until ? row.postponed_until.toISOString().slice(0, 10) : null,
-    reassessment_date: row.reassessment_date ? row.reassessment_date.toISOString().slice(0, 10) : null,
+    enrolled_date: toDateStr(row.enrolled_date),
+    opted_out_date: toDateStr(row.opted_out_date),
+    postponed_until: toDateStr(row.postponed_until),
+    reassessment_date: toDateStr(row.reassessment_date),
     notes: row.notes || null,
     updated_at: row.updated_at,
   };

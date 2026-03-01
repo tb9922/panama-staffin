@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 const int = (v) => parseInt(v ?? '0', 10);
 
@@ -229,7 +229,7 @@ export async function getFireDrillCounts(homeId, today) {
   );
   const r = rows[0];
   return {
-    lastDate: r.last_date ? r.last_date.toISOString().slice(0, 10) : null,
+    lastDate: toDateStr(r.last_date),
     drillsThisYear: r.drills_this_year,
     overdue: r.overdue ?? true,
   };

@@ -1,9 +1,9 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function shapeRow(row) {
   return {
     id:                      row.id,
-    date:                    row.date ? row.date.toISOString().slice(0, 10) : null,
+    date:                    toDateStr(row.date),
     time:                    row.time || undefined,
     scenario:                row.scenario || undefined,
     evacuation_time_seconds: row.evacuation_time_seconds ?? undefined,

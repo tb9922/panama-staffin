@@ -1,14 +1,14 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function shapeRow(row) {
   return {
     id:               row.id,
-    date:             row.date ? row.date.toISOString().slice(0, 10) : null,
+    date:             toDateStr(row.date),
     appraiser:        row.appraiser || undefined,
     objectives:       row.objectives || undefined,
     training_needs:   row.training_needs || undefined,
     development_plan: row.development_plan || undefined,
-    next_due:         row.next_due ? row.next_due.toISOString().slice(0, 10) : undefined,
+    next_due:         toDateStr(row.next_due) ?? undefined,
     notes:            row.notes || undefined,
     updated_at:       row.updated_at ? row.updated_at.toISOString() : undefined,
   };

@@ -8,6 +8,7 @@ function shapeRow(row) {
   if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
   if (typeof shaped.changes === 'string') shaped.changes = JSON.parse(shaped.changes);
   if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
+  // doc_version is the policy document version (VARCHAR), not the optimistic lock version (INTEGER)
   delete shaped.home_id;
   delete shaped.created_at;
   delete shaped.deleted_at;
@@ -33,18 +34,18 @@ export async function sync(homeId, arr, client) {
   for (const p of arr) {
     await conn.query(
       `INSERT INTO policy_reviews (
-         id, home_id, policy_name, policy_ref, category, version,
+         id, home_id, policy_name, policy_ref, category, doc_version,
          last_reviewed, next_review_due, review_frequency_months,
          status, reviewed_by, approved_by, changes, notes, updated_at
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (home_id, id) DO UPDATE SET
-         policy_name=$3,policy_ref=$4,category=$5,version=$6,
+         policy_name=$3,policy_ref=$4,category=$5,doc_version=$6,
          last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
          status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
          updated_at=$15,deleted_at=NULL`,
       [
         p.id, homeId, p.policy_name || null, p.policy_ref || null,
-        p.category || null, p.version || null,
+        p.category || null, p.doc_version || p.version || null,
         p.last_reviewed || null, p.next_review_due || null,
         p.review_frequency_months ?? null, p.status || null,
         p.reviewed_by || null, p.approved_by || null,
@@ -81,19 +82,19 @@ export async function upsert(homeId, data) {
   const now = new Date().toISOString();
   const { rows } = await pool.query(
     `INSERT INTO policy_reviews (
-       id, home_id, policy_name, policy_ref, category, version,
+       id, home_id, policy_name, policy_ref, category, doc_version,
        last_reviewed, next_review_due, review_frequency_months,
        status, reviewed_by, approved_by, changes, notes, updated_at
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       policy_name=$3,policy_ref=$4,category=$5,version=$6,
+       policy_name=$3,policy_ref=$4,category=$5,doc_version=$6,
        last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
        status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
        updated_at=$15,deleted_at=NULL
      RETURNING *`,
     [
       id, homeId, data.policy_name || null, data.policy_ref || null,
-      data.category || null, data.version || null,
+      data.category || null, data.doc_version || null,
       data.last_reviewed || null, data.next_review_due || null,
       data.review_frequency_months ?? null, data.status || null,
       data.reviewed_by || null, data.approved_by || null,
@@ -106,7 +107,7 @@ export async function upsert(homeId, data) {
 
 // Column name whitelist for dynamic SQL
 const ALLOWED_COLUMNS = new Set([
-  'policy_name', 'policy_ref', 'category', 'version',
+  'policy_name', 'policy_ref', 'category', 'doc_version',
   'last_reviewed', 'next_review_due', 'review_frequency_months',
   'status', 'reviewed_by', 'approved_by', 'changes', 'notes',
 ]);

@@ -4,6 +4,19 @@ import logger from './logger.js';
 
 const { Pool } = pg;
 
+// Return DATE columns as ISO strings ('YYYY-MM-DD'), not JS Date objects.
+// Without this, pg interprets DATE as midnight local time — during BST (UTC+1)
+// a date like '2026-03-31' becomes 2026-03-30T23:00:00Z, losing a day.
+pg.types.setTypeParser(1082, (val) => val);
+
+/** Convert a DATE value to 'YYYY-MM-DD' string. Works with both
+ *  Date objects (TIMESTAMP columns) and strings (DATE columns after type parser). */
+export function toDateStr(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return typeof v === 'string' ? v : String(v);
+}
+
 export const pool = new Pool({
   host: config.db.host,
   port: config.db.port,

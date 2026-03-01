@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
@@ -14,7 +14,7 @@ export async function getAllSSPConfigs(client) {
     'SELECT * FROM ssp_config ORDER BY effective_from'
   );
   return rows.map(r => ({
-    effective_from: r.effective_from ? r.effective_from.toISOString().slice(0, 10) : null,
+    effective_from: toDateStr(r.effective_from),
     weekly_rate: f(r.weekly_rate),
     waiting_days: r.waiting_days,
     lel_weekly: r.lel_weekly != null ? f(r.lel_weekly) : null,
@@ -114,13 +114,13 @@ function shapePeriod(row) {
     id: row.id,
     home_id: row.home_id,
     staff_id: row.staff_id,
-    start_date: row.start_date ? row.start_date.toISOString().slice(0, 10) : null,
-    end_date: row.end_date ? row.end_date.toISOString().slice(0, 10) : null,
+    start_date: toDateStr(row.start_date),
+    end_date: toDateStr(row.end_date),
     qualifying_days_per_week: row.qualifying_days_per_week,
     waiting_days_served: row.waiting_days_served,
     ssp_weeks_paid: f(row.ssp_weeks_paid),
     fit_note_received: row.fit_note_received,
-    fit_note_date: row.fit_note_date ? row.fit_note_date.toISOString().slice(0, 10) : null,
+    fit_note_date: toDateStr(row.fit_note_date),
     linked_to_period_id: row.linked_to_period_id || null,
     notes: row.notes || null,
   };
