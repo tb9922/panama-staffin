@@ -937,10 +937,9 @@ export async function uploadHrAttachment(caseType, caseId, file, description) {
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const token = sessionStorage.getItem('token') || '';
   const res = await fetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
+    credentials: 'same-origin',
     body: formData,
   });
   if (res.status === 401) {
@@ -965,9 +964,8 @@ export async function deleteHrAttachment(id) {
 
 export async function downloadHrAttachment(id, originalName) {
   const home = getCurrentHome();
-  const token = sessionStorage.getItem('token') || '';
   const res = await fetch(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+    credentials: 'same-origin',
   });
   if (!res.ok) throw new Error('Download failed');
   const blob = await res.blob();

@@ -32,11 +32,12 @@ router.post('/', loginLimiter, async (req, res, next) => {
     auditService.log('login', '-', username, null).catch(() => {});
 
     // Set JWT as HttpOnly cookie — not accessible to JavaScript, immune to XSS token theft.
-    // SameSite=Strict blocks cross-origin sends; Secure requires HTTPS in production.
+    // SameSite=Lax allows top-level navigations (email/Slack links) while blocking cross-origin POSTs.
+    // Secure requires HTTPS in production.
     res.cookie('panama_token', result.token, {
       httpOnly: true,
       secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/api',
       maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
     });

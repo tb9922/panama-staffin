@@ -43,6 +43,11 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 13. ~~Dashboard shows deactivated staff training~~ — FIXED: `getTrainingCounts` filters `deleted_at IS NULL` + active staff
 14. ~~24 scratch files in repo root~~ — FIXED: removed + gitignored
 15. ~~ROLLBACK.md documents non-existent `--down` flag~~ — FIXED: manual rollback procedure
+16. ~~Welsh tax code `C` prefix produces 0% tax~~ — FIXED: maps to `england_wales` not `wales`
+17. ~~Audit log cross-tenant leak~~ — FIXED: GET /api/audit filters to user's accessible homes
+18. ~~Payroll reads outside transaction~~ — FIXED: `staffRepo.findByHome`/`overrideRepo.findByHome` accept `client` param
+19. ~~GDPR erasure misses shift_overrides.reason~~ — FIXED: clears reason (can contain health data)
+20. ~~financeRepo invoice lines skip tenant filter~~ — FIXED: `home_id` always required
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 

@@ -108,9 +108,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const home = await homeRepo.findById(homeId, client);
     if (!home) throw new NotFoundError('Home not found');
 
-    const allStaffResult = await staffRepo.findByHome(homeId);
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff    = allStaffResult.rows;
-    const overrides   = await overrideRepo.findByHome(homeId);
+    const overrides   = await overrideRepo.findByHome(homeId, undefined, undefined, client);
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates();
 
@@ -477,7 +477,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
     }
 
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
-    const allStaffResult = await staffRepo.findByHome(homeId);
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff = allStaffResult.rows;
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 

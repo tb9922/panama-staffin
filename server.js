@@ -176,10 +176,10 @@ const server = isMainModule ? app.listen(config.port, async () => {
   await ensureSeedUsers().catch(err =>
     logger.warn({ err: err?.message }, 'User seeding skipped')
   );
-  // Prune expired deny-list entries daily
+  // Prune expired deny-list entries hourly
   setInterval(
     () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
-    24 * 60 * 60 * 1000
+    60 * 60 * 1000
   ).unref();
   // Purge audit entries past 7-year retention daily
   setInterval(

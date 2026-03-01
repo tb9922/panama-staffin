@@ -11,7 +11,8 @@ import { pool } from '../db.js';
  * @param {string} [fromDate]  "YYYY-MM-DD" inclusive lower bound
  * @param {string} [toDate]    "YYYY-MM-DD" inclusive upper bound
  */
-export async function findByHome(homeId, fromDate, toDate) {
+export async function findByHome(homeId, fromDate, toDate, client) {
+  const conn = client || pool;
   let sql = 'SELECT date, staff_id, shift, reason, source, sleep_in FROM shift_overrides WHERE home_id = $1';
   const params = [homeId];
   if (fromDate) {
@@ -22,7 +23,7 @@ export async function findByHome(homeId, fromDate, toDate) {
     params.push(toDate);
     sql += ` AND date <= $${params.length}`;
   }
-  const { rows } = await pool.query(sql, params);
+  const { rows } = await conn.query(sql, params);
   const result = {};
   for (const row of rows) {
     const dateStr = row.date instanceof Date

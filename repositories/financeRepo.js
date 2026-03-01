@@ -291,11 +291,9 @@ export async function updateInvoice(id, homeId, data, client, version) {
 
 export async function findInvoiceLines(invoiceId, homeId, client) {
   const conn = client || pool;
-  const params = [invoiceId];
-  let sql = 'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND deleted_at IS NULL';
-  if (homeId) { params.push(homeId); sql += ` AND home_id = $${params.length}`; }
-  sql += ' ORDER BY id';
-  const { rows } = await conn.query(sql, params);
+  const { rows } = await conn.query(
+    'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL ORDER BY id',
+    [invoiceId, homeId]);
   return rows.map(shapeInvoiceLine);
 }
 
@@ -310,10 +308,9 @@ export async function createInvoiceLine(invoiceId, homeId, data, client) {
 
 export async function deleteInvoiceLines(invoiceId, homeId, client) {
   const conn = client || pool;
-  const params = [invoiceId];
-  let sql = 'UPDATE finance_invoice_lines SET deleted_at = NOW() WHERE invoice_id = $1 AND deleted_at IS NULL';
-  if (homeId) { params.push(homeId); sql += ` AND home_id = $${params.length}`; }
-  await conn.query(sql, params);
+  await conn.query(
+    'UPDATE finance_invoice_lines SET deleted_at = NOW() WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    [invoiceId, homeId]);
 }
 
 // ── Expenses ──────────────────────────────────────────────────────────────────
