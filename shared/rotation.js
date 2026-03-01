@@ -266,10 +266,11 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     }
     if (isOTShift(shift)) otHours += hours;
     if (isBHShift(shift)) bhHours += hours;
-    // AL tracking: separate from totalHours (would break WTR avg) but included in totalPay
+    // AL tracking: pay matches the shift the staff member would have worked
     if (shift === 'AL') {
       alDays += 1;
-      alPay += getShiftHours('EL', config) * staff.hourly_rate;
+      const alShift = staff.team && staff.team.startsWith('Night') ? 'N' : (staff.pref || 'EL');
+      alPay += getShiftHours(alShift, config) * staff.hourly_rate;
     }
   });
 
