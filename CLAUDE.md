@@ -36,6 +36,13 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 6. ~~RIDDOR `over_7_day` deadline off by one~~ — FIXED: consolidated via `RIDDOR_CATEGORIES` import
 7. ~~`formatDate` local time vs UTC~~ — FIXED: formatDate/parseDate/addDays all use UTC
 8. ~~Dashboard `today` not reactive~~ — FIXED: Dashboard uses midnight timer; CoverageAlertBanner uses `useLiveDate` hook
+9. ~~XSS via `dangerouslySetInnerHTML`~~ — FIXED: Residents.jsx toast uses JSX elements
+10. ~~No CSP header~~ — FIXED: nginx.conf has `Content-Security-Policy` with `default-src 'self'`
+11. ~~`data.js` Zod bypass~~ — FIXED: uses `parsed.data` instead of `req.body`
+12. ~~Cross-tenant pension leak~~ — FIXED: `pensionRepo.getContributionsByRun` requires `homeId`
+13. ~~Dashboard shows deactivated staff training~~ — FIXED: `getTrainingCounts` filters `deleted_at IS NULL` + active staff
+14. ~~24 scratch files in repo root~~ — FIXED: removed + gitignored
+15. ~~ROLLBACK.md documents non-existent `--down` flag~~ — FIXED: manual rollback procedure
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
