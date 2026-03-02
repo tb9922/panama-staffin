@@ -161,8 +161,8 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
     active, wtr_opt_out, start_date, contract_hours,
     date_of_birth,             // For NMW age-bracket and pension auto-enrolment (null = default 21+)
     ni_number,                 // UK NI number for payroll export (null = not yet provided)
-    al_entitlement,            // Per-staff override of config.al_entitlement_days (null = use global)
-    al_carryover,              // Days carried over from previous leave year (default 0, set manually)
+    al_entitlement,            // Hours override (null = auto: 5.6 × contract_hours). NUMERIC(6,2)
+    al_carryover,              // Hours carried over from previous leave year (default 0, set manually)
     leaving_date,              // Auto-set when deactivated, cleared when reactivated
   }],
   overrides: {
@@ -172,6 +172,7 @@ All data is in a single JSON file per home (`homes/{name}.json`). Shape:
         sleep_in: false,                   // Sleep-in flag (night shifts)
         replaces_staff_id: "other-id",     // OC/AG shifts: who this covers (null if not covering)
         override_hours: 4,                 // TRN/ADM on off-days: actual hours attended (null = use config)
+        al_hours: 12,                      // AL bookings: hours deducted (null on legacy = derive from shift)
       }
     }
   },
@@ -449,8 +450,12 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - `getScheduledShift(staff, cycleDay, date)` — base shift from pattern + team + preference
 - `getActualShift(staff, date, overrides, cycleStartDate)` — override or scheduled
 - `getStaffForDay(staff, date, overrides, config)` — full day build with BH upgrade + virtual agency
-- `calculateStaffPeriodHours(staff, dates, overrides, config)` — hours/pay for a date range
+- `calculateStaffPeriodHours(staff, dates, overrides, config)` — hours/pay for a date range (includes alHours)
 - `isBankHoliday(date, config)` / `getBankHoliday(date, config)` — bank holiday lookup
+- `getLeaveYear(date, leaveYearStart)` — returns { start, end, startStr, endStr } for leave year containing date
+- `getALDeductionHours(staff, dateStr, config)` — hours to deduct for one AL booking based on scheduled shift
+- `STATUTORY_WEEKS` — 5.6 (UK statutory holiday weeks)
+- `ASSUMED_WORKING_DAYS_PER_WEEK` — 5 (for Float/AVL deduction)
 
 ### escalation.js
 - `calculateCoverage(staffForDay, period, config)` — heads + skill points vs minimum
@@ -462,9 +467,10 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - `validateSwap(fromStaff, toStaff, date, overrides, config)` — swap safety check
 
 ### accrual.js
-- `getLeaveYear(date, leaveYearStart)` — returns { start, end, startStr, endStr } for the leave year containing the given date
-- `countALInLeaveYear(staffId, overrides, leaveYear)` — count AL overrides within a leave year
-- `calculateAccrual(staff, config, overrides, asOfDate)` — full accrual calc: pro-rata from start_date, monthly 1/12th accrual, carryover, returns { baseEntitlement, entitlement, accrued, used, remaining, yearRemaining, isProRata, leaveYear }
+- `getLeaveYear(date, leaveYearStart)` — re-exported from rotation.js; returns { start, end, startStr, endStr }
+- `countALInLeaveYear(staffId, overrides, leaveYear)` — legacy day-count (kept for backward compat)
+- `sumALHoursInLeaveYear(staff, overrides, leaveYear, config)` — sum AL hours (stored or derived from shift)
+- `calculateAccrual(staff, config, overrides, asOfDate)` — hours-based accrual: returns { contractHours, annualEntitlementHours, carryoverHours, totalEntitlementHours, proRataEntitlementHours, accruedHours, usedHours, remainingHours, yearRemainingHours, leaveYear, isProRata, missingContractHours, entitlementWeeks, usedWeeks, remainingWeeks }
 - `getAccrualSummary(activeStaff, config, overrides, asOfDate)` — returns Map<staffId, accrualResult> for all active staff
 
 ### training.js
@@ -636,23 +642,42 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - **CQC Regulation 18**: Safe staffing levels must be maintained
 - **Bank holidays**: Auto-fetched from GOV.UK, auto-upgrade shifts to BH-D/BH-N
 
-## Holiday Accrual
+## Holiday Accrual (Hours-Based)
 
-Accrual is calculated in `src/lib/accrual.js`. Key concepts:
+UK statutory: entitlement = **5.6 x contracted weekly hours**. All accrual is in **hours**, not days.
+
+Accrual is calculated in `src/lib/accrual.js`. Core functions in `shared/rotation.js` (server-side access).
+
+Key concepts:
 - Leave year is anchored to `config.leave_year_start` ("MM-DD", default "04-01")
 - Staff accrue 1/12th of entitlement per complete month from their effective start date
-- New starters get pro-rata: their entitlement is `base × (months-left-in-year / 12)`
-- Carryover (`staff.al_carryover`) is added to accrued total and available immediately
-- Per-staff override: `staff.al_entitlement` overrides the global `config.al_entitlement_days`
+- New starters get pro-rata: their entitlement is `base x (months-left-in-year / 12)`
+- Carryover (`staff.al_carryover`, in hours) is added to accrued total and available immediately
+- Per-staff override: `staff.al_entitlement` overrides the formula (set in hours, NULL = auto-derive)
+- Each AL booking stores `al_hours` on `shift_overrides` — deducted from actual scheduled shift hours
+- Legacy bookings (no `al_hours`): derived on-the-fly via `getALDeductionHours(staff, dateStr, config)`
+- Backend is authoritative — computes `al_hours` inside transaction, overrides frontend hint
+- AL on scheduled OFF day: rejected. AL requires `contract_hours > 0`.
 - Automatic year-end rollover is NOT implemented — managers set `al_carryover` manually each April
 
-`calculateAccrual(staff, config, overrides, asOfDate)` returns `{ baseEntitlement, entitlement, accrued, used, remaining, yearRemaining, isProRata, leaveYear }`
+Deduction per AL booking:
+- EL shift = 12h, E/L = 8h, N = 10h (from config shift hours)
+- Float/AVL = `contract_hours / 5` (matches payroll methodology)
+- OFF = 0 (booking blocked)
+
+`calculateAccrual(staff, config, overrides, asOfDate)` returns:
+`{ contractHours, annualEntitlementHours, carryoverHours, totalEntitlementHours, proRataEntitlementHours, accruedHours, usedHours, remainingHours, yearRemainingHours, leaveYear, isProRata, missingContractHours, entitlementWeeks, usedWeeks, remainingWeeks }`
+
+Key functions in `shared/rotation.js`:
+- `getLeaveYear(date, leaveYearStart)` — leave year boundaries
+- `getALDeductionHours(staff, dateStr, config)` — hours to deduct for one AL booking
+- `STATUTORY_WEEKS` — 5.6
 
 UI terminology (consistent across AnnualLeave, Dashboard, booking alerts):
-- **Entitled** = `baseEntitlement` (full-year entitlement, e.g. 28 days)
-- **Earned** = `accrued` (1/12th per month from effective start, pro-rata for mid-year starters)
-- **Used** = `used` (AL overrides counted in the leave year)
-- **Left** = `remaining` (earned - used; can be negative if over-booked)
+- **Entitled** = `annualEntitlementHours` (full-year entitlement in hours)
+- **Earned** = `accruedHours` (1/12th per month from effective start, pro-rata for mid-year starters)
+- **Used** = `usedHours` (AL hours deducted in the leave year)
+- **Left** = `remainingHours` (earned - used; can be negative if over-booked)
 
 ## Full Platform Roadmap
 
