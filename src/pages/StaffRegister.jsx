@@ -24,7 +24,7 @@ function downloadCSV(filename, headers, rows) {
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
   hourly_rate: 11.00, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
-  al_entitlement: null, al_carryover: 0,
+  contract_hours: null, al_entitlement: null, al_carryover: 0,
 };
 
 export default function StaffRegister() {
@@ -344,6 +344,14 @@ export default function StaffRegister() {
                   )}
                 </div>
               </div>
+              <div>
+                <label className={INPUT.label}>Contract hrs/wk</label>
+                <input type="number" min="0" max="60" step="0.5" value={newStaff.contract_hours ?? ''}
+                  placeholder="e.g. 36"
+                  onChange={e => setNewStaff({ ...newStaff, contract_hours: e.target.value ? parseFloat(e.target.value) : null })}
+                  className={INPUT.base} />
+                <p className="text-xs text-gray-400 mt-0.5">Required for AL calculation (5.6 x weekly hrs)</p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={INPUT.label}>Start Date</label>
@@ -390,8 +398,8 @@ export default function StaffRegister() {
       </Modal>
 
       {/* Table */}
-      <div className={CARD.flush}>
-        <table className={TABLE.table}>
+      <div className={CARD.flush + ' overflow-x-auto'}>
+        <table className={TABLE.table + ' min-w-[1100px]'}>
           <thead className={TABLE.thead}>
             <tr>
               <th className={TABLE.th}>ID</th>
@@ -401,6 +409,7 @@ export default function StaffRegister() {
               <SortHeader col="pref">Pref</SortHeader>
               <SortHeader col="skill">Skill</SortHeader>
               {isAdmin && <SortHeader col="hourly_rate">Rate</SortHeader>}
+              <th className={TABLE.th}>Hrs/wk</th>
               <th className={TABLE.th}>Start</th>
               <th className={TABLE.th}>WTR</th>
               <th className={TABLE.th}>Notes</th>
@@ -493,6 +502,20 @@ export default function StaffRegister() {
                       )}
                     </td>
                     )}
+
+                    {/* Contract hrs/wk — editable */}
+                    <td className={TABLE.td}>
+                      {isEd(s.id) ? (
+                        <input type="number" min="0" max="60" step="0.5" value={r.contract_hours ?? ''}
+                          placeholder="—"
+                          onChange={e => updateEditingRow('contract_hours', e.target.value ? parseFloat(e.target.value) : null)}
+                          className={INPUT.inline + ' w-14'} />
+                      ) : (
+                        <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>
+                          {s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}
+                        </span>
+                      )}
+                    </td>
 
                     {/* Start Date — editable */}
                     <td className={TABLE.td}>
