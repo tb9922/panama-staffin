@@ -35,7 +35,9 @@ const concernBodySchema = z.object({
   lessons_learned:          z.string().max(5000).nullable().optional(),
 });
 // anonymous is immutable after creation — omit from update schema to prevent de-anonymisation
-const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial();
+const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/whistleblowing?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -81,7 +83,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
     if (!parsed.success) return zodError(res, parsed);
     const existing = await whistleblowingRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, parsed.data, version);
     if (concern === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

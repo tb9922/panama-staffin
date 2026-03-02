@@ -50,7 +50,9 @@ const residentBodySchema = z.object({
   _fee_change_reason: z.string().max(500).optional(),
 });
 
-const residentUpdateSchema = residentBodySchema.partial();
+const residentUpdateSchema = residentBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Invoice Schemas ───────────────────────────────────────────────────────────
 
@@ -77,7 +79,9 @@ const invoiceBodySchema = z.object({
   lines: z.array(invoiceLineSchema).optional(),
 });
 
-const invoiceUpdateSchema = invoiceBodySchema.partial();
+const invoiceUpdateSchema = invoiceBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 const paymentSchema = z.object({
   amount: z.coerce.number().positive('Payment amount must be greater than zero'),
@@ -111,7 +115,9 @@ const expenseBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const expenseUpdateSchema = expenseBodySchema.partial();
+const expenseUpdateSchema = expenseBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Chase Log Schema ─────────────────────────────────────────────────────────
 
@@ -143,7 +149,9 @@ const paymentScheduleBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial();
+const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
@@ -197,7 +205,7 @@ router.put('/residents/:id', requireAuth, requireAdmin, requireHomeAccess, async
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findResidentById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Resident not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateResident(idP.data, req.home.id, parsed.data, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -275,7 +283,7 @@ router.put('/invoices/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findInvoiceById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Invoice not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, parsed.data, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -359,7 +367,7 @@ router.put('/expenses/:id', requireAuth, requireAdmin, requireHomeAccess, async 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findExpenseById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateExpense(idP.data, req.home.id, parsed.data, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -472,7 +480,7 @@ router.put('/payment-schedules/:id', requireAuth, requireAdmin, requireHomeAcces
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findPaymentScheduleById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Payment schedule not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, parsed.data, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

@@ -33,7 +33,9 @@ const complaintBodySchema = z.object({
   improvements:        z.string().max(5000).nullable().optional(),
   lessons_learned:     z.string().max(5000).nullable().optional(),
 });
-const complaintUpdateSchema = complaintBodySchema.partial();
+const complaintUpdateSchema = complaintBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 const surveyBodySchema = z.object({
   type:                 z.string().max(100).nullable().optional(),
@@ -47,7 +49,9 @@ const surveyBodySchema = z.object({
   actions:              z.string().max(10000).nullable().optional(),
   conducted_by:         z.string().max(200).nullable().optional(),
 });
-const surveyUpdateSchema = surveyBodySchema.partial();
+const surveyUpdateSchema = surveyBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/complaints?home=X
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -89,7 +93,7 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await complaintRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const complaint = await complaintRepo.update(idParsed.data, req.home.id, updates, version);
     if (complaint === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -136,7 +140,7 @@ router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await complaintSurveyRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const survey = await complaintSurveyRepo.update(idParsed.data, req.home.id, updates, version);
     if (survey === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
