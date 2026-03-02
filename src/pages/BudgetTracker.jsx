@@ -3,14 +3,14 @@ import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../lib/api.js';
 
 function getMonthDates(year, month) {
   const dates = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
+  const d = new Date(Date.UTC(year, month, 1));
+  while (d.getUTCMonth() === month) {
     dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -44,6 +44,7 @@ export default function BudgetTracker() {
 }
 
 function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditingBudget, budgetInput, setBudgetInput, agencyCapInput, setAgencyCapInput }) {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -173,13 +174,13 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           <p className="text-sm text-gray-500">12-month rolling view — staffing cost tracking</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => {
+          {isAdmin && <button onClick={() => {
             setEditingBudget('default');
             setBudgetInput(String(defaultBudget || ''));
             setAgencyCapInput(String(defaultAgencyCap || ''));
           }} className={BTN.primary}>
             Set Budget
-          </button>
+          </button>}
           <button onClick={() => {
             const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
             const rows = monthData.map(m => [
@@ -384,12 +385,12 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                       </span>
                     ) : <span className="text-gray-300">-</span>}
                   </td>
-                  <td className={`${TABLE.td} text-center print:hidden`}>
+                  {isAdmin && <td className={`${TABLE.td} text-center print:hidden`}>
                     <button onClick={() => {
                       setEditingBudget(m.key);
                       setBudgetInput(String(m.budget || defaultBudget || ''));
                     }} className="text-blue-500 hover:text-blue-700 text-[10px] underline transition-colors duration-150">edit</button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

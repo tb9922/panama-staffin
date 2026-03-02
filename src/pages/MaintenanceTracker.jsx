@@ -318,17 +318,17 @@ export default function MaintenanceTracker() {
                 <div>
                   <label className={INPUT.label}>Items Checked</label>
                   <input type="number" value={form.items_checked}
-                    onChange={e => setForm({ ...form, items_checked: parseInt(e.target.value) || '' })} className={INPUT.base} />
+                    onChange={e => setForm({ ...form, items_checked: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Items Passed</label>
                   <input type="number" value={form.items_passed}
-                    onChange={e => setForm({ ...form, items_passed: parseInt(e.target.value) || '' })} className={INPUT.base} />
+                    onChange={e => setForm({ ...form, items_passed: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Items Failed</label>
                   <input type="number" value={form.items_failed}
-                    onChange={e => setForm({ ...form, items_failed: parseInt(e.target.value) || '' })} className={INPUT.base} />
+                    onChange={e => setForm({ ...form, items_failed: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })} className={INPUT.base} />
                 </div>
               </div>
 

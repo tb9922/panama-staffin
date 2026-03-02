@@ -84,7 +84,11 @@ export default function PolicyReviewTracker() {
   function calculateNextReviewDue(lastReviewed, frequencyMonths) {
     if (!lastReviewed) return '';
     const d = parseDate(lastReviewed);
-    d.setMonth(d.getMonth() + (frequencyMonths || 12));
+    const targetMonth = d.getUTCMonth() + (frequencyMonths || 12);
+    const origDay = d.getUTCDate();
+    d.setUTCMonth(targetMonth);
+    // Clamp overflow: e.g. Jan 31 + 1 month → Mar 3, roll back to Feb 28
+    if (d.getUTCDate() !== origDay) d.setUTCDate(0);
     return formatDate(d);
   }
 
@@ -137,7 +141,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      setError(e.message);
+      alert(e.message || 'Failed to save');
     }
   }
 
@@ -174,7 +178,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      setError(e.message);
+      alert(e.message || 'Failed to save');
     }
   }
 
@@ -185,7 +189,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      setError(e.message);
+      alert(e.message || 'Failed to delete');
     }
   }
 

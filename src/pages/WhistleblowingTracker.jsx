@@ -63,10 +63,10 @@ export default function WhistleblowingTracker() {
 
   // Date range for stats: last 90 days
   const statsRange = useMemo(() => {
-    const to = new Date(); to.setHours(0, 0, 0, 0);
-    const from = new Date(to); from.setDate(from.getDate() - 89);
-    return { from: formatDate(from), to: formatDate(to) };
-  }, []);
+    const d = new Date(today + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 89);
+    return { from: d.toISOString().slice(0, 10), to: today };
+  }, [today]);
 
   const stats = useMemo(() =>
     getWhistleblowingStats(concerns, statsRange.from, statsRange.to),

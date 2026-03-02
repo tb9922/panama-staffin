@@ -86,10 +86,10 @@ export default function ComplaintsTracker() {
   const complaintConfig = { complaint_response_days: 28 };
 
   const statsRange = useMemo(() => {
-    const to = new Date(); to.setHours(0, 0, 0, 0);
-    const from = new Date(to); from.setDate(from.getDate() - 89);
-    return { from: formatDate(from), to: formatDate(to) };
-  }, []);
+    const d = new Date(today + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 89);
+    return { from: d.toISOString().slice(0, 10), to: today };
+  }, [today]);
 
   const stats = useMemo(() =>
     getComplaintStats(complaints, complaintConfig, statsRange.from, statsRange.to),
@@ -577,19 +577,19 @@ export default function ComplaintsTracker() {
                 <div>
                   <label className={INPUT.label}>Sent</label>
                   <input type="number" value={surveyForm.total_sent}
-                    onChange={e => setSurveyForm({ ...surveyForm, total_sent: parseInt(e.target.value) || '' })}
+                    onChange={e => setSurveyForm({ ...surveyForm, total_sent: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Responses</label>
                   <input type="number" value={surveyForm.responses}
-                    onChange={e => setSurveyForm({ ...surveyForm, responses: parseInt(e.target.value) || '' })}
+                    onChange={e => setSurveyForm({ ...surveyForm, responses: (() => { const v = parseInt(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Satisfaction (1-5)</label>
                   <input type="number" min="1" max="5" step="0.1" value={surveyForm.overall_satisfaction}
-                    onChange={e => setSurveyForm({ ...surveyForm, overall_satisfaction: parseFloat(e.target.value) || '' })}
+                    onChange={e => setSurveyForm({ ...surveyForm, overall_satisfaction: (() => { const v = parseFloat(e.target.value); return isNaN(v) ? '' : v; })() })}
                     className={INPUT.base} />
                 </div>
               </div>

@@ -8,11 +8,11 @@ function getMonthRange(monthsBack) {
   const months = [];
   const now = new Date();
   for (let i = monthsBack - 1; i >= 0; i--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0));
     months.push({
-      label: start.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-      fullLabel: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      label: start.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+      fullLabel: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
       start,
       end,
       dates: getDatesInRange(start, end),
@@ -26,7 +26,7 @@ function getDatesInRange(start, end) {
   const d = new Date(start);
   while (d <= end) {
     dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -35,6 +35,7 @@ export default function SickTrends() {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const homeSlug = getCurrentHome();
@@ -45,12 +46,12 @@ export default function SickTrends() {
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
-      .catch(() => {})
+      .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading sick trend data...</div>;
-  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <SickTrendsInner schedData={schedData} isAdmin={isAdmin} />;
 }

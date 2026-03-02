@@ -28,17 +28,19 @@ export default function ScenarioModel() {
   const [customAL, setCustomAL] = useState(1);
   const [customName, setCustomName] = useState('Custom Scenario');
 
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     getSchedulingData(homeSlug)
       .then(setSchedData)
-      .catch(() => {})
+      .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading scenario data...</div>;
-  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <ScenarioModelInner schedData={schedData} customSick={customSick} setCustomSick={setCustomSick} customAL={customAL} setCustomAL={setCustomAL} customName={customName} setCustomName={setCustomName} />;
 }

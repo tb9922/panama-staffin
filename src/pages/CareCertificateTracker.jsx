@@ -81,7 +81,7 @@ export default function CareCertificateTracker() {
       list = list.filter(s => s.name.toLowerCase().includes(q));
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeStaff, careCertData, filterStatus, search]);
+  }, [activeStaff, careCertData, filterStatus, search, today]);
 
   const eligibleStaff = useMemo(() => {
     return activeStaff.filter(s => !careCertData[s.id]).sort((a, b) => a.name.localeCompare(b.name));
