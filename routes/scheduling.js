@@ -9,21 +9,24 @@ import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
-import { getCycleDay, getScheduledShift, isOTShift, isAgencyShift } from '../shared/rotation.js';
+import {
+  getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
+  getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
+} from '../shared/rotation.js';
 
 const router = Router();
 
 /**
  * Validate an AL override before allowing it.
- * Checks max_al_same_day and per-staff entitlement.
+ * Checks max_al_same_day and per-staff entitlement (hours-based).
  * @param {number} homeId
  * @param {object} config
  * @param {string} date   "YYYY-MM-DD"
  * @param {string} staffId
  * @param {object} [batchCtx]  In-batch counters for bulk validation:
- *   { dayAL: { "YYYY-MM-DD": number }, staffAL: { staffId: number } }
+ *   { dayAL: { "YYYY-MM-DD": number }, staffAL: { staffId: number }, staffALHours: { staffId: number } }
  * @param {object} [client]  Optional pg client for transaction
- * @returns {string|null} error message or null if valid
+ * @returns {{ error: string|null, al_hours: number }} validation result with computed hours
  */
 async function validateALOverride(homeId, config, date, staffId, batchCtx, client) {
   const conn = client || pool;
@@ -37,60 +40,71 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
   );
   const dayCount = countRows[0].cnt + (batchCtx?.dayAL?.[date] ?? 0);
   if (dayCount >= maxAL) {
-    return `Max AL per day (${maxAL}) already reached on ${date}`;
+    return { error: `Max AL per day (${maxAL}) already reached on ${date}`, al_hours: 0 };
   }
 
-  // 2. Check staff entitlement in current leave year
-  const leaveYearStart = config?.leave_year_start || '04-01';
-  const [lyMM, lyDD] = leaveYearStart.split('-').map(Number);
-  const now = new Date();
-  const thisYearBoundary = new Date(Date.UTC(now.getUTCFullYear(), lyMM - 1, lyDD));
-  let lyStartStr, lyEndStr;
-  if (now >= thisYearBoundary) {
-    lyStartStr = thisYearBoundary.toISOString().slice(0, 10);
-    const nextBoundary = new Date(Date.UTC(now.getUTCFullYear() + 1, lyMM - 1, lyDD));
-    nextBoundary.setUTCDate(nextBoundary.getUTCDate() - 1);
-    lyEndStr = nextBoundary.toISOString().slice(0, 10);
-  } else {
-    const prevBoundary = new Date(Date.UTC(now.getUTCFullYear() - 1, lyMM - 1, lyDD));
-    lyStartStr = prevBoundary.toISOString().slice(0, 10);
-    const endBoundary = new Date(thisYearBoundary);
-    endBoundary.setUTCDate(endBoundary.getUTCDate() - 1);
-    lyEndStr = endBoundary.toISOString().slice(0, 10);
-  }
-
-  // Count existing AL for this staff in the leave year
-  const { rows: alRows } = await conn.query(
-    `SELECT COUNT(*)::int AS cnt FROM shift_overrides
-     WHERE home_id = $1 AND staff_id = $2 AND shift = 'AL'
-       AND date >= $3 AND date <= $4`,
-    [homeId, staffId, lyStartStr, lyEndStr]
-  );
-  const alUsed = alRows[0].cnt + (batchCtx?.staffAL?.[staffId] ?? 0);
-
-  // Get staff entitlement
+  // 2. Get staff record
   const { rows: staffRows } = await conn.query(
-    `SELECT al_entitlement, al_carryover, team, pref, start_date FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    `SELECT al_entitlement, al_carryover, contract_hours, team, pref, start_date FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
-  if (staffRows.length === 0) return null; // agency/unknown staff — skip entitlement check
+  if (staffRows.length === 0) return { error: null, al_hours: 0 }; // agency/unknown — skip
   const staff = staffRows[0];
 
-  // Reject AL on scheduled OFF days — only working days should use entitlement
+  // 3. Require contract_hours for AL booking
+  const contractHours = parseFloat(staff.contract_hours) || 0;
+  if (contractHours <= 0) {
+    return { error: `Cannot book AL — contract hours not set for this staff member`, al_hours: 0 };
+  }
+
+  // 4. Reject AL on scheduled OFF days
   const cycleDay = getCycleDay(date, config.cycle_start_date);
-  const staffObj = { id: staffId, team: staff.team, pref: staff.pref, start_date: staff.start_date };
+  const staffObj = { id: staffId, team: staff.team, pref: staff.pref, start_date: staff.start_date, contract_hours: contractHours };
   const scheduled = getScheduledShift(staffObj, cycleDay, date);
   if (scheduled === 'OFF') {
-    return `Cannot book AL on a scheduled OFF day (${date})`;
-  }
-  const base = staff.al_entitlement != null ? staff.al_entitlement : (config?.al_entitlement_days ?? 28);
-  const entitlement = base + (staff.al_carryover ?? 0);
-
-  if (alUsed >= entitlement) {
-    return `Staff has used ${alUsed} of ${entitlement} AL days — no entitlement remaining`;
+    return { error: `Cannot book AL on a scheduled OFF day (${date})`, al_hours: 0 };
   }
 
-  return null;
+  // 5. Compute al_hours for this booking
+  const alHoursForThisDay = getALDeductionHours(staffObj, date, config);
+
+  // 6. Check entitlement in hours
+  const leaveYear = getLeaveYear(date, config?.leave_year_start);
+  const annualEntitlement = staff.al_entitlement != null
+    ? parseFloat(staff.al_entitlement)
+    : STATUTORY_WEEKS * contractHours;
+  const carryover = parseFloat(staff.al_carryover) || 0;
+  const totalEntitlement = annualEntitlement + carryover;
+
+  // Sum hours already used in leave year
+  // Fetch stored hours + dates of legacy (NULL al_hours) rows for per-day derivation
+  const { rows: alRows } = await conn.query(
+    `SELECT COALESCE(SUM(al_hours), 0)::numeric AS total_hours,
+            ARRAY_AGG(date::text) FILTER (WHERE al_hours IS NULL) AS null_dates
+     FROM shift_overrides
+     WHERE home_id = $1 AND staff_id = $2 AND shift = 'AL'
+       AND date >= $3 AND date <= $4`,
+    [homeId, staffId, leaveYear.startStr, leaveYear.endStr]
+  );
+  let hoursUsed = parseFloat(alRows[0].total_hours) || 0;
+  // Legacy bookings without al_hours: derive from scheduled shift (matches frontend)
+  const nullDates = alRows[0].null_dates;
+  if (nullDates) {
+    for (const d of nullDates) {
+      hoursUsed += getALDeductionHours(staffObj, d, config);
+    }
+  }
+  // Add in-batch accumulated hours
+  hoursUsed += (batchCtx?.staffALHours?.[staffId] ?? 0);
+
+  if (hoursUsed + alHoursForThisDay > totalEntitlement) {
+    return {
+      error: `Staff has used ${hoursUsed.toFixed(1)}h of ${totalEntitlement.toFixed(1)}h AL entitlement — cannot deduct ${alHoursForThisDay}h`,
+      al_hours: alHoursForThisDay,
+    };
+  }
+
+  return { error: null, al_hours: alHoursForThisDay };
 }
 
 const VALID_SHIFTS = [
@@ -155,6 +169,7 @@ const overrideBodySchema = z.object({
   sleep_in: z.boolean().optional(),
   replaces_staff_id: z.string().min(1).max(40).optional(),
   override_hours: z.number().min(0).max(24).optional(),
+  al_hours: z.number().min(0).max(24).optional(),
 });
 
 router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
@@ -173,24 +188,33 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHom
       }
     }
 
+    let computedALHours = null;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
-        const alError = await validateALOverride(req.home.id, req.home.config, date, staffId, null, client);
-        if (alError) {
-          // Throw to trigger rollback; caught below to return 400
-          const err = new Error(alError);
+        const result = await validateALOverride(req.home.id, req.home.config, date, staffId, null, client);
+        if (result.error) {
+          const err = new Error(result.error);
           err.isALValidation = true;
           throw err;
         }
-        await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id, override_hours });
+        computedALHours = result.al_hours;
+        // Backend computes al_hours — overrides any frontend hint
+        await overrideRepo.upsertOne(req.home.id, date, staffId, {
+          shift, reason, source, sleep_in, replaces_staff_id, override_hours,
+          al_hours: result.al_hours,
+        }, client);
       });
     } else {
-      await overrideRepo.upsertOne(req.home.id, date, staffId, { shift, reason, source, sleep_in, replaces_staff_id, override_hours });
+      // Non-AL shifts: al_hours should be null
+      await overrideRepo.upsertOne(req.home.id, date, staffId, {
+        shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours: null,
+      });
     }
     await auditService.log('override_upsert', req.home.slug, req.user.username, {
       date, staffId, shift,
       ...(replaces_staff_id && { replaces_staff_id }),
+      ...(computedALHours != null && { al_hours: computedALHours }),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -229,6 +253,7 @@ const bulkBodySchema = z.object({
     sleep_in: z.boolean().optional(),
     replaces_staff_id: z.string().min(1).max(40).optional(),
     override_hours: z.number().min(0).max(24).optional(),
+    al_hours: z.number().min(0).max(24).optional(),
   })).min(1).max(500),
 });
 
@@ -250,26 +275,39 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireAdmin, requ
     }
 
     // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
+    const overrides = parsed.data.overrides;
     await withTransaction(async (client) => {
-      const alOverrides = parsed.data.overrides.filter(o => o.shift === 'AL');
+      const alOverrides = overrides.filter(o => o.shift === 'AL');
       if (alOverrides.length > 0) {
-        const batchCtx = { dayAL: {}, staffAL: {} };
+        const batchCtx = { dayAL: {}, staffAL: {}, staffALHours: {} };
         for (const o of alOverrides) {
-          const alError = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId, batchCtx, client);
-          if (alError) {
-            const err = new Error(alError);
+          const result = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId, batchCtx, client);
+          if (result.error) {
+            const err = new Error(result.error);
             err.isALValidation = true;
             throw err;
           }
+          // Backend computes al_hours — override frontend hint
+          o.al_hours = result.al_hours;
           // Track in-batch counts so subsequent items see accumulated state
           batchCtx.dayAL[o.date] = (batchCtx.dayAL[o.date] ?? 0) + 1;
           batchCtx.staffAL[o.staffId] = (batchCtx.staffAL[o.staffId] ?? 0) + 1;
+          batchCtx.staffALHours[o.staffId] = (batchCtx.staffALHours[o.staffId] ?? 0) + result.al_hours;
         }
       }
-      await overrideRepo.upsertBulk(req.home.id, parsed.data.overrides, client);
+      // Non-AL overrides: ensure al_hours is null
+      for (const o of overrides) {
+        if (o.shift !== 'AL') o.al_hours = null;
+      }
+      await overrideRepo.upsertBulk(req.home.id, overrides, client);
     });
 
-    await auditService.log('override_bulk_upsert', req.home.slug, req.user.username, { count: parsed.data.overrides.length });
+    const alCount = overrides.filter(o => o.shift === 'AL').length;
+    const totalALHours = overrides.reduce((sum, o) => sum + (o.shift === 'AL' ? (o.al_hours ?? 0) : 0), 0);
+    await auditService.log('override_bulk_upsert', req.home.slug, req.user.username, {
+      count: parsed.data.overrides.length,
+      ...(alCount > 0 && { al_count: alCount, al_hours_total: totalALHours }),
+    });
     res.json({ ok: true, count: parsed.data.overrides.length });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });

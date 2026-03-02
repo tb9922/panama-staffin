@@ -366,17 +366,17 @@ export default function StaffRegister() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>AL Entitlement Override</label>
-                  <input type="number" min="0" max="60" value={newStaff.al_entitlement ?? ''}
-                    placeholder={String(config?.al_entitlement_days || 28)}
-                    onChange={e => setNewStaff({ ...newStaff, al_entitlement: e.target.value ? parseInt(e.target.value) : null })}
+                  <label className={INPUT.label}>AL Entitlement Override (hours)</label>
+                  <input type="number" min="0" max="2000" step="0.5" value={newStaff.al_entitlement ?? ''}
+                    placeholder="Auto (5.6 x weekly hrs)"
+                    onChange={e => setNewStaff({ ...newStaff, al_entitlement: e.target.value ? parseFloat(e.target.value) : null })}
                     className={INPUT.base} />
-                  <p className="text-xs text-gray-400 mt-0.5">Blank = default ({config?.al_entitlement_days || 28}d)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Blank = auto (5.6 x contract hours)</p>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Carryover (days)</label>
-                  <input type="number" min="0" max="28" value={newStaff.al_carryover || 0}
-                    onChange={e => setNewStaff({ ...newStaff, al_carryover: parseInt(e.target.value) || 0 })}
+                  <label className={INPUT.label}>Carryover (hours)</label>
+                  <input type="number" min="0" max="500" step="0.5" value={newStaff.al_carryover || 0}
+                    onChange={e => setNewStaff({ ...newStaff, al_carryover: parseFloat(e.target.value) || 0 })}
                     className={INPUT.base} />
                   <p className="text-xs text-gray-400 mt-0.5">From previous year</p>
                 </div>
@@ -526,24 +526,24 @@ export default function StaffRegister() {
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
                         <div className="flex flex-col gap-1">
-                          <input type="number" min="0" max="60" value={r.al_entitlement ?? ''}
-                            placeholder={String(config?.al_entitlement_days || 28)}
-                            title="Entitlement override (blank = default)"
-                            onChange={e => updateEditingRow('al_entitlement', e.target.value ? parseInt(e.target.value) : null)}
-                            className={INPUT.inline + ' w-14'} />
-                          <input type="number" min="0" max="28" value={r.al_carryover || 0}
-                            title="Carryover from previous year"
-                            onChange={e => updateEditingRow('al_carryover', parseInt(e.target.value) || 0)}
-                            className={INPUT.inline + ' w-14'} />
+                          <input type="number" min="0" max="2000" step="0.5" value={r.al_entitlement ?? ''}
+                            placeholder="Auto"
+                            title="Entitlement override in hours (blank = auto)"
+                            onChange={e => updateEditingRow('al_entitlement', e.target.value ? parseFloat(e.target.value) : null)}
+                            className={INPUT.inline + ' w-16'} />
+                          <input type="number" min="0" max="500" step="0.5" value={r.al_carryover || 0}
+                            title="Carryover from previous year (hours)"
+                            onChange={e => updateEditingRow('al_carryover', parseFloat(e.target.value) || 0)}
+                            className={INPUT.inline + ' w-16'} />
                         </div>
                       ) : (
                         <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>
                           {s.al_entitlement != null ? (
-                            <span className="font-medium text-blue-700">{s.al_entitlement}d</span>
+                            <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
                           ) : (
-                            <span className="text-gray-400">{config?.al_entitlement_days || 28}d</span>
+                            <span className="text-gray-400">Auto</span>
                           )}
-                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}c</span>}
+                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}h</span>}
                         </span>
                       )}
                     </td>

@@ -30,8 +30,8 @@ const staffBodySchema = z.object({
   contract_hours:  z.number().min(0).nullable().optional(),
   date_of_birth:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   ni_number:       z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional(),
-  al_entitlement:  z.number().int().min(0).nullable().optional(),
-  al_carryover:    z.number().int().min(0).optional(),
+  al_entitlement:  z.number().min(0).max(2000).nullable().optional(),
+  al_carryover:    z.number().min(0).max(500).optional(),
   leaving_date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 const staffUpdateSchema = staffBodySchema.partial();

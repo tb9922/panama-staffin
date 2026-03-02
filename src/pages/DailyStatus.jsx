@@ -136,12 +136,12 @@ export default function DailyStatus() {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }
 
-  async function applyOverride(staffId, shift, reason, source, sleepIn = false, replacesStaffId = null) {
+  async function applyOverride(staffId, shift, reason, source, sleepIn = false, replacesStaffId = null, extra = {}) {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     try {
-      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined });
+      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra });
       await loadData();
     } catch (e) {
       setError(e.message);
@@ -826,22 +826,31 @@ export default function DailyStatus() {
                   const staff = schedData.staff.find(s => s.id === selectedStaff);
                   if (!staff) return null;
                   const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
-                  if (accrual.remaining <= 0) {
-                    return <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">
-                      No AL remaining ({accrual.accrued.toFixed(1)} earned, {accrual.used} used)
+                  if (accrual.missingContractHours) {
+                    return <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-xl">
+                      Set contract hours in Staff Database to enable AL booking
                     </div>;
                   }
-                  return <div className="text-xs text-gray-500">AL: {accrual.remaining.toFixed(1)} days remaining</div>;
+                  if (accrual.remainingHours <= 0) {
+                    return <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">
+                      No AL remaining ({accrual.accruedHours.toFixed(1)}h earned, {accrual.usedHours.toFixed(1)}h used)
+                    </div>;
+                  }
+                  return <div className="text-xs text-gray-500">AL: {accrual.remainingHours.toFixed(1)}h remaining</div>;
                 })()}
                 <div className={MODAL.footer}>
                   <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
                   <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day) || (modal === 'al' && selectedStaff && (() => {
                     const staff = schedData.staff.find(s => s.id === selectedStaff);
                     if (!staff) return false;
-                    return calculateAccrual(staff, schedData.config, schedData.overrides, currentDate).remaining <= 0;
+                    const acc = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
+                    return acc.remainingHours <= 0 || acc.missingContractHours;
                   })())} onClick={() => {
                     if (modal === 'sick') applySickOverride(selectedStaff);
-                    else if (modal === 'al') applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual');
+                    else if (modal === 'al') {
+                      // al_hours computed by backend — pass hint for optimistic display
+                      applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual', false, null, {});
+                    }
                     else {
                       applyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
                     }

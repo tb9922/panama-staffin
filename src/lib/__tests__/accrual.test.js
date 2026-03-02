@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getLeaveYear, calculateAccrual, countALInLeaveYear } from '../accrual.js';
+import { getLeaveYear, calculateAccrual, countALInLeaveYear, sumALHoursInLeaveYear } from '../accrual.js';
 
 // ── getLeaveYear ───────────────────────────────────────────────────────────────
 
@@ -23,7 +23,6 @@ describe('getLeaveYear', () => {
   });
 
   it('returns correct leave year when date is exactly on the start', () => {
-    // Use April 2 to avoid UTC+1 midnight boundary (April 1 local = March 31 UTC)
     const ly = getLeaveYear('2025-04-02', '04-01');
     expect(ly.startStr).toBe('2025-04-01');
     expect(ly.endStr).toBe('2026-03-31');
@@ -36,7 +35,7 @@ describe('getLeaveYear', () => {
   });
 });
 
-// ── countALInLeaveYear ────────────────────────────────────────────────────────
+// ── countALInLeaveYear (legacy day-count) ────────────────────────────────────
 
 describe('countALInLeaveYear', () => {
   const leaveYear = { startStr: '2025-04-01', endStr: '2026-03-31' };
@@ -51,19 +50,11 @@ describe('countALInLeaveYear', () => {
 
   it('excludes AL outside the leave year', () => {
     const overrides = {
-      '2025-03-31': { S1: { shift: 'AL' } }, // before leave year
-      '2025-05-01': { S1: { shift: 'AL' } }, // within
-      '2026-04-01': { S1: { shift: 'AL' } }, // after leave year
+      '2025-03-31': { S1: { shift: 'AL' } },
+      '2025-05-01': { S1: { shift: 'AL' } },
+      '2026-04-01': { S1: { shift: 'AL' } },
     };
     expect(countALInLeaveYear('S1', overrides, leaveYear)).toBe(1);
-  });
-
-  it('does not count other shifts as AL', () => {
-    const overrides = {
-      '2025-05-01': { S1: { shift: 'SICK' } },
-      '2025-05-02': { S1: { shift: 'OFF' } },
-    };
-    expect(countALInLeaveYear('S1', overrides, leaveYear)).toBe(0);
   });
 
   it('returns 0 when no overrides exist', () => {
@@ -71,91 +62,160 @@ describe('countALInLeaveYear', () => {
   });
 });
 
-// ── calculateAccrual ──────────────────────────────────────────────────────────
+// ── sumALHoursInLeaveYear ────────────────────────────────────────────────────
+
+describe('sumALHoursInLeaveYear', () => {
+  const leaveYear = { startStr: '2025-04-01', endStr: '2026-03-31' };
+  const config = {
+    cycle_start_date: '2025-01-06',
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+    leave_year_start: '04-01',
+  };
+  const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
+
+  it('sums stored al_hours when present', () => {
+    const overrides = {
+      '2025-05-01': { S1: { shift: 'AL', al_hours: 12 } },
+      '2025-05-02': { S1: { shift: 'AL', al_hours: 12 } },
+      '2025-05-03': { S1: { shift: 'AL', al_hours: 8 } },
+    };
+    expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config)).toBe(32);
+  });
+
+  it('derives hours from scheduled shift for legacy bookings (no al_hours)', () => {
+    // Day A on 2025-05-02 = cycleDay 4 = EL (12h)
+    const overrides = {
+      '2025-05-02': { S1: { shift: 'AL' } }, // no al_hours — legacy
+    };
+    const result = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+    expect(result).toBe(12); // EL shift = 12h
+  });
+
+  it('handles mixed stored and legacy bookings', () => {
+    const overrides = {
+      '2025-05-07': { S1: { shift: 'AL', al_hours: 12 } }, // stored
+      '2025-05-02': { S1: { shift: 'AL' } }, // legacy — cycleDay 4 = EL = 12h
+    };
+    const result = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+    expect(result).toBe(24); // 12 stored + 12 derived
+  });
+
+  it('ignores non-AL overrides', () => {
+    const overrides = {
+      '2025-05-01': { S1: { shift: 'SICK' } },
+      '2025-05-02': { S1: { shift: 'E' } },
+    };
+    expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config)).toBe(0);
+  });
+
+  it('excludes AL outside the leave year', () => {
+    const overrides = {
+      '2025-03-15': { S1: { shift: 'AL', al_hours: 12 } }, // before
+      '2025-05-01': { S1: { shift: 'AL', al_hours: 8 } },  // within
+      '2026-04-15': { S1: { shift: 'AL', al_hours: 12 } }, // after
+    };
+    expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config)).toBe(8);
+  });
+});
+
+// ── calculateAccrual (hours-based) ──────────────────────────────────────────
 
 describe('calculateAccrual', () => {
   const config = {
-    al_entitlement_days: 28,
     leave_year_start: '04-01',
+    cycle_start_date: '2025-01-06',
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
   };
 
   function makeStaff(startDate, overrides = {}) {
-    return { id: 'S1', name: 'Alice', start_date: startDate, ...overrides };
+    return { id: 'S1', name: 'Alice', start_date: startDate, contract_hours: 36, team: 'Day A', pref: 'EL', ...overrides };
   }
 
-  it('returns full entitlement for staff who started before the leave year', () => {
+  it('returns hours-based entitlement: 5.6 x contract_hours', () => {
     const staff = makeStaff('2024-01-01');
-    // Use mid-month date to avoid UTC+1 midnight boundary skewing the month count
     const result = calculateAccrual(staff, config, {}, '2025-10-15');
-    // Leave year: 2025-04-01 → 2026-03-31. Staff started before it — full year.
-    expect(result.baseEntitlement).toBe(28);
+    // 5.6 × 36 = 201.6
+    expect(result.annualEntitlementHours).toBeCloseTo(201.6, 1);
     expect(result.isProRata).toBe(false);
-    // Mid-October = ~6.5 months in → accrued ~50-55% of 28
-    expect(result.accrued).toBeGreaterThan(10);
-    expect(result.accrued).toBeLessThan(28);
+    expect(result.contractHours).toBe(36);
+    expect(result.missingContractHours).toBe(false);
+  });
+
+  it('uses staff.al_entitlement override when set (hours)', () => {
+    const staff = makeStaff('2024-01-01', { al_entitlement: 250 });
+    const result = calculateAccrual(staff, config, {}, '2025-09-01');
+    expect(result.annualEntitlementHours).toBe(250);
+  });
+
+  it('flags missingContractHours when contract_hours is null/0', () => {
+    const staff = makeStaff('2024-01-01', { contract_hours: null });
+    const result = calculateAccrual(staff, config, {}, '2025-09-01');
+    expect(result.missingContractHours).toBe(true);
+    expect(result.annualEntitlementHours).toBe(0);
   });
 
   it('is pro-rata for a mid-year starter', () => {
-    // Started 2025-07-01, leave year is 04-01 → 03-31, so 9 months in year
     const staff = makeStaff('2025-07-01');
     const result = calculateAccrual(staff, config, {}, '2025-10-01');
     expect(result.isProRata).toBe(true);
-    // Pro-rata entitlement: 28 × (9/12) = 21 days
-    expect(result.entitlement).toBeCloseTo(21, 0);
+    // 9 months in year: 201.6 × (9/12) = 151.2
+    expect(result.proRataEntitlementHours).toBeCloseTo(151.2, 0);
   });
 
-  it('accrued=carryover when staff has not started yet', () => {
-    const staff = makeStaff('2026-01-01', { al_carryover: 5 });
+  it('accruedHours=carryoverHours when staff has not started yet', () => {
+    const staff = makeStaff('2026-01-01', { al_carryover: 40 });
     const result = calculateAccrual(staff, config, {}, '2025-10-01');
-    expect(result.accrued).toBe(5); // only carryover
-    expect(result.used).toBe(0);
+    expect(result.accruedHours).toBe(40); // only carryover
+    expect(result.usedHours).toBe(0);
   });
 
   it('carryover is available from day 1 of the leave year', () => {
-    const staff = makeStaff('2024-01-01', { al_carryover: 3 });
-    const result = calculateAccrual(staff, config, {}, '2025-04-02'); // 2 days into leave year
-    expect(result.accrued).toBeGreaterThanOrEqual(3); // carryover immediately available
+    const staff = makeStaff('2024-01-01', { al_carryover: 24 });
+    const result = calculateAccrual(staff, config, {}, '2025-04-02');
+    expect(result.accruedHours).toBeGreaterThanOrEqual(24); // carryover immediately available
   });
 
-  it('subtracts used AL from accrued to give remaining', () => {
+  it('subtracts used AL hours from accrued to give remaining', () => {
     const staff = makeStaff('2024-01-01');
     const overrides = {
-      '2025-06-01': { S1: { shift: 'AL' } },
-      '2025-06-02': { S1: { shift: 'AL' } },
-      '2025-06-03': { S1: { shift: 'AL' } },
+      '2025-06-01': { S1: { shift: 'AL', al_hours: 12 } },
+      '2025-06-02': { S1: { shift: 'AL', al_hours: 12 } },
+      '2025-06-03': { S1: { shift: 'AL', al_hours: 12 } },
     };
     const result = calculateAccrual(staff, config, overrides, '2025-09-01');
-    expect(result.used).toBe(3);
-    expect(result.remaining).toBeCloseTo(result.accrued - 3, 1);
+    expect(result.usedHours).toBe(36);
+    expect(result.remainingHours).toBeCloseTo(result.accruedHours - 36, 1);
   });
 
-  it('uses per-staff entitlement override when set', () => {
-    const staff = makeStaff('2024-01-01', { al_entitlement: 33 });
-    const result = calculateAccrual(staff, config, {}, '2025-09-01');
-    expect(result.baseEntitlement).toBe(33); // staff override, not global 28
-  });
-
-  it('remaining can be negative when over-booked', () => {
+  it('remainingHours can be negative when over-booked', () => {
     const staff = makeStaff('2024-01-01');
-    // Book 20 days in the first month of leave year — more than accrued at that point
     const overrides = {};
     for (let d = 1; d <= 20; d++) {
       const dateStr = `2025-04-${String(d).padStart(2, '0')}`;
-      overrides[dateStr] = { S1: { shift: 'AL' } };
+      overrides[dateStr] = { S1: { shift: 'AL', al_hours: 12 } };
     }
     const result = calculateAccrual(staff, config, overrides, '2025-04-20');
-    expect(result.used).toBe(20);
-    expect(result.remaining).toBeLessThan(0); // over-booked
+    expect(result.usedHours).toBe(240); // 20 × 12
+    expect(result.remainingHours).toBeLessThan(0);
   });
 
-  it('full year entitlement is 28 when no pro-rata and no overrides', () => {
+  it('calculates weeks fields correctly', () => {
     const staff = makeStaff('2024-01-01');
-    // entitlement = proRataEntitlement = baseEntitlement * (12/12) = 28 for a full-year member.
-    // Note: accrued grows month-by-month during the year (1/12th per month) and only
-    // reaches 28 on the last day of the final complete month — use entitlement not accrued.
+    const overrides = {
+      '2025-06-01': { S1: { shift: 'AL', al_hours: 12 } },
+    };
+    const result = calculateAccrual(staff, config, overrides, '2025-09-01');
+    // entitlementWeeks = 201.6 / 36 = 5.6
+    expect(result.entitlementWeeks).toBeCloseTo(5.6, 1);
+    // usedWeeks = 12 / 36 = 0.333...
+    expect(result.usedWeeks).toBeCloseTo(0.3, 1);
+  });
+
+  it('full year totalEntitlementHours = annualEntitlement + carryover', () => {
+    const staff = makeStaff('2024-01-01', { al_carryover: 16 });
     const result = calculateAccrual(staff, config, {}, '2026-01-15');
-    expect(result.baseEntitlement).toBe(28);
-    expect(result.isProRata).toBe(false);
-    expect(result.entitlement).toBeCloseTo(28, 0);
+    expect(result.annualEntitlementHours).toBeCloseTo(201.6, 1);
+    // totalEntitlement = proRata (full year = annual) + carryover
+    expect(result.totalEntitlementHours).toBeCloseTo(201.6 + 16, 0);
   });
 });

@@ -1312,11 +1312,11 @@ export async function getSchedulingData(homeSlug, { from, to } = {}) {
   return apiFetch(url, { headers: authHeaders() });
 }
 
-export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours }) {
+export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }) {
   return apiFetch(`${API_BASE}/scheduling/overrides?home=${encodeURIComponent(homeSlug)}`, {
     method: 'PUT',
     headers: authHeaders(),
-    body: JSON.stringify({ date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours }),
+    body: JSON.stringify({ date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }),
   });
 }
 

@@ -1,44 +1,8 @@
-import { formatDate, parseDate, addDays } from './rotation.js';
-
-/**
- * Returns the leave year boundaries that contain the given date.
- * @param {Date|string} date
- * @param {string} leaveYearStart - "MM-DD", e.g. "04-01"
- * @returns {{ start: Date, end: Date, startStr: string, endStr: string }}
- */
-export function getLeaveYear(date, leaveYearStart) {
-  // Use string comparison to avoid UTC/local timezone mixing.
-  // parseDate() returns local-time Dates; Date.UTC() returns UTC — they are not comparable.
-  const dateStr = typeof date === 'string' ? date : formatDate(date);
-  const [mm, dd] = (leaveYearStart || '04-01').split('-').map(Number);
-  const y = parseInt(dateStr.slice(0, 4), 10);
-  const mmStr = String(mm).padStart(2, '0');
-  const ddStr = String(dd).padStart(2, '0');
-
-  const thisStartStr = `${y}-${mmStr}-${ddStr}`;
-  const prevStartStr = `${y - 1}-${mmStr}-${ddStr}`;
-  const nextStartStr = `${y + 1}-${mmStr}-${ddStr}`;
-
-  if (dateStr >= thisStartStr) {
-    // dateStr is in the leave year that starts thisStartStr
-    const endStr = formatDate(addDays(parseDate(nextStartStr), -1));
-    return {
-      start: parseDate(thisStartStr),
-      end: parseDate(endStr),
-      startStr: thisStartStr,
-      endStr,
-    };
-  } else {
-    // dateStr is before thisStartStr — it's in the previous leave year
-    const endStr = formatDate(addDays(parseDate(thisStartStr), -1));
-    return {
-      start: parseDate(prevStartStr),
-      end: parseDate(endStr),
-      startStr: prevStartStr,
-      endStr,
-    };
-  }
-}
+// Hours-based Annual Leave accrual engine.
+// UK law: entitlement = 5.6 × contracted weekly hours.
+// getLeaveYear is canonical in shared/rotation.js — re-exported here for consumers.
+export { getLeaveYear, STATUTORY_WEEKS } from './rotation.js';
+import { formatDate, parseDate, addDays, getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from './rotation.js';
 
 /**
  * Count complete months from start to end (end may be before start → returns 0).
@@ -53,7 +17,8 @@ function monthsBetween(start, end) {
 }
 
 /**
- * Count AL overrides for a staff member within a leave year.
+ * Count AL overrides for a staff member within a leave year (legacy day-count).
+ * Kept for backward compatibility — prefer sumALHoursInLeaveYear.
  */
 export function countALInLeaveYear(staffId, overrides, leaveYear) {
   let count = 0;
@@ -65,31 +30,51 @@ export function countALInLeaveYear(staffId, overrides, leaveYear) {
 }
 
 /**
+ * Sum AL hours used by a staff member within a leave year.
+ * Uses stored al_hours if present, otherwise derives from scheduled shift.
+ */
+export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config) {
+  let hours = 0;
+  for (const [dateKey, dayOverrides] of Object.entries(overrides)) {
+    if (dateKey < leaveYear.startStr || dateKey > leaveYear.endStr) continue;
+    const ov = dayOverrides[staff.id];
+    if (ov?.shift !== 'AL') continue;
+    if (ov.al_hours != null) {
+      hours += parseFloat(ov.al_hours);
+    } else {
+      // Legacy booking — derive from scheduled shift
+      hours += getALDeductionHours(staff, dateKey, config);
+    }
+  }
+  return Math.round(hours * 10) / 10;
+}
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+/**
  * Calculate holiday accrual for a staff member as of a given date.
+ * All values are in HOURS (not days).
  *
- * @param {Object} staff        - staff record
+ * @param {Object} staff        - staff record (must have contract_hours)
  * @param {Object} config       - home config
  * @param {Object} overrides    - all overrides
  * @param {Date|string} asOfDate
- * @returns {{
- *   baseEntitlement: number,
- *   carryover: number,
- *   entitlement: number,
- *   accrued: number,
- *   used: number,
- *   remaining: number,
- *   yearRemaining: number,
- *   leaveYear: { start, end, startStr, endStr },
- *   isProRata: boolean,
- * }}
+ * @returns {object} hours-based accrual result
  */
 export function calculateAccrual(staff, config, overrides, asOfDate) {
   const d = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
   const leaveYear = getLeaveYear(d, config.leave_year_start);
 
-  const baseEntitlement = staff.al_entitlement != null ? staff.al_entitlement : (config.al_entitlement_days || 28);
-  const carryover = staff.al_carryover || 0;
-  const entitlement = baseEntitlement + carryover;
+  const contractHours = parseFloat(staff.contract_hours) || 0;
+  const missingContractHours = !contractHours || contractHours <= 0;
+
+  // Annual entitlement in hours: staff override or statutory formula
+  const annualEntitlementHours = staff.al_entitlement != null
+    ? parseFloat(staff.al_entitlement)
+    : (missingContractHours ? 0 : round1(STATUTORY_WEEKS * contractHours));
+
+  const carryoverHours = parseFloat(staff.al_carryover) || 0;
+  const totalEntitlementHours = round1(annualEntitlementHours + carryoverHours);
 
   // Effective start: later of leave year start or staff start_date
   const staffStart = staff.start_date ? parseDate(staff.start_date) : leaveYear.start;
@@ -98,10 +83,16 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
 
   // If staff hasn't started yet, nothing accrued
   if (effectiveStart > d) {
+    const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
     return {
-      baseEntitlement, carryover, entitlement,
-      accrued: carryover, used: 0, remaining: carryover,
-      yearRemaining: entitlement, leaveYear, isProRata,
+      contractHours, annualEntitlementHours, carryoverHours, totalEntitlementHours,
+      proRataEntitlementHours: annualEntitlementHours,
+      accruedHours: carryoverHours, usedHours, remainingHours: round1(carryoverHours - usedHours),
+      yearRemainingHours: round1(totalEntitlementHours - usedHours),
+      leaveYear, isProRata, missingContractHours,
+      entitlementWeeks: contractHours > 0 ? round1(annualEntitlementHours / contractHours) : 0,
+      usedWeeks: contractHours > 0 ? round1(usedHours / contractHours) : 0,
+      remainingWeeks: contractHours > 0 ? round1((carryoverHours - usedHours) / contractHours) : 0,
     };
   }
 
@@ -110,33 +101,39 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
   // Months elapsed so far (effective start → asOfDate)
   const elapsedMonths = Math.min(monthsBetween(effectiveStart, d), totalMonths);
 
-  // Pro-rata entitlement: fraction of 12-month year the staff member has/will work
+  // Pro-rata entitlement: fraction of 12-month year
   const yearFraction = totalMonths / 12;
-  const proRataEntitlement = Math.round(baseEntitlement * yearFraction * 10) / 10;
+  const proRataEntitlementHours = round1(annualEntitlementHours * yearFraction);
 
   // Accrued: proportional progress through their entitlement period
-  let accrued = totalMonths > 0
-    ? Math.round((elapsedMonths / totalMonths) * proRataEntitlement * 10) / 10
-    : proRataEntitlement;
+  let accruedHours = totalMonths > 0
+    ? round1((elapsedMonths / totalMonths) * proRataEntitlementHours)
+    : proRataEntitlementHours;
 
   // Carryover is available from day 1
-  accrued = Math.round((accrued + carryover) * 10) / 10;
+  accruedHours = round1(accruedHours + carryoverHours);
 
-  const used = countALInLeaveYear(staff.id, overrides, leaveYear);
-  const remaining = Math.round((accrued - used) * 10) / 10;
-  const effectiveEntitlement = Math.round((proRataEntitlement + carryover) * 10) / 10;
-  const yearRemaining = effectiveEntitlement - used;
+  const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+  const remainingHours = round1(accruedHours - usedHours);
+  const effectiveEntitlement = round1(proRataEntitlementHours + carryoverHours);
+  const yearRemainingHours = round1(effectiveEntitlement - usedHours);
 
   return {
-    baseEntitlement,
-    carryover,
-    entitlement: effectiveEntitlement,
-    accrued,
-    used,
-    remaining,
-    yearRemaining,
+    contractHours,
+    annualEntitlementHours,
+    carryoverHours,
+    totalEntitlementHours: effectiveEntitlement,
+    proRataEntitlementHours,
+    accruedHours,
+    usedHours,
+    remainingHours,
+    yearRemainingHours,
     leaveYear,
     isProRata,
+    missingContractHours,
+    entitlementWeeks: contractHours > 0 ? round1(annualEntitlementHours / contractHours) : 0,
+    usedWeeks: contractHours > 0 ? round1(usedHours / contractHours) : 0,
+    remainingWeeks: contractHours > 0 ? round1(remainingHours / contractHours) : 0,
   };
 }
 

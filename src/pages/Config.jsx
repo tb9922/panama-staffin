@@ -265,9 +265,15 @@ export default function Config() {
       <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Annual Leave</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Field label="AL Entitlement" path="al_entitlement_days" unit="days/yr" />
+          <div>
+            <label className={INPUT.label}>AL Entitlement</label>
+            <p className="text-xs text-gray-500 mt-1">Auto: 5.6 x contracted weekly hours.<br/>Override per staff in Staff Database.</p>
+          </div>
           <Field label="Avg AL Per Day" path="avg_al_per_day" unit="people" />
-          <Field label="Max Carryover" path="al_carryover_max" unit="days" />
+          <div>
+            <label className={INPUT.label}>Carryover</label>
+            <p className="text-xs text-gray-500 mt-1">Set per staff in hours (Staff Database).</p>
+          </div>
           <div>
             <label className={INPUT.label}>Leave Year Start</label>
             <select value={config.leave_year_start || '04-01'}

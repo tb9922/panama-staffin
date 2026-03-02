@@ -251,6 +251,7 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
   let otHours = 0;
   let bhHours = 0;
   let alDays = 0;
+  let alHours = 0;
   let alPay = 0;
   const numWeeks = Math.max(1, Math.ceil(dates.length / 7));
   const weekHours = new Array(numWeeks).fill(0);
@@ -277,11 +278,14 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     }
     if (isOTShift(shift)) otHours += hours;
     if (isBHShift(shift)) bhHours += hours;
-    // AL tracking: pay matches the shift the staff member would have worked
+    // AL tracking: use stored al_hours or derive from scheduled shift
     if (shift === 'AL') {
       alDays += 1;
-      const alShift = staff.team && staff.team.startsWith('Night') ? 'N' : (staff.pref || 'EL');
-      alPay += getShiftHours(alShift, config) * staff.hourly_rate;
+      const dateKey = formatDate(date);
+      const stored = overrides[dateKey]?.[staff.id]?.al_hours;
+      const hrs = stored != null ? parseFloat(stored) : getALDeductionHours(staff, dateKey, config);
+      alHours += hrs;
+      alPay += hrs * staff.hourly_rate;
     }
   });
 
@@ -299,7 +303,7 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
                     weekHours[1] < weekHours[0] ? 'Short W2' : 'Balanced';
 
   return {
-    totalHours, grossPay, otHours, otPay, bhHours, bhPay, alDays, alPay,
+    totalHours, grossPay, otHours, otPay, bhHours, bhPay, alDays, alHours, alPay,
     weekHours, avgWeeklyHours, wtrStatus, shortWeek,
     totalPay: grossPay + otPay + bhPay + alPay,
   };
@@ -326,6 +330,64 @@ export function isBankHoliday(date, config) {
 export function getBankHoliday(date, config) {
   const dateStr = formatDate(date);
   return config.bank_holidays?.find(bh => bh.date === dateStr) || null;
+}
+
+// ── Hours-based Annual Leave constants and helpers ─────────────────────────
+
+export const STATUTORY_WEEKS = 5.6;
+export const ASSUMED_WORKING_DAYS_PER_WEEK = 5;
+
+/**
+ * Returns the leave year boundaries that contain the given date.
+ * Moved here from src/lib/accrual.js so backend can use it too.
+ * @param {Date|string} date
+ * @param {string} leaveYearStart - "MM-DD", e.g. "04-01"
+ * @returns {{ start: Date, end: Date, startStr: string, endStr: string }}
+ */
+export function getLeaveYear(date, leaveYearStart) {
+  const dateStr = typeof date === 'string' ? date : formatDate(date);
+  const [mm, dd] = (leaveYearStart || '04-01').split('-').map(Number);
+  const y = parseInt(dateStr.slice(0, 4), 10);
+  const mmStr = String(mm).padStart(2, '0');
+  const ddStr = String(dd).padStart(2, '0');
+
+  const thisStartStr = `${y}-${mmStr}-${ddStr}`;
+  const prevStartStr = `${y - 1}-${mmStr}-${ddStr}`;
+  const nextStartStr = `${y + 1}-${mmStr}-${ddStr}`;
+
+  if (dateStr >= thisStartStr) {
+    const endStr = formatDate(addDays(parseDate(nextStartStr), -1));
+    return { start: parseDate(thisStartStr), end: parseDate(endStr), startStr: thisStartStr, endStr };
+  } else {
+    const endStr = formatDate(addDays(parseDate(thisStartStr), -1));
+    return { start: parseDate(prevStartStr), end: parseDate(endStr), startStr: prevStartStr, endStr };
+  }
+}
+
+/**
+ * Get AL deduction hours for one booking on a given date.
+ * Uses scheduled shift to determine hours. AVL (Float) → contract_hours / 5.
+ * OFF → 0 (but booking should be blocked by callers).
+ * @param {object} staff
+ * @param {string} dateStr "YYYY-MM-DD"
+ * @param {object} config
+ * @returns {number} hours to deduct
+ */
+export function getALDeductionHours(staff, dateStr, config) {
+  const contractHours = parseFloat(staff.contract_hours) || 0;
+  const cycleDay = getCycleDay(dateStr, config.cycle_start_date);
+  const scheduled = getScheduledShift(staff, cycleDay, dateStr);
+
+  if (scheduled === 'OFF') return 0;
+  if (scheduled === 'AVL') {
+    // Float staff: deduct contract_hours / working_days_per_week
+    return contractHours > 0
+      ? Math.round((contractHours / ASSUMED_WORKING_DAYS_PER_WEEK) * 10) / 10
+      : 8; // fallback if no contract hours set
+  }
+  // Normal shift — use config shift hours
+  const hrs = getShiftHours(scheduled, config);
+  return hrs > 0 ? hrs : 8; // fallback 8h if config missing
 }
 
 // Count AL on a given date

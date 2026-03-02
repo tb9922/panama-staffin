@@ -15,8 +15,8 @@ function shapeRow(row) {
     date_of_birth: toDateStr(row.date_of_birth),
     ni_number: row.ni_number || null,
     contract_hours: row.contract_hours != null ? parseFloat(row.contract_hours) : null,
-    al_entitlement: row.al_entitlement != null ? parseInt(row.al_entitlement, 10) : null,
-    al_carryover: row.al_carryover != null ? parseInt(row.al_carryover, 10) : 0,
+    al_entitlement: row.al_entitlement != null ? parseFloat(row.al_entitlement) : null,
+    al_carryover: row.al_carryover != null ? parseFloat(row.al_carryover) : 0,
     leaving_date: toDateStr(row.leaving_date),
     version: row.version != null ? parseInt(row.version, 10) : undefined,
   };
@@ -171,7 +171,7 @@ export async function updateOne(homeId, staffId, fields, version) {
     skill: 'skill', hourly_rate: 'hourly_rate', active: 'active',
     wtr_opt_out: 'wtr_opt_out', start_date: 'start_date::date',
     date_of_birth: 'date_of_birth::date', ni_number: 'ni_number',
-    contract_hours: 'contract_hours::numeric', al_entitlement: 'al_entitlement::int',
+    contract_hours: 'contract_hours::numeric', al_entitlement: 'al_entitlement::numeric',
     al_carryover: 'al_carryover', leaving_date: 'leaving_date::date',
   };
   for (const [key, cast] of Object.entries(settable)) {

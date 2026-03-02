@@ -1,6 +1,7 @@
 // All 17 domain validators moved verbatim from server.js.
 // No logic changes — these are pure functions operating on the assembled data object.
 import { RIDDOR_CATEGORIES } from '../shared/incidents.js';
+import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
 
 function validateALPerDay(data, warnings) {
   const maxAL = data.config.max_al_same_day || 2;
@@ -13,37 +14,36 @@ function validateALPerDay(data, warnings) {
 }
 
 function validateALEntitlement(data, warnings) {
-  const leaveYearStart = data.config.leave_year_start || '04-01';
-  const [lyMM, lyDD] = leaveYearStart.split('-').map(Number);
-  const now = new Date();
-  const thisYearBoundary = new Date(Date.UTC(now.getUTCFullYear(), lyMM - 1, lyDD));
-  let lyStart, lyEnd;
-  if (now >= thisYearBoundary) {
-    lyStart = thisYearBoundary;
-    const nextBoundary = new Date(Date.UTC(now.getUTCFullYear() + 1, lyMM - 1, lyDD));
-    lyEnd = new Date(nextBoundary);
-    lyEnd.setUTCDate(lyEnd.getUTCDate() - 1);
-  } else {
-    lyStart = new Date(Date.UTC(now.getUTCFullYear() - 1, lyMM - 1, lyDD));
-    lyEnd = new Date(thisYearBoundary);
-    lyEnd.setUTCDate(lyEnd.getUTCDate() - 1);
-  }
-  const lyStartStr = lyStart.toISOString().slice(0, 10);
-  const lyEndStr = lyEnd.toISOString().slice(0, 10);
+  const leaveYear = getLeaveYear(new Date(), data.config.leave_year_start);
 
-  const alUsed = {};
+  // Sum AL hours per staff in the leave year
+  const alHoursUsed = {};
   for (const [dateKey, dayOverrides] of Object.entries(data.overrides)) {
-    if (dateKey < lyStartStr || dateKey > lyEndStr) continue;
+    if (dateKey < leaveYear.startStr || dateKey > leaveYear.endStr) continue;
     for (const [staffId, override] of Object.entries(dayOverrides)) {
-      if (override.shift === 'AL') alUsed[staffId] = (alUsed[staffId] || 0) + 1;
+      if (override.shift !== 'AL') continue;
+      const staff = data.staff.find(s => s.id === staffId);
+      let hrs;
+      if (override.al_hours != null) {
+        hrs = parseFloat(override.al_hours);
+      } else if (staff) {
+        // Legacy booking — derive from scheduled shift
+        hrs = getALDeductionHours(staff, dateKey, data.config);
+      } else {
+        hrs = 8; // unknown staff fallback
+      }
+      alHoursUsed[staffId] = (alHoursUsed[staffId] || 0) + hrs;
     }
   }
-  for (const [staffId, used] of Object.entries(alUsed)) {
+  for (const [staffId, used] of Object.entries(alHoursUsed)) {
     const staff = data.staff.find(s => s.id === staffId);
-    const base = staff?.al_entitlement != null ? staff.al_entitlement : (data.config.al_entitlement_days ?? 28);
-    const entitlement = base + (staff?.al_carryover ?? 0);
-    if (used > entitlement) {
-      warnings.push(`${staff?.name || staffId}: ${used} AL days in leave year exceeds entitlement of ${entitlement}`);
+    const contractHours = parseFloat(staff?.contract_hours) || 0;
+    const base = staff?.al_entitlement != null
+      ? parseFloat(staff.al_entitlement)
+      : (contractHours > 0 ? STATUTORY_WEEKS * contractHours : 0);
+    const entitlement = base + (parseFloat(staff?.al_carryover) || 0);
+    if (entitlement > 0 && used > entitlement) {
+      warnings.push(`${staff?.name || staffId}: ${used.toFixed(1)}h AL used in leave year exceeds ${entitlement.toFixed(1)}h entitlement`);
     }
   }
 }

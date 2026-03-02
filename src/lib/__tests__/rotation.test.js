@@ -9,6 +9,9 @@ import {
   getStaffForDay,
   getShiftHours,
   calculateStaffPeriodHours,
+  getALDeductionHours,
+  getLeaveYear,
+  STATUTORY_WEEKS,
 } from '../rotation.js';
 
 // ── getCycleDay ────────────────────────────────────────────────────────────────
@@ -338,7 +341,7 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     expect(result.totalHours).toBe(0);
   });
 
-  it('tracks AL days and pay separately from totalHours', () => {
+  it('tracks AL days, hours, and pay separately from totalHours', () => {
     const dates = [];
     const overrides = {};
     for (let i = 0; i < 7; i++) {
@@ -348,20 +351,30 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     }
     const result = calculateStaffPeriodHours(staff, dates, overrides, config);
     expect(result.alDays).toBe(2);
-    expect(result.alPay).toBeGreaterThan(0);
+    expect(result.alHours).toBe(16); // 2 × 8h (E shift derived from scheduled)
+    expect(result.alPay).toBe(16 * 13); // 16h × £13/hr
     // AL should NOT be in totalHours (would break WTR)
     expect(result.totalHours).toBe(0);
     // AL pay should be in totalPay
     expect(result.totalPay).toBe(result.alPay);
   });
 
-  it('AL pay uses staff pref shift hours (pref E = 8h)', () => {
+  it('AL hours uses getALDeductionHours (pref E = 8h)', () => {
     const staffWithContract = { ...staff, contract_hours: 37.5 };
     const dates = [addDays('2025-01-06', 0)];
     const overrides = { [formatDate(dates[0])]: { S1: { shift: 'AL' } } };
     const result = calculateStaffPeriodHours(staffWithContract, dates, overrides, config);
-    // E hours (8) × hourly_rate (13) = 104
+    // Scheduled E (8h) × hourly_rate (13) = 104
+    expect(result.alHours).toBe(8);
     expect(result.alPay).toBe(104);
+  });
+
+  it('AL uses stored al_hours when present', () => {
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'AL', al_hours: 12 } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.alHours).toBe(12); // stored value, not derived
+    expect(result.alPay).toBe(12 * 13);
   });
 
   it('totalPay includes AL pay alongside working pay', () => {
@@ -375,6 +388,7 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     const result = calculateStaffPeriodHours(staff, dates, overrides, config);
     expect(result.totalHours).toBe(8); // 1 E shift
     expect(result.alDays).toBe(1);
+    expect(result.alHours).toBe(8); // derived from scheduled E
     expect(result.totalPay).toBe(result.grossPay + result.otPay + result.bhPay + result.alPay);
   });
 });
@@ -473,5 +487,77 @@ describe('getShiftHours — crash-safe with incomplete config', () => {
 
   it('ADM returns 0 when neither ADM nor EL defined', () => {
     expect(getShiftHours('ADM', { shifts: {} })).toBe(0);
+  });
+});
+
+// ── getLeaveYear ────────────────────────────────────────────────────────────
+
+describe('getLeaveYear (shared)', () => {
+  it('returns correct boundaries for April start', () => {
+    const ly = getLeaveYear('2025-06-15', '04-01');
+    expect(ly.startStr).toBe('2025-04-01');
+    expect(ly.endStr).toBe('2026-03-31');
+  });
+
+  it('wraps to previous year for dates before boundary', () => {
+    const ly = getLeaveYear('2025-02-01', '04-01');
+    expect(ly.startStr).toBe('2024-04-01');
+    expect(ly.endStr).toBe('2025-03-31');
+  });
+});
+
+// ── STATUTORY_WEEKS ─────────────────────────────────────────────────────────
+
+describe('STATUTORY_WEEKS', () => {
+  it('is 5.6', () => {
+    expect(STATUTORY_WEEKS).toBe(5.6);
+  });
+});
+
+// ── getALDeductionHours ─────────────────────────────────────────────────────
+
+describe('getALDeductionHours', () => {
+  const config = {
+    cycle_start_date: '2025-01-06',
+    shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+  };
+
+  it('returns EL hours (12) for Day A staff with EL pref on a working day', () => {
+    const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
+    // 2025-01-06 is cycle day 0 — Day A works
+    const hrs = getALDeductionHours(staff, '2025-01-06', config);
+    expect(hrs).toBe(12);
+  });
+
+  it('returns N hours (10) for Night A staff on a working day', () => {
+    const staff = { id: 'S2', team: 'Night A', contract_hours: 36, start_date: '2024-01-01' };
+    const hrs = getALDeductionHours(staff, '2025-01-06', config);
+    expect(hrs).toBe(10);
+  });
+
+  it('returns contract_hours/5 for Float staff (AVL)', () => {
+    const staff = { id: 'S3', team: 'Float', contract_hours: 37.5, start_date: '2024-01-01' };
+    const hrs = getALDeductionHours(staff, '2025-01-06', config);
+    // 37.5 / 5 = 7.5
+    expect(hrs).toBe(7.5);
+  });
+
+  it('returns 0 for a scheduled OFF day', () => {
+    const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
+    // 2025-01-08 is cycle day 2 — Day A OFF
+    const hrs = getALDeductionHours(staff, '2025-01-08', config);
+    expect(hrs).toBe(0);
+  });
+
+  it('returns 8h fallback for Float staff with no contract_hours', () => {
+    const staff = { id: 'S3', team: 'Float', contract_hours: 0, start_date: '2024-01-01' };
+    const hrs = getALDeductionHours(staff, '2025-01-06', config);
+    expect(hrs).toBe(8); // fallback
+  });
+
+  it('returns 8h fallback when config shifts are missing', () => {
+    const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
+    const hrs = getALDeductionHours(staff, '2025-01-06', { cycle_start_date: '2025-01-06', shifts: {} });
+    expect(hrs).toBe(8); // fallback
   });
 });

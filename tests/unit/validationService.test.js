@@ -110,33 +110,37 @@ describe('validateALPerDay', () => {
 // ── AL entitlement ──────────────────────────────────────────────────────────
 
 describe('validateALEntitlement', () => {
-  it('warns when staff exceeds annual entitlement', () => {
+  it('warns when staff exceeds annual entitlement (hours)', () => {
     const data = baseData();
-    data.staff = [makeStaff({ al_entitlement: 2, al_carryover: 0 })];
-    // 3 AL days in the current leave year (Apr 2025 - Mar 2026)
+    // al_entitlement is now in hours (not days)
+    data.staff = [makeStaff({ al_entitlement: 20, al_carryover: 0, contract_hours: 36 })];
+    // 3 AL bookings with stored al_hours totalling 30h > 20h entitlement
     data.overrides = {
-      '2025-04-10': { S001: { shift: 'AL' } },
-      '2025-04-11': { S001: { shift: 'AL' } },
-      '2025-04-12': { S001: { shift: 'AL' } },
+      '2025-04-10': { S001: { shift: 'AL', al_hours: 12 } },
+      '2025-04-11': { S001: { shift: 'AL', al_hours: 10 } },
+      '2025-04-12': { S001: { shift: 'AL', al_hours: 8 } },
     };
     const warnings = validateAll(data);
     expect(warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining('exceeds entitlement')])
+      expect.arrayContaining([expect.stringContaining('exceeds')])
+    );
+    expect(warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('entitlement')])
     );
   });
 
   it('includes carryover in entitlement calculation', () => {
     const data = baseData();
-    data.staff = [makeStaff({ al_entitlement: 2, al_carryover: 2 })];
-    // 4 AL days — exactly the entitlement (2 + 2 carryover)
+    // 20h entitlement + 16h carryover = 36h total
+    data.staff = [makeStaff({ al_entitlement: 20, al_carryover: 16, contract_hours: 36 })];
+    // 3 AL bookings totalling 36h — exactly at entitlement (no warning)
     data.overrides = {
-      '2025-04-10': { S001: { shift: 'AL' } },
-      '2025-04-11': { S001: { shift: 'AL' } },
-      '2025-04-12': { S001: { shift: 'AL' } },
-      '2025-04-13': { S001: { shift: 'AL' } },
+      '2025-04-10': { S001: { shift: 'AL', al_hours: 12 } },
+      '2025-04-11': { S001: { shift: 'AL', al_hours: 12 } },
+      '2025-04-12': { S001: { shift: 'AL', al_hours: 12 } },
     };
     const warnings = validateAll(data);
-    expect(warnings.filter(w => w.includes('exceeds entitlement'))).toHaveLength(0);
+    expect(warnings.filter(w => w.includes('exceeds') && w.includes('entitlement'))).toHaveLength(0);
   });
 });
 

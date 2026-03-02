@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate } from '../lib/rotation.js';
+import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -76,7 +76,7 @@ export default function AnnualLeave() {
     return getLeaveYear(today, schedData.config.leave_year_start);
   }, [schedData]);
 
-  // Book AL — only on scheduled working days, enforces accrued entitlement
+  // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
     if (!bookingStaff || !bookingStart || !bookingEnd || !schedData) return;
     const start = parseDate(bookingStart);
@@ -89,19 +89,21 @@ export default function AnnualLeave() {
     const accrual = accruals.get(bookingStaff);
     if (!accrual) return;
 
-    const bookabledays = Math.floor(accrual.remaining);
-    if (bookabledays <= 0) {
-      alert(`${staff.name} has no leave left (${accrual.accrued.toFixed(1)} days earned, ${accrual.used} used). No more leave can be booked.`);
+    if (accrual.missingContractHours) {
+      alert(`${staff.name} has no contract hours set. Set contract hours in Staff Database before booking AL.`);
       return;
     }
 
-    // Build the same loop as before but collect rows for bulkUpsertOverrides
-    // Use a local clone of overrides to compute alOnDay correctly during iteration
+    if (accrual.remainingHours <= 0) {
+      alert(`${staff.name} has no leave left (${accrual.accruedHours.toFixed(1)}h earned, ${accrual.usedHours.toFixed(1)}h used). No more leave can be booked.`);
+      return;
+    }
+
     const localOverrides = JSON.parse(JSON.stringify(schedData.overrides));
     const toBook = [];
     const issues = [];
     let skippedOff = 0;
-    let booked = 0;
+    let hoursBooked = 0;
     let d = new Date(start);
     while (d <= end) {
       const dateKey = formatDate(d);
@@ -113,16 +115,16 @@ export default function AnnualLeave() {
         continue;
       }
       const alOnDay = countALOnDate(d, localOverrides);
+      const hrs = getALDeductionHours(staff, dateKey, schedData.config);
       if (alOnDay >= schedData.config.max_al_same_day) {
         issues.push(`${dateKey}: max AL reached (${schedData.config.max_al_same_day})`);
-      } else if (booked >= bookabledays) {
-        issues.push(`${dateKey}: earned leave exhausted (${accrual.accrued.toFixed(1)} earned, ${accrual.used + booked} would be used)`);
+      } else if (hoursBooked + hrs > accrual.remainingHours + 0.05) {
+        issues.push(`${dateKey}: earned leave exhausted (${accrual.accruedHours.toFixed(1)}h earned, ${(accrual.usedHours + hoursBooked).toFixed(1)}h would be used)`);
       } else {
-        toBook.push({ date: dateKey, staffId: bookingStaff, shift: 'AL', reason: 'Annual leave booked', source: 'al' });
-        // Update local clone so subsequent alOnDay checks reflect this booking
+        toBook.push({ date: dateKey, staffId: bookingStaff, shift: 'AL', reason: 'Annual leave booked', source: 'al', al_hours: hrs });
         if (!localOverrides[dateKey]) localOverrides[dateKey] = {};
-        localOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al' };
-        booked++;
+        localOverrides[dateKey][bookingStaff] = { shift: 'AL', reason: 'Annual leave booked', source: 'al', al_hours: hrs };
+        hoursBooked += hrs;
       }
       d = addDays(d, 1);
     }
@@ -130,7 +132,7 @@ export default function AnnualLeave() {
     const msgs = [];
     if (skippedOff > 0) msgs.push(`${skippedOff} scheduled OFF days skipped (AL not used)`);
     if (issues.length > 0) msgs.push('Skipped days:\n' + issues.join('\n'));
-    if (msgs.length > 0) alert(`${booked} AL days booked.\n\n${msgs.join('\n\n')}`);
+    if (msgs.length > 0) alert(`${toBook.length} AL days booked (${hoursBooked.toFixed(1)}h).\n\n${msgs.join('\n\n')}`);
 
     if (toBook.length > 0) {
       setSaving(true);
@@ -197,6 +199,9 @@ export default function AnnualLeave() {
 
   if (!schedData) return null;
 
+  // Threshold for amber warning: approximately one day's worth of hours
+  const amberThreshold = (parseFloat(schedData.config?.shifts?.EL?.hours) || 12);
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
@@ -218,7 +223,7 @@ export default function AnnualLeave() {
         <div className="mb-6 text-xs text-gray-500 print:hidden">
           Leave Year: <span className="font-medium text-gray-700">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</span>
           <span className="mx-2 text-gray-300">|</span>
-          Accrual: monthly (1/12th per month)
+          Accrual: monthly (1/12th per month) | Hours-based (5.6 x weekly contracted hours)
         </div>
       )}
 
@@ -233,10 +238,10 @@ export default function AnnualLeave() {
                 <option value="">Select...</option>
                 {activeStaff.map(s => {
                   const acc = accruals.get(s.id);
-                  const avail = acc ? acc.remaining : 0;
+                  const avail = acc ? acc.remainingHours : 0;
                   return (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.team}) — {avail.toFixed(1)} days left
+                      {s.name} ({s.team}) — {avail.toFixed(1)}h left
                     </option>
                   );
                 })}
@@ -246,13 +251,18 @@ export default function AnnualLeave() {
             {/* Accrual info box */}
             {selectedAccrual && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 space-y-0.5">
-                <div className="flex justify-between"><span>Entitled</span><span className="font-medium">{selectedAccrual.baseEntitlement}d{selectedAccrual.carryover > 0 ? ` (+${selectedAccrual.carryover}d c/o)` : ''}</span></div>
-                <div className="flex justify-between"><span>Earned to date</span><span className="font-medium">{selectedAccrual.accrued.toFixed(1)}d</span></div>
-                <div className="flex justify-between"><span>Used</span><span className="font-medium">{selectedAccrual.used}d</span></div>
+                {selectedAccrual.missingContractHours && (
+                  <div className="bg-amber-100 border border-amber-300 rounded px-2 py-1 mb-1 text-amber-800 font-medium">
+                    Set contract hours in Staff Database to enable AL booking
+                  </div>
+                )}
+                <div className="flex justify-between"><span>Entitled</span><span className="font-medium">{selectedAccrual.annualEntitlementHours.toFixed(1)}h{selectedAccrual.carryoverHours > 0 ? ` (+${selectedAccrual.carryoverHours.toFixed(1)}h c/o)` : ''}{selectedAccrual.entitlementWeeks > 0 ? ` (${selectedAccrual.entitlementWeeks}wk)` : ''}</span></div>
+                <div className="flex justify-between"><span>Earned to date</span><span className="font-medium">{selectedAccrual.accruedHours.toFixed(1)}h</span></div>
+                <div className="flex justify-between"><span>Used</span><span className="font-medium">{selectedAccrual.usedHours.toFixed(1)}h</span></div>
                 <div className="flex justify-between border-t border-amber-200 pt-0.5 mt-0.5">
                   <span className="font-semibold">Left</span>
-                  <span className={`font-bold ${selectedAccrual.remaining < 0 ? 'text-red-600' : selectedAccrual.remaining <= 2 ? 'text-amber-600' : 'text-emerald-700'}`}>
-                    {selectedAccrual.remaining.toFixed(1)}d
+                  <span className={`font-bold ${selectedAccrual.remainingHours < 0 ? 'text-red-600' : selectedAccrual.remainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-700'}`}>
+                    {selectedAccrual.remainingHours.toFixed(1)}h
                   </span>
                 </div>
               </div>
@@ -269,7 +279,7 @@ export default function AnnualLeave() {
               </div>
             </div>
             <div className="text-xs text-gray-500">Max {schedData.config.max_al_same_day} staff on AL per day</div>
-            <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving}
+            <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving || (selectedAccrual?.missingContractHours)}
               className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
               {saving ? 'Booking...' : 'Book Annual Leave'}
             </button>
@@ -303,24 +313,29 @@ export default function AnnualLeave() {
               </thead>
               <tbody>
                 {filtered.sort((a, b) => a.name.localeCompare(b.name)).map(s => {
-                  const acc = accruals.get(s.id) || { baseEntitlement: 0, entitlement: 0, accrued: 0, used: 0, remaining: 0, yearRemaining: 0, isProRata: false, carryover: 0 };
-                  const pct = acc.baseEntitlement > 0 ? (acc.used / acc.baseEntitlement) * 100 : 0;
+                  const acc = accruals.get(s.id) || {
+                    annualEntitlementHours: 0, totalEntitlementHours: 0, accruedHours: 0, usedHours: 0,
+                    remainingHours: 0, yearRemainingHours: 0, isProRata: false, carryoverHours: 0,
+                    contractHours: 0, missingContractHours: true,
+                  };
+                  const pct = acc.annualEntitlementHours > 0 ? (acc.usedHours / acc.annualEntitlementHours) * 100 : 0;
                   return (
                     <tr key={s.id} className={TABLE.tr}>
                       <td className={`${TABLE.td} font-medium`}>
                         {s.name}
                         {acc.isProRata && <span className={`ml-1 ${BADGE.blue}`}>Pro-rata</span>}
+                        {acc.missingContractHours && <span className={`ml-1 ${BADGE.amber}`}>No hrs</span>}
                       </td>
                       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.team}</td>
                       <td className={`${TABLE.td} text-center text-xs`}>
-                        {acc.baseEntitlement}d
-                        {acc.carryover > 0 && <span className={`ml-1 ${BADGE.amber}`}>+{acc.carryover}c/o</span>}
+                        {acc.annualEntitlementHours.toFixed(1)}h
+                        {acc.carryoverHours > 0 && <span className={`ml-1 ${BADGE.amber}`}>+{acc.carryoverHours.toFixed(1)}h</span>}
                       </td>
-                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.accrued.toFixed(1)}</td>
-                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.used}</td>
+                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.accruedHours.toFixed(1)}</td>
+                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.usedHours.toFixed(1)}</td>
                       <td className={`${TABLE.td} text-center`}>
-                        <span className={`font-medium text-sm ${acc.remaining < 0 ? 'text-red-600' : acc.remaining <= 2 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {acc.remaining.toFixed(1)}
+                        <span className={`font-medium text-sm ${acc.remainingHours < 0 ? 'text-red-600' : acc.remainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {acc.remainingHours.toFixed(1)}h
                         </span>
                       </td>
                       <td className={TABLE.td}>

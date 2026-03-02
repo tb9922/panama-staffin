@@ -175,9 +175,9 @@ function DashboardInner({ schedData }) {
     // AL accrual overbooked check
     activeCareStaff.forEach((s, idx) => {
       const acc = calculateAccrual(s, config, overrides, today);
-      if (acc.remaining < 0) {
+      if (acc.remainingHours < 0) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
-        list.push({ type: 'warning', msg: `${label}: ${Math.abs(acc.remaining).toFixed(1)} AL days over earned balance` });
+        list.push({ type: 'warning', msg: `${label}: ${Math.abs(acc.remainingHours).toFixed(1)} AL hours over earned balance` });
       }
     });
 
