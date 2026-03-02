@@ -44,6 +44,7 @@ const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();
 const tsIdSchema     = z.coerce.number().int().positive();
 const providerSchema = z.coerce.number().int().positive();
+const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : null;
 
 const ruleBodySchema = z.object({
   name:           z.string().min(1).max(100),
@@ -174,7 +175,7 @@ router.get('/timesheets/period', requireAuth, requireAdmin, requireHomeAccess, a
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
     if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end date parameters required' });
-    const entries = await timesheetRepo.findByHomePeriod(req.home.id, startP.data, endP.data, req.query.status || null, req.query.staff_id || null);
+    const entries = await timesheetRepo.findByHomePeriod(req.home.id, startP.data, endP.data, safeStr(req.query.status, 20), safeStr(req.query.staff_id, 20));
     res.json(entries);
   } catch (err) { next(err); }
 });
@@ -568,7 +569,7 @@ const sickPeriodUpdateSchema = z.object({
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
 router.get('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const staffId = req.query.staffId || null;
+    const staffId = safeStr(req.query.staffId, 20);
     res.json(await sspRepo.listSickPeriods(req.home.id, staffId));
   } catch (err) { next(err); }
 });

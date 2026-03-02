@@ -17,6 +17,10 @@ const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
+const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : undefined;
+const safeDate = v => (typeof v === 'string' && dateRe.test(v)) ? v : undefined;
+const safeInt = v => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : undefined; };
 
 function handleConstraintError(err, res) {
   if (err.code === '23505') return res.status(409).json({ error: 'Duplicate record — invoice number already exists' });
@@ -159,9 +163,9 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
 router.get('/residents/with-beds', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const filters = {};
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.funding_type) filters.fundingType = req.query.funding_type;
-    if (req.query.search) filters.search = req.query.search;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.funding_type) filters.fundingType = safeStr(req.query.funding_type);
+    if (req.query.search) filters.search = safeStr(req.query.search, 200);
     const result = await financeService.findResidentsWithBeds(req.home.id, filters);
     res.json(result);
   } catch (err) { next(err); }
@@ -171,8 +175,8 @@ router.get('/residents', requireAuth, requireAdmin, requireHomeAccess, async (re
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.funding_type) filters.fundingType = req.query.funding_type;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.funding_type) filters.fundingType = safeStr(req.query.funding_type);
     res.json(await financeService.findResidents(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -243,11 +247,11 @@ router.get('/invoices', requireAuth, requireAdmin, requireHomeAccess, async (req
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.payer_type) filters.payerType = req.query.payer_type;
-    if (req.query.resident_id) filters.residentId = parseInt(req.query.resident_id);
-    if (req.query.from) filters.from = req.query.from;
-    if (req.query.to) filters.to = req.query.to;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.payer_type) filters.payerType = safeStr(req.query.payer_type);
+    if (req.query.resident_id) { const rid = safeInt(req.query.resident_id); if (rid) filters.residentId = rid; }
+    if (req.query.from) { const d = safeDate(req.query.from); if (d) filters.from = d; }
+    if (req.query.to) { const d = safeDate(req.query.to); if (d) filters.to = d; }
     res.json(await financeService.findInvoices(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -331,10 +335,10 @@ router.get('/expenses', requireAuth, requireAdmin, requireHomeAccess, async (req
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.category) filters.category = req.query.category;
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.from) filters.from = req.query.from;
-    if (req.query.to) filters.to = req.query.to;
+    if (req.query.category) filters.category = safeStr(req.query.category);
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.from) { const d = safeDate(req.query.from); if (d) filters.from = d; }
+    if (req.query.to) { const d = safeDate(req.query.to); if (d) filters.to = d; }
     res.json(await financeService.findExpenses(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -519,8 +523,8 @@ router.delete('/payment-schedules/:id', requireAuth, requireAdmin, requireHomeAc
 router.get('/dashboard', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const now = new Date();
-    const from = req.query.from || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const to = req.query.to || now.toISOString().slice(0, 10);
+    const from = safeDate(req.query.from) || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = safeDate(req.query.to) || now.toISOString().slice(0, 10);
     if (from > to) return res.status(400).json({ error: '"from" date must not be after "to" date' });
     res.json(await financeService.getFinanceDashboard(req.home.id, from, to));
   } catch (err) { next(err); }

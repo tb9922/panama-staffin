@@ -118,12 +118,20 @@ const shiftSchema = z.enum(VALID_SHIFTS);
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    // Default ±90-day rolling window; callers may widen with ?from=&to= query params.
+    // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     const now = new Date();
-    const fromDate = req.query.from || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90))
-      .toISOString().slice(0, 10);
-    const toDate = req.query.to || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90))
-      .toISOString().slice(0, 10);
+    const fromDate = (typeof req.query.from === 'string' && dateRe.test(req.query.from))
+      ? req.query.from
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
+    const toDate = (typeof req.query.to === 'string' && dateRe.test(req.query.to))
+      ? req.query.to
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
+    // Cap range to 400 days to prevent unbounded queries
+    const daySpan = (new Date(toDate) - new Date(fromDate)) / 86400000;
+    if (daySpan < 0 || daySpan > 400) {
+      return res.status(400).json({ error: 'Date range must be 0–400 days' });
+    }
 
     const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([
       staffRepo.findByHome(req.home.id),

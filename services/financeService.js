@@ -261,7 +261,7 @@ export async function getFinanceDashboard(homeId, from, to) {
     const { rows: agencyRows } = await pool.query(
       `SELECT COALESCE(SUM(total_cost), 0) AS total
        FROM agency_shifts
-       WHERE home_id = $1 AND shift_date >= $2 AND shift_date <= $3`,
+       WHERE home_id = $1 AND date >= $2 AND date <= $3`,
       [homeId, from, to]);
     agencyCosts = agencyRows[0]?.total != null ? parseFloat(agencyRows[0].total) : 0;
   } catch { /* agency tables may not exist — graceful fallback */ }
