@@ -12,10 +12,10 @@ import {
 
 function getMonthDates(year, month) {
   const dates = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
+  const d = new Date(Date.UTC(year, month, 1));
+  while (d.getUTCMonth() === month) {
     dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -68,13 +68,13 @@ export default function AnnualLeave() {
   const accruals = useMemo(() => {
     if (!schedData) return new Map();
     return getAccrualSummary(activeStaff, schedData.config, schedData.overrides, today);
-  }, [schedData, activeStaff]);
+  }, [schedData, activeStaff, today]);
 
   // Leave year for display
   const leaveYear = useMemo(() => {
     if (!schedData) return null;
     return getLeaveYear(today, schedData.config.leave_year_start);
-  }, [schedData]);
+  }, [schedData, today]);
 
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
@@ -170,7 +170,7 @@ export default function AnnualLeave() {
   // Upcoming AL bookings
   const upcomingAL = useMemo(() => {
     if (!schedData) return [];
-    const todayStr = formatDate(new Date());
+    const todayStr = today;
     const bookings = [];
     Object.entries(schedData.overrides).forEach(([dateKey, dayOverrides]) => {
       if (dateKey < todayStr) return;
@@ -183,7 +183,7 @@ export default function AnnualLeave() {
     });
     bookings.sort((a, b) => a.date.localeCompare(b.date));
     return bookings;
-  }, [schedData]);
+  }, [schedData, today]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">

@@ -146,7 +146,7 @@ export default function RiskRegister() {
       setShowModal(false);
       await load();
     } catch (e) {
-      setError(e.message);
+      alert(e.message || 'Failed to save');
     }
   }
 
@@ -157,7 +157,7 @@ export default function RiskRegister() {
       setShowModal(false);
       await load();
     } catch (e) {
-      setError(e.message);
+      alert(e.message || 'Failed to delete');
     }
   }
 

@@ -3,9 +3,10 @@ import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../lib/api.js';
 
 export default function Config() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const homeSlug = getCurrentHome();
   const [config, setConfig] = useState(null);
   const [staff, setStaff] = useState([]);
@@ -37,6 +38,7 @@ export default function Config() {
   useEffect(() => { load(); }, [load]);
 
   function handleChange(path, value) {
+    if (!isAdmin) return;
     const keys = path.split('.');
     const newConfig = JSON.parse(JSON.stringify(config));
     let obj = newConfig;
@@ -49,6 +51,7 @@ export default function Config() {
   }
 
   async function handleSave() {
+    if (!isAdmin) return;
     setSaveError(null);
     try {
       await saveConfig(homeSlug, config);
@@ -121,10 +124,10 @@ export default function Config() {
       )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <button onClick={handleSave}
+        {isAdmin && <button onClick={handleSave}
           className={`${BTN.primary} ${saved ? '!bg-green-600' : dirty ? '!bg-amber-600 hover:!bg-amber-700' : ''}`}>
           {saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
-        </button>
+        </button>}
       </div>
 
       {/* Home Details */}

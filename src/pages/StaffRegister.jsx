@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -418,8 +418,8 @@ export default function StaffRegister() {
               const stats = staffStats[s.id];
               const rErr = rowError?.id === s.id ? rowError.msg : null;
               return (
-                <>
-                  <tr key={s.id} className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
+                <Fragment key={s.id}>
+                  <tr className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
                     <td className={`${TABLE.td} font-mono text-xs text-gray-400`}>{s.id}</td>
 
                     {/* Name — editable */}
@@ -610,7 +610,7 @@ export default function StaffRegister() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

@@ -74,7 +74,7 @@ function getMonthDates(year, month) {
 
 function parseLocalDate(str) {
   const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 export default function RotationGrid() {

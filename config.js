@@ -43,6 +43,11 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+if (process.env.JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET must be at least 32 characters for adequate entropy');
+  process.exit(1);
+}
+
 if (process.env.ALLOWED_ORIGIN === '*') {
   console.error('FATAL: ALLOWED_ORIGIN=* is not permitted — this would expose all endpoints including health records');
   process.exit(1);

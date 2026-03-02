@@ -11,6 +11,7 @@ import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 export default function FatigueTracker() {
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Reactive today — updates at midnight so fatigue data is never stale
   const [today, setToday] = useState(() => new Date());
@@ -28,12 +29,12 @@ export default function FatigueTracker() {
     if (!homeSlug) return;
     getSchedulingData(homeSlug)
       .then(setSchedData)
-      .catch(() => {})
+      .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading fatigue data...</div>;
-  if (!schedData) return <div className="p-6 text-red-600">Failed to load scheduling data</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <FatigueTrackerInner schedData={schedData} today={today} />;
 }

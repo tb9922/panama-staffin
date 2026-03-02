@@ -46,6 +46,7 @@ function metricColor(value, lowerIsBetter) {
 export default function CQCEvidence() {
   const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const homeSlug = getCurrentHome();
@@ -59,7 +60,7 @@ export default function CQCEvidence() {
 
     Promise.all([
       getSchedulingData(homeSlug, { from, to }),
-      getTrainingData(homeSlug),
+      getTrainingData(homeSlug).catch(() => ({})),
       getIncidents(homeSlug).catch(() => ({ incidents: [] })),
       getComplaints(homeSlug).catch(() => ({ complaints: [], surveys: [] })),
       getMaintenance(homeSlug).catch(() => ({ checks: [] })),
@@ -90,12 +91,12 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(() => {})
+    }).catch(e => setError(e.message || 'Failed to load CQC data'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading CQC data...</div>;
-  if (!moduleData) return <div className="p-6 text-red-600">Failed to load CQC data</div>;
+  if (error || !moduleData) return <div className="p-6 text-red-600">{error || 'Failed to load CQC data'}</div>;
 
   return <CQCEvidenceInner data={moduleData} />;
 }

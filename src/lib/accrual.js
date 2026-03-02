@@ -11,8 +11,8 @@ import { formatDate, parseDate, addDays, getLeaveYear, getALDeductionHours, STAT
 function monthsBetween(start, end) {
   const s = new Date(start);
   const e = new Date(end);
-  let months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
-  if (e.getDate() < s.getDate()) months--;
+  let months = (e.getUTCFullYear() - s.getUTCFullYear()) * 12 + (e.getUTCMonth() - s.getUTCMonth());
+  if (e.getUTCDate() < s.getUTCDate()) months--;
   return Math.max(0, months);
 }
 

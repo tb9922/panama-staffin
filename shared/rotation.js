@@ -383,11 +383,11 @@ export function getALDeductionHours(staff, dateStr, config) {
     // Float staff: deduct contract_hours / working_days_per_week
     return contractHours > 0
       ? Math.round((contractHours / ASSUMED_WORKING_DAYS_PER_WEEK) * 10) / 10
-      : 8; // fallback if no contract hours set
+      : 0; // no contract hours = cannot calculate deduction
   }
   // Normal shift — use config shift hours
   const hrs = getShiftHours(scheduled, config);
-  return hrs > 0 ? hrs : 8; // fallback 8h if config missing
+  return hrs > 0 ? hrs : 0; // missing config = cannot calculate deduction
 }
 
 // Count AL on a given date
