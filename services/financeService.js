@@ -114,6 +114,10 @@ export async function createInvoiceWithLines(homeId, data, username) {
       await financeRepo.createInvoiceLine(invoice.id, homeId, line, client);
     }
 
+    if (invoice.resident_id) {
+      await financeRepo.recalculateResidentBalance(invoice.resident_id, homeId, client);
+    }
+
     logger.info({ homeId, invoiceId: invoice.id, invoiceNumber, total: totalAmount, payerType: invoice.payer_type, createdBy: username }, 'Invoice created');
     const savedLines = await financeRepo.findInvoiceLines(invoice.id, homeId, client);
     return { ...invoice, lines: savedLines };
@@ -148,6 +152,11 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
 
     const invoice = await financeRepo.updateInvoice(id, homeId, data, client, version);
     if (invoice === null) return null;
+
+    if (existing.resident_id) {
+      await financeRepo.recalculateResidentBalance(existing.resident_id, homeId, client);
+    }
+
     const savedLines = await financeRepo.findInvoiceLines(id, homeId, client);
     return { ...invoice, lines: savedLines };
   });
@@ -182,6 +191,14 @@ export async function recordPayment(invoiceId, homeId, paymentData, username) {
       payment_method: paymentData.payment_method || null,
       payment_reference: paymentData.payment_reference || null,
     }, client);
+
+    if (invoice.resident_id) {
+      await financeRepo.updateResidentPaymentInfo(
+        invoice.resident_id, homeId,
+        paymentData.paid_date || new Date().toISOString().slice(0, 10),
+        paymentAmount, client
+      );
+    }
 
     logger.info({ homeId, invoiceId, amount: paymentAmount, newBalance, newStatus, method: paymentData.payment_method, recordedBy: username }, 'Payment recorded');
     return updated;
@@ -295,13 +312,14 @@ export async function getFinanceAlerts(homeId) {
   const today = new Date().toISOString().slice(0, 10);
   const thirtyDaysOut = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
-  const [overdueCount, pendingCount, feeReviews, ageing, chasesDue, upcoming] = await Promise.all([
+  const [overdueCount, pendingCount, feeReviews, ageing, chasesDue, upcoming, outstandingResidents] = await Promise.all([
     financeRepo.getOverdueInvoiceCount(homeId, today),
     financeRepo.getPendingExpenseCount(homeId),
     financeRepo.getFeeReviewsDue(homeId, thirtyDaysOut),
     financeRepo.getReceivablesAgeing(homeId, today),
     financeRepo.getChasesDueForAction(homeId, today),
     financeRepo.getUpcomingPayments(homeId, today),
+    financeRepo.getResidentsWithOutstandingBalance(homeId),
   ]);
 
   const alerts = [];
@@ -336,6 +354,16 @@ export async function getFinanceAlerts(homeId) {
   // Scheduled payments due
   if (upcoming.length > 0) {
     alerts.push({ type: 'info', message: `${upcoming.length} scheduled payment${upcoming.length > 1 ? 's' : ''} due`, link: '/finance/payment-schedules' });
+  }
+
+  // Resident outstanding balances
+  if (outstandingResidents.length > 0) {
+    const total = outstandingResidents.reduce((s, r) => s + parseFloat(r.outstanding_balance), 0);
+    alerts.push({
+      type: 'warning',
+      message: `${outstandingResidents.length} resident${outstandingResidents.length > 1 ? 's' : ''} with \u00A3${total.toFixed(0)} outstanding`,
+      link: '/finance/income',
+    });
   }
 
   return alerts;

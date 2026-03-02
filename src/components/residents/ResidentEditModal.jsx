@@ -183,6 +183,18 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
               <input className={INPUT.base} value={feeChangeReason} onChange={e => setFeeChangeReason(e.target.value)} placeholder="e.g. Annual fee uplift" />
             </div>
           )}
+          {resident.last_payment_date && (
+            <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200 text-sm">
+              <span className="text-gray-500">Last payment:</span>{' '}
+              <span className="font-medium">{formatCurrency(resident.last_payment_amount)}</span>
+              <span className="text-gray-400 ml-1">on {resident.last_payment_date}</span>
+            </div>
+          )}
+          {resident.outstanding_balance > 0 && (
+            <div className="mt-2 p-3 bg-amber-50 rounded border border-amber-200 text-sm">
+              <span className="text-amber-700 font-medium">Outstanding: {formatCurrency(resident.outstanding_balance)}</span>
+            </div>
+          )}
         </div>
       )}
 

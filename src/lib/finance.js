@@ -121,6 +121,22 @@ export function formatCurrency(n) {
   return `${sign}£${Math.abs(val).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+export const PAYMENT_STATUSES = [
+  { id: 'up_to_date', label: 'Up to date', badge: 'green' },
+  { id: 'outstanding', label: 'Outstanding', badge: 'amber' },
+  { id: 'overdue', label: 'Overdue', badge: 'red' },
+  { id: 'no_invoices', label: 'No invoices', badge: 'gray' },
+];
+
+export function getPaymentStatus(resident) {
+  if (resident.outstanding_balance > 0) {
+    if (!resident.last_payment_date) return 'overdue';
+    const daysSince = (Date.now() - new Date(resident.last_payment_date).getTime()) / 86400000;
+    return daysSince > 35 ? 'overdue' : 'outstanding';
+  }
+  return resident.last_payment_date ? 'up_to_date' : 'no_invoices';
+}
+
 export function calculateExpectedMonthlyIncome(residents) {
   if (!residents || residents.length === 0) return 0;
   return residents
