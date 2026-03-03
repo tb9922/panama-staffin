@@ -15,23 +15,27 @@ const staffIdSchema = z.string().min(1).max(20);
 const STAFF_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const STAFF_TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
+const STAFF_PREFS = ['E', 'L', 'EL', 'N', 'ANY'];
+const optDate = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional());
+const optNI   = z.preprocess(v => v === '' ? null : v, z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional());
+
 const staffBodySchema = z.object({
   id:              z.string().min(1).max(20),
   name:            z.string().min(1).max(200),
   role:            z.enum(STAFF_ROLES),
   team:            z.enum(STAFF_TEAMS),
-  pref:            z.enum(['E', 'L', 'EL']).nullable().optional(),
+  pref:            z.enum(STAFF_PREFS).nullable().optional(),
   skill:           z.number().min(0).max(5).optional(),
   hourly_rate:     z.number().positive().optional(),
   active:          z.boolean().optional(),
   wtr_opt_out:     z.boolean().optional(),
-  start_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  start_date:      optDate,
   contract_hours:  z.number().min(0).nullable().optional(),
-  date_of_birth:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  ni_number:       z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional(),
+  date_of_birth:   optDate,
+  ni_number:       optNI,
   al_entitlement:  z.number().min(0).max(2000).nullable().optional(),
   al_carryover:    z.number().min(0).max(500).optional(),
-  leaving_date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  leaving_date:    optDate,
 });
 const staffUpdateSchema = staffBodySchema.partial();
 
