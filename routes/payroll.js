@@ -39,6 +39,7 @@ const router = Router();
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
 const dateSchema     = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const optTime        = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{2}:\d{2}$/).nullable().optional());
 const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();
 const tsIdSchema     = z.coerce.number().int().positive();
@@ -56,12 +57,12 @@ const ruleBodySchema = z.object({
 const timesheetBodySchema = z.object({
   staff_id:        z.string().min(1).max(20),
   date:            dateSchema,
-  scheduled_start: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  scheduled_end:   z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  actual_start:    z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  actual_end:      z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  snapped_start:   z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  snapped_end:     z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  scheduled_start: optTime,
+  scheduled_end:   optTime,
+  actual_start:    optTime,
+  actual_end:      optTime,
+  snapped_start:   optTime,
+  snapped_end:     optTime,
   snap_applied:    z.boolean().optional().default(false),
   snap_minutes_saved: z.number().optional().default(0),
   break_minutes:   z.number().int().nonnegative().optional().default(0),
