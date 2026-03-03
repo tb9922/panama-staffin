@@ -15,8 +15,9 @@ export async function hasAccess(username, homeId) {
 /**
  * Grant a user access to a home. Idempotent (ON CONFLICT DO NOTHING).
  */
-export async function grantAccess(username, homeId) {
-  await pool.query(
+export async function grantAccess(username, homeId, client) {
+  const conn = client || pool;
+  await conn.query(
     'INSERT INTO user_home_access (username, home_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
     [username, homeId]
   );
