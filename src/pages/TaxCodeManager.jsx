@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
@@ -272,163 +273,155 @@ export default function TaxCodeManager() {
       </div>
 
       {/* Modal */}
-      {showModal && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panel}>
-            <h2 className={MODAL.title}>
-              {editStaffId ? 'Update Tax Code' : 'Add Tax Code'}
-            </h2>
-
-            <div className="space-y-4">
-              {/* Staff */}
-              <div>
-                <label className={INPUT.label}>Staff Member</label>
-                {editStaffId ? (
-                  <div className="text-sm font-medium text-gray-900 py-2">
-                    {staffMap[editStaffId]?.name || editStaffId}
-                  </div>
-                ) : (
-                  <StaffPicker
-                    value={form.staff_id}
-                    onChange={v => field('staff_id', v)}
-                    required
-                  />
-                )}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editStaffId ? 'Update Tax Code' : 'Add Tax Code'}>
+        <div className="space-y-4">
+          {/* Staff */}
+          <div>
+            <label className={INPUT.label}>Staff Member</label>
+            {editStaffId ? (
+              <div className="text-sm font-medium text-gray-900 py-2">
+                {staffMap[editStaffId]?.name || editStaffId}
               </div>
+            ) : (
+              <StaffPicker
+                value={form.staff_id}
+                onChange={v => field('staff_id', v)}
+                required
+              />
+            )}
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                {/* Tax code */}
-                <div>
-                  <label className={INPUT.label}>Tax Code</label>
-                  <input
-                    className={INPUT.base}
-                    value={form.tax_code}
-                    onChange={e => field('tax_code', e.target.value.toUpperCase())}
-                    placeholder="e.g. 1257L"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    S prefix = Scotland. K codes apply addition to taxable pay.
-                  </p>
-                </div>
-
-                {/* Basis */}
-                <div>
-                  <label className={INPUT.label}>Basis</label>
-                  <select className={INPUT.select} value={form.basis} onChange={e => field('basis', e.target.value)}>
-                    <option value="cumulative">Cumulative</option>
-                    <option value="w1m1">W1/M1 (Emergency)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* NI Category */}
-                <div>
-                  <label className={INPUT.label}>NI Category</label>
-                  <select className={INPUT.select} value={form.ni_category} onChange={e => field('ni_category', e.target.value)}>
-                    {NI_CATEGORIES.map(c => (
-                      <option key={c} value={c}>Category {c}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">Most employees: Category A</p>
-                </div>
-
-                {/* Student Loan */}
-                <div>
-                  <label className={INPUT.label}>Student Loan Plan</label>
-                  <input
-                    className={INPUT.base}
-                    value={form.student_loan_plan}
-                    onChange={e => field('student_loan_plan', e.target.value)}
-                    placeholder="e.g. 1 or 2 or 1,PG"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Leave blank if no deduction applies</p>
-                </div>
-              </div>
-
-              {/* Effective from */}
-              <div>
-                <label className={INPUT.label}>Effective From</label>
-                <input
-                  type="date"
-                  className={INPUT.base}
-                  value={form.effective_from}
-                  onChange={e => field('effective_from', e.target.value)}
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  New records do not overwrite earlier effective dates — all history is preserved.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Previous pay */}
-                <div>
-                  <label className={INPUT.label}>Previous Pay (P45 Box 4) £</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className={INPUT.base}
-                    value={form.previous_pay}
-                    onChange={e => field('previous_pay', e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                {/* Previous tax */}
-                <div>
-                  <label className={INPUT.label}>Previous Tax (P45 Box 5) £</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className={INPUT.base}
-                    value={form.previous_tax}
-                    onChange={e => field('previous_tax', e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-
-              {/* Source */}
-              <div>
-                <label className={INPUT.label}>Source</label>
-                <select className={INPUT.select} value={form.source} onChange={e => field('source', e.target.value)}>
-                  <option value="manual">Manual entry</option>
-                  <option value="p45">P45 from previous employer</option>
-                  <option value="starter">Starter checklist</option>
-                  <option value="hmrc">HMRC coding notice</option>
-                </select>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className={INPUT.label}>Notes (optional)</label>
-                <textarea
-                  className={INPUT.base}
-                  rows={2}
-                  value={form.notes}
-                  onChange={e => field('notes', e.target.value)}
-                  placeholder="e.g. Updated per HMRC P6 notice received 15 Jan 2026"
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Tax code */}
+            <div>
+              <label className={INPUT.label}>Tax Code</label>
+              <input
+                className={INPUT.base}
+                value={form.tax_code}
+                onChange={e => field('tax_code', e.target.value.toUpperCase())}
+                placeholder="e.g. 1257L"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                S prefix = Scotland. K codes apply addition to taxable pay.
+              </p>
             </div>
 
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                className={BTN.primary}
-                onClick={handleSave}
-                disabled={saving || !form.staff_id || !form.tax_code || !form.effective_from}
-              >
-                {saving ? 'Saving...' : 'Save Tax Code'}
-              </button>
+            {/* Basis */}
+            <div>
+              <label className={INPUT.label}>Basis</label>
+              <select className={INPUT.select} value={form.basis} onChange={e => field('basis', e.target.value)}>
+                <option value="cumulative">Cumulative</option>
+                <option value="w1m1">W1/M1 (Emergency)</option>
+              </select>
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* NI Category */}
+            <div>
+              <label className={INPUT.label}>NI Category</label>
+              <select className={INPUT.select} value={form.ni_category} onChange={e => field('ni_category', e.target.value)}>
+                {NI_CATEGORIES.map(c => (
+                  <option key={c} value={c}>Category {c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Most employees: Category A</p>
+            </div>
+
+            {/* Student Loan */}
+            <div>
+              <label className={INPUT.label}>Student Loan Plan</label>
+              <input
+                className={INPUT.base}
+                value={form.student_loan_plan}
+                onChange={e => field('student_loan_plan', e.target.value)}
+                placeholder="e.g. 1 or 2 or 1,PG"
+              />
+              <p className="text-xs text-gray-400 mt-1">Leave blank if no deduction applies</p>
+            </div>
+          </div>
+
+          {/* Effective from */}
+          <div>
+            <label className={INPUT.label}>Effective From</label>
+            <input
+              type="date"
+              className={INPUT.base}
+              value={form.effective_from}
+              onChange={e => field('effective_from', e.target.value)}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              New records do not overwrite earlier effective dates — all history is preserved.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Previous pay */}
+            <div>
+              <label className={INPUT.label}>Previous Pay (P45 Box 4) £</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className={INPUT.base}
+                value={form.previous_pay}
+                onChange={e => field('previous_pay', e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Previous tax */}
+            <div>
+              <label className={INPUT.label}>Previous Tax (P45 Box 5) £</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className={INPUT.base}
+                value={form.previous_tax}
+                onChange={e => field('previous_tax', e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          {/* Source */}
+          <div>
+            <label className={INPUT.label}>Source</label>
+            <select className={INPUT.select} value={form.source} onChange={e => field('source', e.target.value)}>
+              <option value="manual">Manual entry</option>
+              <option value="p45">P45 from previous employer</option>
+              <option value="starter">Starter checklist</option>
+              <option value="hmrc">HMRC coding notice</option>
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className={INPUT.label}>Notes (optional)</label>
+            <textarea
+              className={INPUT.base}
+              rows={2}
+              value={form.notes}
+              onChange={e => field('notes', e.target.value)}
+              placeholder="e.g. Updated per HMRC P6 notice received 15 Jan 2026"
+            />
+          </div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className={BTN.primary}
+            onClick={handleSave}
+            disabled={saving || !form.staff_id || !form.tax_code || !form.effective_from}
+          >
+            {saving ? 'Saving...' : 'Save Tax Code'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

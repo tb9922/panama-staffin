@@ -1,4 +1,4 @@
-import { pool, withTransaction } from '../db.js';
+import { withTransaction } from '../db.js';
 import logger from '../logger.js';
 import * as financeRepo from '../repositories/financeRepo.js';
 
@@ -91,7 +91,7 @@ export async function createInvoiceWithLines(homeId, data, username) {
   return withTransaction(async (client) => {
     // Generate invoice number atomically
     const now = new Date();
-    const prefix = `INV-${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const prefix = `INV-${String(now.getUTCFullYear()).slice(2)}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     const invoiceNumber = await financeRepo.getNextInvoiceNumber(homeId, prefix, client);
 
     // Calculate totals from lines
@@ -131,10 +131,9 @@ export async function updateInvoice(id, homeId, data) {
 }
 
 export async function updateInvoiceWithLines(id, homeId, data, username, version) {
-  const existing = await financeRepo.findInvoiceById(id, homeId);
-  if (!existing) return null;
-
   return withTransaction(async (client) => {
+    const existing = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
+    if (!existing) return null;
     // Recalculate totals if lines provided
     if (data.lines) {
       await financeRepo.deleteInvoiceLines(id, homeId, client);
@@ -261,34 +260,13 @@ export async function getFinanceDashboard(homeId, from, to) {
     financeRepo.getMonthlyExpenseTrend(homeId, 6),
   ]);
 
-  // Read payroll and agency costs for the period (read-only integration)
+  // Read payroll, agency costs and home config via repo layer
   let staffCosts = 0;
   let agencyCosts = 0;
-  try {
-    const { rows: payrollRows } = await pool.query(
-      `SELECT COALESCE(SUM(total_gross), 0) AS total
-       FROM payroll_runs
-       WHERE home_id = $1 AND status IN ('approved','locked','exported')
-         AND period_start >= $2 AND period_end <= $3`,
-      [homeId, from, to]);
-    staffCosts = payrollRows[0]?.total != null ? parseFloat(payrollRows[0].total) : 0;
-  } catch { /* payroll tables may not exist — graceful fallback */ }
-
-  try {
-    const { rows: agencyRows } = await pool.query(
-      `SELECT COALESCE(SUM(total_cost), 0) AS total
-       FROM agency_shifts
-       WHERE home_id = $1 AND shift_date >= $2 AND shift_date <= $3`,
-      [homeId, from, to]);
-    agencyCosts = agencyRows[0]?.total != null ? parseFloat(agencyRows[0].total) : 0;
-  } catch { /* agency tables may not exist — graceful fallback */ }
-
-  // Read registered_beds from homes.config
   let registeredBeds = 0;
-  try {
-    const { rows: homeRows } = await pool.query('SELECT config FROM homes WHERE id = $1', [homeId]);
-    registeredBeds = homeRows[0]?.config?.registered_beds ?? 0;
-  } catch { /* fallback */ }
+  try { staffCosts = await financeRepo.getPayrollTotal(homeId, from, to); } catch { /* payroll tables may not exist */ }
+  try { agencyCosts = await financeRepo.getAgencyTotal(homeId, from, to); } catch { /* agency tables may not exist */ }
+  try { registeredBeds = await financeRepo.getRegisteredBeds(homeId); } catch { /* fallback */ }
 
   const totalExpenses = expenses.total_expenses + staffCosts + agencyCosts;
   const netPosition = income.total_invoiced - totalExpenses;

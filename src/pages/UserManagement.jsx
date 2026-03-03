@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   listUsers, createUser, updateUser, resetUserPassword,
   getUserHomes, setUserHomes, listAllHomesForAccess,
@@ -143,9 +144,8 @@ function AddUserModal({ onClose, onSuccess }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <form className={MODAL.panel} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h2 className={MODAL.title}>Add User</h2>
+    <Modal isOpen={true} onClose={onClose} title="Add User">
+      <form onSubmit={handleSubmit}>
         {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
         <div className="space-y-3">
           <div>
@@ -178,7 +178,7 @@ function AddUserModal({ onClose, onSuccess }) {
           <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Creating...' : 'Create User'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -207,9 +207,8 @@ function EditUserModal({ user, onClose, onSuccess }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <form className={MODAL.panel} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h2 className={MODAL.title}>Edit User — {user.username}</h2>
+    <Modal isOpen={true} onClose={onClose} title={`Edit User — ${user.username}`}>
+      <form onSubmit={handleSubmit}>
         {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
         <div className="space-y-3">
           <div>
@@ -239,7 +238,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
           <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -269,9 +268,8 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <form className={MODAL.panelSm} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h2 className={MODAL.title}>Reset Password — {user.username}</h2>
+    <Modal isOpen={true} onClose={onClose} title={`Reset Password — ${user.username}`} size="sm">
+      <form onSubmit={handleSubmit}>
         {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
         <p className="text-xs text-gray-500 mb-3">This will revoke all active sessions for this user.</p>
         <div className="space-y-3">
@@ -290,7 +288,7 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
           <button type="submit" className={BTN.danger} disabled={saving}>{saving ? 'Resetting...' : 'Reset Password'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -334,36 +332,33 @@ function HomeAccessModal({ user, allHomes, onClose, onSuccess }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-        <h2 className={MODAL.title}>Home Access — {user.username}</h2>
-        {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
-        {loading ? (
-          <p className="text-gray-400 text-sm py-4 text-center">Loading...</p>
-        ) : allHomes.length === 0 ? (
-          <p className="text-gray-400 text-sm py-4 text-center">No homes configured</p>
-        ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {allHomes.map(h => (
-              <label key={h.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                <input type="checkbox" checked={selected.has(h.id)} onChange={() => toggle(h.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                <span className="text-sm text-gray-700">{h.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-          <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-            onClick={() => setSelected(new Set(allHomes.map(h => h.id)))}>Select All</button>
-          <div className="flex gap-3">
-            <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-            <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading}>
-              {saving ? 'Saving...' : 'Save Access'}
-            </button>
-          </div>
+    <Modal isOpen={true} onClose={onClose} title={`Home Access — ${user.username}`}>
+      {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+      {loading ? (
+        <p className="text-gray-400 text-sm py-4 text-center">Loading...</p>
+      ) : allHomes.length === 0 ? (
+        <p className="text-gray-400 text-sm py-4 text-center">No homes configured</p>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {allHomes.map(h => (
+            <label key={h.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+              <input type="checkbox" checked={selected.has(h.id)} onChange={() => toggle(h.id)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span className="text-sm text-gray-700">{h.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+        <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+          onClick={() => setSelected(new Set(allHomes.map(h => h.id)))}>Select All</button>
+        <div className="flex gap-3">
+          <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
+          <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading}>
+            {saving ? 'Saving...' : 'Save Access'}
+          </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

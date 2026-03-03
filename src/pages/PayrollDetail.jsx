@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
@@ -500,56 +501,51 @@ export default function PayrollDetail() {
       )}
 
       {/* Approve confirmation modal */}
-      {showApproveConfirm && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panelSm}>
-            <h2 className={MODAL.title}>Approve Pay Run</h2>
-            <div className="space-y-3 mb-6">
-              <p className="text-sm text-gray-600">
-                This will lock the pay run and mark it ready for export to your accountant.
-                <strong className="text-red-600"> This cannot be undone.</strong>
-              </p>
-              <div className="bg-gray-50 rounded-lg p-3 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Period</span>
-                  <span className="font-medium">{run?.period_start} &rarr; {run?.period_end}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Staff count</span>
-                  <span className="font-medium">{run?.staff_count ?? '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Total gross pay</span>
-                  <span className="font-medium">
-                    {run?.total_gross != null
-                      ? `£${parseFloat(run.total_gross).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
-                      : '—'}
-                  </span>
-                </div>
-              </div>
+      <Modal isOpen={showApproveConfirm} onClose={() => setShowApproveConfirm(false)} title="Approve Pay Run" size="sm">
+        <div className="space-y-3 mb-6">
+          <p className="text-sm text-gray-600">
+            This will lock the pay run and mark it ready for export to your accountant.
+            <strong className="text-red-600"> This cannot be undone.</strong>
+          </p>
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Period</span>
+              <span className="font-medium">{run?.period_start} &rarr; {run?.period_end}</span>
             </div>
-            <div className={MODAL.footer}>
-              <button
-                className={BTN.secondary}
-                onClick={() => setShowApproveConfirm(false)}
-                disabled={action === 'approving'}
-              >
-                Cancel
-              </button>
-              <button
-                className={BTN.danger}
-                onClick={async () => {
-                  setShowApproveConfirm(false);
-                  await handleApprove();
-                }}
-                disabled={action === 'approving'}
-              >
-                {action === 'approving' ? 'Approving…' : 'Confirm Approve'}
-              </button>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Staff count</span>
+              <span className="font-medium">{run?.staff_count ?? '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total gross pay</span>
+              <span className="font-medium">
+                {run?.total_gross != null
+                  ? `£${parseFloat(run.total_gross).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
+                  : '—'}
+              </span>
             </div>
           </div>
         </div>
-      )}
+        <div className={MODAL.footer}>
+          <button
+            className={BTN.secondary}
+            onClick={() => setShowApproveConfirm(false)}
+            disabled={action === 'approving'}
+          >
+            Cancel
+          </button>
+          <button
+            className={BTN.danger}
+            onClick={async () => {
+              setShowApproveConfirm(false);
+              await handleApprove();
+            }}
+            disabled={action === 'approving'}
+          >
+            {action === 'approving' ? 'Approving…' : 'Confirm Approve'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

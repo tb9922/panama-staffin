@@ -34,27 +34,21 @@ export async function sync(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(c => c.id);
 
-  for (const c of arr) {
-    await conn.query(
-      `INSERT INTO whistleblowing_concerns (
-         id, home_id, date_raised, raised_by_role, anonymous,
-         category, description, severity, status,
-         acknowledgement_date, investigator, investigation_start_date,
-         findings, outcome, outcome_details,
-         reporter_protected, protection_details,
-         follow_up_date, follow_up_completed, resolution_date,
-         lessons_learned, reported_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
-       ON CONFLICT (home_id, id) DO UPDATE SET
-         date_raised=$3,raised_by_role=$4,anonymous=$5,
-         category=$6,description=$7,severity=$8,status=$9,
-         acknowledgement_date=$10,investigator=$11,investigation_start_date=$12,
-         findings=$13,outcome=$14,outcome_details=$15,
-         reporter_protected=$16,protection_details=$17,
-         follow_up_date=$18,follow_up_completed=$19,resolution_date=$20,
-         lessons_learned=$21,reported_at=$22,updated_at=$23,deleted_at=NULL`,
-      [
-        c.id, homeId, c.date_raised || null, c.raised_by_role || null,
+  const COLS_PER_ROW = 22;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((c, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},` +
+        `$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},$${b+15},` +
+        `$${b+16},$${b+17},$${b+18},$${b+19},$${b+20},$${b+21})`
+      );
+      values.push(
+        c.id, c.date_raised || null, c.raised_by_role || null,
         c.anonymous ?? false,
         c.category || null, c.description || null, c.severity || null,
         c.status || null,
@@ -65,7 +59,27 @@ export async function sync(homeId, arr, client) {
         c.follow_up_date || null, c.follow_up_completed ?? false,
         c.resolution_date || null,
         c.lessons_learned || null, c.reported_at || null, c.updated_at || null,
-      ]
+      );
+    });
+    await conn.query(
+      `INSERT INTO whistleblowing_concerns (
+         id, home_id, date_raised, raised_by_role, anonymous,
+         category, description, severity, status,
+         acknowledgement_date, investigator, investigation_start_date,
+         findings, outcome, outcome_details,
+         reporter_protected, protection_details,
+         follow_up_date, follow_up_completed, resolution_date,
+         lessons_learned, reported_at, updated_at
+       ) VALUES ${placeholders.join(',')}
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         date_raised=EXCLUDED.date_raised,raised_by_role=EXCLUDED.raised_by_role,anonymous=EXCLUDED.anonymous,
+         category=EXCLUDED.category,description=EXCLUDED.description,severity=EXCLUDED.severity,status=EXCLUDED.status,
+         acknowledgement_date=EXCLUDED.acknowledgement_date,investigator=EXCLUDED.investigator,investigation_start_date=EXCLUDED.investigation_start_date,
+         findings=EXCLUDED.findings,outcome=EXCLUDED.outcome,outcome_details=EXCLUDED.outcome_details,
+         reporter_protected=EXCLUDED.reporter_protected,protection_details=EXCLUDED.protection_details,
+         follow_up_date=EXCLUDED.follow_up_date,follow_up_completed=EXCLUDED.follow_up_completed,resolution_date=EXCLUDED.resolution_date,
+         lessons_learned=EXCLUDED.lessons_learned,reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+      [homeId, ...values]
     );
   }
 

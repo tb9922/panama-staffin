@@ -34,27 +34,47 @@ export async function sync(homeId, certObj, client) {
   const conn = client || pool;
   if (!certObj) return;
 
-  for (const [staffId, cert] of Object.entries(certObj)) {
-    await conn.query(
-      `INSERT INTO care_certificates (
-         home_id, staff_id, start_date, expected_completion, supervisor,
-         status, completion_date, standards, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-       ON CONFLICT (home_id, staff_id) DO UPDATE SET
-         start_date=EXCLUDED.start_date,expected_completion=EXCLUDED.expected_completion,supervisor=EXCLUDED.supervisor,
-         status=EXCLUDED.status,completion_date=EXCLUDED.completion_date,standards=EXCLUDED.standards,updated_at=NOW()`,
-      [
-        homeId, staffId,
-        cert.start_date || null, cert.expected_completion || null,
-        cert.supervisor || null, cert.status || null,
-        cert.completion_date || null,
-        JSON.stringify(cert.standards || {}),
-      ]
-    );
+  const flat = Object.entries(certObj).map(([staffId, cert]) => ({
+    staffId,
+    start_date: cert.start_date || null,
+    expected_completion: cert.expected_completion || null,
+    supervisor: cert.supervisor || null,
+    status: cert.status || null,
+    completion_date: cert.completion_date || null,
+    standards: JSON.stringify(cert.standards || {}),
+  }));
+
+  const staffIds = flat.map(r => r.staffId);
+
+  if (flat.length > 0) {
+    const COLS_PER_ROW = 7;
+    const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+    for (let i = 0; i < flat.length; i += CHUNK) {
+      const chunk = flat.slice(i, i + CHUNK);
+      const placeholders = [];
+      const values = [];
+      chunk.forEach((c, j) => {
+        const b = j * COLS_PER_ROW + 2;
+        placeholders.push(`($1,$${b},$${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},NOW())`);
+        values.push(
+          c.staffId, c.start_date, c.expected_completion,
+          c.supervisor, c.status, c.completion_date, c.standards
+        );
+      });
+      await conn.query(
+        `INSERT INTO care_certificates (
+           home_id, staff_id, start_date, expected_completion, supervisor,
+           status, completion_date, standards, updated_at
+         ) VALUES ${placeholders.join(',')}
+         ON CONFLICT (home_id, staff_id) DO UPDATE SET
+           start_date=EXCLUDED.start_date,expected_completion=EXCLUDED.expected_completion,supervisor=EXCLUDED.supervisor,
+           status=EXCLUDED.status,completion_date=EXCLUDED.completion_date,standards=EXCLUDED.standards,updated_at=NOW()`,
+        [homeId, ...values]
+      );
+    }
   }
 
   // Soft-delete staff who no longer have a care cert record
-  const staffIds = Object.keys(certObj);
   if (staffIds.length === 0) {
     // Empty payload guard: never wipe all records
     return;

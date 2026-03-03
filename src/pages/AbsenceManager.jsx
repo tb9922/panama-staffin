@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getAbsenceSummary, getStaffAbsence,
@@ -85,23 +86,7 @@ export default function AbsenceManager() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!showRtwModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showRtwModal]);
-
-  useEffect(() => {
-    if (!showOhModal) return;
-    const handler = e => {
-      if (e.key === 'Escape') { setShowOhModal(false); setEditingOh(null); setOhForm(emptyOh()); }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showOhModal]);
+  // Escape key handling is provided by the Modal component
 
   // Bradford detail
   async function handleSelectStaff(staffId) {
@@ -414,64 +399,61 @@ export default function AbsenceManager() {
 
   function renderRtwModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowRtwModal(false)}>
-        <div className={MODAL.panelXl}>
-          <h3 className={MODAL.title}>{editingRtw ? 'Edit RTW Interview' : 'New RTW Interview'}</h3>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
-              <StaffPicker value={rtwForm.staff_id || ''} onChange={val => rf('staff_id', val)} label="Staff Member" />
-              <div>
-                <label className={INPUT.label}>RTW Date</label>
-                <input type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Absence Start Date</label>
-                <input type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Absence End Date</label>
-                <input type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Conducted By</label>
-                <input className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Absence Reason</label>
-                <input className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
-              </div>
-            </div>
-            <div className="flex gap-6">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={rtwForm.fit_for_work} onChange={e => rf('fit_for_work', e.target.checked)} />
-                Fit for Work
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={rtwForm.referral_needed} onChange={e => rf('referral_needed', e.target.checked)} />
-                OH Referral Needed
-              </label>
-            </div>
+      <Modal isOpen={true} onClose={() => { setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); }} title={editingRtw ? 'Edit RTW Interview' : 'New RTW Interview'} size="xl">
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <StaffPicker value={rtwForm.staff_id || ''} onChange={val => rf('staff_id', val)} label="Staff Member" />
             <div>
-              <label className={INPUT.label}>Adjustments</label>
-              <textarea className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
-            </div>
-            <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
+              <label className={INPUT.label}>RTW Date</label>
+              <input type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
             </div>
           </div>
-          <FileAttachments caseType="rtw_interview" caseId={editingRtw?.id} />
-          {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} disabled={saving} onClick={() => setShowRtwModal(false)}>Cancel</button>
-            <button className={BTN.primary} disabled={saving} onClick={handleSaveRtw}>{saving ? 'Saving...' : editingRtw ? 'Update' : 'Create'}</button>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Absence Start Date</label>
+              <input type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Absence End Date</label>
+              <input type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Conducted By</label>
+              <input className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Absence Reason</label>
+              <input className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={rtwForm.fit_for_work} onChange={e => rf('fit_for_work', e.target.checked)} />
+              Fit for Work
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={rtwForm.referral_needed} onChange={e => rf('referral_needed', e.target.checked)} />
+              OH Referral Needed
+            </label>
+          </div>
+          <div>
+            <label className={INPUT.label}>Adjustments</label>
+            <textarea className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
           </div>
         </div>
-      </div>
+        <FileAttachments caseType="rtw_interview" caseId={editingRtw?.id} />
+        {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} disabled={saving} onClick={() => setShowRtwModal(false)}>Cancel</button>
+          <button className={BTN.primary} disabled={saving} onClick={handleSaveRtw}>{saving ? 'Saving...' : editingRtw ? 'Update' : 'Create'}</button>
+        </div>
+      </Modal>
     );
   }
 
@@ -479,62 +461,59 @@ export default function AbsenceManager() {
 
   function renderOhModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowOhModal(false)}>
-        <div className={MODAL.panelXl}>
-          <h3 className={MODAL.title}>{editingOh ? 'Edit OH Referral' : 'New OH Referral'}</h3>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
-              <StaffPicker value={ohForm.staff_id || ''} onChange={val => ohf('staff_id', val)} label="Staff Member" />
-              <div>
-                <label className={INPUT.label}>Referral Date</label>
-                <input type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Reason</label>
-                <input className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Provider</label>
-                <input className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
-              </div>
-            </div>
+      <Modal isOpen={true} onClose={() => { setShowOhModal(false); setEditingOh(null); setOhForm(emptyOh()); }} title={editingOh ? 'Edit OH Referral' : 'New OH Referral'} size="xl">
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <StaffPicker value={ohForm.staff_id || ''} onChange={val => ohf('staff_id', val)} label="Staff Member" />
             <div>
-              <label className={INPUT.label}>Appointment Date</label>
-              <input type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="oh_report" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
-              <label htmlFor="oh_report" className="text-sm">Report Received</label>
-            </div>
-            {ohForm.report_received && (
-              <div>
-                <label className={INPUT.label}>Report Date</label>
-                <input type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
-              </div>
-            )}
-            <div>
-              <label className={INPUT.label}>Recommendations</label>
-              <textarea className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
-            </div>
-            <div>
-              <label className={INPUT.label}>Follow-up Date</label>
-              <input type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
-            </div>
-            <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
+              <label className={INPUT.label}>Referral Date</label>
+              <input type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
             </div>
           </div>
-          <FileAttachments caseType="oh_referral" caseId={editingOh?.id} />
-          {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} disabled={saving} onClick={() => setShowOhModal(false)}>Cancel</button>
-            <button className={BTN.primary} disabled={saving} onClick={handleSaveOh}>{saving ? 'Saving...' : editingOh ? 'Update' : 'Create'}</button>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Reason</label>
+              <input className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Provider</label>
+              <input className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Appointment Date</label>
+            <input type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="oh_report" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
+            <label htmlFor="oh_report" className="text-sm">Report Received</label>
+          </div>
+          {ohForm.report_received && (
+            <div>
+              <label className={INPUT.label}>Report Date</label>
+              <input type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
+            </div>
+          )}
+          <div>
+            <label className={INPUT.label}>Recommendations</label>
+            <textarea className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Follow-up Date</label>
+            <input type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
           </div>
         </div>
-      </div>
+        <FileAttachments caseType="oh_referral" caseId={editingOh?.id} />
+        {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} disabled={saving} onClick={() => setShowOhModal(false)}>Cancel</button>
+          <button className={BTN.primary} disabled={saving} onClick={handleSaveOh}>{saving ? 'Saving...' : editingOh ? 'Update' : 'Create'}</button>
+        </div>
+      </Modal>
     );
   }
 }

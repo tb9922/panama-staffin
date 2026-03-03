@@ -6,11 +6,10 @@ import * as incidentRepo from '../repositories/incidentRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const addendumSchema = z.object({ content: z.string().min(1).max(5000) });
@@ -76,7 +75,7 @@ const incidentBodySchema = z.object({
 const incidentUpdateSchema = incidentBodySchema.partial();
 
 // GET /api/incidents?home=X
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [incidentsResult, staffResult] = await Promise.all([
@@ -91,7 +90,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 });
 
 // POST /api/incidents?home=X
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -102,7 +101,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/incidents/:id?home=X
-router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -127,7 +126,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
 });
 
 // DELETE /api/incidents/:id?home=X
-router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -139,7 +138,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
 });
 
 // POST /api/incidents/:id/freeze?home=X
-router.post('/:id/freeze', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/:id/freeze', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -151,7 +150,7 @@ router.post('/:id/freeze', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // GET /api/incidents/:id/addenda?home=X
-router.get('/:id/addenda', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/:id/addenda', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });
@@ -161,7 +160,7 @@ router.get('/:id/addenda', requireAuth, requireHomeAccess, async (req, res, next
 });
 
 // POST /api/incidents/:id/addenda?home=X
-router.post('/:id/addenda', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/:id/addenda', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });

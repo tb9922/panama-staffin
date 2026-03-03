@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getHMRCLiabilities, markHMRCPaid, getCurrentHome, getLoggedInUser } from '../lib/api.js';
 
 const STATUS_BADGE = {
@@ -273,50 +274,45 @@ export default function HMRCDashboard() {
       </div>
 
       {/* Mark as Paid modal */}
-      {showPaidModal && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panelSm}>
-            <h2 className={MODAL.title}>Mark as Paid</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              {taxMonthLabel(showPaidModal.tax_month)} — Total: {fmt(showPaidModal.total_due)}
-            </p>
+      <Modal isOpen={!!showPaidModal} onClose={() => setShowPaidModal(null)} title="Mark as Paid" size="sm">
+        <p className="text-sm text-gray-600 mb-4">
+          {showPaidModal && taxMonthLabel(showPaidModal.tax_month)} — Total: {showPaidModal && fmt(showPaidModal.total_due)}
+        </p>
 
-            <div className="space-y-4">
-              <div>
-                <label className={INPUT.label}>Payment Date</label>
-                <input
-                  type="date"
-                  className={INPUT.base}
-                  value={paidForm.paid_date}
-                  onChange={e => setPaidForm(f => ({ ...f, paid_date: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className={INPUT.label}>Payment Reference (optional)</label>
-                <input
-                  className={INPUT.base}
-                  value={paidForm.paid_reference}
-                  onChange={e => setPaidForm(f => ({ ...f, paid_reference: e.target.value }))}
-                  placeholder="e.g. HMRC Ref 12345 or bank ref"
-                />
-              </div>
-            </div>
-
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowPaidModal(null)} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                className={BTN.success}
-                onClick={handleMarkPaid}
-                disabled={saving || !paidForm.paid_date}
-              >
-                {saving ? 'Saving...' : 'Confirm Paid'}
-              </button>
-            </div>
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>Payment Date</label>
+            <input
+              type="date"
+              className={INPUT.base}
+              value={paidForm.paid_date}
+              onChange={e => setPaidForm(f => ({ ...f, paid_date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className={INPUT.label}>Payment Reference (optional)</label>
+            <input
+              className={INPUT.base}
+              value={paidForm.paid_reference}
+              onChange={e => setPaidForm(f => ({ ...f, paid_reference: e.target.value }))}
+              placeholder="e.g. HMRC Ref 12345 or bank ref"
+            />
           </div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowPaidModal(null)} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className={BTN.success}
+            onClick={handleMarkPaid}
+            disabled={saving || !paidForm.paid_date}
+          >
+            {saving ? 'Saving...' : 'Confirm Paid'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

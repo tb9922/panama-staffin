@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
@@ -667,12 +668,8 @@ export default function MonthlyTimesheet() {
       </div>
 
       {/* Edit Modal */}
-      {editModal && (
-        <div className={MODAL.overlay} onClick={() => setEditModal(null)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>
-              {staff?.name} — {editModal.row.dateStr}
-            </h2>
+      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${staff?.name} — ${editModal.row.dateStr}` : ''} size="lg">
+          {editModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
               {staff?.role} — Roster: {editModal.row.rosterShift}
               {editModal.row.entry?.status === 'disputed' && (
@@ -722,15 +719,12 @@ export default function MonthlyTimesheet() {
                 {saving ? 'Saving...' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>}
+      </Modal>
 
       {/* Dispute Modal */}
-      {disputeModal && (
-        <div className={MODAL.overlay} onClick={() => setDisputeModal(null)}>
-          <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>Dispute Entry</h2>
+      <Modal isOpen={!!disputeModal} onClose={() => setDisputeModal(null)} title="Dispute Entry">
+          {disputeModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
               {staff?.name} — {disputeModal.entry.date}
             </p>
@@ -757,9 +751,8 @@ export default function MonthlyTimesheet() {
                 {saving ? 'Submitting...' : 'Dispute'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>}
+      </Modal>
     </div>
   );
 }

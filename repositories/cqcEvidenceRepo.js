@@ -32,21 +32,35 @@ export async function sync(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(e => e.id);
 
-  for (const e of arr) {
+  const COLS_PER_ROW = 9;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((e, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},` +
+        `$${b+5},$${b+6},$${b+7},$${b+8})`
+      );
+      values.push(
+        e.id, e.quality_statement || null, e.type || null,
+        e.title || null, e.description || null,
+        e.date_from || null, e.date_to || null,
+        e.added_by || null, e.added_at || null,
+      );
+    });
     await conn.query(
       `INSERT INTO cqc_evidence (
          id, home_id, quality_statement, type, title, description,
          date_from, date_to, added_by, added_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         quality_statement=$3,type=$4,title=$5,description=$6,
-         date_from=$7,date_to=$8,added_by=$9,added_at=$10,deleted_at=NULL`,
-      [
-        e.id, homeId, e.quality_statement || null, e.type || null,
-        e.title || null, e.description || null,
-        e.date_from || null, e.date_to || null,
-        e.added_by || null, e.added_at || null,
-      ]
+         quality_statement=EXCLUDED.quality_statement,type=EXCLUDED.type,title=EXCLUDED.title,
+         description=EXCLUDED.description,date_from=EXCLUDED.date_from,date_to=EXCLUDED.date_to,
+         added_by=EXCLUDED.added_by,added_at=EXCLUDED.added_at,deleted_at=NULL`,
+      [homeId, ...values]
     );
   }
 

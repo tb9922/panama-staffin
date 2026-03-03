@@ -47,19 +47,36 @@ export async function sync(homeId, appraisalsObj, client) {
   const conn = client || pool;
   if (!appraisalsObj) return;
 
-  const incomingIds = [];
-  for (const sessions of Object.values(appraisalsObj)) {
+  const flat = [];
+  for (const [staffId, sessions] of Object.entries(appraisalsObj)) {
     for (const a of sessions) {
-      incomingIds.push(a.id);
+      flat.push({ staffId, ...a });
     }
   }
 
-  for (const [staffId, sessions] of Object.entries(appraisalsObj)) {
-    for (const a of sessions) {
+  const incomingIds = flat.map(r => r.id);
+
+  if (flat.length > 0) {
+    const COLS_PER_ROW = 9;
+    const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+    for (let i = 0; i < flat.length; i += CHUNK) {
+      const chunk = flat.slice(i, i + CHUNK);
+      const placeholders = [];
+      const values = [];
+      chunk.forEach((a, j) => {
+        const b = j * COLS_PER_ROW + 2;
+        placeholders.push(`($${b},$1,$${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},NOW())`);
+        values.push(
+          a.id, a.staffId, a.date,
+          a.appraiser || null, a.objectives || null,
+          a.training_needs || null, a.development_plan || null,
+          a.next_due || null, a.notes || null
+        );
+      });
       await conn.query(
         `INSERT INTO appraisals
            (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+         VALUES ${placeholders.join(',')}
          ON CONFLICT (home_id, id) DO UPDATE SET
            date             = EXCLUDED.date,
            appraiser        = EXCLUDED.appraiser,
@@ -70,8 +87,7 @@ export async function sync(homeId, appraisalsObj, client) {
            notes            = EXCLUDED.notes,
            updated_at       = NOW(),
            deleted_at       = NULL`,
-        [a.id, homeId, staffId, a.date, a.appraiser || null, a.objectives || null,
-         a.training_needs || null, a.development_plan || null, a.next_due || null, a.notes || null]
+        [homeId, ...values]
       );
     }
   }

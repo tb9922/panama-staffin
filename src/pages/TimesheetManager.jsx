@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getTimesheets, upsertTimesheet, approveTimesheet, bulkApproveTimesheets,
   getCurrentHome, getSchedulingData, getLoggedInUser,
@@ -338,12 +339,8 @@ export default function TimesheetManager() {
       </div>
 
       {/* Edit Modal */}
-      {editModal && (
-        <div className={MODAL.overlay} onClick={() => setEditModal(null)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>
-              {editModal.staff.name} — {selectedDate}
-            </h2>
+      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${editModal.staff.name} — ${selectedDate}` : ''} size="lg">
+          {editModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">{editModal.staff.role} · Shift: {editModal.staff.shift}</p>
 
             <div className="space-y-4">
@@ -396,9 +393,8 @@ export default function TimesheetManager() {
                 {saving ? 'Saving…' : 'Save Entry'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>}
+      </Modal>
     </div>
   );
 }

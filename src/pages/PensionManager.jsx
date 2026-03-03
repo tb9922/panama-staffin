@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
@@ -345,104 +346,96 @@ export default function PensionManager() {
       </div>
 
       {/* Modal */}
-      {showModal && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panel}>
-            <h2 className={MODAL.title}>
-              {editStaffId ? 'Update Pension Enrolment' : 'Add Pension Enrolment'}
-            </h2>
-
-            <div className="space-y-4">
-              {/* Staff */}
-              <div>
-                <label className={INPUT.label}>Staff Member</label>
-                {editStaffId ? (
-                  <div className="text-sm font-medium text-gray-900 py-2">
-                    {staffMap[editStaffId]?.name || editStaffId}
-                  </div>
-                ) : (
-                  <StaffPicker
-                    value={form.staff_id}
-                    onChange={v => field('staff_id', v)}
-                    required
-                  />
-                )}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editStaffId ? 'Update Pension Enrolment' : 'Add Pension Enrolment'}>
+        <div className="space-y-4">
+          {/* Staff */}
+          <div>
+            <label className={INPUT.label}>Staff Member</label>
+            {editStaffId ? (
+              <div className="text-sm font-medium text-gray-900 py-2">
+                {staffMap[editStaffId]?.name || editStaffId}
               </div>
+            ) : (
+              <StaffPicker
+                value={form.staff_id}
+                onChange={v => field('staff_id', v)}
+                required
+              />
+            )}
+          </div>
 
-              {/* Status */}
-              <div>
-                <label className={INPUT.label}>Enrolment Status</label>
-                <select className={INPUT.select} value={form.status} onChange={e => field('status', e.target.value)}>
-                  {STATUSES.map(s => (
-                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                  ))}
-                </select>
-              </div>
+          {/* Status */}
+          <div>
+            <label className={INPUT.label}>Enrolment Status</label>
+            <select className={INPUT.select} value={form.status} onChange={e => field('status', e.target.value)}>
+              {STATUSES.map(s => (
+                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Enrolment Date</label>
-                  <input type="date" className={INPUT.base}
-                    value={form.enrolment_date}
-                    onChange={e => field('enrolment_date', e.target.value)} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Opt-Out Date</label>
-                  <input type="date" className={INPUT.base}
-                    value={form.opt_out_date}
-                    onChange={e => field('opt_out_date', e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className={INPUT.label}>Re-enrolment Date</label>
-                <input type="date" className={INPUT.base}
-                  value={form.re_enrolment_date}
-                  onChange={e => field('re_enrolment_date', e.target.value)} />
-                <p className="text-xs text-gray-400 mt-1">Typically 3 years after opt-out date.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>EE Contribution Override (%)</label>
-                  <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
-                    value={form.contribution_override_employee}
-                    onChange={e => field('contribution_override_employee', e.target.value)}
-                    placeholder={config ? `${(config.employee_rate * 100).toFixed(1)} (default)` : ''} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>ER Contribution Override (%)</label>
-                  <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
-                    value={form.contribution_override_employer}
-                    onChange={e => field('contribution_override_employer', e.target.value)}
-                    placeholder={config ? `${(config.employer_rate * 100).toFixed(1)} (default)` : ''} />
-                </div>
-              </div>
-
-              <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={2}
-                  value={form.notes}
-                  onChange={e => field('notes', e.target.value)}
-                  placeholder="e.g. Opted out by written notice 15 Jan 2026" />
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Enrolment Date</label>
+              <input type="date" className={INPUT.base}
+                value={form.enrolment_date}
+                onChange={e => field('enrolment_date', e.target.value)} />
             </div>
-
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                className={BTN.primary}
-                onClick={handleSave}
-                disabled={saving || !form.staff_id || !form.status}
-              >
-                {saving ? 'Saving...' : 'Save Enrolment'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Opt-Out Date</label>
+              <input type="date" className={INPUT.base}
+                value={form.opt_out_date}
+                onChange={e => field('opt_out_date', e.target.value)} />
             </div>
           </div>
+
+          <div>
+            <label className={INPUT.label}>Re-enrolment Date</label>
+            <input type="date" className={INPUT.base}
+              value={form.re_enrolment_date}
+              onChange={e => field('re_enrolment_date', e.target.value)} />
+            <p className="text-xs text-gray-400 mt-1">Typically 3 years after opt-out date.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>EE Contribution Override (%)</label>
+              <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
+                value={form.contribution_override_employee}
+                onChange={e => field('contribution_override_employee', e.target.value)}
+                placeholder={config ? `${(config.employee_rate * 100).toFixed(1)} (default)` : ''} />
+            </div>
+            <div>
+              <label className={INPUT.label}>ER Contribution Override (%)</label>
+              <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
+                value={form.contribution_override_employer}
+                onChange={e => field('contribution_override_employer', e.target.value)}
+                placeholder={config ? `${(config.employer_rate * 100).toFixed(1)} (default)` : ''} />
+            </div>
+          </div>
+
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2}
+              value={form.notes}
+              onChange={e => field('notes', e.target.value)}
+              placeholder="e.g. Opted out by written notice 15 Jan 2026" />
+          </div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(false)} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className={BTN.primary}
+            onClick={handleSave}
+            disabled={saving || !form.staff_id || !form.status}
+          >
+            {saving ? 'Saving...' : 'Save Enrolment'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

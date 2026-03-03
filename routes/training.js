@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as supervisionRepo from '../repositories/supervisionRepo.js';
 import * as appraisalRepo from '../repositories/appraisalRepo.js';
@@ -13,7 +13,6 @@ import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const recordIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 const staffIdSchema = z.string().min(1).max(20);
@@ -87,7 +86,7 @@ const fireDrillSchema = z.object({
 });
 
 // GET /api/training?home=X — one-shot load for TrainingMatrix
-router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [trainingResult, supervisionsResult, appraisalsResult, fireDrills, staffResult] = await Promise.all([
@@ -112,7 +111,7 @@ router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, n
 });
 
 // PUT /api/training/config/types?home=X — update training types in config
-router.put('/config/types', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/config/types', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = trainingTypesArraySchema.safeParse(req.body?.trainingTypes);
     if (!parsed.success) return zodError(res, parsed);
@@ -125,7 +124,7 @@ router.put('/config/types', requireAuth, requireAdmin, requireHomeAccess, async 
 });
 
 // POST /api/training/supervisions?home=X — create supervision
-router.post('/supervisions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/supervisions', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = supervisionSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -137,7 +136,7 @@ router.post('/supervisions', requireAuth, requireAdmin, requireHomeAccess, async
 });
 
 // PUT /api/training/supervisions/:id?home=X — update supervision
-router.put('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -151,7 +150,7 @@ router.put('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess, as
 });
 
 // DELETE /api/training/supervisions/:id?home=X — soft-delete supervision
-router.delete('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/supervisions/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -163,7 +162,7 @@ router.delete('/supervisions/:id', requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // POST /api/training/appraisals?home=X — create appraisal
-router.post('/appraisals', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/appraisals', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = appraisalSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -175,7 +174,7 @@ router.post('/appraisals', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // PUT /api/training/appraisals/:id?home=X — update appraisal
-router.put('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -189,7 +188,7 @@ router.put('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
 });
 
 // DELETE /api/training/appraisals/:id?home=X — soft-delete appraisal
-router.delete('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/appraisals/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -201,7 +200,7 @@ router.delete('/appraisals/:id', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // POST /api/training/fire-drills?home=X — create fire drill
-router.post('/fire-drills', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/fire-drills', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = fireDrillSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -213,7 +212,7 @@ router.post('/fire-drills', requireAuth, requireAdmin, requireHomeAccess, async 
 });
 
 // PUT /api/training/fire-drills/:id?home=X — update fire drill
-router.put('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -227,7 +226,7 @@ router.put('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, asy
 });
 
 // DELETE /api/training/fire-drills/:id?home=X — hard-delete fire drill
-router.delete('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/fire-drills/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -241,7 +240,7 @@ router.delete('/fire-drills/:id', requireAuth, requireAdmin, requireHomeAccess, 
 // PUT /api/training/:staffId/:typeId?home=X — upsert single training record
 // NOTE: Must be registered AFTER all named routes (config/*, supervisions/*, appraisals/*, fire-drills/*)
 // to avoid the greedy /:staffId/:typeId pattern shadowing them.
-router.put('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:staffId/:typeId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);
@@ -256,7 +255,7 @@ router.put('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, as
 
 // DELETE /api/training/:staffId/:typeId?home=X — remove training record
 // NOTE: Must be registered AFTER all named routes for the same reason.
-router.delete('/:staffId/:typeId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:staffId/:typeId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);
     const typeParsed = typeIdSchema.safeParse(req.params.typeId);

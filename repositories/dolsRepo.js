@@ -49,23 +49,21 @@ export async function syncDols(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(d => d.id);
 
-  for (const d of arr) {
-    await conn.query(
-      `INSERT INTO dols (
-         id, home_id, resident_name, dob, room_number,
-         application_type, application_date, authorised,
-         authorisation_date, expiry_date, authorisation_number, authorising_authority,
-         restrictions, reviewed_date, review_status, next_review_date,
-         notes, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-       ON CONFLICT (home_id, id) DO UPDATE SET
-         resident_name=$3,dob=$4,room_number=$5,
-         application_type=$6,application_date=$7,authorised=$8,
-         authorisation_date=$9,expiry_date=$10,authorisation_number=$11,
-         authorising_authority=$12,restrictions=$13,reviewed_date=$14,
-         review_status=$15,next_review_date=$16,notes=$17,updated_at=$18,deleted_at=NULL`,
-      [
-        d.id, homeId, d.resident_name || null, d.dob || null, d.room_number || null,
+  const COLS_PER_ROW = 17;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((d, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
+        `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},` +
+        `$${b+15},$${b+16})`
+      );
+      values.push(
+        d.id, d.resident_name || null, d.dob || null, d.room_number || null,
         d.application_type || null, d.application_date || null,
         d.authorised ?? false,
         d.authorisation_date || null, d.expiry_date || null,
@@ -73,7 +71,25 @@ export async function syncDols(homeId, arr, client) {
         JSON.stringify(d.restrictions || []),
         d.reviewed_date || null, d.review_status || null, d.next_review_date || null,
         d.notes || null, d.updated_at || null,
-      ]
+      );
+    });
+    await conn.query(
+      `INSERT INTO dols (
+         id, home_id, resident_name, dob, room_number,
+         application_type, application_date, authorised,
+         authorisation_date, expiry_date, authorisation_number, authorising_authority,
+         restrictions, reviewed_date, review_status, next_review_date,
+         notes, updated_at
+       ) VALUES ${placeholders.join(',')}
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         resident_name=EXCLUDED.resident_name,dob=EXCLUDED.dob,room_number=EXCLUDED.room_number,
+         application_type=EXCLUDED.application_type,application_date=EXCLUDED.application_date,authorised=EXCLUDED.authorised,
+         authorisation_date=EXCLUDED.authorisation_date,expiry_date=EXCLUDED.expiry_date,
+         authorisation_number=EXCLUDED.authorisation_number,authorising_authority=EXCLUDED.authorising_authority,
+         restrictions=EXCLUDED.restrictions,reviewed_date=EXCLUDED.reviewed_date,
+         review_status=EXCLUDED.review_status,next_review_date=EXCLUDED.next_review_date,
+         notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+      [homeId, ...values]
     );
   }
 
@@ -179,23 +195,37 @@ export async function syncMca(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(m => m.id);
 
-  for (const m of arr) {
+  const COLS_PER_ROW = 10;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((m, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
+        `$${b+7},$${b+8},$${b+9})`
+      );
+      values.push(
+        m.id, m.resident_name || null, m.assessment_date || null,
+        m.assessor || null, m.decision_area || null,
+        m.lacks_capacity ?? false, m.best_interest_decision || null,
+        m.next_review_date || null, m.notes || null, m.updated_at || null,
+      );
+    });
     await conn.query(
       `INSERT INTO mca_assessments (
          id, home_id, resident_name, assessment_date, assessor,
          decision_area, lacks_capacity, best_interest_decision,
          next_review_date, notes, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         resident_name=$3,assessment_date=$4,assessor=$5,
-         decision_area=$6,lacks_capacity=$7,best_interest_decision=$8,
-         next_review_date=$9,notes=$10,updated_at=$11,deleted_at=NULL`,
-      [
-        m.id, homeId, m.resident_name || null, m.assessment_date || null,
-        m.assessor || null, m.decision_area || null,
-        m.lacks_capacity ?? false, m.best_interest_decision || null,
-        m.next_review_date || null, m.notes || null, m.updated_at || null,
-      ]
+         resident_name=EXCLUDED.resident_name,assessment_date=EXCLUDED.assessment_date,assessor=EXCLUDED.assessor,
+         decision_area=EXCLUDED.decision_area,lacks_capacity=EXCLUDED.lacks_capacity,
+         best_interest_decision=EXCLUDED.best_interest_decision,
+         next_review_date=EXCLUDED.next_review_date,notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+      [homeId, ...values]
     );
   }
 

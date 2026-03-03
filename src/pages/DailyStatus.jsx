@@ -10,6 +10,7 @@ import {
 } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
@@ -603,13 +604,7 @@ export default function DailyStatus() {
       </div>
 
       {/* Modal */}
-      {modal && (
-        <div className={MODAL.overlay} onClick={closeModal}>
-          <div className={MODAL.panelSm} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>
-              {modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'}
-            </h2>
-
+      <Modal isOpen={!!modal} onClose={closeModal} title={modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'} size="sm">
             {modal === 'swap' ? (
               <div className="space-y-3">
                 <div>
@@ -858,9 +853,7 @@ export default function DailyStatus() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

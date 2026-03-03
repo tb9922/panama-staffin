@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getLoggedInUser, getFinanceExpenses, createFinanceExpense,
   updateFinanceExpense, approveFinanceExpense,
@@ -40,13 +41,6 @@ export default function ExpenseTracker() {
   }, [home, filterCategory, filterStatus]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
 
   function openCreate() {
     setEditing(null);
@@ -197,82 +191,76 @@ export default function ExpenseTracker() {
       </div>
 
       {/* Expense Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelLg} role="dialog" aria-modal="true" aria-labelledby="expense-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="expense-modal-title" className={MODAL.title}>{editing ? 'Edit Expense' : 'Add Expense'}</h2>
-
-            {readOnly && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-3 text-sm">
-                Approved/paid expenses cannot be edited.
-              </div>
-            )}
-
-            <fieldset disabled={readOnly} className={readOnly ? 'opacity-60' : ''}>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={INPUT.label}>Date *</label>
-                <input type="date" value={form.expense_date || ''} onChange={e => set('expense_date', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Category *</label>
-                <select value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={INPUT.select}>
-                  {EXPENSE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select></div>
-              <div className="col-span-2"><label className={INPUT.label}>Description *</label>
-                <input value={form.description || ''} onChange={e => set('description', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Supplier</label>
-                <input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Invoice Reference</label>
-                <input value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} className={INPUT.base} /></div>
-
-              <div><label className={INPUT.label}>Net Amount *</label>
-                <input type="number" step="0.01" value={form.net_amount ?? ''} onChange={e => setAmount('net_amount', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>VAT</label>
-                <input type="number" step="0.01" value={form.vat_amount ?? ''} onChange={e => setAmount('vat_amount', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Gross Amount</label>
-                <input type="number" step="0.01" value={form.gross_amount ?? ''} className={`${INPUT.base} bg-gray-50`} readOnly /></div>
-              <div><label className={INPUT.label}>Subcategory</label>
-                <input value={form.subcategory || ''} onChange={e => set('subcategory', e.target.value)} className={INPUT.base} /></div>
-
-              <div><label className={INPUT.label}>Payment Method</label>
-                <select value={form.payment_method || ''} onChange={e => set('payment_method', e.target.value || null)} className={INPUT.select}>
-                  <option value="">Not paid</option>
-                  {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select></div>
-              <div><label className={INPUT.label}>Payment Reference</label>
-                <input value={form.payment_reference || ''} onChange={e => set('payment_reference', e.target.value)} className={INPUT.base} /></div>
-
-              <div className="col-span-2 flex items-center gap-3 mt-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.recurring || false} onChange={e => set('recurring', e.target.checked)}
-                    className="rounded border-gray-300" />
-                  Recurring expense
-                </label>
-                {form.recurring && (
-                  <select value={form.recurrence_frequency || 'monthly'} onChange={e => set('recurrence_frequency', e.target.value)} className={`${INPUT.select} w-auto`}>
-                    {SCHEDULE_FREQUENCIES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-                  </select>
-                )}
-              </div>
-
-              <div className="col-span-2"><label className={INPUT.label}>Notes</label>
-                <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
-
-              {editing && (
-                <div className="col-span-2 bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500">Status: <span className={BADGE[getStatusBadge(form.status, EXPENSE_STATUSES)]}>{getLabel(form.status, EXPENSE_STATUSES)}</span></p>
-                  {form.approved_by && <p className="text-xs text-gray-500 mt-1">Approved by {form.approved_by} on {form.approved_date}</p>}
-                  <p className="text-xs text-gray-500 mt-1">Created by {form.created_by}</p>
-                </div>
-              )}
-            </div>
-            </fieldset>
-
-            <div className={MODAL.footer}>
-              <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {isAdmin && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
-            </div>
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Expense' : 'Add Expense'} size="lg">
+        {readOnly && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-3 text-sm">
+            Approved/paid expenses cannot be edited.
           </div>
+        )}
+
+        <fieldset disabled={readOnly} className={readOnly ? 'opacity-60' : ''}>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={INPUT.label}>Date *</label>
+            <input type="date" value={form.expense_date || ''} onChange={e => set('expense_date', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Category *</label>
+            <select value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={INPUT.select}>
+              {EXPENSE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select></div>
+          <div className="col-span-2"><label className={INPUT.label}>Description *</label>
+            <input value={form.description || ''} onChange={e => set('description', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Supplier</label>
+            <input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Invoice Reference</label>
+            <input value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} className={INPUT.base} /></div>
+
+          <div><label className={INPUT.label}>Net Amount *</label>
+            <input type="number" step="0.01" value={form.net_amount ?? ''} onChange={e => setAmount('net_amount', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>VAT</label>
+            <input type="number" step="0.01" value={form.vat_amount ?? ''} onChange={e => setAmount('vat_amount', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Gross Amount</label>
+            <input type="number" step="0.01" value={form.gross_amount ?? ''} className={`${INPUT.base} bg-gray-50`} readOnly /></div>
+          <div><label className={INPUT.label}>Subcategory</label>
+            <input value={form.subcategory || ''} onChange={e => set('subcategory', e.target.value)} className={INPUT.base} /></div>
+
+          <div><label className={INPUT.label}>Payment Method</label>
+            <select value={form.payment_method || ''} onChange={e => set('payment_method', e.target.value || null)} className={INPUT.select}>
+              <option value="">Not paid</option>
+              {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select></div>
+          <div><label className={INPUT.label}>Payment Reference</label>
+            <input value={form.payment_reference || ''} onChange={e => set('payment_reference', e.target.value)} className={INPUT.base} /></div>
+
+          <div className="col-span-2 flex items-center gap-3 mt-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.recurring || false} onChange={e => set('recurring', e.target.checked)}
+                className="rounded border-gray-300" />
+              Recurring expense
+            </label>
+            {form.recurring && (
+              <select value={form.recurrence_frequency || 'monthly'} onChange={e => set('recurrence_frequency', e.target.value)} className={`${INPUT.select} w-auto`}>
+                {SCHEDULE_FREQUENCIES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div className="col-span-2"><label className={INPUT.label}>Notes</label>
+            <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
+
+          {editing && (
+            <div className="col-span-2 bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500">Status: <span className={BADGE[getStatusBadge(form.status, EXPENSE_STATUSES)]}>{getLabel(form.status, EXPENSE_STATUSES)}</span></p>
+              {form.approved_by && <p className="text-xs text-gray-500 mt-1">Approved by {form.approved_by} on {form.approved_date}</p>}
+              <p className="text-xs text-gray-500 mt-1">Created by {form.created_by}</p>
+            </div>
+          )}
         </div>
-      )}
+        </fieldset>
+
+        <div className={MODAL.footer}>
+          <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
+          {isAdmin && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
+        </div>
+      </Modal>
     </div>
   );
 }

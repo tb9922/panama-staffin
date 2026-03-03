@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -297,204 +298,200 @@ export default function IpcAuditTracker() {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[90vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit IPC Audit' : 'New IPC Audit'}</h2>
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit IPC Audit' : 'New IPC Audit'} size="lg">
+        <div className="max-h-[90vh] overflow-y-auto">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
-              {TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Details Tab */}
-            {activeTab === 'details' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className={INPUT.label}>Audit Type *</label>
-                    <select className={INPUT.select} value={form.audit_type} onChange={e => setForm({ ...form, audit_type: e.target.value })}>
-                      <option value="">Select...</option>
-                      {auditTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={INPUT.label}>Date *</label>
-                    <input type="date" className={INPUT.base} value={form.audit_date} onChange={e => setForm({ ...form, audit_date: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={INPUT.label}>Auditor</label>
-                    <input type="text" className={INPUT.base} placeholder="Name" value={form.auditor} onChange={e => setForm({ ...form, auditor: e.target.value })} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={INPUT.label}>Overall Score (0-100)</label>
-                    <input type="number" min="0" max="100" className={INPUT.base} value={form.overall_score}
-                      onChange={e => setForm({ ...form, overall_score: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={INPUT.label}>Compliance % (0-100)</label>
-                    <input type="number" min="0" max="100" className={INPUT.base} value={form.compliance_pct}
-                      onChange={e => setForm({ ...form, compliance_pct: e.target.value })} />
-                  </div>
-                </div>
-
-                {/* Risk Areas */}
+          {/* Details Tab */}
+          {activeTab === 'details' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={INPUT.label}>Risk Areas</label>
-                    <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-                      onClick={() => setForm({ ...form, risk_areas: [...form.risk_areas, { area: '', severity: 'low', details: '' }] })}>
-                      + Add Risk Area
-                    </button>
-                  </div>
-                  {form.risk_areas.length === 0 && <p className="text-xs text-gray-400">No risk areas identified</p>}
-                  {form.risk_areas.map((risk, i) => (
-                    <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                      <div className="flex gap-2">
-                        <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Area" value={risk.area}
-                          onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], area: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
-                        <select className={`${INPUT.sm} w-28`} value={risk.severity}
-                          onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], severity: e.target.value }; setForm({ ...form, risk_areas: r }); }}>
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                        </select>
-                        <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
-                          onClick={() => setForm({ ...form, risk_areas: form.risk_areas.filter((_, j) => j !== i) })}>Remove</button>
-                      </div>
-                      <textarea className={`${INPUT.sm} h-12`} placeholder="Details..."
-                        value={risk.details}
-                        onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], details: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
-                    </div>
-                  ))}
+                  <label className={INPUT.label}>Audit Type *</label>
+                  <select className={INPUT.select} value={form.audit_type} onChange={e => setForm({ ...form, audit_type: e.target.value })}>
+                    <option value="">Select...</option>
+                    {auditTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
                 </div>
-
-                {/* Corrective Actions */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={INPUT.label}>Corrective Actions</label>
-                    <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-                      onClick={() => setForm({ ...form, corrective_actions: [...form.corrective_actions, { id: 'ca-' + Date.now(), description: '', assigned_to: '', due_date: '', completed_date: '', status: 'open' }] })}>
-                      + Add Action
-                    </button>
-                  </div>
-                  {form.corrective_actions.length === 0 && <p className="text-xs text-gray-400">No corrective actions recorded</p>}
-                  {form.corrective_actions.map((action, i) => (
-                    <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
-                      <div className="flex gap-2">
-                        <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description}
-                          onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], description: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                        <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
-                          onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, j) => j !== i) })}>Remove</button>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        <input type="text" className={INPUT.sm} placeholder="Assigned to" value={action.assigned_to}
-                          onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], assigned_to: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                        <input type="date" className={INPUT.sm} title="Due date" value={action.due_date}
-                          onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], due_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                        <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date}
-                          onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], completed_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
-                        <select className={INPUT.sm} value={action.status}
-                          onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], status: e.target.value }; setForm({ ...form, corrective_actions: a }); }}>
-                          <option value="open">Open</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      </div>
-                    </div>
-                  ))}
+                  <label className={INPUT.label}>Date *</label>
+                  <input type="date" className={INPUT.base} value={form.audit_date} onChange={e => setForm({ ...form, audit_date: e.target.value })} />
                 </div>
-
                 <div>
-                  <label className={INPUT.label}>Notes</label>
-                  <textarea className={`${INPUT.base} h-16`} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                  <label className={INPUT.label}>Auditor</label>
+                  <input type="text" className={INPUT.base} placeholder="Name" value={form.auditor} onChange={e => setForm({ ...form, auditor: e.target.value })} />
                 </div>
               </div>
-            )}
 
-            {/* Outbreak Tab */}
-            {activeTab === 'outbreak' && (
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer mb-2">
-                  <input type="checkbox" checked={form.outbreak.suspected}
-                    onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, suspected: e.target.checked } })}
-                    className="accent-blue-600" />
-                  Outbreak suspected / confirmed
-                </label>
-                {form.outbreak.suspected && (
-                  <div className="ml-6 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={INPUT.label}>Outbreak Type</label>
-                        <input type="text" className={INPUT.base} placeholder="e.g. Norovirus, COVID-19"
-                          value={form.outbreak.type}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, type: e.target.value } })} />
-                      </div>
-                      <div>
-                        <label className={INPUT.label}>Status</label>
-                        <select className={INPUT.select} value={form.outbreak.status}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, status: e.target.value } })}>
-                          <option value="">Select...</option>
-                          {OUTBREAK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={INPUT.label}>Overall Score (0-100)</label>
+                  <input type="number" min="0" max="100" className={INPUT.base} value={form.overall_score}
+                    onChange={e => setForm({ ...form, overall_score: e.target.value })} />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Compliance % (0-100)</label>
+                  <input type="number" min="0" max="100" className={INPUT.base} value={form.compliance_pct}
+                    onChange={e => setForm({ ...form, compliance_pct: e.target.value })} />
+                </div>
+              </div>
+
+              {/* Risk Areas */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={INPUT.label}>Risk Areas</label>
+                  <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                    onClick={() => setForm({ ...form, risk_areas: [...form.risk_areas, { area: '', severity: 'low', details: '' }] })}>
+                    + Add Risk Area
+                  </button>
+                </div>
+                {form.risk_areas.length === 0 && <p className="text-xs text-gray-400">No risk areas identified</p>}
+                {form.risk_areas.map((risk, i) => (
+                  <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
+                    <div className="flex gap-2">
+                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Area" value={risk.area}
+                        onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], area: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
+                      <select className={`${INPUT.sm} w-28`} value={risk.severity}
+                        onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], severity: e.target.value }; setForm({ ...form, risk_areas: r }); }}>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                      <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                        onClick={() => setForm({ ...form, risk_areas: form.risk_areas.filter((_, j) => j !== i) })}>Remove</button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={INPUT.label}>Start Date</label>
-                        <input type="date" className={INPUT.base} value={form.outbreak.start_date}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, start_date: e.target.value } })} />
-                      </div>
-                      <div>
-                        <label className={INPUT.label}>End Date</label>
-                        <input type="date" className={INPUT.base} value={form.outbreak.end_date}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, end_date: e.target.value } })} />
-                      </div>
+                    <textarea className={`${INPUT.sm} h-12`} placeholder="Details..."
+                      value={risk.details}
+                      onChange={e => { const r = [...form.risk_areas]; r[i] = { ...r[i], details: e.target.value }; setForm({ ...form, risk_areas: r }); }} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Corrective Actions */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={INPUT.label}>Corrective Actions</label>
+                  <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
+                    onClick={() => setForm({ ...form, corrective_actions: [...form.corrective_actions, { id: 'ca-' + Date.now(), description: '', assigned_to: '', due_date: '', completed_date: '', status: 'open' }] })}>
+                    + Add Action
+                  </button>
+                </div>
+                {form.corrective_actions.length === 0 && <p className="text-xs text-gray-400">No corrective actions recorded</p>}
+                {form.corrective_actions.map((action, i) => (
+                  <div key={i} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
+                    <div className="flex gap-2">
+                      <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Action description" value={action.description}
+                        onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], description: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
+                      <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
+                        onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, j) => j !== i) })}>Remove</button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={INPUT.label}>Affected Staff</label>
-                        <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_staff}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_staff: Number(e.target.value) || 0 } })} />
-                      </div>
-                      <div>
-                        <label className={INPUT.label}>Affected Residents</label>
-                        <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_residents}
-                          onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_residents: Number(e.target.value) || 0 } })} />
-                      </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <input type="text" className={INPUT.sm} placeholder="Assigned to" value={action.assigned_to}
+                        onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], assigned_to: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
+                      <input type="date" className={INPUT.sm} title="Due date" value={action.due_date}
+                        onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], due_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
+                      <input type="date" className={INPUT.sm} title="Completed date" value={action.completed_date}
+                        onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], completed_date: e.target.value }; setForm({ ...form, corrective_actions: a }); }} />
+                      <select className={INPUT.sm} value={action.status}
+                        onChange={e => { const a = [...form.corrective_actions]; a[i] = { ...a[i], status: e.target.value }; setForm({ ...form, corrective_actions: a }); }}>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className={INPUT.label}>Notes</label>
+                <textarea className={`${INPUT.base} h-16`} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+              </div>
+            </div>
+          )}
+
+          {/* Outbreak Tab */}
+          {activeTab === 'outbreak' && (
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer mb-2">
+                <input type="checkbox" checked={form.outbreak.suspected}
+                  onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, suspected: e.target.checked } })}
+                  className="accent-blue-600" />
+                Outbreak suspected / confirmed
+              </label>
+              {form.outbreak.suspected && (
+                <div className="ml-6 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={INPUT.label}>Outbreak Type</label>
+                      <input type="text" className={INPUT.base} placeholder="e.g. Norovirus, COVID-19"
+                        value={form.outbreak.type}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, type: e.target.value } })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Control Measures</label>
-                      <textarea className={`${INPUT.base} h-20`} placeholder="Measures taken to contain outbreak..."
-                        value={form.outbreak.measures}
-                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, measures: e.target.value } })} />
+                      <label className={INPUT.label}>Status</label>
+                      <select className={INPUT.select} value={form.outbreak.status}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, status: e.target.value } })}>
+                        <option value="">Select...</option>
+                        {OUTBREAK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Footer */}
-            <div className={MODAL.footer}>
-              {editingId && isAdmin && (
-                <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={INPUT.label}>Start Date</label>
+                      <input type="date" className={INPUT.base} value={form.outbreak.start_date}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, start_date: e.target.value } })} />
+                    </div>
+                    <div>
+                      <label className={INPUT.label}>End Date</label>
+                      <input type="date" className={INPUT.base} value={form.outbreak.end_date}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, end_date: e.target.value } })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={INPUT.label}>Affected Staff</label>
+                      <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_staff}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_staff: Number(e.target.value) || 0 } })} />
+                    </div>
+                    <div>
+                      <label className={INPUT.label}>Affected Residents</label>
+                      <input type="number" min="0" className={INPUT.base} value={form.outbreak.affected_residents}
+                        onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, affected_residents: Number(e.target.value) || 0 } })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={INPUT.label}>Control Measures</label>
+                    <textarea className={`${INPUT.base} h-20`} placeholder="Measures taken to contain outbreak..."
+                      value={form.outbreak.measures}
+                      onChange={e => setForm({ ...form, outbreak: { ...form.outbreak, measures: e.target.value } })} />
+                  </div>
+                </div>
               )}
-              <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
-                {editingId ? 'Update' : 'Save'}
-              </button>
             </div>
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Footer */}
+        <div className={MODAL.footer}>
+          {editingId && isAdmin && (
+            <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+          )}
+          <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
+          <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
+            {editingId ? 'Update' : 'Save'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -6,17 +6,16 @@ import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import { diffFields } from '../lib/audit.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { homeConfigSchema } from '../lib/zodHelpers.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 
 const configBodySchema = z.object({
   config: homeConfigSchema,
 }).strict();
 
-router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const homes = await homeService.listHomes();
     const allowedIds = await userHomeRepo.findHomeSlugsForUser(req.user.username);
@@ -28,7 +27,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
 });
 
 // PUT /api/homes/config?home=X — update the config JSONB for a home
-router.put('/config', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/config', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = configBodySchema.safeParse(req.body);
     if (!parsed.success) {

@@ -6,6 +6,7 @@ import {
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 import {
@@ -64,10 +65,10 @@ function downloadCSV(filename, headers, rows) {
 
 function getMonthDates(year, month) {
   const dates = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
+  const d = new Date(Date.UTC(year, month, 1));
+  while (d.getUTCMonth() === month) {
     dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
 }
@@ -107,9 +108,9 @@ export default function RotationGrid() {
   // Dynamic calendar month dates
   const { monthDates, monthLabel } = useMemo(() => {
     const now = new Date();
-    const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const dates = getMonthDates(target.getFullYear(), target.getMonth());
-    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1));
+    const dates = getMonthDates(target.getUTCFullYear(), target.getUTCMonth());
+    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     return { monthDates: dates, monthLabel: label };
   }, [monthOffset]);
 
@@ -669,10 +670,7 @@ export default function RotationGrid() {
       </div>
 
       {/* Bulk Revert Modal */}
-      {bulkModal?.type === 'revert-all' && (
-        <div className={MODAL.overlay} onClick={(e) => { if (e.target === e.currentTarget) setBulkModal(null); }}>
-          <div className={MODAL.panelSm}>
-            <h2 className={MODAL.title}>Revert All Overrides</h2>
+      <Modal isOpen={bulkModal?.type === 'revert-all'} onClose={() => setBulkModal(null)} title="Revert All Overrides" size="sm">
             <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
             <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month.</p>
             <div className={MODAL.footer}>
@@ -681,33 +679,24 @@ export default function RotationGrid() {
                 {saving ? 'Reverting...' : 'Revert All'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Shift Editor Modal */}
-      {editing && (
-        <div className={MODAL.overlay} onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-modal-in">
-            {/* Header */}
-            <div className="bg-gray-800 text-white px-5 py-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">{schedData.staff.find(s => s.id === editing.staffId)?.name}</h2>
-                  <p className="text-xs text-gray-400">
-                    {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLORS[editing.currentShift] || 'bg-gray-600'}`}>
-                    {editing.currentShift}
-                  </span>
-                  <p className="text-[10px] text-gray-400 mt-1">current</p>
-                </div>
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={editing ? schedData.staff.find(s => s.id === editing.staffId)?.name || 'Edit Shift' : 'Edit Shift'} size="lg">
+          {editing && <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-gray-500">
+                {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+              <div className="text-right">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLORS[editing.currentShift] || 'bg-gray-100'}`}>
+                  {editing.currentShift}
+                </span>
+                <p className="text-[10px] text-gray-400 mt-1">current</p>
               </div>
             </div>
 
-            <div className="p-5">
+            <div>
               {/* Shift Selector Dropdown */}
               <div className="mb-4">
                 <label className={INPUT.label}>Change shift to:</label>
@@ -891,7 +880,7 @@ export default function RotationGrid() {
             </div>
 
             {/* Footer */}
-            <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-gray-50/80">
+            <div className={MODAL.footer}>
               <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>
                 Cancel
               </button>
@@ -927,9 +916,8 @@ export default function RotationGrid() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>}
+      </Modal>
     </div>
   );
 }

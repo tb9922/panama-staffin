@@ -10,13 +10,33 @@ import { homeConfigSchema } from '../lib/zodHelpers.js';
 const staffItemSchema = z.object({
   id: z.string().min(1).max(50),
   name: z.string().min(1).max(200),
+  role: z.string().max(100).optional(),
+  team: z.string().max(100).optional(),
+  pref: z.string().max(10).nullish(),
+  skill: z.number().optional(),
+  hourly_rate: z.number().optional(),
+  active: z.boolean().optional(),
+  wtr_opt_out: z.boolean().optional(),
+  start_date: z.string().max(20).nullish(),
+  date_of_birth: z.string().max(20).nullish(),
+  ni_number: z.string().max(20).nullish(),
+  contract_hours: z.number().nullish(),
+  al_entitlement: z.number().nullish(),
+  al_carryover: z.number().nullish(),
+  leaving_date: z.string().max(20).nullish(),
 }).passthrough();
+
+const MAX_PAYLOAD_SIZE = 5_000_000; // 5MB cap
 
 const dataBodySchema = z.object({
   config: homeConfigSchema,
   staff: z.array(staffItemSchema).max(2000),
-  overrides: z.object({}).passthrough(),
-}).passthrough();
+  overrides: z.record(z.string(), z.record(z.string(), z.object({}).passthrough())),
+  _clientUpdatedAt: z.string().nullish(),
+}).passthrough().refine(
+  obj => JSON.stringify(obj).length < MAX_PAYLOAD_SIZE,
+  { message: 'Payload too large (max 5MB)' },
+);
 
 /** Detect data-corruption issues that MUST block the save */
 function detectCriticalErrors(body) {

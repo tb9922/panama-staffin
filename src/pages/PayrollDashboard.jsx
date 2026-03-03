@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getPayrollRuns, createPayrollRun, getCurrentHome, getLoggedInUser } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
 
@@ -183,48 +184,43 @@ export default function PayrollDashboard() {
       </div>
 
       {/* Create Modal */}
-      {showCreate && (
-        <div className={MODAL.overlay} onClick={() => setShowCreate(false)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>New Payroll Run</h2>
-            <div className="space-y-4">
-              <div>
-                <label className={INPUT.label}>Pay Frequency</label>
-                <select className={INPUT.select} value={form.pay_frequency}
-                  onChange={e => handleFreqChange(e.target.value)}>
-                  <option value="weekly">Weekly</option>
-                  <option value="fortnightly">Fortnightly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Period Start</label>
-                  <input type="date" className={INPUT.base} value={form.period_start}
-                    onChange={e => setForm(f => ({ ...f, period_start: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>Period End</label>
-                  <input type="date" className={INPUT.base} value={form.period_end}
-                    onChange={e => setForm(f => ({ ...f, period_end: e.target.value }))} />
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>Notes (optional)</label>
-                <input className={INPUT.sm} value={form.notes}
-                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder="e.g. May 2026 monthly payroll" />
-              </div>
+      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="New Payroll Run" size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>Pay Frequency</label>
+            <select className={INPUT.select} value={form.pay_frequency}
+              onChange={e => handleFreqChange(e.target.value)}>
+              <option value="weekly">Weekly</option>
+              <option value="fortnightly">Fortnightly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Period Start</label>
+              <input type="date" className={INPUT.base} value={form.period_start}
+                onChange={e => setForm(f => ({ ...f, period_start: e.target.value }))} />
             </div>
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowCreate(false)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleCreate} disabled={creating}>
-                {creating ? 'Creating…' : 'Create Run'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Period End</label>
+              <input type="date" className={INPUT.base} value={form.period_end}
+                onChange={e => setForm(f => ({ ...f, period_end: e.target.value }))} />
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>Notes (optional)</label>
+            <input className={INPUT.sm} value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="e.g. May 2026 monthly payroll" />
+          </div>
         </div>
-      )}
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowCreate(false)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreate} disabled={creating}>
+            {creating ? 'Creating…' : 'Create Run'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

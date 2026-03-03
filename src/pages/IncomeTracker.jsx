@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
@@ -75,13 +76,6 @@ function ResidentsTab({ home, isAdmin }) {
   }, [home, filterStatus, filterFunding]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
 
   function openCreate() {
     setEditing(null);
@@ -194,11 +188,7 @@ function ResidentsTab({ home, isAdmin }) {
       </div>
 
       {/* Resident Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelXl} role="dialog" aria-modal="true" aria-labelledby="resident-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="resident-modal-title" className={MODAL.title}>{editing ? 'Edit Resident' : 'Add Resident'}</h2>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Resident' : 'Add Resident'} size="xl">
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'profile', label: 'Profile' }, { id: 'fees', label: 'Fees' }, { id: 'history', label: 'Fee History' }, { id: 'notes', label: 'Notes' }].map(t => (
                 <button key={t.id} onClick={() => setModalTab(t.id)}
@@ -319,9 +309,7 @@ function ResidentsTab({ home, isAdmin }) {
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
               {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </>
   );
 }
@@ -365,13 +353,6 @@ function InvoicesTab({ home, isAdmin }) {
   }, [home, filterStatus, filterPayer]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
 
   function openCreate() {
     setEditing(null);
@@ -515,11 +496,7 @@ function InvoicesTab({ home, isAdmin }) {
       </div>
 
       {/* Invoice Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelWide} role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="invoice-modal-title" className={MODAL.title}>{editing ? `Invoice ${editing.invoice_number || ''}` : 'New Invoice'}</h2>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? `Invoice ${editing.invoice_number || ''}` : 'New Invoice'} size="wide">
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'details', label: 'Details' }, { id: 'lines', label: 'Lines' }, ...(editing ? [{ id: 'payment', label: 'Payment' }] : [])].map(t => (
                 <button key={t.id} onClick={() => setModalTab(t.id)}
@@ -627,9 +604,7 @@ function InvoicesTab({ home, isAdmin }) {
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
               {isAdmin && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </>
   );
 }

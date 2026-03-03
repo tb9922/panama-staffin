@@ -54,45 +54,30 @@ export async function sync(homeId, incidentsArr, client) {
 
   const incomingIds = incidentsArr.map(i => i.id);
 
-  for (const inc of incidentsArr) {
-    await conn.query(
-      `INSERT INTO incidents (
-         id, home_id, date, time, location, type, severity, description,
-         person_affected, person_affected_name, staff_involved, immediate_action,
-         medical_attention, hospital_attendance,
-         cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
-         cqc_notified, cqc_notified_date, cqc_reference,
-         riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
-         safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
-         witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
-         police_involved, police_reference, police_contact_date,
-         msp_wishes_recorded, msp_outcome_preferences, msp_person_involved,
-         investigation_status, investigation_start_date, investigation_lead,
-         investigation_review_date, root_cause, lessons_learned, investigation_closed_date,
-         corrective_actions, reported_by, reported_at, updated_at
-       ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-         $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-         $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51
-       )
-       ON CONFLICT (home_id, id) DO UPDATE SET
-         date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
-         person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
-         medical_attention=$13,hospital_attendance=$14,
-         cqc_notifiable=$15,cqc_notification_type=$16,cqc_notification_deadline=$17,
-         cqc_notified=$18,cqc_notified_date=$19,cqc_reference=$20,
-         riddor_reportable=$21,riddor_category=$22,riddor_reported=$23,riddor_reported_date=$24,riddor_reference=$25,
-         safeguarding_referral=$26,safeguarding_to=$27,safeguarding_reference=$28,safeguarding_date=$29,
-         witnesses=$30,duty_of_candour_applies=$31,candour_notification_date=$32,candour_letter_sent_date=$33,candour_recipient=$34,
-         police_involved=$35,police_reference=$36,police_contact_date=$37,
-         msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
-         investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
-         investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
-         corrective_actions=$48,reported_by=$49,reported_at=$50,updated_at=$51,
-         deleted_at=NULL
-       WHERE incidents.frozen_at IS NULL`,
-      [
-        inc.id, homeId, inc.date || null, inc.time || null, inc.location || null,
+  // Batch upsert — 49 per-row params (id + 47 fields + reported_at; homeId=$1, updated_at=NOW())
+  const COLS_PER_ROW = 49;
+  const CHUNK = 25; // 25 × 49 = 1225 params + 1 homeId = well within PG 65535 limit
+  for (let i = 0; i < incidentsArr.length; i += CHUNK) {
+    const chunk = incidentsArr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((inc, j) => {
+      const b = j * COLS_PER_ROW + 2; // $1 is homeId
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
+        `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},` +
+        `$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},$${b+18},` +
+        `$${b+19},$${b+20},$${b+21},$${b+22},$${b+23},` +
+        `$${b+24},$${b+25},$${b+26},$${b+27},` +
+        `$${b+28},$${b+29},$${b+30},$${b+31},$${b+32},` +
+        `$${b+33},$${b+34},$${b+35},` +
+        `$${b+36},$${b+37},$${b+38},` +
+        `$${b+39},$${b+40},$${b+41},` +
+        `$${b+42},$${b+43},$${b+44},$${b+45},` +
+        `$${b+46},$${b+47},$${b+48},NOW())`
+      );
+      values.push(
+        inc.id, inc.date || null, inc.time || null, inc.location || null,
         inc.type || null, inc.severity || null, inc.description || null,
         inc.person_affected || null, inc.person_affected_name || null,
         JSON.stringify(inc.staff_involved || []), inc.immediate_action || null,
@@ -114,8 +99,78 @@ export async function sync(homeId, incidentsArr, client) {
         inc.investigation_lead || null, inc.investigation_review_date || null,
         inc.root_cause || null, inc.lessons_learned || null, inc.investigation_closed_date || null,
         JSON.stringify(inc.corrective_actions || []),
-        inc.reported_by || null, inc.reported_at || null, inc.updated_at || null,
-      ]
+        inc.reported_by || null, inc.reported_at || null,
+      );
+    });
+    await conn.query(
+      `INSERT INTO incidents (
+         id, home_id, date, time, location, type, severity, description,
+         person_affected, person_affected_name, staff_involved, immediate_action,
+         medical_attention, hospital_attendance,
+         cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
+         cqc_notified, cqc_notified_date, cqc_reference,
+         riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+         safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
+         witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
+         police_involved, police_reference, police_contact_date,
+         msp_wishes_recorded, msp_outcome_preferences, msp_person_involved,
+         investigation_status, investigation_start_date, investigation_lead,
+         investigation_review_date, root_cause, lessons_learned, investigation_closed_date,
+         corrective_actions, reported_by, reported_at, updated_at
+       ) VALUES ${placeholders.join(',')}
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         date                      = EXCLUDED.date,
+         time                      = EXCLUDED.time,
+         location                  = EXCLUDED.location,
+         type                      = EXCLUDED.type,
+         severity                  = EXCLUDED.severity,
+         description               = EXCLUDED.description,
+         person_affected           = EXCLUDED.person_affected,
+         person_affected_name      = EXCLUDED.person_affected_name,
+         staff_involved            = EXCLUDED.staff_involved,
+         immediate_action          = EXCLUDED.immediate_action,
+         medical_attention         = EXCLUDED.medical_attention,
+         hospital_attendance       = EXCLUDED.hospital_attendance,
+         cqc_notifiable            = EXCLUDED.cqc_notifiable,
+         cqc_notification_type     = EXCLUDED.cqc_notification_type,
+         cqc_notification_deadline = EXCLUDED.cqc_notification_deadline,
+         cqc_notified              = EXCLUDED.cqc_notified,
+         cqc_notified_date         = EXCLUDED.cqc_notified_date,
+         cqc_reference             = EXCLUDED.cqc_reference,
+         riddor_reportable         = EXCLUDED.riddor_reportable,
+         riddor_category           = EXCLUDED.riddor_category,
+         riddor_reported           = EXCLUDED.riddor_reported,
+         riddor_reported_date      = EXCLUDED.riddor_reported_date,
+         riddor_reference          = EXCLUDED.riddor_reference,
+         safeguarding_referral     = EXCLUDED.safeguarding_referral,
+         safeguarding_to           = EXCLUDED.safeguarding_to,
+         safeguarding_reference    = EXCLUDED.safeguarding_reference,
+         safeguarding_date         = EXCLUDED.safeguarding_date,
+         witnesses                 = EXCLUDED.witnesses,
+         duty_of_candour_applies   = EXCLUDED.duty_of_candour_applies,
+         candour_notification_date = EXCLUDED.candour_notification_date,
+         candour_letter_sent_date  = EXCLUDED.candour_letter_sent_date,
+         candour_recipient         = EXCLUDED.candour_recipient,
+         police_involved           = EXCLUDED.police_involved,
+         police_reference          = EXCLUDED.police_reference,
+         police_contact_date       = EXCLUDED.police_contact_date,
+         msp_wishes_recorded       = EXCLUDED.msp_wishes_recorded,
+         msp_outcome_preferences   = EXCLUDED.msp_outcome_preferences,
+         msp_person_involved       = EXCLUDED.msp_person_involved,
+         investigation_status      = EXCLUDED.investigation_status,
+         investigation_start_date  = EXCLUDED.investigation_start_date,
+         investigation_lead        = EXCLUDED.investigation_lead,
+         investigation_review_date = EXCLUDED.investigation_review_date,
+         root_cause                = EXCLUDED.root_cause,
+         lessons_learned           = EXCLUDED.lessons_learned,
+         investigation_closed_date = EXCLUDED.investigation_closed_date,
+         corrective_actions        = EXCLUDED.corrective_actions,
+         reported_by               = EXCLUDED.reported_by,
+         reported_at               = EXCLUDED.reported_at,
+         updated_at                = NOW(),
+         deleted_at                = NULL
+       WHERE incidents.frozen_at IS NULL`,
+      [homeId, ...values]
     );
   }
 

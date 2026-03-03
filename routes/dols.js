@@ -5,11 +5,10 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -45,7 +44,7 @@ const mcaBodySchema = z.object({
 const mcaUpdateSchema = mcaBodySchema.partial();
 
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [dolsResult, mcaResult] = await Promise.all([
@@ -61,7 +60,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 });
 
 // POST /api/dols?home=X — create DoLS record
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -72,7 +71,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/dols/:id?home=X — update DoLS record
-router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -92,7 +91,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
 });
 
 // DELETE /api/dols/:id?home=X — soft delete DoLS record
-router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -104,7 +103,7 @@ router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, 
 });
 
 // POST /api/dols/mca?home=X — create MCA assessment
-router.post('/mca', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/mca', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = mcaBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -115,7 +114,7 @@ router.post('/mca', requireAuth, requireAdmin, requireHomeAccess, async (req, re
 });
 
 // PUT /api/dols/mca/:id?home=X — update MCA assessment
-router.put('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -135,7 +134,7 @@ router.put('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (req,
 });
 
 // DELETE /api/dols/mca/:id?home=X — soft delete MCA assessment
-router.delete('/mca/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

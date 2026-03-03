@@ -30,23 +30,38 @@ export async function sync(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(a => a.id);
 
-  for (const a of arr) {
-    await conn.query(
-      `INSERT INTO ipc_audits (
-         id, home_id, audit_date, audit_type, auditor, overall_score, compliance_pct,
-         risk_areas, corrective_actions, outbreak, notes, reported_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       ON CONFLICT (home_id, id) DO UPDATE SET
-         audit_date=$3,audit_type=$4,auditor=$5,overall_score=$6,compliance_pct=$7,
-         risk_areas=$8,corrective_actions=$9,outbreak=$10,notes=$11,
-         reported_at=$12,updated_at=$13,deleted_at=NULL`,
-      [
-        a.id, homeId, a.audit_date || null, a.audit_type || null, a.auditor || null,
+  const COLS_PER_ROW = 12;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((a, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},` +
+        `$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
+      );
+      values.push(
+        a.id, a.audit_date || null, a.audit_type || null, a.auditor || null,
         a.overall_score ?? null, a.compliance_pct ?? null,
         JSON.stringify(a.risk_areas || []), JSON.stringify(a.corrective_actions || []),
         JSON.stringify(a.outbreak || {}), a.notes || null,
         a.reported_at || null, a.updated_at || null,
-      ]
+      );
+    });
+    await conn.query(
+      `INSERT INTO ipc_audits (
+         id, home_id, audit_date, audit_type, auditor, overall_score, compliance_pct,
+         risk_areas, corrective_actions, outbreak, notes, reported_at, updated_at
+       ) VALUES ${placeholders.join(',')}
+       ON CONFLICT (home_id, id) DO UPDATE SET
+         audit_date=EXCLUDED.audit_date,audit_type=EXCLUDED.audit_type,auditor=EXCLUDED.auditor,
+         overall_score=EXCLUDED.overall_score,compliance_pct=EXCLUDED.compliance_pct,
+         risk_areas=EXCLUDED.risk_areas,corrective_actions=EXCLUDED.corrective_actions,
+         outbreak=EXCLUDED.outbreak,notes=EXCLUDED.notes,
+         reported_at=EXCLUDED.reported_at,updated_at=EXCLUDED.updated_at,deleted_at=NULL`,
+      [homeId, ...values]
     );
   }
 

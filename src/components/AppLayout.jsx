@@ -215,7 +215,7 @@ export default function AppLayout() {
         )}
         <CoverageAlertBanner />
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
-          <AppRoutes />
+          <AppRoutes key={activeHome} />
         </Suspense>
       </main>
       {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}

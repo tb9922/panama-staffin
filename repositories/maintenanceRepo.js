@@ -29,24 +29,51 @@ export async function sync(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(m => m.id);
 
-  for (const m of arr) {
+  // Batch upsert — 14 per-row params (id + 12 fields + notes; homeId=$1, updated_at=NOW())
+  const COLS_PER_ROW = 14;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((m, j) => {
+      const b = j * COLS_PER_ROW + 2; // $1 is homeId
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},` +
+        `$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},` +
+        `$${b+11},$${b+12},$${b+13},NOW())`
+      );
+      values.push(
+        m.id, m.category || null, m.description || null, m.frequency || null,
+        m.last_completed || null, m.next_due || null, m.completed_by || null,
+        m.contractor || null, m.items_checked ?? null, m.items_passed ?? null,
+        m.items_failed ?? null, m.certificate_ref || null, m.certificate_expiry || null,
+        m.notes || null,
+      );
+    });
     await conn.query(
       `INSERT INTO maintenance (
          id, home_id, category, description, frequency, last_completed, next_due,
          completed_by, contractor, items_checked, items_passed, items_failed,
          certificate_ref, certificate_expiry, notes, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         category=$3,description=$4,frequency=$5,last_completed=$6,next_due=$7,
-         completed_by=$8,contractor=$9,items_checked=$10,items_passed=$11,items_failed=$12,
-         certificate_ref=$13,certificate_expiry=$14,notes=$15,updated_at=$16,deleted_at=NULL`,
-      [
-        m.id, homeId, m.category || null, m.description || null, m.frequency || null,
-        m.last_completed || null, m.next_due || null, m.completed_by || null,
-        m.contractor || null, m.items_checked ?? null, m.items_passed ?? null,
-        m.items_failed ?? null, m.certificate_ref || null, m.certificate_expiry || null,
-        m.notes || null, m.updated_at || null,
-      ]
+         category           = EXCLUDED.category,
+         description        = EXCLUDED.description,
+         frequency          = EXCLUDED.frequency,
+         last_completed     = EXCLUDED.last_completed,
+         next_due           = EXCLUDED.next_due,
+         completed_by       = EXCLUDED.completed_by,
+         contractor         = EXCLUDED.contractor,
+         items_checked      = EXCLUDED.items_checked,
+         items_passed       = EXCLUDED.items_passed,
+         items_failed       = EXCLUDED.items_failed,
+         certificate_ref    = EXCLUDED.certificate_ref,
+         certificate_expiry = EXCLUDED.certificate_expiry,
+         notes              = EXCLUDED.notes,
+         updated_at         = NOW(),
+         deleted_at         = NULL`,
+      [homeId, ...values]
     );
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 
@@ -291,157 +292,144 @@ export default function SickPayTracker() {
       </div>
 
       {/* Create modal */}
-      {showCreate && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panel}>
-            <h2 className={MODAL.title}>Record Sick Period</h2>
+      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Record Sick Period">
+        <div className="space-y-4">
+          <StaffPicker
+            label="Staff Member"
+            value={createForm.staff_id}
+            onChange={v => cfield('staff_id', v)}
+            required
+          />
 
-            <div className="space-y-4">
-              <StaffPicker
-                label="Staff Member"
-                value={createForm.staff_id}
-                onChange={v => cfield('staff_id', v)}
-                required
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Start Date</label>
-                  <input type="date" className={INPUT.base}
-                    value={createForm.start_date}
-                    onChange={e => cfield('start_date', e.target.value)} />
-                </div>
-                <div>
-                  <label className={INPUT.label}>End Date (leave blank if ongoing)</label>
-                  <input type="date" className={INPUT.base}
-                    value={createForm.end_date}
-                    onChange={e => cfield('end_date', e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className={INPUT.label}>Qualifying Days Per Week</label>
-                <select
-                  className={INPUT.select}
-                  value={createForm.qualifying_days_per_week}
-                  onChange={e => cfield('qualifying_days_per_week', e.target.value)}
-                >
-                  {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                    <option key={d} value={d}>{d} day{d !== 1 ? 's' : ''}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">
-                  The number of days this staff member is contracted to work per week. Default: 5.
-                </p>
-              </div>
-
-              <div>
-                <label className={INPUT.label}>Linked to Previous Period (optional)</label>
-                <select
-                  className={INPUT.select}
-                  value={createForm.linked_to_period_id}
-                  onChange={e => cfield('linked_to_period_id', e.target.value)}
-                >
-                  <option value="">None — new sick period</option>
-                  {periods
-                    .filter(p => p.staff_id === createForm.staff_id && p.end_date)
-                    .map(p => (
-                      <option key={p.id} value={p.id}>
-                        Period: {p.start_date} → {p.end_date} ({parseFloat(p.ssp_weeks_paid || 0).toFixed(2)} SSP wks)
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={2}
-                  value={createForm.notes}
-                  onChange={e => cfield('notes', e.target.value)}
-                  placeholder="e.g. Self-certified absence, fit note requested" />
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Start Date</label>
+              <input type="date" className={INPUT.base}
+                value={createForm.start_date}
+                onChange={e => cfield('start_date', e.target.value)} />
             </div>
-
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowCreate(false)} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                className={BTN.primary}
-                onClick={handleCreate}
-                disabled={saving || !createForm.staff_id || !createForm.start_date}
-              >
-                {saving ? 'Saving...' : 'Record Period'}
-              </button>
+            <div>
+              <label className={INPUT.label}>End Date (leave blank if ongoing)</label>
+              <input type="date" className={INPUT.base}
+                value={createForm.end_date}
+                onChange={e => cfield('end_date', e.target.value)} />
             </div>
           </div>
+
+          <div>
+            <label className={INPUT.label}>Qualifying Days Per Week</label>
+            <select
+              className={INPUT.select}
+              value={createForm.qualifying_days_per_week}
+              onChange={e => cfield('qualifying_days_per_week', e.target.value)}
+            >
+              {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                <option key={d} value={d}>{d} day{d !== 1 ? 's' : ''}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              The number of days this staff member is contracted to work per week. Default: 5.
+            </p>
+          </div>
+
+          <div>
+            <label className={INPUT.label}>Linked to Previous Period (optional)</label>
+            <select
+              className={INPUT.select}
+              value={createForm.linked_to_period_id}
+              onChange={e => cfield('linked_to_period_id', e.target.value)}
+            >
+              <option value="">None — new sick period</option>
+              {periods
+                .filter(p => p.staff_id === createForm.staff_id && p.end_date)
+                .map(p => (
+                  <option key={p.id} value={p.id}>
+                    Period: {p.start_date} → {p.end_date} ({parseFloat(p.ssp_weeks_paid || 0).toFixed(2)} SSP wks)
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2}
+              value={createForm.notes}
+              onChange={e => cfield('notes', e.target.value)}
+              placeholder="e.g. Self-certified absence, fit note requested" />
+          </div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowCreate(false)} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className={BTN.primary}
+            onClick={handleCreate}
+            disabled={saving || !createForm.staff_id || !createForm.start_date}
+          >
+            {saving ? 'Saving...' : 'Record Period'}
+          </button>
+        </div>
+      </Modal>
 
       {/* Update modal */}
-      {showUpdate && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panel}>
-            <h2 className={MODAL.title}>
-              Update Sick Period — {staffMap[showUpdate.staff_id]?.name || showUpdate.staff_id}
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Started: {showUpdate.start_date}
-              {showUpdate.end_date && ` | Ended: ${showUpdate.end_date}`}
-            </p>
+      <Modal isOpen={!!showUpdate} onClose={() => setShowUpdate(null)} title={`Update Sick Period — ${staffMap[showUpdate?.staff_id]?.name || showUpdate?.staff_id || ''}`}>
+        <p className="text-sm text-gray-500 mb-4">
+          Started: {showUpdate?.start_date}
+          {showUpdate?.end_date && ` | Ended: ${showUpdate.end_date}`}
+        </p>
 
-            <div className="space-y-4">
-              <div>
-                <label className={INPUT.label}>End Date (set to close period)</label>
-                <input type="date" className={INPUT.base}
-                  value={updateForm.end_date}
-                  onChange={e => ufield('end_date', e.target.value)} />
-              </div>
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>End Date (set to close period)</label>
+            <input type="date" className={INPUT.base}
+              value={updateForm.end_date}
+              onChange={e => ufield('end_date', e.target.value)} />
+          </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="fit_note"
-                  checked={updateForm.fit_note_received}
-                  onChange={e => ufield('fit_note_received', e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <label htmlFor="fit_note" className="text-sm text-gray-700">Fit note received from GP</label>
-              </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="fit_note"
+              checked={updateForm.fit_note_received}
+              onChange={e => ufield('fit_note_received', e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <label htmlFor="fit_note" className="text-sm text-gray-700">Fit note received from GP</label>
+          </div>
 
-              {updateForm.fit_note_received && (
-                <div>
-                  <label className={INPUT.label}>Fit Note Date</label>
-                  <input type="date" className={INPUT.base}
-                    value={updateForm.fit_note_date}
-                    onChange={e => ufield('fit_note_date', e.target.value)} />
-                </div>
-              )}
-
-              <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={2}
-                  value={updateForm.notes}
-                  onChange={e => ufield('notes', e.target.value)}
-                  placeholder="e.g. Fit note received, return to work interview completed" />
-              </div>
+          {updateForm.fit_note_received && (
+            <div>
+              <label className={INPUT.label}>Fit Note Date</label>
+              <input type="date" className={INPUT.base}
+                value={updateForm.fit_note_date}
+                onChange={e => ufield('fit_note_date', e.target.value)} />
             </div>
+          )}
 
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setShowUpdate(null)} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                className={BTN.primary}
-                onClick={handleUpdate}
-                disabled={saving}
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2}
+              value={updateForm.notes}
+              onChange={e => ufield('notes', e.target.value)}
+              placeholder="e.g. Fit note received, return to work interview completed" />
           </div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowUpdate(null)} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className={BTN.primary}
+            onClick={handleUpdate}
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -164,8 +164,15 @@ export function calculateDayCost(staffForDay, config) {
   // AL cost: pay matches the shift the staff member would have worked
   staffForDay.forEach(s => {
     if (s.shift !== 'AL') return;
-    const alShift = s.team && s.team.startsWith('Night') ? 'N' : (s.pref || 'EL');
-    base += getShiftHours(alShift, config) * (s.hourly_rate || 0);
+    let alHours;
+    if (s.team === 'Float') {
+      alHours = (parseFloat(s.contract_hours) || 0) / 5;
+    } else if (s.team && s.team.startsWith('Night')) {
+      alHours = getShiftHours('N', config);
+    } else {
+      alHours = getShiftHours(s.pref || 'EL', config);
+    }
+    base += alHours * (s.hourly_rate || 0);
   });
 
   const total = base + otPremium + agencyDay + agencyNight + bhPremium + sleepIn;

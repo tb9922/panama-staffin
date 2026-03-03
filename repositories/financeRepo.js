@@ -275,10 +275,13 @@ export async function findInvoiceById(id, homeId, client, { forUpdate } = {}) {
 
 export async function getNextInvoiceNumber(homeId, prefix, client) {
   const conn = client || pool;
+  // Advisory lock serializes invoice number generation per home
+  // (FOR UPDATE on LIMIT 1 locks nothing when zero rows match the prefix)
+  await conn.query('SELECT pg_advisory_xact_lock($1)', [homeId]);
   const { rows } = await conn.query(
     `SELECT invoice_number FROM finance_invoices
      WHERE home_id = $1 AND invoice_number LIKE $2
-     ORDER BY invoice_number DESC LIMIT 1 FOR UPDATE`,
+     ORDER BY invoice_number DESC LIMIT 1`,
     [homeId, `${prefix}%`]);
   if (rows.length === 0) return `${prefix}-001`;
   const last = rows[0].invoice_number;
@@ -761,4 +764,30 @@ export async function softDelete(entity, id, homeId, client) {
     `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING id`,
     [id, homeId]);
   return rows.length > 0;
+}
+
+// ── Dashboard integration queries ───────────────────────────────────────────
+
+export async function getPayrollTotal(homeId, from, to) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(total_gross), 0) AS total
+     FROM payroll_runs
+     WHERE home_id = $1 AND status IN ('approved','locked','exported')
+       AND period_start >= $2 AND period_end <= $3`,
+    [homeId, from, to]);
+  return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
+}
+
+export async function getAgencyTotal(homeId, from, to) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(total_cost), 0) AS total
+     FROM agency_shifts
+     WHERE home_id = $1 AND shift_date >= $2 AND shift_date <= $3`,
+    [homeId, from, to]);
+  return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
+}
+
+export async function getRegisteredBeds(homeId) {
+  const { rows } = await pool.query('SELECT config FROM homes WHERE id = $1', [homeId]);
+  return rows[0]?.config?.registered_beds ?? 0;
 }
