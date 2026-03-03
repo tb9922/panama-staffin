@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { useData } from '../contexts/DataContext.jsx';
@@ -16,7 +17,8 @@ function generateSlug(name) {
 }
 
 export default function PlatformHomes() {
-  const { refreshHomes } = useData();
+  const { refreshHomes, switchHome } = useData();
+  const navigate = useNavigate();
 
   const [homes, setHomes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -87,6 +89,7 @@ export default function PlatformHomes() {
                 <td className={TABLE.td}>{formatDate(home.updatedAt)}</td>
                 <td className={TABLE.td}>
                   <div className="flex gap-1.5">
+                    <button className={`${BTN.primary} ${BTN.xs}`} onClick={() => { switchHome(home.slug); navigate('/'); }}>View</button>
                     <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditHome(home)}>Edit</button>
                     <button className={`${BTN.danger} ${BTN.xs}`} onClick={() => setDeleteHome(home)}>Delete</button>
                   </div>
