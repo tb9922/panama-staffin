@@ -120,7 +120,7 @@ export default function StaffRegister() {
       }
       // Clear leaving_date when reactivating
       if (field === 'active' && value === true) {
-        updated.leaving_date = '';
+        updated.leaving_date = null;
       }
       return updated;
     });
@@ -131,7 +131,12 @@ export default function StaffRegister() {
     setSaving(true);
     setRowError(null);
     try {
-      await updateStaffMember(homeSlug, editingRow.id, editingRow);
+      const cleaned = {
+        ...editingRow,
+        start_date: editingRow.start_date || null,
+        leaving_date: editingRow.leaving_date || null,
+      };
+      await updateStaffMember(homeSlug, editingRow.id, cleaned);
       setEditing(null);
       setEditingRow(null);
       setRefreshKey(k => k + 1);
@@ -154,7 +159,11 @@ export default function StaffRegister() {
       return num > max ? num : max;
     }, 0);
     const id = 'S' + String(maxId + 1).padStart(3, '0');
-    const staffEntry = { ...newStaff, id };
+    const staffEntry = {
+      ...newStaff, id,
+      start_date: newStaff.start_date || null,
+      leaving_date: newStaff.leaving_date || null,
+    };
     setSaving(true);
     setRowError(null);
     try {
