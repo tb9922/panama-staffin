@@ -96,11 +96,12 @@ export async function updateUser(id, fields, actorUsername) {
     await authService.revokeUser(target.username);
   }
 
-  // If role changed, force re-login so new JWT has correct role
-  if (fields.role && fields.role !== target.role) {
+  // If role or platform admin flag changed, force re-login so new JWT has correct claims
+  if ((fields.role && fields.role !== target.role) ||
+      (fields.is_platform_admin !== undefined && fields.is_platform_admin !== target.is_platform_admin)) {
     await authService.revokeUser(target.username);
     // If upgraded to admin, grant all homes
-    if (fields.role === 'admin') {
+    if (fields.role === 'admin' && fields.role !== target.role) {
       await userHomeRepo.grantAllHomes(target.username);
     }
   }

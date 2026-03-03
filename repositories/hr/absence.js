@@ -34,7 +34,7 @@ export async function findStaffSickOverrides(homeId, staffId, cutoff, client) {
 export async function findHomeConfig(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT config FROM homes WHERE id = $1', [homeId]
+    'SELECT config FROM homes WHERE id = $1 AND deleted_at IS NULL', [homeId]
   );
   return rows[0]?.config || {};
 }

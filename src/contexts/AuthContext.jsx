@@ -14,9 +14,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const isViewer = user?.role === 'viewer';
+  const isPlatformAdmin = user?.isPlatformAdmin || false;
 
   return (
-    <AuthContext.Provider value={{ user, isViewer, login: handleLogin, logout: handleLogout }}>
+    <AuthContext.Provider value={{ user, isViewer, isPlatformAdmin, login: handleLogin, logout: handleLogout }}>
       {children}
     </AuthContext.Provider>
   );

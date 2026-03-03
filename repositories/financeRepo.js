@@ -788,6 +788,6 @@ export async function getAgencyTotal(homeId, from, to) {
 }
 
 export async function getRegisteredBeds(homeId) {
-  const { rows } = await pool.query('SELECT config FROM homes WHERE id = $1', [homeId]);
+  const { rows } = await pool.query('SELECT config FROM homes WHERE id = $1 AND deleted_at IS NULL', [homeId]);
   return rows[0]?.config?.registered_beds ?? 0;
 }

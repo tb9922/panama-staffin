@@ -50,7 +50,7 @@ export async function findHomeIdsForUser(username) {
 export async function findHomeSlugsForUser(username) {
   const { rows } = await pool.query(
     `SELECT h.slug FROM user_home_access uha
-     JOIN homes h ON h.id = uha.home_id
+     JOIN homes h ON h.id = uha.home_id AND h.deleted_at IS NULL
      WHERE uha.username = $1`,
     [username]
   );
@@ -64,8 +64,32 @@ export async function findHomeSlugsForUser(username) {
 export async function grantAllHomes(username) {
   await pool.query(
     `INSERT INTO user_home_access (username, home_id)
-       SELECT $1, id FROM homes FOR SHARE
+       SELECT $1, id FROM homes WHERE deleted_at IS NULL FOR SHARE
        ON CONFLICT DO NOTHING`,
     [username]
   );
+}
+
+/**
+ * Revoke all user access to a specific home.
+ * Used when soft-deleting a home. Accepts transaction client.
+ */
+export async function revokeAllForHome(homeId, client) {
+  const conn = client || pool;
+  await conn.query(
+    'DELETE FROM user_home_access WHERE home_id = $1',
+    [homeId]
+  );
+}
+
+/**
+ * Get all usernames with access to a home.
+ * Used to capture affected users in audit before revoking.
+ */
+export async function findUsernamesForHome(homeId) {
+  const { rows } = await pool.query(
+    'SELECT username FROM user_home_access WHERE home_id = $1',
+    [homeId]
+  );
+  return rows.map(r => r.username);
 }

@@ -52,11 +52,11 @@ export async function login(username, password) {
     userRepo.updateLastLogin(username).catch(() => {});
     const jti = randomUUID();
     const token = jwt.sign(
-      { username: dbUser.username, role: dbUser.role, jti },
+      { username: dbUser.username, role: dbUser.role, is_platform_admin: !!dbUser.is_platform_admin, jti },
       config.jwtSecret,
       { expiresIn: config.jwtExpiresIn }
     );
-    return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '' };
+    return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };
   }
 
   // Fallback: env-var users (backward compatibility before migration)
@@ -70,7 +70,7 @@ export async function login(username, password) {
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn }
   );
-  return { username: envUser.username, role: envUser.role, token };
+  return { username: envUser.username, role: envUser.role, token, isPlatformAdmin: false };
 }
 
 export function verifyToken(token) {
