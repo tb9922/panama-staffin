@@ -32,12 +32,16 @@ function shapeRun(row) {
   };
 }
 
-export async function findByHome(homeId) {
+export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT * FROM payroll_runs WHERE home_id = $1 ORDER BY period_start DESC`,
-    [homeId],
+    `SELECT *, COUNT(*) OVER() AS _total
+     FROM payroll_runs WHERE home_id = $1
+     ORDER BY period_start DESC
+     LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 500), Math.max(offset, 0)],
   );
-  return rows.map(shapeRun);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map(shapeRun), total };
 }
 
 export async function findById(runId, homeId, client) {

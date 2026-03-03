@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
@@ -76,13 +77,6 @@ function ResidentsTab({ home, isAdmin }) {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
-
   function openCreate() {
     setEditing(null);
     setForm({ status: 'active', funding_type: 'self_funded', care_type: 'residential', admission_date: new Date().toISOString().slice(0, 10) });
@@ -124,10 +118,11 @@ function ResidentsTab({ home, isAdmin }) {
     const { downloadXLSX } = await import('../lib/excel.js');
     downloadXLSX('finance_residents.xlsx', [{
       name: 'Residents',
-      headers: ['Name', 'Room', 'Care Type', 'Funding', 'Weekly Fee', 'Status', 'Next Fee Review'],
+      headers: ['Name', 'Room', 'Care Type', 'Funding', 'Weekly Fee', 'Status', 'Next Fee Review', 'Outstanding', 'Last Paid', 'Last Payment'],
       rows: residents.map(r => [
         r.resident_name, r.room_number || '', r.care_type, r.funding_type,
         r.weekly_fee, r.status, r.next_fee_review || '',
+        r.outstanding_balance || 0, r.last_payment_date || '', r.last_payment_amount || '',
       ]),
     }]);
   }
@@ -164,10 +159,12 @@ function ResidentsTab({ home, isAdmin }) {
               <th className={`${TABLE.th} text-right`}>Weekly Fee</th>
               <th className={TABLE.th}>Status</th>
               <th className={TABLE.th}>Fee Review</th>
+              <th className={`${TABLE.th} text-right`}>Balance</th>
+              <th className={TABLE.th}>Last Paid</th>
             </tr></thead>
             <tbody>
               {residents.length === 0 ? (
-                <tr><td colSpan={7} className={TABLE.empty}>No residents found</td></tr>
+                <tr><td colSpan={9} className={TABLE.empty}>No residents found</td></tr>
               ) : residents.map(r => (
                 <tr key={r.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(r)}>
                   <td className={`${TABLE.td} font-medium`}>{r.resident_name}</td>
@@ -177,6 +174,12 @@ function ResidentsTab({ home, isAdmin }) {
                   <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(r.weekly_fee)}</td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(r.status, RESIDENT_STATUSES)]}>{getLabel(r.status, RESIDENT_STATUSES)}</span></td>
                   <td className={TABLE.td}>{r.next_fee_review || '—'}</td>
+                  <td className={`${TABLE.tdMono} text-right`}>
+                    {r.outstanding_balance > 0
+                      ? <span className="text-amber-600 font-medium">{formatCurrency(r.outstanding_balance)}</span>
+                      : <span className="text-green-600">{formatCurrency(0)}</span>}
+                  </td>
+                  <td className={TABLE.td}>{r.last_payment_date || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -185,11 +188,7 @@ function ResidentsTab({ home, isAdmin }) {
       </div>
 
       {/* Resident Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelXl} role="dialog" aria-modal="true" aria-labelledby="resident-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="resident-modal-title" className={MODAL.title}>{editing ? 'Edit Resident' : 'Add Resident'}</h2>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Resident' : 'Add Resident'} size="xl">
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'profile', label: 'Profile' }, { id: 'fees', label: 'Fees' }, { id: 'history', label: 'Fee History' }, { id: 'notes', label: 'Notes' }].map(t => (
                 <button key={t.id} onClick={() => setModalTab(t.id)}
@@ -253,6 +252,18 @@ function ResidentsTab({ home, isAdmin }) {
                   <div className="col-span-2"><label className={INPUT.label}>Fee Change Reason</label>
                     <input value={form._fee_change_reason || ''} onChange={e => set('_fee_change_reason', e.target.value)} className={INPUT.base} placeholder="Reason for fee change (recorded in history)" /></div>
                 )}
+                {editing?.last_payment_date && (
+                  <div className="col-span-2 mt-1 p-3 bg-gray-50 rounded border border-gray-200 text-sm">
+                    <span className="text-gray-500">Last payment:</span>{' '}
+                    <span className="font-medium">{formatCurrency(editing.last_payment_amount)}</span>
+                    <span className="text-gray-400 ml-1">on {editing.last_payment_date}</span>
+                  </div>
+                )}
+                {editing && editing.outstanding_balance > 0 && (
+                  <div className="col-span-2 p-3 bg-amber-50 rounded border border-amber-200 text-sm">
+                    <span className="text-amber-700 font-medium">Outstanding: {formatCurrency(editing.outstanding_balance)}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -298,9 +309,7 @@ function ResidentsTab({ home, isAdmin }) {
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
               {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </>
   );
 }
@@ -344,13 +353,6 @@ function InvoicesTab({ home, isAdmin }) {
   }, [home, filterStatus, filterPayer]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
 
   function openCreate() {
     setEditing(null);
@@ -494,11 +496,7 @@ function InvoicesTab({ home, isAdmin }) {
       </div>
 
       {/* Invoice Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelWide} role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="invoice-modal-title" className={MODAL.title}>{editing ? `Invoice ${editing.invoice_number || ''}` : 'New Invoice'}</h2>
-
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? `Invoice ${editing.invoice_number || ''}` : 'New Invoice'} size="wide">
             <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
               {[{ id: 'details', label: 'Details' }, { id: 'lines', label: 'Lines' }, ...(editing ? [{ id: 'payment', label: 'Payment' }] : [])].map(t => (
                 <button key={t.id} onClick={() => setModalTab(t.id)}
@@ -606,9 +604,7 @@ function InvoicesTab({ home, isAdmin }) {
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
               {isAdmin && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </>
   );
 }

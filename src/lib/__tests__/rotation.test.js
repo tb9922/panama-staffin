@@ -549,15 +549,15 @@ describe('getALDeductionHours', () => {
     expect(hrs).toBe(0);
   });
 
-  it('returns 8h fallback for Float staff with no contract_hours', () => {
+  it('returns 0 for Float staff with no contract_hours', () => {
     const staff = { id: 'S3', team: 'Float', contract_hours: 0, start_date: '2024-01-01' };
     const hrs = getALDeductionHours(staff, '2025-01-06', config);
-    expect(hrs).toBe(8); // fallback
+    expect(hrs).toBe(0); // no contract hours = cannot calculate
   });
 
-  it('returns 8h fallback when config shifts are missing', () => {
+  it('returns 0 when config shifts are missing', () => {
     const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
     const hrs = getALDeductionHours(staff, '2025-01-06', { cycle_start_date: '2025-01-06', shifts: {} });
-    expect(hrs).toBe(8); // fallback
+    expect(hrs).toBe(0); // missing config = cannot calculate
   });
 });

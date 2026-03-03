@@ -133,10 +133,10 @@ describe('Account lockout', () => {
     expect(rows[0].locked_until).not.toBeNull();
   });
 
-  it('rejects correct password while locked', async () => {
+  it('rejects correct password while locked (generic error to prevent enumeration)', async () => {
     const res = await request(app).post('/api/login').send({ username: LOCKOUT_USER, password: LOCKOUT_PW });
     expect(res.status).toBe(401);
-    expect(res.body.error).toContain('locked');
+    expect(res.body.error).toBe('Invalid credentials');
   });
 
   it('allows login after lockout expires', async () => {

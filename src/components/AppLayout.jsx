@@ -9,7 +9,7 @@ import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
 
 export default function AppLayout() {
-  const { user, isViewer, logout } = useAuth();
+  const { user, isViewer, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError } = useData();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -123,7 +123,7 @@ export default function AppLayout() {
           ))}
 
           {/* Grouped sections */}
-          {NAV_SECTIONS.filter(s => !s.adminOnly || !isViewer).map(section => {
+          {NAV_SECTIONS.filter(s => (!s.adminOnly || !isViewer) && (!s.platformAdminOnly || isPlatformAdmin)).map(section => {
             const isOpen = expandedSections[section.id];
             return (
               <div key={section.id}>
@@ -147,7 +147,7 @@ export default function AppLayout() {
                 </button>
                 {isOpen && sidebarOpen && (
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
-                    {section.items.filter(item => !item.adminOnly || !isViewer).map(item => (
+                    {section.items.filter(item => (!item.adminOnly || !isViewer) && (!item.platformAdminOnly || isPlatformAdmin)).map(item => (
                       <NavLink
                         key={item.path}
                         to={item.path}
@@ -215,7 +215,7 @@ export default function AppLayout() {
         )}
         <CoverageAlertBanner />
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading...</div>}>
-          <AppRoutes />
+          <AppRoutes key={activeHome} />
         </Suspense>
       </main>
       {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}

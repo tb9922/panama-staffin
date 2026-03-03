@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getDataRequests, createDataRequest, updateDataRequest, gatherRequestData, executeErasure,
   getDataBreaches, createDataBreach, updateDataBreach, assessBreach,
@@ -238,32 +239,27 @@ export default function GdprDashboard() {
       {showModal === 'complaint' && renderComplaintModal()}
 
       {/* Erasure Confirmation Modal */}
-      {erasureConfirm && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) { setErasureConfirm(null); setErasureInput(''); } }}>
-          <div className={MODAL.panelSm} onClick={e => e.stopPropagation()}>
-            <h3 className={MODAL.title}>Confirm Permanent Erasure</h3>
-            <div className="space-y-3">
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                This will permanently anonymise all personal data for this subject. This action cannot be undone.
-              </div>
-              <div>
-                <label className={INPUT.label}>Type <strong>ERASE</strong> to confirm</label>
-                <input
-                  className={INPUT.base}
-                  value={erasureInput}
-                  onChange={e => setErasureInput(e.target.value)}
-                  placeholder="ERASE"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => { setErasureConfirm(null); setErasureInput(''); }}>Cancel</button>
-              <button className={BTN.danger} disabled={erasureInput !== 'ERASE'} onClick={confirmErasure}>Execute Erasure</button>
-            </div>
+      <Modal isOpen={!!erasureConfirm} onClose={() => { setErasureConfirm(null); setErasureInput(''); }} title="Confirm Permanent Erasure" size="sm">
+        <div className="space-y-3">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            This will permanently anonymise all personal data for this subject. This action cannot be undone.
+          </div>
+          <div>
+            <label className={INPUT.label}>Type <strong>ERASE</strong> to confirm</label>
+            <input
+              className={INPUT.base}
+              value={erasureInput}
+              onChange={e => setErasureInput(e.target.value)}
+              placeholder="ERASE"
+              autoFocus
+            />
           </div>
         </div>
-      )}
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => { setErasureConfirm(null); setErasureInput(''); }}>Cancel</button>
+          <button className={BTN.danger} disabled={erasureInput !== 'ERASE'} onClick={confirmErasure}>Execute Erasure</button>
+        </div>
+      </Modal>
     </div>
   );
 
@@ -582,210 +578,198 @@ export default function GdprDashboard() {
 
   function renderRequestModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(null)}>
-        <div className={MODAL.panelLg}>
-          <h3 className={MODAL.title}>New Data Request</h3>
-          <div className="space-y-4">
+      <Modal isOpen={true} onClose={() => setShowModal(null)} title="New Data Request" size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>Request Type</label>
+            <select className={INPUT.select} value={form.request_type || ''} onChange={e => setForm({ ...form, request_type: e.target.value })}>
+              {REQUEST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Request Type</label>
-              <select className={INPUT.select} value={form.request_type || ''} onChange={e => setForm({ ...form, request_type: e.target.value })}>
-                {REQUEST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              <label className={INPUT.label}>Subject Type</label>
+              <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
+                <option value="staff">Staff</option>
+                <option value="resident">Resident</option>
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Subject Type</label>
-                <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
-                  <option value="staff">Staff</option>
-                  <option value="resident">Resident</option>
-                </select>
-              </div>
-              <div>
-                <label className={INPUT.label}>Subject ID / Name</label>
-                <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} placeholder="e.g. S001 or name" />
-              </div>
-            </div>
             <div>
-              <label className={INPUT.label}>Subject Name</label>
-              <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Date Received</label>
-                <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Deadline</label>
-                <input type="date" className={INPUT.base} value={form.deadline || (form.date_received ? calculateDeadline(form.date_received) : '')}
-                  onChange={e => setForm({ ...form, deadline: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={3} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
+              <label className={INPUT.label}>Subject ID / Name</label>
+              <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} placeholder="e.g. S001 or name" />
             </div>
           </div>
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleCreateRequest}>Create Request</button>
+          <div>
+            <label className={INPUT.label}>Subject Name</label>
+            <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Date Received</label>
+              <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Deadline</label>
+              <input type="date" className={INPUT.base} value={form.deadline || (form.date_received ? calculateDeadline(form.date_received) : '')}
+                onChange={e => setForm({ ...form, deadline: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={3} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
         </div>
-      </div>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateRequest}>Create Request</button>
+        </div>
+      </Modal>
     );
   }
 
   function renderBreachModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(null)}>
-        <div className={MODAL.panelLg}>
-          <h3 className={MODAL.title}>Report Data Breach</h3>
-          <div className="space-y-4">
+      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Report Data Breach" size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>Title</label>
+            <input className={INPUT.base} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief description of the breach" />
+          </div>
+          <div>
+            <label className={INPUT.label}>Description</label>
+            <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className={INPUT.label}>Title</label>
-              <input className={INPUT.base} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief description of the breach" />
-            </div>
-            <div>
-              <label className={INPUT.label}>Description</label>
-              <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <label className={INPUT.label}>Discovered Date</label>
-                <input type="date" className={INPUT.base} value={form.discovered_date || ''} onChange={e => setForm({ ...form, discovered_date: e.target.value })} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Time</label>
-                <input type="time" className={INPUT.base} value={form.discovered_time || ''} onChange={e => setForm({ ...form, discovered_time: e.target.value })} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Severity</label>
-                <select className={INPUT.select} value={form.severity || 'low'} onChange={e => setForm({ ...form, severity: e.target.value })}>
-                  {BREACH_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={INPUT.label}>Risk to Rights</label>
-                <select className={INPUT.select} value={form.risk_to_rights || 'unlikely'} onChange={e => setForm({ ...form, risk_to_rights: e.target.value })}>
-                  {RISK_TO_RIGHTS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Individuals Affected</label>
-                <input type="number" className={INPUT.base} value={form.individuals_affected || 0} onChange={e => setForm({ ...form, individuals_affected: parseInt(e.target.value, 10) || 0 })} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Data Categories (comma-separated)</label>
-                <input className={INPUT.base} value={form.data_categories || ''} onChange={e => setForm({ ...form, data_categories: e.target.value })} placeholder="e.g. staff_health, dbs" />
-              </div>
+              <label className={INPUT.label}>Discovered Date</label>
+              <input type="date" className={INPUT.base} value={form.discovered_date || ''} onChange={e => setForm({ ...form, discovered_date: e.target.value })} />
             </div>
             <div>
-              <label className={INPUT.label}>Containment Actions</label>
-              <textarea className={INPUT.base} rows={2} value={form.containment_actions || ''} onChange={e => setForm({ ...form, containment_actions: e.target.value })} />
+              <label className={INPUT.label}>Time</label>
+              <input type="time" className={INPUT.base} value={form.discovered_time || ''} onChange={e => setForm({ ...form, discovered_time: e.target.value })} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Severity</label>
+              <select className={INPUT.select} value={form.severity || 'low'} onChange={e => setForm({ ...form, severity: e.target.value })}>
+                {BREACH_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={INPUT.label}>Risk to Rights</label>
+              <select className={INPUT.select} value={form.risk_to_rights || 'unlikely'} onChange={e => setForm({ ...form, risk_to_rights: e.target.value })}>
+                {RISK_TO_RIGHTS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
             </div>
           </div>
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleCreateBreach}>Report Breach</button>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Individuals Affected</label>
+              <input type="number" className={INPUT.base} value={form.individuals_affected || 0} onChange={e => setForm({ ...form, individuals_affected: parseInt(e.target.value, 10) || 0 })} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Data Categories (comma-separated)</label>
+              <input className={INPUT.base} value={form.data_categories || ''} onChange={e => setForm({ ...form, data_categories: e.target.value })} placeholder="e.g. staff_health, dbs" />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Containment Actions</label>
+            <textarea className={INPUT.base} rows={2} value={form.containment_actions || ''} onChange={e => setForm({ ...form, containment_actions: e.target.value })} />
           </div>
         </div>
-      </div>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateBreach}>Report Breach</button>
+        </div>
+      </Modal>
     );
   }
 
   function renderConsentModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(null)}>
-        <div className={MODAL.panelLg}>
-          <h3 className={MODAL.title}>Record Consent</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Subject Type</label>
-                <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
-                  <option value="staff">Staff</option>
-                  <option value="resident">Resident</option>
-                </select>
-              </div>
-              <div>
-                <label className={INPUT.label}>Subject ID</label>
-                <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} />
-              </div>
-            </div>
+      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Record Consent" size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Subject Name</label>
-              <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
-            </div>
-            <div>
-              <label className={INPUT.label}>Purpose</label>
-              <input className={INPUT.base} value={form.purpose || ''} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Photo consent for marketing" />
-            </div>
-            <div>
-              <label className={INPUT.label}>Legal Basis</label>
-              <select className={INPUT.select} value={form.legal_basis || 'consent'} onChange={e => setForm({ ...form, legal_basis: e.target.value })}>
-                {LEGAL_BASES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+              <label className={INPUT.label}>Subject Type</label>
+              <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
+                <option value="staff">Staff</option>
+                <option value="resident">Resident</option>
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Notes</label>
-              <textarea className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
+              <label className={INPUT.label}>Subject ID</label>
+              <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} />
             </div>
           </div>
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleCreateConsent}>Record Consent</button>
+          <div>
+            <label className={INPUT.label}>Subject Name</label>
+            <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Purpose</label>
+            <input className={INPUT.base} value={form.purpose || ''} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Photo consent for marketing" />
+          </div>
+          <div>
+            <label className={INPUT.label}>Legal Basis</label>
+            <select className={INPUT.select} value={form.legal_basis || 'consent'} onChange={e => setForm({ ...form, legal_basis: e.target.value })}>
+              {LEGAL_BASES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
         </div>
-      </div>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateConsent}>Record Consent</button>
+        </div>
+      </Modal>
     );
   }
 
   function renderComplaintModal() {
     return (
-      <div className={MODAL.overlay} onClick={e => e.target === e.currentTarget && setShowModal(null)}>
-        <div className={MODAL.panelLg}>
-          <h3 className={MODAL.title}>Log DP Complaint</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Date Received</label>
-                <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
-              </div>
-              <div>
-                <label className={INPUT.label}>Category</label>
-                <select className={INPUT.select} value={form.category || 'access'} onChange={e => setForm({ ...form, category: e.target.value })}>
-                  {DP_COMPLAINT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
-              </div>
+      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Log DP Complaint" size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Date Received</label>
+              <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
             </div>
             <div>
-              <label className={INPUT.label}>Complainant Name</label>
-              <input className={INPUT.base} value={form.complainant_name || ''} onChange={e => setForm({ ...form, complainant_name: e.target.value })} />
-            </div>
-            <div>
-              <label className={INPUT.label}>Description</label>
-              <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={INPUT.label}>Severity</label>
-                <select className={INPUT.select} value={form.severity || 'low'} onChange={e => setForm({ ...form, severity: e.target.value })}>
-                  {BREACH_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </div>
-              <div className="flex items-center pt-6">
-                <input type="checkbox" id="ico_involved" checked={form.ico_involved || false} onChange={e => setForm({ ...form, ico_involved: e.target.checked })} className="mr-2" />
-                <label htmlFor="ico_involved" className="text-sm">ICO Involved</label>
-              </div>
+              <label className={INPUT.label}>Category</label>
+              <select className={INPUT.select} value={form.category || 'access'} onChange={e => setForm({ ...form, category: e.target.value })}>
+                {DP_COMPLAINT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
             </div>
           </div>
-          <div className={MODAL.footer}>
-            <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-            <button className={BTN.primary} onClick={handleCreateComplaint}>Log Complaint</button>
+          <div>
+            <label className={INPUT.label}>Complainant Name</label>
+            <input className={INPUT.base} value={form.complainant_name || ''} onChange={e => setForm({ ...form, complainant_name: e.target.value })} />
+          </div>
+          <div>
+            <label className={INPUT.label}>Description</label>
+            <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Severity</label>
+              <select className={INPUT.select} value={form.severity || 'low'} onChange={e => setForm({ ...form, severity: e.target.value })}>
+                {BREACH_SEVERITIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center pt-6">
+              <input type="checkbox" id="ico_involved" checked={form.ico_involved || false} onChange={e => setForm({ ...form, ico_involved: e.target.checked })} className="mr-2" />
+              <label htmlFor="ico_involved" className="text-sm">ICO Involved</label>
+            </div>
           </div>
         </div>
-      </div>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateComplaint}>Log Complaint</button>
+        </div>
+      </Modal>
     );
   }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -396,11 +397,8 @@ export default function RiskRegister() {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className={`${MODAL.panelLg} max-h-[90vh] overflow-y-auto`}>
-            <h2 className={MODAL.title}>{editingId ? 'Edit Risk' : 'New Risk'}</h2>
-
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Risk' : 'New Risk'} size="lg">
+          <div className="max-h-[75vh] overflow-y-auto">
             {/* Tabs */}
             <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
               {TABS.map(tab => (
@@ -580,6 +578,7 @@ export default function RiskRegister() {
               </div>
             )}
 
+          </div>
             {/* Footer */}
             <div className={MODAL.footer}>
               {editingId && isAdmin && (
@@ -590,9 +589,7 @@ export default function RiskRegister() {
                 {editingId ? 'Update' : 'Save'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

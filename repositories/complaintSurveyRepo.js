@@ -32,22 +32,44 @@ export async function sync(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(s => s.id);
 
-  for (const s of arr) {
+  // Batch upsert — 12 per-row params, homeId shared as $1
+  const COLS_PER_ROW = 12;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    const chunk = arr.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((s, j) => {
+      const b = j * COLS_PER_ROW + 2; // $1 is homeId
+      placeholders.push(
+        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},` +
+        `$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
+      );
+      values.push(
+        s.id, s.type || null, s.date || null, s.title || null,
+        s.total_sent ?? null, s.responses ?? null, s.overall_satisfaction ?? null,
+        JSON.stringify(s.area_scores || {}), s.key_feedback || null,
+        s.actions || null, s.conducted_by || null, s.reported_at || null,
+      );
+    });
     await conn.query(
       `INSERT INTO complaint_surveys (
          id, home_id, type, date, title, total_sent, responses,
          overall_satisfaction, area_scores, key_feedback, actions, conducted_by, reported_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         type=$3,date=$4,title=$5,total_sent=$6,responses=$7,
-         overall_satisfaction=$8,area_scores=$9,key_feedback=$10,
-         actions=$11,conducted_by=$12,reported_at=$13`,
-      [
-        s.id, homeId, s.type || null, s.date || null, s.title || null,
-        s.total_sent ?? null, s.responses ?? null, s.overall_satisfaction ?? null,
-        JSON.stringify(s.area_scores || {}), s.key_feedback || null,
-        s.actions || null, s.conducted_by || null, s.reported_at || null,
-      ]
+         type                 = EXCLUDED.type,
+         date                 = EXCLUDED.date,
+         title                = EXCLUDED.title,
+         total_sent           = EXCLUDED.total_sent,
+         responses            = EXCLUDED.responses,
+         overall_satisfaction = EXCLUDED.overall_satisfaction,
+         area_scores          = EXCLUDED.area_scores,
+         key_feedback         = EXCLUDED.key_feedback,
+         actions              = EXCLUDED.actions,
+         conducted_by         = EXCLUDED.conducted_by,
+         reported_at          = EXCLUDED.reported_at`,
+      [homeId, ...values]
     );
   }
 

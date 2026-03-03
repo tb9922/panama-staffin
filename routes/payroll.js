@@ -17,7 +17,7 @@
 import { Router }   from 'express';
 import { z }        from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as payRateRulesRepo  from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo     from '../repositories/timesheetRepo.js';
@@ -35,7 +35,6 @@ import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -102,7 +101,7 @@ const agencyShiftBodySchema = z.object({
 // ── Pay Rate Rules ─────────────────────────────────────────────────────────────
 
 // GET /api/payroll/rates?home=X — list active rules (seeds defaults on first call)
-router.get('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/rates', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     // Seed defaults if none exist yet (idempotent)
     await payrollService.seedDefaultRulesIfNeeded(req.home.id);
@@ -113,7 +112,7 @@ router.get('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, r
 });
 
 // POST /api/payroll/rates?home=X — create rule
-router.post('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/rates', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = ruleBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -124,7 +123,7 @@ router.post('/rates', requireAuth, requireAdmin, requireHomeAccess, async (req, 
 });
 
 // PUT /api/payroll/rates/:ruleId?home=X — update rule (soft-close + create new version)
-router.put('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/rates/:ruleId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const ruleId = ruleIdSchema.safeParse(req.params.ruleId);
     if (!ruleId.success) return res.status(400).json({ error: 'Invalid rule ID' });
@@ -138,7 +137,7 @@ router.put('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, async
 });
 
 // DELETE /api/payroll/rates/:ruleId?home=X — deactivate rule
-router.delete('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/rates/:ruleId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const ruleId = ruleIdSchema.safeParse(req.params.ruleId);
     if (!ruleId.success) return res.status(400).json({ error: 'Invalid rule ID' });
@@ -150,7 +149,7 @@ router.delete('/rates/:ruleId', requireAuth, requireAdmin, requireHomeAccess, as
 });
 
 // GET /api/payroll/nmw?date=YYYY-MM-DD — NMW rates for a date (auth-only, no admin required)
-router.get('/nmw', requireAuth, async (req, res, next) => {
+router.get('/nmw', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const rates = await payRateRulesRepo.getAllNmwRates();
     res.json(rates);
@@ -160,7 +159,7 @@ router.get('/nmw', requireAuth, async (req, res, next) => {
 // ── Timesheets ─────────────────────────────────────────────────────────────────
 
 // GET /api/payroll/timesheets?home=X&date=YYYY-MM-DD — entries for a date
-router.get('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/timesheets', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const dateP = dateSchema.safeParse(req.query.date);
     if (!dateP.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
@@ -170,7 +169,7 @@ router.get('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (r
 });
 
 // GET /api/payroll/timesheets/period?home=X&start=X&end=X — period view
-router.get('/timesheets/period', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/timesheets/period', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
@@ -181,7 +180,7 @@ router.get('/timesheets/period', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // POST /api/payroll/timesheets?home=X — create or update entry
-router.post('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = timesheetBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -192,7 +191,7 @@ router.post('/timesheets', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // POST /api/payroll/timesheets/:id/approve?home=X — approve single entry
-router.post('/timesheets/:id/approve', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets/:id/approve', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = tsIdSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid timesheet ID' });
@@ -204,7 +203,7 @@ router.post('/timesheets/:id/approve', requireAuth, requireAdmin, requireHomeAcc
 });
 
 // POST /api/payroll/timesheets/:id/dispute?home=X — dispute a single entry
-router.post('/timesheets/:id/dispute', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets/:id/dispute', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = tsIdSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid timesheet ID' });
@@ -218,7 +217,7 @@ router.post('/timesheets/:id/dispute', requireAuth, requireAdmin, requireHomeAcc
 });
 
 // POST /api/payroll/timesheets/bulk-approve?home=X — approve all pending for a date
-router.post('/timesheets/bulk-approve', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets/bulk-approve', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const dateP = dateSchema.safeParse(req.body.date);
     if (!dateP.success) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
@@ -229,7 +228,7 @@ router.post('/timesheets/bulk-approve', requireAuth, requireAdmin, requireHomeAc
 });
 
 // POST /api/payroll/timesheets/batch-upsert?home=X — bulk create/update entries
-router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets/batch-upsert', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const { entries } = req.body;
     if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ error: 'entries array required' });
@@ -249,7 +248,7 @@ router.post('/timesheets/batch-upsert', requireAuth, requireAdmin, requireHomeAc
 });
 
 // POST /api/payroll/timesheets/approve-range?home=X — approve all pending for a staff member in date range
-router.post('/timesheets/approve-range', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/timesheets/approve-range', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffIdP = z.string().min(1).max(20).safeParse(req.body.staff_id);
     const startP = dateSchema.safeParse(req.body.start);
@@ -265,15 +264,17 @@ router.post('/timesheets/approve-range', requireAuth, requireAdmin, requireHomeA
 // ── Payroll Runs ──────────────────────────────────────────────────────────────
 
 // GET /api/payroll/runs?home=X — list all runs
-router.get('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const runs = await payrollRunRepo.findByHome(req.home.id);
-    res.json(runs);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const { rows, total } = await payrollRunRepo.findByHome(req.home.id, { limit, offset });
+    res.json({ rows, total });
   } catch (err) { next(err); }
 });
 
 // POST /api/payroll/runs?home=X — create draft run
-router.post('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/runs', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = runBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -291,7 +292,7 @@ router.post('/runs', requireAuth, requireAdmin, requireHomeAccess, async (req, r
 });
 
 // GET /api/payroll/runs/:runId?home=X — get run with lines
-router.get('/runs/:runId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -303,7 +304,7 @@ router.get('/runs/:runId', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // POST /api/payroll/runs/:runId/calculate?home=X — trigger calculation
-router.post('/runs/:runId/calculate', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/runs/:runId/calculate', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -316,7 +317,7 @@ router.post('/runs/:runId/calculate', requireAuth, requireAdmin, requireHomeAcce
 });
 
 // POST /api/payroll/runs/:runId/approve?home=X — approve run (blocks if NMW violations)
-router.post('/runs/:runId/approve', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/runs/:runId/approve', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -328,7 +329,7 @@ router.post('/runs/:runId/approve', requireAuth, requireAdmin, requireHomeAccess
 });
 
 // GET /api/payroll/runs/:runId/export?home=X&format=sage|xero|generic — CSV download
-router.get('/runs/:runId/export', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -345,7 +346,7 @@ router.get('/runs/:runId/export', requireAuth, requireAdmin, requireHomeAccess, 
 });
 
 // GET /api/payroll/runs/:runId/payslips/:staffId?home=X — single payslip PDF
-router.get('/runs/:runId/payslips/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -362,7 +363,7 @@ router.get('/runs/:runId/payslips/:staffId', requireAuth, requireAdmin, requireH
 });
 
 // GET /api/payroll/runs/:runId/payslips?home=X — bulk payslip data (JSON, frontend renders PDF)
-router.get('/runs/:runId/payslips', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -374,14 +375,14 @@ router.get('/runs/:runId/payslips', requireAuth, requireAdmin, requireHomeAccess
 // ── Agency ────────────────────────────────────────────────────────────────────
 
 // GET /api/payroll/agency/providers?home=X
-router.get('/agency/providers', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/providers', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await agencyRepo.findProvidersByHome(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/payroll/agency/providers?home=X
-router.post('/agency/providers', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/agency/providers', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = providerBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -392,7 +393,7 @@ router.post('/agency/providers', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // PUT /api/payroll/agency/providers/:id?home=X
-router.put('/agency/providers/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/agency/providers/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = providerSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid provider ID' });
@@ -406,7 +407,7 @@ router.put('/agency/providers/:id', requireAuth, requireAdmin, requireHomeAccess
 });
 
 // GET /api/payroll/agency/shifts?home=X&start=YYYY-MM-DD&end=YYYY-MM-DD
-router.get('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/shifts', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
@@ -416,7 +417,7 @@ router.get('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, async
 });
 
 // POST /api/payroll/agency/shifts?home=X
-router.post('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/agency/shifts', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = agencyShiftBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -429,7 +430,7 @@ router.post('/agency/shifts', requireAuth, requireAdmin, requireHomeAccess, asyn
 });
 
 // PUT /api/payroll/agency/shifts/:id?home=X
-router.put('/agency/shifts/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = providerSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid shift ID' });
@@ -444,7 +445,7 @@ router.put('/agency/shifts/:id', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // GET /api/payroll/agency/metrics?home=X&weeks=12
-router.get('/agency/metrics', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/agency/metrics', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const weeks = Math.min(52, Math.max(1, parseInt(req.query.weeks, 10) || 12));
     res.json(await agencyRepo.getMetrics(req.home.id, weeks));
@@ -467,14 +468,14 @@ const taxCodeBodySchema = z.object({
 });
 
 // GET /api/payroll/tax-codes?home=X
-router.get('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/tax-codes', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await taxRepo.listTaxCodesByHome(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/payroll/tax-codes?home=X
-router.post('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/tax-codes', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = taxCodeBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -485,7 +486,7 @@ router.post('/tax-codes', requireAuth, requireAdmin, requireHomeAccess, async (r
 });
 
 // GET /api/payroll/ytd?home=X&staffId=X&year=X
-router.get('/ytd', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/ytd', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffId = z.string().min(1).max(20).safeParse(req.query.staffId);
     const year    = z.coerce.number().int().min(2020).safeParse(req.query.year);
@@ -508,14 +509,14 @@ const enrolmentBodySchema = z.object({
 });
 
 // GET /api/payroll/pensions?home=X
-router.get('/pensions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/pensions', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await pensionRepo.listEnrolmentsByHome(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/payroll/pensions?home=X
-router.post('/pensions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/pensions', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = enrolmentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -526,7 +527,7 @@ router.post('/pensions', requireAuth, requireAdmin, requireHomeAccess, async (re
 });
 
 // GET /api/payroll/pension-config
-router.get('/pension-config', requireAuth, async (req, res, next) => {
+router.get('/pension-config', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const config = await pensionRepo.getPensionConfig(today);
@@ -537,7 +538,7 @@ router.get('/pension-config', requireAuth, async (req, res, next) => {
 // ── Phase 2: SSP & Sick Periods ───────────────────────────────────────────────
 
 // GET /api/payroll/ssp-config
-router.get('/ssp-config', requireAuth, async (req, res, next) => {
+router.get('/ssp-config', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const configs = await sspRepo.getAllSSPConfigs();
     res.json(configs);
@@ -567,7 +568,7 @@ const sickPeriodUpdateSchema = z.object({
 });
 
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
-router.get('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/sick-periods', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffId = safeStr(req.query.staffId, 20);
     res.json(await sspRepo.listSickPeriods(req.home.id, staffId));
@@ -575,7 +576,7 @@ router.get('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async 
 });
 
 // POST /api/payroll/sick-periods?home=X
-router.post('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/sick-periods', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = sickPeriodBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -596,7 +597,7 @@ router.post('/sick-periods', requireAuth, requireAdmin, requireHomeAccess, async
 });
 
 // PUT /api/payroll/sick-periods/:id?home=X
-router.put('/sick-periods/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/sick-periods/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = z.coerce.number().int().positive().safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid period ID' });
@@ -617,7 +618,7 @@ const markPaidSchema = z.object({
 });
 
 // GET /api/payroll/hmrc?home=X&year=X
-router.get('/hmrc', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/hmrc', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const year = z.coerce.number().int().min(2020).safeParse(req.query.year);
     if (!year.success) return res.status(400).json({ error: 'year is required' });
@@ -628,7 +629,7 @@ router.get('/hmrc', requireAuth, requireAdmin, requireHomeAccess, async (req, re
 });
 
 // PUT /api/payroll/hmrc/:id/paid?home=X
-router.put('/hmrc/:id/paid', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/hmrc/:id/paid', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = z.coerce.number().int().positive().safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid liability ID' });
@@ -643,7 +644,7 @@ router.put('/hmrc/:id/paid', requireAuth, requireAdmin, requireHomeAccess, async
 
 // GET /api/payroll/runs/:runId/summary-pdf?home=X — payroll summary PDF for accountant
 // Admin only, approved/exported/locked runs only
-router.get('/runs/:runId/summary-pdf', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/runs/:runId/summary-pdf', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });

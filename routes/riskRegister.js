@@ -5,11 +5,10 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as riskRepo from '../repositories/riskRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -44,7 +43,7 @@ const riskUpdateSchema = riskBodySchema.partial().extend({
 });
 
 // GET /api/risk-register?home=X
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const risksResult = await riskRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
@@ -53,7 +52,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 });
 
 // POST /api/risk-register?home=X
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = riskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -64,7 +63,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/risk-register/:id?home=X
-router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -84,7 +83,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
 });
 
 // DELETE /api/risk-register/:id?home=X
-router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

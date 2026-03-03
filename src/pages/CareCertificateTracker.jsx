@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { formatDate } from '../lib/rotation.js';
+import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
   CARE_CERTIFICATE_STANDARDS, CC_CATEGORIES, CC_STATUSES, CC_STANDARD_STATUSES,
@@ -392,11 +392,9 @@ export default function CareCertificateTracker() {
               </div>
               {startForm.start_date && (
                 <div className="text-xs text-gray-500">
-                  Expected completion: <span className="font-medium">{(() => {
-                    const d = new Date(startForm.start_date + 'T00:00:00');
-                    d.setDate(d.getDate() + CC_COMPLETION_WEEKS * 7);
-                    return formatDate(d);
-                  })()}</span> (12 weeks)
+                  Expected completion: <span className="font-medium">{
+                    formatDate(addDays(parseDate(startForm.start_date), CC_COMPLETION_WEEKS * 7))
+                  }</span> (12 weeks)
                 </div>
               )}
             </div>

@@ -4,10 +4,9 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth
 import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as auditService from '../services/auditService.js';
 
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').nullable());
 const uuidSchema = z.string().uuid('Invalid entry ID');
@@ -27,7 +26,7 @@ const updateBodySchema = z.object({
 });
 
 // GET /api/handover?home=X&date=YYYY-MM-DD
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const dateParam = dateSchema.safeParse(req.query.date);
     if (!dateParam.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
@@ -39,7 +38,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 });
 
 // POST /api/handover?home=X  — create entry (author from JWT)
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = entryBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -52,7 +51,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/handover/:id?home=X  — update content/priority
-router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
@@ -68,7 +67,7 @@ router.put('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res
 });
 
 // POST /api/handover/:id/acknowledge?home=X  — mark as read by incoming shift (auth only — viewer can ack)
-router.post('/:id/acknowledge', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.post('/:id/acknowledge', writeRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
@@ -82,7 +81,7 @@ router.post('/:id/acknowledge', requireAuth, requireHomeAccess, async (req, res,
 });
 
 // DELETE /api/handover/:id?home=X
-router.delete('/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });

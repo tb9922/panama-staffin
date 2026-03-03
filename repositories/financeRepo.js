@@ -19,6 +19,8 @@ function shapeResident(row) {
     fnc_amount: f(row.fnc_amount),
     top_up_amount: f(row.top_up_amount), top_up_payer: row.top_up_payer, top_up_contact: row.top_up_contact,
     last_fee_review: d(row.last_fee_review), next_fee_review: d(row.next_fee_review),
+    last_payment_date: d(row.last_payment_date), last_payment_amount: f(row.last_payment_amount),
+    outstanding_balance: f(row.outstanding_balance),
     status: row.status, notes: row.notes,
     version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
@@ -139,6 +141,51 @@ export async function countActiveResidents(homeId, client) {
   return rows[0].count;
 }
 
+// ── Resident Payment Tracking (system-managed) ──────────────────────────────
+
+const OUTSTANDING_STATUSES = "('sent', 'overdue', 'partially_paid')";
+
+export async function recalculateResidentBalance(residentId, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(`
+    UPDATE finance_residents SET outstanding_balance = COALESCE((
+      SELECT SUM(balance_due) FROM finance_invoices
+      WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL
+        AND status IN ${OUTSTANDING_STATUSES}
+        AND balance_due > 0
+    ), 0)
+    WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+    RETURNING outstanding_balance
+  `, [residentId, homeId]);
+  return rows[0]?.outstanding_balance ?? 0;
+}
+
+export async function updateResidentPaymentInfo(residentId, homeId, paymentDate, paymentAmount, client) {
+  const conn = client || pool;
+  await conn.query(`
+    UPDATE finance_residents SET
+      last_payment_date = $3,
+      last_payment_amount = $4,
+      outstanding_balance = COALESCE((
+        SELECT SUM(balance_due) FROM finance_invoices
+        WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL
+          AND status IN ${OUTSTANDING_STATUSES}
+          AND balance_due > 0
+      ), 0)
+    WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
+  `, [residentId, homeId, paymentDate, paymentAmount]);
+}
+
+export async function getResidentsWithOutstandingBalance(homeId, limit = 5) {
+  const { rows } = await pool.query(`
+    SELECT resident_name, outstanding_balance FROM finance_residents
+    WHERE home_id = $1 AND deleted_at IS NULL AND status = 'active'
+      AND outstanding_balance > 0
+    ORDER BY outstanding_balance DESC LIMIT $2
+  `, [homeId, limit]);
+  return rows;
+}
+
 // ── Fee Changes ───────────────────────────────────────────────────────────────
 
 function shapeFeeChange(row) {
@@ -228,10 +275,13 @@ export async function findInvoiceById(id, homeId, client, { forUpdate } = {}) {
 
 export async function getNextInvoiceNumber(homeId, prefix, client) {
   const conn = client || pool;
+  // Advisory lock serializes invoice number generation per home
+  // (FOR UPDATE on LIMIT 1 locks nothing when zero rows match the prefix)
+  await conn.query('SELECT pg_advisory_xact_lock($1)', [homeId]);
   const { rows } = await conn.query(
     `SELECT invoice_number FROM finance_invoices
      WHERE home_id = $1 AND invoice_number LIKE $2
-     ORDER BY invoice_number DESC LIMIT 1 FOR UPDATE`,
+     ORDER BY invoice_number DESC LIMIT 1`,
     [homeId, `${prefix}%`]);
   if (rows.length === 0) return `${prefix}-001`;
   const last = rows[0].invoice_number;
@@ -714,4 +764,30 @@ export async function softDelete(entity, id, homeId, client) {
     `UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL RETURNING id`,
     [id, homeId]);
   return rows.length > 0;
+}
+
+// ── Dashboard integration queries ───────────────────────────────────────────
+
+export async function getPayrollTotal(homeId, from, to) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(total_gross), 0) AS total
+     FROM payroll_runs
+     WHERE home_id = $1 AND status IN ('approved','locked','exported')
+       AND period_start >= $2 AND period_end <= $3`,
+    [homeId, from, to]);
+  return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
+}
+
+export async function getAgencyTotal(homeId, from, to) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(total_cost), 0) AS total
+     FROM agency_shifts
+     WHERE home_id = $1 AND shift_date >= $2 AND shift_date <= $3`,
+    [homeId, from, to]);
+  return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
+}
+
+export async function getRegisteredBeds(homeId) {
+  const { rows } = await pool.query('SELECT config FROM homes WHERE id = $1 AND deleted_at IS NULL', [homeId]);
+  return rows[0]?.config?.registered_beds ?? 0;
 }

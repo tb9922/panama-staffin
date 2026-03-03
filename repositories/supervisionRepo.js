@@ -46,18 +46,34 @@ export async function sync(homeId, supervisionsObj, client) {
   const conn = client || pool;
   if (!supervisionsObj) return;
 
-  const incomingIds = [];
-  for (const sessions of Object.values(supervisionsObj)) {
+  const flat = [];
+  for (const [staffId, sessions] of Object.entries(supervisionsObj)) {
     for (const s of sessions) {
-      incomingIds.push(s.id);
+      flat.push({ staffId, ...s });
     }
   }
 
-  for (const [staffId, sessions] of Object.entries(supervisionsObj)) {
-    for (const s of sessions) {
+  const incomingIds = flat.map(r => r.id);
+
+  if (flat.length > 0) {
+    const COLS_PER_ROW = 8;
+    const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+    for (let i = 0; i < flat.length; i += CHUNK) {
+      const chunk = flat.slice(i, i + CHUNK);
+      const placeholders = [];
+      const values = [];
+      chunk.forEach((s, j) => {
+        const b = j * COLS_PER_ROW + 2;
+        placeholders.push(`($${b},$1,$${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},NOW())`);
+        values.push(
+          s.id, s.staffId, s.date,
+          s.supervisor || null, s.topics || null,
+          s.actions || null, s.next_due || null, s.notes || null
+        );
+      });
       await conn.query(
         `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         VALUES ${placeholders.join(',')}
          ON CONFLICT (home_id, id) DO UPDATE SET
            date       = EXCLUDED.date,
            supervisor = EXCLUDED.supervisor,
@@ -67,8 +83,7 @@ export async function sync(homeId, supervisionsObj, client) {
            notes      = EXCLUDED.notes,
            updated_at = NOW(),
            deleted_at = NULL`,
-        [s.id, homeId, staffId, s.date, s.supervisor || null, s.topics || null,
-         s.actions || null, s.next_due || null, s.notes || null]
+        [homeId, ...values]
       );
     }
   }

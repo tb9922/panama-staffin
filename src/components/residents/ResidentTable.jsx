@@ -35,7 +35,7 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
     const { downloadXLSX } = await import('../../lib/excel.js');
     downloadXLSX('residents.xlsx', [{
       name: 'Residents',
-      headers: ['Name', 'Room / Bed', 'Funding', 'Weekly Fee', 'Admitted', 'Fee Review', 'Status'],
+      headers: ['Name', 'Room / Bed', 'Funding', 'Weekly Fee', 'Admitted', 'Fee Review', 'Outstanding', 'Last Paid', 'Status'],
       rows: residents.map(r => [
         r.resident_name,
         r.bed?.room_number || (r.status === 'active' ? 'No bed' : ''),
@@ -43,6 +43,8 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
         r.weekly_fee != null ? `£${parseFloat(r.weekly_fee).toFixed(2)}` : '',
         r.admission_date || '',
         r.next_fee_review || '',
+        r.outstanding_balance != null ? `£${parseFloat(r.outstanding_balance).toFixed(2)}` : '',
+        r.last_payment_date || '',
         getLabel(r.status, RESIDENT_STATUSES),
       ]),
     }]);
@@ -63,6 +65,8 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
               <th className={TABLE.th + ' text-right'}>Weekly Fee</th>
               <th className={TABLE.th}>Admitted</th>
               <th className={TABLE.th}>Fee Review</th>
+              <th className={TABLE.th + ' text-right'}>Balance</th>
+              <th className={TABLE.th}>Last Paid</th>
               <th className={TABLE.th}>Status</th>
               {isAdmin && <th className={TABLE.th}>Actions</th>}
             </tr>
@@ -76,6 +80,16 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
                 <td className={TABLE.tdMono + ' text-right'}>{formatCurrency(r.weekly_fee)}</td>
                 <td className={TABLE.td}>{r.admission_date || '\u2014'}</td>
                 <td className={TABLE.td}>{renderFeeReview(r)}</td>
+                <td className={TABLE.tdMono + ' text-right'}>
+                  {r.outstanding_balance > 0
+                    ? <span className="text-amber-600 font-medium">{formatCurrency(r.outstanding_balance)}</span>
+                    : <span className="text-green-600">{formatCurrency(0)}</span>}
+                </td>
+                <td className={TABLE.td}>
+                  {r.last_payment_date
+                    ? <div><span>{r.last_payment_date}</span>{r.last_payment_amount != null && <span className="text-xs text-gray-400 ml-1">({formatCurrency(r.last_payment_amount)})</span>}</div>
+                    : <span className="text-gray-400">{'\u2014'}</span>}
+                </td>
                 <td className={TABLE.td}>
                   <span className={BADGE[getStatusBadge(r.status, RESIDENT_STATUSES)]}>{getLabel(r.status, RESIDENT_STATUSES)}</span>
                 </td>

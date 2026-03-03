@@ -2,14 +2,13 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 const sectionSchema = z.enum([
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
@@ -29,7 +28,7 @@ const onboardingSectionSchema = z.object({
 }).strict();
 
 // GET /api/onboarding?home=X
-router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const [onboarding, staffResult] = await Promise.all([
       onboardingRepo.findByHome(req.home.id),
@@ -41,7 +40,7 @@ router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, n
 });
 
 // PUT /api/onboarding/:staffId/:section?home=X — upsert section data
-router.put('/:staffId/:section', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffIdParsed = staffIdSchema.safeParse(req.params.staffId);
     const sectionParsed = sectionSchema.safeParse(req.params.section);
@@ -60,7 +59,7 @@ router.put('/:staffId/:section', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // DELETE /api/onboarding/:staffId/:section?home=X — clear section data
-router.delete('/:staffId/:section', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const staffIdParsed = staffIdSchema.safeParse(req.params.staffId);
     const sectionParsed = sectionSchema.safeParse(req.params.section);

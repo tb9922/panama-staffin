@@ -589,17 +589,16 @@ export async function findDPComplaintById(id, homeId) { return gdprRepo.findDPCo
 export async function createDPComplaint(homeId, data) { return gdprRepo.createDPComplaint(homeId, data); }
 export async function updateDPComplaint(id, homeId, data, version) { return gdprRepo.updateDPComplaint(id, homeId, data, null, version); }
 
-export async function getAccessLog({ limit = 100, offset = 0, homeSlug } = {}) {
-  if (!homeSlug) {
+export async function getAccessLog({ limit = 100, offset = 0, homeSlugs } = {}) {
+  if (!homeSlugs || homeSlugs.length === 0) {
     return gdprRepo.getAccessLog({ limit, offset });
   }
-  // Filter by home — join access_log.home_id to homes.slug
   const { rows } = await pool.query(
     `SELECT al.* FROM access_log al
-     JOIN homes h ON h.id = al.home_id
-     WHERE h.slug = $1
+     JOIN homes h ON h.id = al.home_id AND h.deleted_at IS NULL
+     WHERE h.slug = ANY($1)
      ORDER BY al.ts DESC LIMIT $2 OFFSET $3`,
-    [homeSlug, limit, offset]
+    [homeSlugs, limit, offset]
   );
   return rows;
 }

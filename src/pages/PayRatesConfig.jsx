@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
   getCurrentHome, getLoggedInUser,
@@ -219,83 +220,73 @@ export default function PayRatesConfig() {
       </div>
 
       {/* Add/Edit Modal */}
-      {modal && (
-        <div className={MODAL.overlay} onClick={() => setModal(null)}>
-          <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>{modal.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'}</h2>
-            <div className="space-y-4">
-              <div>
-                <label className={INPUT.label}>Rule Name</label>
-                <input className={INPUT.base} value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. Night Enhancement" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={INPUT.label}>Applies To</label>
-                  <select className={INPUT.select} value={form.applies_to}
-                    onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
-                    {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={INPUT.label}>Rate Type</label>
-                  <select className={INPUT.select} value={form.rate_type}
-                    onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
-                    {Object.entries(RATE_TYPE_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className={INPUT.label}>
-                  Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
-                </label>
-                <input className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
-                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
-                {form.rate_type === 'percentage' && form.amount && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Example: 12hr night shift at £12.00/hr → +£{(12 * 12 * parseFloat(form.amount || 0) / 100).toFixed(2)} enhancement
-                  </p>
-                )}
-              </div>
-              {modal.mode === 'edit' && (
-                <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">
-                  Editing creates a new version of this rule dated today. The previous version is preserved for historical payroll records.
-                </p>
-              )}
+      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal?.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'} size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className={INPUT.label}>Rule Name</label>
+            <input className={INPUT.base} value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Night Enhancement" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Applies To</label>
+              <select className={INPUT.select} value={form.applies_to}
+                onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
+                {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
             </div>
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>
-              <button className={BTN.primary} onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving…' : modal.mode === 'add' ? 'Add Rule' : 'Save Changes'}
-              </button>
+            <div>
+              <label className={INPUT.label}>Rate Type</label>
+              <select className={INPUT.select} value={form.rate_type}
+                onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
+                {Object.entries(RATE_TYPE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>
+              Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
+            </label>
+            <input className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
+              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+              placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
+            {form.rate_type === 'percentage' && form.amount && (
+              <p className="text-xs text-gray-500 mt-1">
+                Example: 12hr night shift at £12.00/hr → +£{(12 * 12 * parseFloat(form.amount || 0) / 100).toFixed(2)} enhancement
+              </p>
+            )}
+          </div>
+          {modal?.mode === 'edit' && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded p-2">
+              Editing creates a new version of this rule dated today. The previous version is preserved for historical payroll records.
+            </p>
+          )}
         </div>
-      )}
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>
+          <button className={BTN.primary} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : modal?.mode === 'add' ? 'Add Rule' : 'Save Changes'}
+          </button>
+        </div>
+      </Modal>
 
       {/* Delete Confirm Modal */}
-      {deleteConfirm && (
-        <div className={MODAL.overlay} onClick={() => setDeleteConfirm(null)}>
-          <div className={MODAL.panelSm} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>Remove Rule</h2>
-            <p className="text-sm text-gray-600">
-              Remove <strong>{deleteConfirm.name}</strong>? This deactivates the rule — it remains visible in historical payroll records but will no longer apply to new calculations.
-            </p>
-            <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => setDeleteConfirm(null)}>Cancel</button>
-              <button className={BTN.danger} onClick={() => handleDelete(deleteConfirm.id)} disabled={saving}>
-                {saving ? 'Removing…' : 'Remove Rule'}
-              </button>
-            </div>
-          </div>
+      <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Remove Rule" size="sm">
+        <p className="text-sm text-gray-600">
+          Remove <strong>{deleteConfirm?.name}</strong>? This deactivates the rule — it remains visible in historical payroll records but will no longer apply to new calculations.
+        </p>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={() => setDeleteConfirm(null)}>Cancel</button>
+          <button className={BTN.danger} onClick={() => deleteConfirm && handleDelete(deleteConfirm.id)} disabled={saving}>
+            {saving ? 'Removing…' : 'Remove Rule'}
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

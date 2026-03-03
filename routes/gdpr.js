@@ -1,15 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
-import { hasAccess } from '../repositories/userHomeRepo.js';
+import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -96,14 +95,14 @@ const dpComplaintUpdateSchema = z.object({
 // ── Data Requests (SAR/Erasure/etc.) ─────────────────────────────────────────
 
 // GET /api/gdpr/requests?home=X
-router.get('/requests', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/requests', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await gdprService.findRequests(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/requests?home=X
-router.post('/requests', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/requests', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = requestBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -114,7 +113,7 @@ router.post('/requests', requireAuth, requireAdmin, requireHomeAccess, async (re
 });
 
 // PUT /api/gdpr/requests/:id?home=X
-router.put('/requests/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/requests/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
@@ -132,7 +131,7 @@ router.put('/requests/:id', requireAuth, requireAdmin, requireHomeAccess, async 
 });
 
 // POST /api/gdpr/requests/:id/gather — trigger SAR data export
-router.post('/requests/:id/gather', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
@@ -146,7 +145,7 @@ router.post('/requests/:id/gather', requireAuth, requireAdmin, requireHomeAccess
 });
 
 // POST /api/gdpr/requests/:id/execute — execute erasure
-router.post('/requests/:id/execute', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
@@ -171,14 +170,14 @@ router.post('/requests/:id/execute', requireAuth, requireAdmin, requireHomeAcces
 // ── Data Breaches ────────────────────────────────────────────────────────────
 
 // GET /api/gdpr/breaches?home=X
-router.get('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/breaches', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await gdprService.findBreaches(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/breaches?home=X
-router.post('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/breaches', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = breachBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -189,7 +188,7 @@ router.post('/breaches', requireAuth, requireAdmin, requireHomeAccess, async (re
 });
 
 // PUT /api/gdpr/breaches/:id?home=X
-router.put('/breaches/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/breaches/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
@@ -207,7 +206,7 @@ router.put('/breaches/:id', requireAuth, requireAdmin, requireHomeAccess, async 
 });
 
 // POST /api/gdpr/breaches/:id/assess — risk assessment
-router.post('/breaches/:id/assess', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid breach ID' });
@@ -227,7 +226,7 @@ router.post('/breaches/:id/assess', requireAuth, requireAdmin, requireHomeAccess
 // ── Retention Schedule ───────────────────────────────────────────────────────
 
 // GET /api/gdpr/retention — schedule + optional scan
-router.get('/retention', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/retention', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
     if (req.query.scan === 'true') {
       if (!req.query.home) return res.status(400).json({ error: 'home parameter required for scan' });
@@ -245,14 +244,14 @@ router.get('/retention', requireAuth, requireAdmin, async (req, res, next) => {
 // ── Consent Records ──────────────────────────────────────────────────────────
 
 // GET /api/gdpr/consent?home=X
-router.get('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/consent', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await gdprService.findConsent(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/consent?home=X
-router.post('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/consent', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = consentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -263,7 +262,7 @@ router.post('/consent', requireAuth, requireAdmin, requireHomeAccess, async (req
 });
 
 // PUT /api/gdpr/consent/:id?home=X
-router.put('/consent/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/consent/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid consent ID' });
@@ -287,14 +286,14 @@ router.put('/consent/:id', requireAuth, requireAdmin, requireHomeAccess, async (
 // ── DP Complaints ────────────────────────────────────────────────────────────
 
 // GET /api/gdpr/complaints?home=X
-router.get('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/complaints', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     res.json(await gdprService.findDPComplaints(req.home.id));
   } catch (err) { next(err); }
 });
 
 // POST /api/gdpr/complaints?home=X
-router.post('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/complaints', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = dpComplaintBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -305,7 +304,7 @@ router.post('/complaints', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // PUT /api/gdpr/complaints/:id?home=X
-router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid complaint ID' });
@@ -324,22 +323,23 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
 
 // ── Access Log ───────────────────────────────────────────────────────────────
 
-// GET /api/gdpr/access-log?home=X — access log scoped to home when ?home= provided
-router.get('/access-log', requireAuth, requireAdmin, async (req, res, next) => {
+// GET /api/gdpr/access-log?home=X — access log scoped to home (or user's homes if omitted)
+router.get('/access-log', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const homeP = homeIdSchema.safeParse(req.query.home);
-    if (!homeP.success) return res.status(400).json({ error: 'Invalid home parameter' });
-    let homeSlug;
-    if (homeP.data) {
+    let homeSlugs;
+    if (homeP.success && homeP.data) {
       const home = await homeRepo.findBySlug(homeP.data);
       if (!home) return res.status(404).json({ error: 'Home not found' });
       const allowed = await hasAccess(req.user.username, home.id);
       if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
-      homeSlug = home.slug;
+      homeSlugs = [home.slug];
+    } else {
+      homeSlugs = await findHomeSlugsForUser(req.user.username);
     }
-    res.json(await gdprService.getAccessLog({ limit, offset, homeSlug }));
+    res.json(await gdprService.getAccessLog({ limit, offset, homeSlugs }));
   } catch (err) { next(err); }
 });
 

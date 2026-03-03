@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getLoggedInUser, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 
@@ -35,13 +36,6 @@ export default function ReceivablesManager() {
   }, [home]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showChaseModal) return;
-    const handler = e => { if (e.key === 'Escape') closeChaseModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showChaseModal]);
 
   async function openChaseModal(invoice) {
     setSelectedInvoice(invoice);
@@ -199,71 +193,66 @@ export default function ReceivablesManager() {
       </div>
 
       {/* Chase Modal */}
-      {showChaseModal && selectedInvoice && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeChaseModal(); }}>
-          <div className={MODAL.panelLg} role="dialog" aria-modal="true" aria-labelledby="chase-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="chase-modal-title" className={MODAL.title}>Chase Log &mdash; {selectedInvoice.invoice_number}</h2>
-            <div className="flex items-center gap-4 mb-4 text-sm">
-              <span><strong>Payer:</strong> {selectedInvoice.payer_name}</span>
-              <span><strong>Outstanding:</strong> <span className="text-red-600 font-bold">{formatCurrency(selectedInvoice.outstanding)}</span></span>
-              <span><strong>Overdue:</strong> {selectedInvoice.days_overdue} days</span>
-            </div>
-
-            {/* Chase History */}
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Chase History</h3>
-            {chases.length === 0 ? (
-              <p className="text-gray-400 text-sm py-3 text-center">No chase records yet</p>
-            ) : (
-              <div className={`${TABLE.wrapper} mb-4`}>
-                <table className={TABLE.table}>
-                  <thead className={TABLE.thead}><tr>
-                    <th className={TABLE.th}>Date</th>
-                    <th className={TABLE.th}>Method</th>
-                    <th className={TABLE.th}>Contact</th>
-                    <th className={TABLE.th}>Outcome</th>
-                    <th className={TABLE.th}>Next Action</th>
-                  </tr></thead>
-                  <tbody>
-                    {chases.map(c => (
-                      <tr key={c.id} className={TABLE.tr}>
-                        <td className={TABLE.td}>{c.chase_date}</td>
-                        <td className={TABLE.td}><span className={BADGE.blue}>{getLabel(c.method, CHASE_METHODS)}</span></td>
-                        <td className={TABLE.td}>{c.contact_name || '\u2014'}</td>
-                        <td className={`${TABLE.td} max-w-48 truncate`}>{c.outcome || '\u2014'}</td>
-                        <td className={TABLE.td}>{c.next_action_date || '\u2014'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Add Chase Form */}
-            <h3 className="text-sm font-semibold text-gray-700 mb-2 mt-4">Record Chase</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={INPUT.label}>Date *</label>
-                <input type="date" value={chaseForm.chase_date || ''} onChange={e => setChaseField('chase_date', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Method *</label>
-                <select value={chaseForm.method || ''} onChange={e => setChaseField('method', e.target.value)} className={INPUT.select}>
-                  {CHASE_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select></div>
-              <div><label className={INPUT.label}>Contact Name</label>
-                <input value={chaseForm.contact_name || ''} onChange={e => setChaseField('contact_name', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Next Action Date</label>
-                <input type="date" value={chaseForm.next_action_date || ''} onChange={e => setChaseField('next_action_date', e.target.value || null)} className={INPUT.base} /></div>
-              <div className="col-span-2"><label className={INPUT.label}>Outcome</label>
-                <textarea rows={2} value={chaseForm.outcome || ''} onChange={e => setChaseField('outcome', e.target.value)} className={INPUT.base} /></div>
-              <div className="col-span-2"><label className={INPUT.label}>Notes</label>
-                <textarea rows={2} value={chaseForm.notes || ''} onChange={e => setChaseField('notes', e.target.value)} className={INPUT.base} /></div>
-            </div>
-
-            <div className={MODAL.footer}>
-              <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
-              {isAdmin && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
-            </div>
-          </div>
+      <Modal isOpen={!!(showChaseModal && selectedInvoice)} onClose={closeChaseModal} title={`Chase Log \u2014 ${selectedInvoice?.invoice_number || ''}`} size="lg">
+        <div className="flex items-center gap-4 mb-4 text-sm">
+          <span><strong>Payer:</strong> {selectedInvoice?.payer_name}</span>
+          <span><strong>Outstanding:</strong> <span className="text-red-600 font-bold">{formatCurrency(selectedInvoice?.outstanding)}</span></span>
+          <span><strong>Overdue:</strong> {selectedInvoice?.days_overdue} days</span>
         </div>
-      )}
+
+        {/* Chase History */}
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Chase History</h3>
+        {chases.length === 0 ? (
+          <p className="text-gray-400 text-sm py-3 text-center">No chase records yet</p>
+        ) : (
+          <div className={`${TABLE.wrapper} mb-4`}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}><tr>
+                <th className={TABLE.th}>Date</th>
+                <th className={TABLE.th}>Method</th>
+                <th className={TABLE.th}>Contact</th>
+                <th className={TABLE.th}>Outcome</th>
+                <th className={TABLE.th}>Next Action</th>
+              </tr></thead>
+              <tbody>
+                {chases.map(c => (
+                  <tr key={c.id} className={TABLE.tr}>
+                    <td className={TABLE.td}>{c.chase_date}</td>
+                    <td className={TABLE.td}><span className={BADGE.blue}>{getLabel(c.method, CHASE_METHODS)}</span></td>
+                    <td className={TABLE.td}>{c.contact_name || '\u2014'}</td>
+                    <td className={`${TABLE.td} max-w-48 truncate`}>{c.outcome || '\u2014'}</td>
+                    <td className={TABLE.td}>{c.next_action_date || '\u2014'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Add Chase Form */}
+        <h3 className="text-sm font-semibold text-gray-700 mb-2 mt-4">Record Chase</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={INPUT.label}>Date *</label>
+            <input type="date" value={chaseForm.chase_date || ''} onChange={e => setChaseField('chase_date', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Method *</label>
+            <select value={chaseForm.method || ''} onChange={e => setChaseField('method', e.target.value)} className={INPUT.select}>
+              {CHASE_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select></div>
+          <div><label className={INPUT.label}>Contact Name</label>
+            <input value={chaseForm.contact_name || ''} onChange={e => setChaseField('contact_name', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Next Action Date</label>
+            <input type="date" value={chaseForm.next_action_date || ''} onChange={e => setChaseField('next_action_date', e.target.value || null)} className={INPUT.base} /></div>
+          <div className="col-span-2"><label className={INPUT.label}>Outcome</label>
+            <textarea rows={2} value={chaseForm.outcome || ''} onChange={e => setChaseField('outcome', e.target.value)} className={INPUT.base} /></div>
+          <div className="col-span-2"><label className={INPUT.label}>Notes</label>
+            <textarea rows={2} value={chaseForm.notes || ''} onChange={e => setChaseField('notes', e.target.value)} className={INPUT.base} /></div>
+        </div>
+
+        <div className={MODAL.footer}>
+          <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
+          {isAdmin && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
+        </div>
+      </Modal>
     </div>
   );
 }

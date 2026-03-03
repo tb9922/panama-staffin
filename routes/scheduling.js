@@ -45,7 +45,7 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
 
   // 2. Get staff record
   const { rows: staffRows } = await conn.query(
-    `SELECT al_entitlement, al_carryover, contract_hours, team, pref, start_date FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    `SELECT al_entitlement, al_carryover, contract_hours, team, pref, start_date FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
     [homeId, staffId]
   );
   if (staffRows.length === 0) return { error: null, al_hours: 0 }; // agency/unknown — skip

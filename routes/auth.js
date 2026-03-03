@@ -55,7 +55,7 @@ router.post('/', loginLimiter, async (req, res, next) => {
 
 // ── Logout (clear cookie) ───────────────────────────────────────────────────
 
-router.post('/logout', (req, res) => {
+router.post('/logout', requireAuth, (req, res) => {
   res.clearCookie('panama_token', { path: '/api' });
   res.json({ ok: true });
 });

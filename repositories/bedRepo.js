@@ -184,7 +184,7 @@ export async function findStaleOccupants(homeId, client) {
     `/* bedRepo – findStaleOccupants */
      SELECT b.* FROM beds b
      INNER JOIN finance_residents fr ON fr.id = b.resident_id
-     WHERE b.home_id = $1 AND b.status = 'occupied'
+     WHERE b.home_id = $1 AND fr.home_id = $1 AND b.status = 'occupied'
        AND fr.status IN ('discharged', 'deceased')`,
     [homeId]
   );

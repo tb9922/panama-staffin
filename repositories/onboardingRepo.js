@@ -27,14 +27,30 @@ export async function sync(homeId, onboardingObj, client) {
   const conn = client || pool;
   if (!onboardingObj) return;
 
-  for (const [staffId, data] of Object.entries(onboardingObj)) {
+  const rows = Object.entries(onboardingObj).map(([staffId, data]) => ({
+    staffId,
+    data: JSON.stringify(data ?? {}),
+  }));
+  if (rows.length === 0) return;
+
+  const COLS_PER_ROW = 2;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW);
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((item, j) => {
+      const b = j * COLS_PER_ROW + 2;
+      placeholders.push(`($1,$${b},$${b + 1},NOW())`);
+      values.push(item.staffId, item.data);
+    });
     await conn.query(
       `INSERT INTO onboarding (home_id, staff_id, data, updated_at)
-       VALUES ($1,$2,$3,NOW())
+       VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, staff_id) DO UPDATE SET
          data       = EXCLUDED.data,
          updated_at = NOW()`,
-      [homeId, staffId, JSON.stringify(data ?? {})]
+      [homeId, ...values]
     );
   }
 }

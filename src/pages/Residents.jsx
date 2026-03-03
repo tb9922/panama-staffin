@@ -70,12 +70,16 @@ export default function Residents() {
       const daysUntil = (new Date(r.next_fee_review) - new Date()) / 86400000;
       return daysUntil <= 30 && daysUntil >= 0;
     });
+    const withBalance = active.filter(r => r.outstanding_balance > 0);
+    const totalOutstanding = withBalance.reduce((sum, r) => sum + (parseFloat(r.outstanding_balance) || 0), 0);
     return {
       activeCount: active.length,
       occupancyPct: active.length > 0 ? Math.round((withBed.length / active.length) * 100) : null,
       inHospital: inHospital.length,
       bedsAvailable,
       reviewsDue: reviewDue.length,
+      totalOutstanding,
+      residentsWithBalance: withBalance.length,
     };
   }, [residents, bedsAvailable]);
 

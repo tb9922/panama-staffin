@@ -148,7 +148,7 @@ export function calculateSpeakUpCulture(data, fromDate, toDate) {
   const concerns = filterByDateRange(data.whistleblowing_concerns || [], fromDate, toDate);
 
   if (concerns.length === 0) {
-    return { score: 50, totalConcerns: 0, resolutionRate: 0, protectionRate: 0, detail: 'No concerns raised — may indicate low awareness' };
+    return { score: 100, totalConcerns: 0, resolutionRate: 0, protectionRate: 0, detail: 'No concerns raised' };
   }
 
   // Concerns logged: having any is positive (scored 40%)

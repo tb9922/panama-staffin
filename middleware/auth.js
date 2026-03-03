@@ -37,6 +37,13 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+export function requirePlatformAdmin(req, res, next) {
+  if (req.user?.role !== 'admin' || !req.user?.is_platform_admin) {
+    return res.status(403).json({ error: 'Platform admin access required' });
+  }
+  next();
+}
+
 /**
  * Middleware: resolve home from ?home= query param, verify user has access.
  * Sets req.home to the home row on success.

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getLoggedInUser, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 
@@ -28,13 +29,6 @@ export default function PayablesManager() {
   }, [home]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handler = e => { if (e.key === 'Escape') closeModal(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showModal]);
 
   const today = new Date().toISOString().slice(0, 10);
   const in28Days = (() => {
@@ -242,58 +236,52 @@ export default function PayablesManager() {
       </div>
 
       {/* Schedule Modal */}
-      {showModal && (
-        <div className={MODAL.overlay} onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className={MODAL.panelLg} role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title" onClick={e => e.stopPropagation()}>
-            <h2 id="schedule-modal-title" className={MODAL.title}>{editing ? 'Edit Payment Schedule' : 'Add Payment Schedule'}</h2>
+      <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Payment Schedule' : 'Add Payment Schedule'} size="lg">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2"><label className={INPUT.label}>Supplier *</label>
+            <input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Category *</label>
+            <select value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={INPUT.select}>
+              {EXPENSE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select></div>
+          <div><label className={INPUT.label}>Frequency *</label>
+            <select value={form.frequency || 'monthly'} onChange={e => set('frequency', e.target.value)} className={INPUT.select}>
+              {SCHEDULE_FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select></div>
+          <div><label className={INPUT.label}>Amount *</label>
+            <input type="number" step="0.01" value={form.amount ?? ''} onChange={e => set('amount', e.target.value)} className={INPUT.base} /></div>
+          <div><label className={INPUT.label}>Next Due *</label>
+            <input type="date" value={form.next_due || ''} onChange={e => set('next_due', e.target.value)} className={INPUT.base} /></div>
+          <div className="col-span-2"><label className={INPUT.label}>Description</label>
+            <input value={form.description || ''} onChange={e => set('description', e.target.value)} className={INPUT.base} /></div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><label className={INPUT.label}>Supplier *</label>
-                <input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Category *</label>
-                <select value={form.category || 'other'} onChange={e => set('category', e.target.value)} className={INPUT.select}>
-                  {EXPENSE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select></div>
-              <div><label className={INPUT.label}>Frequency *</label>
-                <select value={form.frequency || 'monthly'} onChange={e => set('frequency', e.target.value)} className={INPUT.select}>
-                  {SCHEDULE_FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-                </select></div>
-              <div><label className={INPUT.label}>Amount *</label>
-                <input type="number" step="0.01" value={form.amount ?? ''} onChange={e => set('amount', e.target.value)} className={INPUT.base} /></div>
-              <div><label className={INPUT.label}>Next Due *</label>
-                <input type="date" value={form.next_due || ''} onChange={e => set('next_due', e.target.value)} className={INPUT.base} /></div>
-              <div className="col-span-2"><label className={INPUT.label}>Description</label>
-                <input value={form.description || ''} onChange={e => set('description', e.target.value)} className={INPUT.base} /></div>
-
-              <div className="col-span-2 flex items-center gap-6 mt-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.auto_approve || false} onChange={e => set('auto_approve', e.target.checked)}
-                    className="rounded border-gray-300" />
-                  Auto-approve when processed
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.on_hold || false} onChange={e => set('on_hold', e.target.checked)}
-                    className="rounded border-gray-300" />
-                  On hold
-                </label>
-              </div>
-
-              {form.on_hold && (
-                <div className="col-span-2"><label className={INPUT.label}>Hold Reason</label>
-                  <input value={form.hold_reason || ''} onChange={e => set('hold_reason', e.target.value)} className={INPUT.base} /></div>
-              )}
-
-              <div className="col-span-2"><label className={INPUT.label}>Notes</label>
-                <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
-            </div>
-
-            <div className={MODAL.footer}>
-              <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Schedule'}</button>}
-            </div>
+          <div className="col-span-2 flex items-center gap-6 mt-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.auto_approve || false} onChange={e => set('auto_approve', e.target.checked)}
+                className="rounded border-gray-300" />
+              Auto-approve when processed
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.on_hold || false} onChange={e => set('on_hold', e.target.checked)}
+                className="rounded border-gray-300" />
+              On hold
+            </label>
           </div>
+
+          {form.on_hold && (
+            <div className="col-span-2"><label className={INPUT.label}>Hold Reason</label>
+              <input value={form.hold_reason || ''} onChange={e => set('hold_reason', e.target.value)} className={INPUT.base} /></div>
+          )}
+
+          <div className="col-span-2"><label className={INPUT.label}>Notes</label>
+            <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
         </div>
-      )}
+
+        <div className={MODAL.footer}>
+          <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
+          {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Schedule'}</button>}
+        </div>
+      </Modal>
     </div>
   );
 }

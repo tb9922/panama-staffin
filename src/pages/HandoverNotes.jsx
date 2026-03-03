@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getLoggedInUser, getIncidents } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const SHIFTS = [
@@ -259,74 +260,69 @@ export default function HandoverNotes() {
       })}
 
       {/* Add / Edit modal */}
-      {modal && (
-        <div className={MODAL.overlay}>
-          <div className={MODAL.panelSm}>
-            <h2 className={MODAL.title}>{modal === 'add' ? 'Add Handover Entry' : 'Edit Handover Entry'}</h2>
-            <div className="space-y-3">
-              {modal === 'add' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={INPUT.label}>Shift</label>
-                    <select value={form.shift} onChange={e => setForm(f => ({ ...f, shift: e.target.value }))} className={INPUT.select}>
-                      {SHIFTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={INPUT.label}>Category</label>
-                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={INPUT.select}>
-                      {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
+      <Modal isOpen={!!modal} onClose={closeModal} title={modal === 'add' ? 'Add Handover Entry' : 'Edit Handover Entry'} size="sm">
+        <div className="space-y-3">
+          {modal === 'add' && (
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={INPUT.label}>Priority</label>
-                <div className="flex gap-3">
-                  {PRIORITIES.map(p => (
-                    <label key={p.id} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="priority"
-                        value={p.id}
-                        checked={form.priority === p.id}
-                        onChange={() => setForm(f => ({ ...f, priority: p.id }))}
-                      />
-                      <span className={`${BADGE[p.badge]} text-xs`}>{p.label}</span>
-                    </label>
-                  ))}
-                </div>
+                <label className={INPUT.label}>Shift</label>
+                <select value={form.shift} onChange={e => setForm(f => ({ ...f, shift: e.target.value }))} className={INPUT.select}>
+                  {SHIFTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
               </div>
               <div>
-                <label className={INPUT.label}>Content <span className="text-red-500">*</span></label>
-                <textarea
-                  value={form.content}
-                  onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-                  className={`${INPUT.base} h-24 resize-y`}
-                  placeholder="Describe the situation, actions taken, or information to hand over"
-                />
+                <label className={INPUT.label}>Category</label>
+                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={INPUT.select}>
+                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
               </div>
-              {modal === 'add' && todayIncidents.length > 0 && (
-                <div>
-                  <label className={INPUT.label}>Link to Incident (optional)</label>
-                  <select value={form.incident_id} onChange={e => setForm(f => ({ ...f, incident_id: e.target.value }))} className={INPUT.select}>
-                    <option value="">None</option>
-                    {todayIncidents.map(i => (
-                      <option key={i.id} value={i.id}>{i.type} — {i.description?.slice(0, 60) || i.id}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
-            <div className={MODAL.footer}>
-              <button onClick={closeModal} className={BTN.ghost} disabled={saving}>Cancel</button>
-              <button onClick={handleSave} className={BTN.primary} disabled={saving || !form.content.trim()}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+          )}
+          <div>
+            <label className={INPUT.label}>Priority</label>
+            <div className="flex gap-3">
+              {PRIORITIES.map(p => (
+                <label key={p.id} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="priority"
+                    value={p.id}
+                    checked={form.priority === p.id}
+                    onChange={() => setForm(f => ({ ...f, priority: p.id }))}
+                  />
+                  <span className={`${BADGE[p.badge]} text-xs`}>{p.label}</span>
+                </label>
+              ))}
             </div>
           </div>
+          <div>
+            <label className={INPUT.label}>Content <span className="text-red-500">*</span></label>
+            <textarea
+              value={form.content}
+              onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+              className={`${INPUT.base} h-24 resize-y`}
+              placeholder="Describe the situation, actions taken, or information to hand over"
+            />
+          </div>
+          {modal === 'add' && todayIncidents.length > 0 && (
+            <div>
+              <label className={INPUT.label}>Link to Incident (optional)</label>
+              <select value={form.incident_id} onChange={e => setForm(f => ({ ...f, incident_id: e.target.value }))} className={INPUT.select}>
+                <option value="">None</option>
+                {todayIncidents.map(i => (
+                  <option key={i.id} value={i.id}>{i.type} — {i.description?.slice(0, 60) || i.id}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-      )}
+        <div className={MODAL.footer}>
+          <button onClick={closeModal} className={BTN.ghost} disabled={saving}>Cancel</button>
+          <button onClick={handleSave} className={BTN.primary} disabled={saving || !form.content.trim()}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

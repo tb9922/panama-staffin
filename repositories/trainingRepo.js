@@ -43,32 +43,52 @@ export async function sync(homeId, trainingObj, client) {
   const conn = client || pool;
   if (!trainingObj) return;
 
+  // Flatten nested { staffId: { typeId: record } } to flat array
+  const flat = [];
   for (const [staffId, staffRecords] of Object.entries(trainingObj)) {
     for (const [typeId, rec] of Object.entries(staffRecords)) {
-      await conn.query(
-        `INSERT INTO training_records
-           (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
-            certificate_ref, level, notes, updated_at, deleted_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NULL)
-         ON CONFLICT (home_id, staff_id, training_type_id) DO UPDATE SET
-           completed       = EXCLUDED.completed,
-           expiry          = EXCLUDED.expiry,
-           trainer         = EXCLUDED.trainer,
-           method          = EXCLUDED.method,
-           certificate_ref = EXCLUDED.certificate_ref,
-           level           = EXCLUDED.level,
-           notes           = EXCLUDED.notes,
-           updated_at      = NOW(),
-           deleted_at      = NULL`,
-        [
-          homeId, staffId, typeId,
-          rec.completed ?? null, rec.expiry ?? null,
-          rec.trainer ?? null, rec.method ?? null,
-          rec.certificate_ref ?? null, rec.level ?? null,
-          rec.notes ?? null,
-        ]
-      );
+      flat.push({ staffId, typeId, ...rec });
     }
+  }
+  if (flat.length === 0) return;
+
+  // Batch upsert — 9 per-row params, homeId shared as $1
+  const COLS_PER_ROW = 9;
+  const CHUNK = Math.floor(65000 / COLS_PER_ROW); // stay within PG 65535 param limit
+  for (let i = 0; i < flat.length; i += CHUNK) {
+    const chunk = flat.slice(i, i + CHUNK);
+    const placeholders = [];
+    const values = [];
+    chunk.forEach((r, j) => {
+      const b = j * COLS_PER_ROW + 2; // $1 is homeId
+      placeholders.push(
+        `($1,$${b},$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},NOW(),NULL)`
+      );
+      values.push(
+        r.staffId, r.typeId,
+        r.completed ?? null, r.expiry ?? null,
+        r.trainer ?? null, r.method ?? null,
+        r.certificate_ref ?? null, r.level ?? null,
+        r.notes ?? null,
+      );
+    });
+    await conn.query(
+      `INSERT INTO training_records
+         (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
+          certificate_ref, level, notes, updated_at, deleted_at)
+       VALUES ${placeholders.join(',')}
+       ON CONFLICT (home_id, staff_id, training_type_id) DO UPDATE SET
+         completed       = EXCLUDED.completed,
+         expiry          = EXCLUDED.expiry,
+         trainer         = EXCLUDED.trainer,
+         method          = EXCLUDED.method,
+         certificate_ref = EXCLUDED.certificate_ref,
+         level           = EXCLUDED.level,
+         notes           = EXCLUDED.notes,
+         updated_at      = NOW(),
+         deleted_at      = NULL`,
+      [homeId, ...values]
+    );
   }
 }
 

@@ -1,4 +1,5 @@
 import { CARD, BADGE } from '../../lib/design.js';
+import { formatCurrency } from '../../lib/finance.js';
 
 export default function ResidentSummaryBar({ stats }) {
   const occupancyColor = stats.occupancyPct == null ? 'gray'
@@ -6,7 +7,7 @@ export default function ResidentSummaryBar({ stats }) {
     : stats.occupancyPct >= 70 ? 'amber' : 'red';
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
       <div className={CARD.padded}>
         <p className="text-sm text-gray-500">Active Residents</p>
         <p className="text-2xl font-semibold">{stats.activeCount}</p>
@@ -31,6 +32,15 @@ export default function ResidentSummaryBar({ stats }) {
         <p className={`text-2xl font-semibold ${stats.reviewsDue > 0 ? 'text-amber-600' : 'text-green-600'}`}>
           {stats.reviewsDue}
         </p>
+      </div>
+      <div className={CARD.padded}>
+        <p className="text-sm text-gray-500">Outstanding</p>
+        <p className={`text-2xl font-semibold ${stats.totalOutstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
+          {formatCurrency(stats.totalOutstanding || 0)}
+        </p>
+        {stats.residentsWithBalance > 0 && (
+          <p className="text-xs text-gray-500 mt-1">{stats.residentsWithBalance} resident{stats.residentsWithBalance > 1 ? 's' : ''}</p>
+        )}
       </div>
     </div>
   );

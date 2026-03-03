@@ -34,10 +34,24 @@ export function DataProvider({ children }) {
     setCurrentHome(homeId);
   }, []);
 
+  const refreshHomes = useCallback(async () => {
+    try {
+      const h = await loadHomes();
+      setHomes(h);
+      if (!h.find(x => x.id === activeHome)) {
+        const first = h[0]?.id || 'default';
+        setActiveHome(first);
+        setCurrentHome(first);
+      }
+    } catch (e) {
+      console.error('Failed to refresh homes:', e.message);
+    }
+  }, [activeHome]);
+
   return (
     <DataCtx.Provider value={{
       loading, error, homes, activeHome,
-      switchHome, setError, clearError,
+      switchHome, refreshHomes, setError, clearError,
     }}>
       {children}
     </DataCtx.Provider>

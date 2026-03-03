@@ -2,7 +2,7 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import { withTransaction } from '../db.js';
@@ -10,7 +10,6 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const staffIdSchema = z.string().min(1).max(20);
 
 const STAFF_ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
@@ -40,7 +39,7 @@ const staffUpdateSchema = staffBodySchema.partial().extend({
 
 // POST /api/staff?home=X — create a new staff member
 // Client generates the ID (format "S001", "S002" etc.) — server accepts it as-is
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = staffBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -51,7 +50,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/staff/:staffId?home=X — update a staff member
-router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
@@ -71,7 +70,7 @@ router.put('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req
 });
 
 // DELETE /api/staff/:staffId?home=X — soft-delete staff + remove their overrides
-router.delete('/:staffId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });

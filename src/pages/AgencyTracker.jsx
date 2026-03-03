@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
@@ -54,42 +55,39 @@ function ProviderModal({ existing, onSave, onClose }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-        <h2 className={MODAL.title}>{existing ? 'Edit Provider' : 'Add Agency Provider'}</h2>
-        {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
-        <div className="space-y-4">
-          <div>
-            <label className={INPUT.label}>Provider Name *</label>
-            <input className={INPUT.base} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Prestige Nursing" />
-          </div>
-          <div>
-            <label className={INPUT.label}>Contact (optional)</label>
-            <input className={INPUT.base} value={form.contact || ''} onChange={e => set('contact', e.target.value)} placeholder="Email or phone" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={INPUT.label}>Day Rate (£/hr)</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.rate_day} onChange={e => set('rate_day', e.target.value)} placeholder="e.g. 18.50" />
-            </div>
-            <div>
-              <label className={INPUT.label}>Night Rate (£/hr)</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.rate_night} onChange={e => set('rate_night', e.target.value)} placeholder="e.g. 22.00" />
-            </div>
-          </div>
-          {existing && (
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="prov-active" checked={form.active} onChange={e => set('active', e.target.checked)} />
-              <label htmlFor="prov-active" className="text-sm text-gray-700">Active</label>
-            </div>
-          )}
+    <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Provider' : 'Add Agency Provider'}>
+      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
+      <div className="space-y-4">
+        <div>
+          <label className={INPUT.label}>Provider Name *</label>
+          <input className={INPUT.base} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Prestige Nursing" />
         </div>
-        <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <div>
+          <label className={INPUT.label}>Contact (optional)</label>
+          <input className={INPUT.base} value={form.contact || ''} onChange={e => set('contact', e.target.value)} placeholder="Email or phone" />
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Day Rate (£/hr)</label>
+            <input type="number" step="0.01" className={INPUT.base} value={form.rate_day} onChange={e => set('rate_day', e.target.value)} placeholder="e.g. 18.50" />
+          </div>
+          <div>
+            <label className={INPUT.label}>Night Rate (£/hr)</label>
+            <input type="number" step="0.01" className={INPUT.base} value={form.rate_night} onChange={e => set('rate_night', e.target.value)} placeholder="e.g. 22.00" />
+          </div>
+        </div>
+        {existing && (
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="prov-active" checked={form.active} onChange={e => set('active', e.target.checked)} />
+            <label htmlFor="prov-active" className="text-sm text-gray-700">Active</label>
+          </div>
+        )}
       </div>
-    </div>
+      <div className={MODAL.footer}>
+        <button className={BTN.secondary} onClick={onClose}>Cancel</button>
+        <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -158,75 +156,72 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <div className={MODAL.panelLg} onClick={e => e.stopPropagation()}>
-        <h2 className={MODAL.title}>{existing ? 'Edit Agency Shift' : 'Log Agency Shift'}</h2>
-        {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={INPUT.label}>Provider *</label>
-              <select className={INPUT.select} value={form.agency_id} onChange={e => handleProviderChange(e.target.value)}>
-                {providers.filter(p => p.active).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={INPUT.label}>Date *</label>
-              <input type="date" className={INPUT.base} value={form.date} onChange={e => set('date', e.target.value)} />
-            </div>
+    <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Agency Shift' : 'Log Agency Shift'} size="lg">
+      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Provider *</label>
+            <select className={INPUT.select} value={form.agency_id} onChange={e => handleProviderChange(e.target.value)}>
+              {providers.filter(p => p.active).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={INPUT.label}>Shift Code *</label>
-              <select className={INPUT.select} value={form.shift_code} onChange={e => handleShiftChange(e.target.value)}>
-                {SHIFT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={INPUT.label}>Hours *</label>
-              <input type="number" step="0.5" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
-            </div>
-            <div>
-              <label className={INPUT.label}>Rate (£/hr) *</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
-            </div>
+          <div>
+            <label className={INPUT.label}>Date *</label>
+            <input type="date" className={INPUT.base} value={form.date} onChange={e => set('date', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={INPUT.label}>Worker Name (optional)</label>
-              <input className={INPUT.base} value={form.worker_name || ''} onChange={e => set('worker_name', e.target.value)} placeholder="e.g. John Smith" />
-            </div>
-            <div>
-              <label className={INPUT.label}>Role Covered (optional)</label>
-              <input className={INPUT.base} value={form.role_covered || ''} onChange={e => set('role_covered', e.target.value)} placeholder="e.g. Senior Carer" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={INPUT.label}>Invoice Ref (optional)</label>
-              <input className={INPUT.base} value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} placeholder="e.g. INV-2026-042" />
-            </div>
-            <div className="flex items-end pb-2">
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="shift-reconciled" checked={!!form.reconciled} onChange={e => set('reconciled', e.target.checked)} />
-                <label htmlFor="shift-reconciled" className="text-sm text-gray-700">Reconciled</label>
-              </div>
-            </div>
-          </div>
-          {form.hours && form.hourly_rate && (
-            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-800">
-              Total cost: <strong>{fmt(parseFloat(form.hours) * parseFloat(form.hourly_rate))}</strong>
-            </div>
-          )}
         </div>
-        <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Shift'}</button>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className={INPUT.label}>Shift Code *</label>
+            <select className={INPUT.select} value={form.shift_code} onChange={e => handleShiftChange(e.target.value)}>
+              {SHIFT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={INPUT.label}>Hours *</label>
+            <input type="number" step="0.5" className={INPUT.base} value={form.hours} onChange={e => set('hours', e.target.value)} placeholder="e.g. 12" />
+          </div>
+          <div>
+            <label className={INPUT.label}>Rate (£/hr) *</label>
+            <input type="number" step="0.01" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
+          </div>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Worker Name (optional)</label>
+            <input className={INPUT.base} value={form.worker_name || ''} onChange={e => set('worker_name', e.target.value)} placeholder="e.g. John Smith" />
+          </div>
+          <div>
+            <label className={INPUT.label}>Role Covered (optional)</label>
+            <input className={INPUT.base} value={form.role_covered || ''} onChange={e => set('role_covered', e.target.value)} placeholder="e.g. Senior Carer" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={INPUT.label}>Invoice Ref (optional)</label>
+            <input className={INPUT.base} value={form.invoice_ref || ''} onChange={e => set('invoice_ref', e.target.value)} placeholder="e.g. INV-2026-042" />
+          </div>
+          <div className="flex items-end pb-2">
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="shift-reconciled" checked={!!form.reconciled} onChange={e => set('reconciled', e.target.checked)} />
+              <label htmlFor="shift-reconciled" className="text-sm text-gray-700">Reconciled</label>
+            </div>
+          </div>
+        </div>
+        {form.hours && form.hourly_rate && (
+          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-800">
+            Total cost: <strong>{fmt(parseFloat(form.hours) * parseFloat(form.hourly_rate))}</strong>
+          </div>
+        )}
       </div>
-    </div>
+      <div className={MODAL.footer}>
+        <button className={BTN.secondary} onClick={onClose}>Cancel</button>
+        <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Shift'}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -545,17 +540,12 @@ export default function AgencyTracker() {
         />
       )}
 
-      {showShiftModal && providers.filter(p => p.active).length === 0 && (
-        <div className={MODAL.overlay} onClick={() => setShowShiftModal(false)}>
-          <div className={MODAL.panel} onClick={e => e.stopPropagation()}>
-            <h2 className={MODAL.title}>No Active Providers</h2>
-            <p className="text-sm text-gray-600 mb-4">Add at least one active agency provider before logging shifts.</p>
-            <div className={MODAL.footer}>
-              <button className={BTN.primary} onClick={() => { setShowShiftModal(false); setTab('providers'); setShowProvModal(true); }}>Add Provider</button>
-            </div>
-          </div>
+      <Modal isOpen={showShiftModal && providers.filter(p => p.active).length === 0} onClose={() => setShowShiftModal(false)} title="No Active Providers">
+        <p className="text-sm text-gray-600 mb-4">Add at least one active agency provider before logging shifts.</p>
+        <div className={MODAL.footer}>
+          <button className={BTN.primary} onClick={() => { setShowShiftModal(false); setTab('providers'); setShowProvModal(true); }}>Add Provider</button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

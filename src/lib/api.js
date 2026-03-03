@@ -46,7 +46,7 @@ export async function login(username, password) {
   if (!res.ok) throw new Error('Invalid credentials');
   const user = await res.json();
   // JWT is now in HttpOnly cookie (set by server) — only store display info
-  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '' }));
+  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '', isPlatformAdmin: user.isPlatformAdmin || false }));
   return user;
 }
 
@@ -1445,5 +1445,29 @@ export async function revertBedTransition(homeSlug, bedId, reason) {
 export async function moveBedResident(homeSlug, fromBedId, toBedId) {
   return apiFetch(`${API_BASE}/beds/move?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify({ fromBedId, toBedId }),
+  });
+}
+
+// ── Platform Admin ──────────────────────────────────────────────────────────
+
+export async function listPlatformHomes() {
+  return apiFetch(`${API_BASE}/platform/homes`, { headers: authHeaders() });
+}
+
+export async function createPlatformHome(data) {
+  return apiFetch(`${API_BASE}/platform/homes`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updatePlatformHome(id, data) {
+  return apiFetch(`${API_BASE}/platform/homes/${id}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deletePlatformHome(id) {
+  return apiFetch(`${API_BASE}/platform/homes/${id}`, {
+    method: 'DELETE', headers: authHeaders(),
   });
 }

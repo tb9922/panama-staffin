@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../lib/api.js';
 
@@ -202,10 +203,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       </div>
 
       {/* Budget Setting Modal */}
-      {editingBudget === 'default' && (
-        <div className={`${MODAL.overlay} print:hidden`}>
-          <div className={MODAL.panelSm}>
-            <h3 className={MODAL.title}>Set Monthly Budget</h3>
+      <Modal isOpen={editingBudget === 'default'} onClose={() => setEditingBudget(null)} title="Set Monthly Budget" size="sm">
             <div className="space-y-3">
               <div>
                 <label className={INPUT.label}>Total Staff Budget (£/month)</label>
@@ -222,9 +220,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
               <button onClick={() => setEditingBudget(null)} className={BTN.secondary}>Cancel</button>
               <button onClick={saveDefaultBudget} className={BTN.primary}>Save</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -411,10 +407,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       </div>
 
       {/* Per-month budget edit modal */}
-      {editingBudget && editingBudget !== 'default' && (
-        <div className={`${MODAL.overlay} print:hidden`}>
-          <div className={MODAL.panelSm}>
-            <h3 className={MODAL.title}>Budget for {editingBudget}</h3>
+      <Modal isOpen={!!editingBudget && editingBudget !== 'default'} onClose={() => setEditingBudget(null)} title={`Budget for ${editingBudget || ''}`} size="sm">
             <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               className={`${INPUT.base} mb-3`} placeholder="Monthly budget £" />
             <div className={MODAL.footer}>
@@ -428,9 +421,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
               }} className={BTN.secondary}>Use Default</button>
               <button onClick={() => saveBudgetOverride(editingBudget)} className={BTN.primary}>Save</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

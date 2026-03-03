@@ -8,6 +8,19 @@ import { pool } from '../db.js';
 export async function findById(id, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
+    'SELECT * FROM homes WHERE id = $1 AND deleted_at IS NULL',
+    [id],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Find a home by ID without filtering soft-deleted rows.
+ * Used only by platform admin CRUD where deleted status must be checked explicitly.
+ */
+export async function findByIdIncludingDeleted(id, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     'SELECT * FROM homes WHERE id = $1',
     [id],
   );
@@ -21,7 +34,7 @@ export async function findById(id, client) {
  */
 export async function findBySlug(slug) {
   const { rows } = await pool.query(
-    'SELECT * FROM homes WHERE slug = $1',
+    'SELECT * FROM homes WHERE slug = $1 AND deleted_at IS NULL',
     [slug]
   );
   return rows[0] || null;
@@ -34,7 +47,7 @@ export async function findBySlug(slug) {
  */
 export async function findBySlugForUpdate(slug, client) {
   const { rows } = await client.query(
-    'SELECT * FROM homes WHERE slug = $1 FOR UPDATE',
+    'SELECT * FROM homes WHERE slug = $1 AND deleted_at IS NULL FOR UPDATE',
     [slug]
   );
   return rows[0] || null;
@@ -46,7 +59,7 @@ export async function findBySlugForUpdate(slug, client) {
  */
 export async function listAll() {
   const { rows } = await pool.query(
-    'SELECT id, slug, name, config FROM homes ORDER BY name'
+    'SELECT id, slug, name, config FROM homes WHERE deleted_at IS NULL ORDER BY name'
   );
   return rows.map(r => ({
     id: r.slug,
@@ -62,7 +75,7 @@ export async function listAll() {
  */
 export async function listAllWithIds() {
   const { rows } = await pool.query(
-    'SELECT id, slug, name, config FROM homes ORDER BY name'
+    'SELECT id, slug, name, config FROM homes WHERE deleted_at IS NULL ORDER BY name'
   );
   return rows.map(r => ({
     id: r.id,
@@ -85,10 +98,11 @@ export async function upsert(slug, name, configObj, annualLeave, client) {
   const { rows } = await conn.query(
     `INSERT INTO homes (slug, name, config, annual_leave)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (slug) DO UPDATE SET
+     ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE SET
        name = EXCLUDED.name,
        config = EXCLUDED.config,
        annual_leave = EXCLUDED.annual_leave,
+       deleted_at = NULL,
        updated_at = NOW()
      RETURNING *`,
     [slug, name, JSON.stringify(configObj), JSON.stringify(annualLeave || {})]
@@ -122,4 +136,91 @@ export async function updateAnnualLeave(homeId, alObj, client) {
     'UPDATE homes SET annual_leave = $1, updated_at = NOW() WHERE id = $2',
     [JSON.stringify(alObj || {}), homeId]
   );
+}
+
+/**
+ * Check if an active (non-deleted) home with the given slug exists.
+ */
+export async function slugExistsActive(slug) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM homes WHERE slug = $1 AND deleted_at IS NULL LIMIT 1',
+    [slug]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Create a new home with explicit INSERT (never upsert).
+ * @param {string} slug
+ * @param {string} name
+ * @param {object} configObj
+ * @param {object} client - transaction client (required)
+ */
+export async function create(slug, name, configObj, client) {
+  const { rows } = await client.query(
+    `INSERT INTO homes (slug, name, config, annual_leave)
+     VALUES ($1, $2, $3, '{}')
+     RETURNING *`,
+    [slug, name, JSON.stringify(configObj)]
+  );
+  return rows[0];
+}
+
+/**
+ * List all homes with staff/user counts for platform admin.
+ * @param {boolean} includeDeleted
+ */
+export async function listAllWithStats(includeDeleted = false) {
+  const filter = includeDeleted ? '' : 'WHERE h.deleted_at IS NULL';
+  const { rows } = await pool.query(
+    `SELECT h.id, h.slug, h.name, h.config, h.deleted_at, h.updated_at,
+       (SELECT COUNT(*)::int FROM staff s WHERE s.home_id = h.id AND s.deleted_at IS NULL) AS staff_count,
+       (SELECT COUNT(*)::int FROM user_home_access uha WHERE uha.home_id = h.id) AS user_count
+     FROM homes h ${filter}
+     ORDER BY h.name`
+  );
+  return rows.map(r => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.config?.home_name || r.name,
+    beds: r.config?.registered_beds,
+    careType: r.config?.care_type,
+    cycleStartDate: r.config?.cycle_start_date,
+    staffCount: r.staff_count,
+    userCount: r.user_count,
+    deletedAt: r.deleted_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+/**
+ * Soft-delete a home. Must be called within a transaction.
+ */
+export async function softDelete(id, client) {
+  await client.query(
+    'UPDATE homes SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL',
+    [id]
+  );
+}
+
+/**
+ * Update the name column for a home.
+ */
+export async function updateName(id, name, client) {
+  const conn = client || pool;
+  await conn.query(
+    'UPDATE homes SET name = $1, updated_at = NOW() WHERE id = $2',
+    [name, id]
+  );
+}
+
+/**
+ * Count active (non-deleted) homes. Accepts client for transaction use.
+ */
+export async function countActive(client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    "SELECT COUNT(*)::int AS count FROM homes WHERE deleted_at IS NULL"
+  );
+  return rows[0].count;
 }

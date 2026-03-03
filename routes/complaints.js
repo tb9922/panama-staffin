@@ -6,11 +6,10 @@ import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 
 const router = Router();
-router.use(writeRateLimiter);
 const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
@@ -54,7 +53,7 @@ const surveyUpdateSchema = surveyBodySchema.partial().extend({
 });
 
 // GET /api/complaints?home=X
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [complaintsResult, surveysResult] = await Promise.all([
@@ -69,7 +68,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
 });
 
 // POST /api/complaints?home=X
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -80,7 +79,7 @@ router.post('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, 
 });
 
 // PUT /api/complaints/complaints/:id?home=X
-router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -105,7 +104,7 @@ router.put('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, asyn
 });
 
 // DELETE /api/complaints/complaints/:id?home=X
-router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -117,7 +116,7 @@ router.delete('/complaints/:id', requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // POST /api/complaints/surveys?home=X
-router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/surveys', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -128,7 +127,7 @@ router.post('/surveys', requireAuth, requireAdmin, requireHomeAccess, async (req
 });
 
 // PUT /api/complaints/surveys/:id?home=X
-router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/surveys/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -152,7 +151,7 @@ router.put('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (
 });
 
 // DELETE /api/complaints/surveys/:id?home=X
-router.delete('/surveys/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/surveys/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

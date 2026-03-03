@@ -5,9 +5,9 @@ import { getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.j
 
 function getMonday(date) {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
+  const day = d.getUTCDay();
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+  d.setUTCDate(diff);
   return d;
 }
 
