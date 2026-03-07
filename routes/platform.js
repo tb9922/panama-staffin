@@ -7,6 +7,7 @@ import { withTransaction } from '../db.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as auditService from '../services/auditService.js';
+import { DEFAULT_TRAINING_TYPES } from '../shared/training.js';
 
 const router = Router();
 
@@ -41,7 +42,10 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
     agency_rate_day: 18, agency_rate_night: 22, ot_premium: 5, bh_premium_multiplier: 1.5,
     max_consecutive_days: 6, max_al_same_day: 2, al_entitlement_days: 28,
     leave_year_start: '04-01', al_carryover_max: 8,
-    training_types: [],
+    training_types: DEFAULT_TRAINING_TYPES,
+    supervision_frequency_probation: 30,
+    supervision_frequency_standard: 49,
+    supervision_probation_months: 6,
     bank_holidays: [],
     nlw_rate: 12.21,
   };
