@@ -11,6 +11,7 @@ import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { getTrainingTypes } from '../shared/training.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -100,7 +101,7 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, a
     const supervisions = supervisionsResult.rows;
     const appraisals = appraisalsResult.rows;
     const staff = staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active, start_date: s.start_date }));
-    const trainingTypes = req.home.config?.training_types || [];
+    const trainingTypes = getTrainingTypes(req.home.config);
     const supervisionConfig = {
       supervision_frequency_probation: req.home.config?.supervision_frequency_probation ?? 30,
       supervision_frequency_standard: req.home.config?.supervision_frequency_standard ?? 49,
