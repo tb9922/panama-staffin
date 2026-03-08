@@ -42,13 +42,21 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
     const pg = paginationSchema.parse(req.query);
     const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const concerns = concernsResult.rows;
+    const isAdmin = req.user.role === 'admin';
     // Strip raised_by_role from anonymous concerns to prevent de-anonymisation
+    // Strip investigation details for non-admin viewers (GDPR)
     const safe = concerns.map(c => {
-      if (c.anonymous) {
-        const { raised_by_role: _raised_by_role, ...rest } = c;
-        return rest;
+      const stripped = { ...c };
+      if (c.anonymous) delete stripped.raised_by_role;
+      if (!isAdmin) {
+        delete stripped.investigator;
+        delete stripped.investigation_start_date;
+        delete stripped.findings;
+        delete stripped.outcome_details;
+        delete stripped.protection_details;
+        delete stripped.lessons_learned;
       }
-      return c;
+      return stripped;
     });
     res.json({ concerns: safe, _total: concernsResult.total });
   } catch (err) { next(err); }

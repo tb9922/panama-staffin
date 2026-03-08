@@ -82,9 +82,27 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
       incidentRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       staffRepo.findByHome(req.home.id),
     ]);
-    const incidents = incidentsResult.rows;
+    let incidents = incidentsResult.rows;
     const incidentTypes = req.home.config?.incident_types || [];
     const staff = staffResult.rows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
+    // Strip GDPR-sensitive fields for non-admin viewers (safety handover summary preserved)
+    if (req.user.role !== 'admin') {
+      incidents = incidents.map(inc => {
+        const {
+          investigation_lead: _a, investigation_review_date: _b, root_cause: _c,
+          lessons_learned: _d, investigation_closed_date: _e, investigation_start_date: _f,
+          safeguarding_to: _g, safeguarding_reference: _h, safeguarding_date: _i,
+          police_reference: _j, police_contact_date: _k,
+          riddor_reference: _l, riddor_reported_date: _m,
+          cqc_reference: _n, cqc_notified_date: _o,
+          candour_notification_date: _p, candour_letter_sent_date: _q, candour_recipient: _r,
+          msp_outcome_preferences: _s, msp_person_involved: _t,
+          witnesses: _u,
+          ...safe
+        } = inc;
+        return safe;
+      });
+    }
     res.json({ incidents, incidentTypes, staff, _total: incidentsResult.total });
   } catch (err) { next(err); }
 });
