@@ -44,7 +44,8 @@ export default function PayrollDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const r = await getPayrollRuns(homeSlug);
+      const res = await getPayrollRuns(homeSlug);
+      const r = Array.isArray(res) ? res : (res.rows || []);
       setRuns(r);
       // Pre-fill next period on first load
       if (r.length > 0) {
