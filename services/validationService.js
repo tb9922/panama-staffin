@@ -2,6 +2,7 @@
 // No logic changes — these are pure functions operating on the assembled data object.
 import { RIDDOR_CATEGORIES } from '../shared/incidents.js';
 import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
+import { getMinimumWageRate } from '../shared/nmw.js';
 
 function validateALPerDay(data, warnings) {
   const maxAL = data.config.max_al_same_day || 2;
@@ -49,10 +50,11 @@ function validateALEntitlement(data, warnings) {
 }
 
 function validateNLW(data, warnings) {
-  const nlwRate = data.config.nlw_rate || 12.21;
   for (const s of data.staff.filter(s => s.active !== false)) {
-    if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
-      warnings.push(`${s.name}: rate £${s.hourly_rate.toFixed(2)} is below NLW £${nlwRate.toFixed(2)}`);
+    if (s.hourly_rate == null) continue;
+    const { rate, label } = getMinimumWageRate(s.date_of_birth, data.config);
+    if (s.hourly_rate < rate) {
+      warnings.push(`${s.name}: rate £${s.hourly_rate.toFixed(2)} is below ${label} £${rate.toFixed(2)}`);
     }
   }
 }
