@@ -190,10 +190,7 @@ export default function Config() {
             </tbody>
           </table>
         </div>
-        <div className="grid grid-cols-2 gap-4 p-5 pt-4">
-          <Field label="Handover" path="handover_mins" unit="mins" />
-          <Field label="Break Deduction" path="break_deduction" step={0.5} unit="hrs" />
-        </div>
+        <div className="p-5 pt-4" />
       </section>
 
       {/* Minimum Staffing */}
@@ -219,7 +216,6 @@ export default function Config() {
           <Field label="OT Premium" path="ot_premium" step={0.5} unit="/hr" />
           <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />
           <Field label="Agency Night Rate" path="agency_rate_night" unit="/hr" />
-          <Field label="Agency Target (e.g. 0.05 = 5%)" path="agency_target_pct" step={0.01} />
           <Field label="Sleep-In Rate (£ flat per night)" path="sleep_in_rate" step={0.01} unit="/night" />
         </div>
       </section>
@@ -230,8 +226,6 @@ export default function Config() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Max Consecutive Days" path="max_consecutive_days" />
           <Field label="Max AL Same Day" path="max_al_same_day" />
-          <Field label="Float Retainer" path="float_retainer_weekly" unit="/wk" />
-          <Field label="Weekly OT Cap" path="weekly_ot_cap" unit="shifts" />
         </div>
         <div className="mt-4 space-y-2">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">

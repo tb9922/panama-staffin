@@ -91,7 +91,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHome
     const currentRecord = current[idParsed.data];
     if (!currentRecord) return res.status(404).json({ error: 'Care certificate record not found' });
     const bodyParsed = careCertUpdateSchema.safeParse(req.body);
-    if (!bodyParsed.success) return res.status(400).json({ error: 'Validation failed', issues: bodyParsed.error.issues });
+    if (!bodyParsed.success) return zodError(res, bodyParsed);
     // Deep merge standards to avoid overwriting other standards on single-standard update
     const updated = { ...currentRecord, ...bodyParsed.data };
     if (bodyParsed.data.standards && currentRecord.standards) {

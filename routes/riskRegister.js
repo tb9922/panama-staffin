@@ -38,7 +38,9 @@ const riskBodySchema = z.object({
   next_review:          dateSchema.optional(),
   status:               z.string().max(50).nullable().optional(),
 });
-const riskUpdateSchema = riskBodySchema.partial();
+const riskUpdateSchema = riskBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/risk-register?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -69,7 +71,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
     if (!parsed.success) return zodError(res, parsed);
     const existing = await riskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const risk = await riskRepo.update(idParsed.data, req.home.id, parsed.data, version);
     if (risk === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

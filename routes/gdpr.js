@@ -33,6 +33,7 @@ const requestUpdateSchema = z.object({
   notes:             z.string().max(2000).nullable().optional(),
   completed_date:    dateSchema.optional(),
   completed_by:      z.string().max(100).optional(),
+  _version:          z.number().int().nonnegative().optional(),
 });
 
 const breachBodySchema = z.object({
@@ -59,6 +60,7 @@ const breachUpdateSchema = z.object({
   root_cause:         z.string().max(5000).nullable().optional(),
   preventive_measures: z.string().max(5000).nullable().optional(),
   status:             z.enum(['open', 'contained', 'resolved', 'closed']).optional(),
+  _version:           z.number().int().nonnegative().optional(),
 });
 
 const consentBodySchema = z.object({
@@ -87,6 +89,7 @@ const dpComplaintUpdateSchema = z.object({
   ico_reference:   z.string().max(100).optional(),
   resolution:      z.string().max(5000).nullable().optional(),
   resolution_date: dateSchema.optional(),
+  _version:        z.number().int().nonnegative().optional(),
 });
 
 // ── Data Requests (SAR/Erasure/etc.) ─────────────────────────────────────────
@@ -118,7 +121,7 @@ router.put('/requests/:id', writeRateLimiter, requireAuth, requireAdmin, require
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findRequestById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Request not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
@@ -193,7 +196,7 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireAdmin, require
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findBreachById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Breach not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
@@ -266,11 +269,12 @@ router.put('/consent/:id', writeRateLimiter, requireAuth, requireAdmin, requireH
     const parsed = z.object({
       withdrawn: z.string().max(100).nullable().optional(),
       notes: z.string().max(2000).nullable().optional(),
+      _version: z.number().int().nonnegative().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findConsentById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Consent record not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateConsent(idP.data, req.home.id, parsed.data, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
@@ -308,7 +312,7 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requi
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findDPComplaintById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Complaint not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateDPComplaint(idP.data, req.home.id, parsed.data, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);

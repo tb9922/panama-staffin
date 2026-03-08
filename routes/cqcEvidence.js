@@ -20,7 +20,9 @@ const evidenceBodySchema = z.object({
   date_from:         dateSchema.optional(),
   date_to:           dateSchema.optional(),
 });
-const evidenceUpdateSchema = evidenceBodySchema.partial();
+const evidenceUpdateSchema = evidenceBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/cqc-evidence?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -51,7 +53,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
     if (!parsed.success) return zodError(res, parsed);
     const existing = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const item = await cqcEvidenceRepo.update(idParsed.data, req.home.id, parsed.data, version);
     if (item === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

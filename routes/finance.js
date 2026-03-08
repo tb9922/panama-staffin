@@ -16,6 +16,10 @@ const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
+const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : undefined;
+const safeDate = v => (typeof v === 'string' && dateRe.test(v)) ? v : undefined;
+const safeInt = v => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : undefined; };
 
 function handleConstraintError(err, res) {
   if (err.code === '23505') return res.status(409).json({ error: 'Duplicate record — invoice number already exists' });
@@ -49,7 +53,9 @@ const residentBodySchema = z.object({
   _fee_change_reason: z.string().max(500).optional(),
 });
 
-const residentUpdateSchema = residentBodySchema.partial();
+const residentUpdateSchema = residentBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Invoice Schemas ───────────────────────────────────────────────────────────
 
@@ -76,7 +82,9 @@ const invoiceBodySchema = z.object({
   lines: z.array(invoiceLineSchema).optional(),
 });
 
-const invoiceUpdateSchema = invoiceBodySchema.partial();
+const invoiceUpdateSchema = invoiceBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 const paymentSchema = z.object({
   amount: z.coerce.number().positive('Payment amount must be greater than zero'),
@@ -110,7 +118,9 @@ const expenseBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const expenseUpdateSchema = expenseBodySchema.partial();
+const expenseUpdateSchema = expenseBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Chase Log Schema ─────────────────────────────────────────────────────────
 
@@ -142,7 +152,9 @@ const paymentScheduleBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial();
+const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
@@ -150,9 +162,9 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial();
 router.get('/residents/with-beds', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const filters = {};
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.funding_type) filters.fundingType = req.query.funding_type;
-    if (req.query.search) filters.search = req.query.search;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.funding_type) filters.fundingType = safeStr(req.query.funding_type);
+    if (req.query.search) filters.search = safeStr(req.query.search, 200);
     const result = await financeService.findResidentsWithBeds(req.home.id, filters);
     res.json(result);
   } catch (err) { next(err); }
@@ -162,8 +174,8 @@ router.get('/residents', readRateLimiter, requireAuth, requireAdmin, requireHome
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.funding_type) filters.fundingType = req.query.funding_type;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.funding_type) filters.fundingType = safeStr(req.query.funding_type);
     res.json(await financeService.findResidents(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -196,7 +208,7 @@ router.put('/residents/:id', writeRateLimiter, requireAuth, requireAdmin, requir
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findResidentById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Resident not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateResident(idP.data, req.home.id, parsed.data, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -234,11 +246,11 @@ router.get('/invoices', readRateLimiter, requireAuth, requireAdmin, requireHomeA
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.payer_type) filters.payerType = req.query.payer_type;
-    if (req.query.resident_id) filters.residentId = parseInt(req.query.resident_id);
-    if (req.query.from) filters.from = req.query.from;
-    if (req.query.to) filters.to = req.query.to;
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.payer_type) filters.payerType = safeStr(req.query.payer_type);
+    if (req.query.resident_id) { const rid = safeInt(req.query.resident_id); if (rid) filters.residentId = rid; }
+    if (req.query.from) { const d = safeDate(req.query.from); if (d) filters.from = d; }
+    if (req.query.to) { const d = safeDate(req.query.to); if (d) filters.to = d; }
     res.json(await financeService.findInvoices(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -274,7 +286,7 @@ router.put('/invoices/:id', writeRateLimiter, requireAuth, requireAdmin, require
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findInvoiceById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Invoice not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, parsed.data, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -322,10 +334,10 @@ router.get('/expenses', readRateLimiter, requireAuth, requireAdmin, requireHomeA
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
-    if (req.query.category) filters.category = req.query.category;
-    if (req.query.status) filters.status = req.query.status;
-    if (req.query.from) filters.from = req.query.from;
-    if (req.query.to) filters.to = req.query.to;
+    if (req.query.category) filters.category = safeStr(req.query.category);
+    if (req.query.status) filters.status = safeStr(req.query.status);
+    if (req.query.from) { const d = safeDate(req.query.from); if (d) filters.from = d; }
+    if (req.query.to) { const d = safeDate(req.query.to); if (d) filters.to = d; }
     res.json(await financeService.findExpenses(req.home.id, filters));
   } catch (err) { next(err); }
 });
@@ -358,7 +370,7 @@ router.put('/expenses/:id', writeRateLimiter, requireAuth, requireAdmin, require
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findExpenseById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updateExpense(idP.data, req.home.id, parsed.data, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -471,7 +483,7 @@ router.put('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAdmin
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findPaymentScheduleById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Payment schedule not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, parsed.data, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -510,8 +522,8 @@ router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAd
 router.get('/dashboard', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const now = new Date();
-    const from = req.query.from || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const to = req.query.to || now.toISOString().slice(0, 10);
+    const from = safeDate(req.query.from) || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = safeDate(req.query.to) || now.toISOString().slice(0, 10);
     if (from > to) return res.status(400).json({ error: '"from" date must not be after "to" date' });
     res.json(await financeService.getFinanceDashboard(req.home.id, from, to));
   } catch (err) { next(err); }

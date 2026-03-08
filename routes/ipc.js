@@ -42,7 +42,9 @@ const ipcBodySchema = z.object({
   }).nullable().optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
-const ipcUpdateSchema = ipcBodySchema.partial();
+const ipcUpdateSchema = ipcBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/ipc?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -80,7 +82,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await ipcRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const audit = await ipcRepo.update(idParsed.data, req.home.id, updates, version);
     if (audit === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

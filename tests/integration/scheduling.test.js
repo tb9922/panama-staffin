@@ -485,15 +485,6 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts al_entitlement_days: 0', () => {
-    const result = homeConfigSchema.safeParse({ al_entitlement_days: 0 });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects al_entitlement_days > 365', () => {
-    const result = homeConfigSchema.safeParse({ al_entitlement_days: 366 });
-    expect(result.success).toBe(false);
-  });
 });
 
 // ── S3: PII filtering in homeService ─────────────────────────────────────────

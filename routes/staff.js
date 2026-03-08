@@ -37,7 +37,9 @@ const staffBodySchema = z.object({
   al_carryover:    z.number().min(0).max(500).optional(),
   leaving_date:    optDate,
 });
-const staffUpdateSchema = staffBodySchema.partial();
+const staffUpdateSchema = staffBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // POST /api/staff?home=X — create a new staff member
 // Client generates the ID (format "S001", "S002" etc.) — server accepts it as-is
@@ -60,7 +62,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHome
     if (!parsed.success) return zodError(res, parsed);
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const staff = await staffRepo.updateOne(req.home.id, idParsed.data, parsed.data, version);
     if (staff === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

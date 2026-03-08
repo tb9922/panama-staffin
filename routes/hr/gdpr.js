@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../../errors.js';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
@@ -17,7 +18,7 @@ const dateParamSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = purgeBodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    if (!parsed.success) return zodError(res, parsed);
     const { retention_years: retentionYears, dry_run: dryRun } = parsed.data;
     const counts = await hrRepo.purgeExpiredRecords(req.home.id, retentionYears, dryRun);
     // Also purge audit log entries beyond retention period

@@ -1,3 +1,4 @@
+import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
@@ -47,7 +48,7 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireAdmin, re
       return res.status(400).json({ error: 'Invalid staffId or section' });
     }
     const bodyParsed = onboardingSectionSchema.safeParse(req.body);
-    if (!bodyParsed.success) return res.status(400).json({ error: 'Validation failed', issues: bodyParsed.error.issues });
+    if (!bodyParsed.success) return zodError(res, bodyParsed);
     const allOnboarding = await onboardingRepo.findByHome(req.home.id);
     const beforeSection = allOnboarding[staffIdParsed.data]?.[sectionParsed.data] ?? null;
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data);

@@ -2,6 +2,7 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/a
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { diffFields } from '../../lib/hrFieldMappers.js';
+import { z } from 'zod';
 import { idSchema } from './schemas.js';
 
 // ── Case Route Factory ──────────────────────────────────────────────────────
@@ -52,10 +53,11 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
     try {
       const idParsed = idSchema.safeParse(req.params.id);
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
-      const parsed = updateSchema.safeParse(req.body);
+      const versionedSchema = updateSchema.extend({ _version: z.number().int().nonnegative().optional() });
+      const parsed = versionedSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
 
-      const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+      const version = parsed.data._version != null ? parsed.data._version : null;
       const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
       if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
 

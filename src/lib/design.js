@@ -66,9 +66,9 @@ export const TABLE = {
 // ── Modals ────────────────────────────────────────────────────────────────────
 export const MODAL = {
   overlay:  'fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50',
-  panel:    'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-modal-in',
-  panelLg:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 animate-modal-in',
-  panelSm:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-modal-in',
+  panel:    'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
+  panelLg:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
+  panelSm:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
   panelXl:   'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
   panelWide: 'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
   title:    'text-lg font-semibold text-gray-900 mb-4',

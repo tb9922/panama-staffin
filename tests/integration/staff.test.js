@@ -238,7 +238,7 @@ describe('PUT /api/staff/:id — update', () => {
       .put('/api/staff/ST010')
       .query({ home: homeASlug })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Stale Update', _version: String(staleVersion) })
+      .send({ name: 'Stale Update', _version: staleVersion })
       .expect(409);
 
     expect(res.body.error).toMatch(/modified/i);

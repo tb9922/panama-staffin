@@ -134,6 +134,13 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     // Pre-load SSP configs once for the run (pick the right row per date inside the loop)
     const allSSPConfigs = await sspRepo.getAllSSPConfigs(client);
 
+    // Pre-load all timesheets for the period to avoid N+1 queries (staff × dates)
+    const allTimesheets = await timesheetRepo.findByHomePeriod(homeId, run.period_start, run.period_end, null, null, client);
+    const tsMap = new Map();
+    for (const ts of allTimesheets) {
+      tsMap.set(`${ts.staff_id}:${ts.date}`, ts);
+    }
+
     // Pre-load constant tax/pension config once for the run (same for all staff)
     const taxYear       = getTaxYear(new Date(run.period_end));
     const periodsInYear = run.pay_frequency === 'weekly' ? 52 : run.pay_frequency === 'fortnightly' ? 26 : 12;
@@ -211,7 +218,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (!isWorkingShift(shift) || isAgencyShift(shift)) continue;
 
         // Hours: approved/locked timesheet > config default
-        const ts = await timesheetRepo.findByStaffDate(homeId, s.id, date, client);
+        const ts = tsMap.get(`${s.id}:${date}`) || null;
         let hours;
         if (ts && ['approved', 'locked'].includes(ts.status) && ts.payable_hours != null) {
           hours = parseFloat(ts.payable_hours);

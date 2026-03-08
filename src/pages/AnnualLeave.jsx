@@ -305,7 +305,6 @@ export default function AnnualLeave() {
                   <th className={TABLE.th}>Name</th>
                   <th className={TABLE.th}>Team</th>
                   <th className={`${TABLE.th} text-center`}>Entitled</th>
-                  <th className={`${TABLE.th} text-center`}>Earned</th>
                   <th className={`${TABLE.th} text-center`}>Used</th>
                   <th className={`${TABLE.th} text-center`}>Left</th>
                   <th className={TABLE.th}>Progress</th>
@@ -331,11 +330,10 @@ export default function AnnualLeave() {
                         {acc.annualEntitlementHours.toFixed(1)}h
                         {acc.carryoverHours > 0 && <span className={`ml-1 ${BADGE.amber}`}>+{acc.carryoverHours.toFixed(1)}h</span>}
                       </td>
-                      <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.accruedHours.toFixed(1)}</td>
                       <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.usedHours.toFixed(1)}</td>
                       <td className={`${TABLE.td} text-center`}>
-                        <span className={`font-medium text-sm ${acc.remainingHours < 0 ? 'text-red-600' : acc.remainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {acc.remainingHours.toFixed(1)}h
+                        <span className={`font-medium text-sm ${acc.yearRemainingHours < 0 ? 'text-red-600' : acc.yearRemainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {acc.yearRemainingHours.toFixed(1)}h
                         </span>
                       </td>
                       <td className={TABLE.td}>

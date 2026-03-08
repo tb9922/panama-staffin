@@ -29,7 +29,9 @@ const dolsBodySchema = z.object({
   next_review_date:       dateSchema.optional(),
   notes:                  z.string().max(5000).nullable().optional(),
 });
-const dolsUpdateSchema = dolsBodySchema.partial();
+const dolsUpdateSchema = dolsBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 const mcaBodySchema = z.object({
   resident_name:          z.string().min(1).max(200),
@@ -41,7 +43,9 @@ const mcaBodySchema = z.object({
   next_review_date:       dateSchema.optional(),
   notes:                  z.string().max(5000).nullable().optional(),
 });
-const mcaUpdateSchema = mcaBodySchema.partial();
+const mcaUpdateSchema = mcaBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 // GET /api/dols?home=X — viewers (shift leads, seniors) need DoLS status for residents
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
@@ -79,7 +83,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dolsRepo.findDolsById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data, version);
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
@@ -122,7 +126,7 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeA
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dolsRepo.findMcaById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const record = await dolsRepo.updateMca(idParsed.data, req.home.id, parsed.data, version);
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
