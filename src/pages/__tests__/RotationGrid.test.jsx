@@ -36,13 +36,6 @@ function renderAdmin() {
   });
 }
 
-function renderViewer() {
-  api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-  return renderWithProviders(<RotationGrid />, {
-    user: { username: 'viewer', role: 'viewer' },
-  });
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('RotationGrid', () => {

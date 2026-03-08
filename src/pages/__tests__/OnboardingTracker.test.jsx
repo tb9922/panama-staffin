@@ -79,13 +79,6 @@ function renderAdmin() {
   });
 }
 
-function renderViewer() {
-  api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-  return renderWithProviders(<OnboardingTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
-  });
-}
-
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {

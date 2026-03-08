@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_STAFF, MOCK_CONFIG } from '../../test/fixtures/schedulingData.js';
 import AnnualLeave from '../AnnualLeave.jsx';

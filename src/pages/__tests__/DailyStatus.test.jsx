@@ -36,13 +36,6 @@ function renderAdmin() {
   });
 }
 
-function renderViewer() {
-  api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-  return renderWithProviders(<DailyStatus />, {
-    route: `/day/${FIXED_DATE}`,
-    user: { username: 'viewer', role: 'viewer' },
-  });
-}
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 

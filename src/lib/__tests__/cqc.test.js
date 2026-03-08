@@ -11,7 +11,6 @@ import {
   calculateTrainingBreakdown,
   calculateSafeguardingTrainingPct,
   calculateDbsCompliancePct,
-  calculateOnboardingCompletionPct,
   calculateFireDrillCompliancePct,
   calculateAppraisalCompletionPct,
   calculateMcaTrainingCompliancePct,
@@ -52,13 +51,6 @@ function baseConfig() {
     al_entitlement_days: 28,
     bank_holidays: [],
   };
-}
-
-function makeTrainingRecord(typeId, completed, refresherMonths = 12) {
-  const d = new Date(completed);
-  d.setMonth(d.getMonth() + refresherMonths);
-  const expiry = d.toISOString().slice(0, 10);
-  return { [typeId]: { completed, expiry, trainer: 'Test', method: 'classroom' } };
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────

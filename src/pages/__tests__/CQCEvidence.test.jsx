@@ -39,7 +39,6 @@ vi.mock('../../hooks/useLiveDate.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
-import { downloadXLSX } from '../../lib/excel.js';
 
 // ── Fixture data ───────────────────────────────────────────────────────────────
 

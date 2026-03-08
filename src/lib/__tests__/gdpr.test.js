@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateDeadline, calculateICODeadline, daysUntilDeadline, isOverdue,
-  hoursUntilICODeadline, assessBreachRisk, calculateGdprComplianceScore,
+  assessBreachRisk, calculateGdprComplianceScore,
   getGdprAlerts, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
   REQUEST_TYPES, LEGAL_BASES, DATA_CATEGORIES,
 } from '../gdpr.js';

@@ -19,7 +19,7 @@ vi.mock('../../lib/api.js', async () => {
 });
 
 vi.mock('../../lib/payroll.js', () => ({
-  suggestNextPeriod: vi.fn((lastRun, freq) => ({
+  suggestNextPeriod: vi.fn(() => ({
     start: '2026-03-01',
     end: '2026-03-31',
   })),
