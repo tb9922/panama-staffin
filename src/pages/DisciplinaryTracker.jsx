@@ -3,7 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import {
-  getCurrentHome, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
+  getCurrentHome, getLoggedInUser, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
 } from '../lib/api.js';
 import {
@@ -47,6 +47,7 @@ export default function DisciplinaryTracker() {
   const [jsonErrors, setJsonErrors] = useState({});
   useDirtyGuard(showModal);
   const home = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const editReqRef = useRef(0);
   useEffect(() => setOffset(0), [filterStaff, filterStatus]);
 
@@ -183,7 +184,7 @@ export default function DisciplinaryTracker() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>}
         </div>
       </div>
 
@@ -218,7 +219,7 @@ export default function DisciplinaryTracker() {
             <tbody>
               {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No disciplinary cases</td></tr>}
               {cases.map(c => (
-                <tr key={c.id} className={TABLE.tr + ' cursor-pointer'} onClick={() => openEdit(c)}>
+                <tr key={c.id} className={`${TABLE.tr}${isAdmin ? ' cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(c)}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
                   <td className={TABLE.td}>{c.date_raised}</td>
                   <td className={TABLE.td}>{DISCIPLINARY_CATEGORIES.find(cat => cat.id === c.category)?.name || c.category}</td>
