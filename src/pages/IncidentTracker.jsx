@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
-import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {

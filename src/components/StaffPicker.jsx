@@ -11,6 +11,7 @@ async function loadStaff(home) {
   return list;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearStaffCache() { staffCache.clear(); }
 
 export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
@@ -21,10 +22,10 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
     const home = getCurrentHome();
     if (!home) return;
     let cancelled = false;
-    setLoading(true);
+    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     loadStaff(home).then(list => {
       if (!cancelled) { setStaff(list); setLoading(false); }
-    }).catch(() => { if (!cancelled) setLoading(false); });
+    }).catch((err) => { if (!cancelled) { setLoading(false); console.error('Failed to load staff list', err); } });
     return () => { cancelled = true; };
   }, []);
 

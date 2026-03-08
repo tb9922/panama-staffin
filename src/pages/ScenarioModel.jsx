@@ -84,6 +84,7 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
   const annualSaving = (withoutKill28 - withKill28) / 28 * 365;
 
   // Winter scenarios
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const winterResults = useMemo(() => {
     const floatPool = schedData.staff.filter(s => s.team === 'Float' && s.active !== false).length;
     const otCap = config.weekly_ot_cap || 8;

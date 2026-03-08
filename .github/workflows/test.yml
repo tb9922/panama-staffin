@@ -42,11 +42,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Security audit
         run: npm audit --audit-level=moderate
-        continue-on-error: true
 
       - name: Run database migrations
         run: node scripts/migrate.js

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { BTN, INPUT, MODAL, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES, getLabel, formatCurrency } from '../../lib/finance.js';
 import { updateFinanceResident, getFinanceFeeHistory } from '../../lib/api.js';

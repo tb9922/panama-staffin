@@ -28,7 +28,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
   const titleId = useId();
 
   // Keep ref fresh without triggering effect re-runs
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; });
 
   // Focus trap + Escape key + restore focus
   useEffect(() => {
