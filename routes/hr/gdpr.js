@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
@@ -6,10 +7,18 @@ import * as auditRepo from '../../repositories/auditRepo.js';
 
 const router = Router();
 
+const purgeBodySchema = z.object({
+  retention_years: z.coerce.number().int().min(6).max(99).default(6),
+  dry_run: z.boolean().default(true),
+});
+
+const dateParamSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const retentionYears = Math.max(1, parseInt(req.body.retention_years, 10) || 6);
-    const dryRun = req.body.dry_run !== false;
+    const parsed = purgeBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const { retention_years: retentionYears, dry_run: dryRun } = parsed.data;
     const counts = await hrRepo.purgeExpiredRecords(req.home.id, retentionYears, dryRun);
     // Also purge audit log entries beyond retention period
     const retentionDays = retentionYears * 365;
@@ -23,8 +32,8 @@ router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess
 
 router.get('/admin/audit-export', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
-    const from = req.query.from || '1970-01-01';
-    const to = req.query.to || '9999-12-31';
+    const from = dateParamSchema.safeParse(req.query.from).success ? req.query.from : '1970-01-01';
+    const to = dateParamSchema.safeParse(req.query.to).success ? req.query.to : '9999-12-31';
     const rows = await auditRepo.exportHrByHome(req.home.slug, from, to);
     res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${req.home.slug}-${from}-${to}.json"`);
     res.json(rows);
