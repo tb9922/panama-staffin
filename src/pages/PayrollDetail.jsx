@@ -38,7 +38,7 @@ function fmtHrs(n) {
 async function downloadWithAuth(url, filename) {
   const res = await fetch(url, { credentials: 'same-origin' });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch(() => ({ error: 'Invalid response' }));
     throw new Error(body.error || `Export failed (${res.status})`);
   }
   const blob = await res.blob();
@@ -71,7 +71,7 @@ export default function PayrollDetail() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(() => {});
+    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
   }, []);
 
   // staffMap from scheduling API for name/role lookup

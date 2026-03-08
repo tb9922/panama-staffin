@@ -97,10 +97,10 @@ function DashboardInner({ schedData }) {
     if (!home) return;
     let cancelled = false;
     Promise.all([
-      getHrStats(home).catch(() => null),
-      getHrWarnings(home).catch(() => []),
-      getFinanceAlerts(home).catch(() => []),
-      getDashboardSummary(home).catch(() => null),
+      getHrStats(home).catch(e => { console.warn('Failed to load HR stats:', e.message); return null; }),
+      getHrWarnings(home).catch(e => { console.warn('Failed to load HR warnings:', e.message); return []; }),
+      getFinanceAlerts(home).catch(e => { console.warn('Failed to load finance alerts:', e.message); return []; }),
+      getDashboardSummary(home).catch(e => { console.warn('Failed to load dashboard summary:', e.message); return null; }),
     ]).then(([stats, warnings, finAlerts, dashSummary]) => {
       if (cancelled) return;
       setHrData({ stats, warnings: warnings || [] });

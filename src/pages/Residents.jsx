@@ -39,7 +39,7 @@ export default function Residents() {
       if (searchQuery) filters.search = searchQuery;
       const [data, bedsData] = await Promise.all([
         getResidentsWithBeds(home, filters),
-        getBeds(home).catch(() => null),
+        getBeds(home).catch(e => { console.warn('Failed to load beds:', e.message); return null; }),
       ]);
       setResidents(data.rows || []);
       setTotal(data.total || 0);
