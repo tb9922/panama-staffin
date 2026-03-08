@@ -5,6 +5,7 @@ import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember, getLoggedInUser } from '../lib/api.js';
+import { getMinimumWageRate } from '../../shared/nmw.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -65,7 +66,7 @@ export default function StaffRegister() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  const nlwRate = config?.nlw_rate || 12.21;
+  const nlwRate = config?.nlw_rate || 12.71;
 
   const staff = useMemo(() => {
     let list = [...allStaff];
@@ -348,9 +349,7 @@ export default function StaffRegister() {
                   <input type="number" step="0.5" value={newStaff.hourly_rate}
                     onChange={e => setNewStaff({ ...newStaff, hourly_rate: parseFloat(e.target.value) || 0 })}
                     className={INPUT.base} />
-                  {newStaff.hourly_rate < nlwRate && (
-                    <p className="text-xs text-red-600 mt-1">Below NLW (£{nlwRate.toFixed(2)})</p>
-                  )}
+                  {(() => { const mw = getMinimumWageRate(newStaff.date_of_birth, config); return newStaff.hourly_rate < mw.rate ? <p className="text-xs text-red-600 mt-1">Below {mw.label} (£{mw.rate.toFixed(2)})</p> : null; })()}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -484,20 +483,16 @@ export default function StaffRegister() {
                         <div>
                           <div className="flex items-center gap-0.5">
                             <span className="text-xs text-gray-400">£</span>
-                            <input type="number" step="0.25" min={nlwRate} value={r.hourly_rate}
+                            <input type="number" step="0.25" min={getMinimumWageRate(r.date_of_birth, config).rate} value={r.hourly_rate}
                               onChange={e => updateEditingRow('hourly_rate', parseFloat(e.target.value) || 0)}
                               className={INPUT.inline + ' w-16'} />
                           </div>
-                          {r.hourly_rate < nlwRate && (
-                            <p className="text-[10px] text-red-600 mt-0.5">Below NLW</p>
-                          )}
+                          {(() => { const mw = getMinimumWageRate(r.date_of_birth, config); return r.hourly_rate < mw.rate ? <p className="text-[10px] text-red-600 mt-0.5">Below {mw.label}</p> : null; })()}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => startEditing(s)}>
                           <span className="hover:text-blue-600 transition-colors">£{s.hourly_rate?.toFixed(2)}</span>
-                          {isCareRole(s.role) && s.hourly_rate < nlwRate && (
-                            <span className={BADGE.red}>Below NLW</span>
-                          )}
+                          {(() => { const mw = getMinimumWageRate(s.date_of_birth, config); return isCareRole(s.role) && s.hourly_rate < mw.rate ? <span className={BADGE.red}>Below {mw.label}</span> : null; })()}
                         </div>
                       )}
                     </td>

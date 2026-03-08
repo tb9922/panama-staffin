@@ -18,7 +18,7 @@ function baseData() {
       max_al_same_day: 2,
       al_entitlement_days: 28,
       leave_year_start: '04-01',
-      nlw_rate: 12.21,
+      nlw_rate: 12.71,
       training_types: [],
     },
     staff: [],
@@ -147,10 +147,10 @@ describe('validateALEntitlement', () => {
 // ── NLW ─────────────────────────────────────────────────────────────────────
 
 describe('validateNLW', () => {
-  it('warns for staff below NLW', () => {
+  it('warns for staff below NLW (21+)', () => {
     const data = baseData();
-    data.config.nlw_rate = 12.21;
-    data.staff = [makeStaff({ hourly_rate: 10.50 })];
+    data.config.nlw_rate = 12.71;
+    data.staff = [makeStaff({ hourly_rate: 10.50, date_of_birth: '1990-01-01' })];
     const warnings = validateAll(data);
     expect(warnings).toEqual(
       expect.arrayContaining([expect.stringContaining('below NLW')])
@@ -159,17 +159,58 @@ describe('validateNLW', () => {
 
   it('no warning for staff at or above NLW', () => {
     const data = baseData();
-    data.config.nlw_rate = 12.21;
-    data.staff = [makeStaff({ hourly_rate: 12.21 })];
+    data.config.nlw_rate = 12.71;
+    data.staff = [makeStaff({ hourly_rate: 12.71, date_of_birth: '1990-01-01' })];
     const warnings = validateAll(data);
-    expect(warnings.filter(w => w.includes('NLW'))).toHaveLength(0);
+    expect(warnings.filter(w => w.includes('NLW') || w.includes('NMW'))).toHaveLength(0);
   });
 
   it('skips inactive staff', () => {
     const data = baseData();
     data.staff = [makeStaff({ hourly_rate: 5.00, active: false })];
     const warnings = validateAll(data);
-    expect(warnings.filter(w => w.includes('NLW'))).toHaveLength(0);
+    expect(warnings.filter(w => w.includes('NLW') || w.includes('NMW'))).toHaveLength(0);
+  });
+
+  it('uses 18-20 rate for staff aged 18-20', () => {
+    const data = baseData();
+    data.config.nlw_rate = 12.71;
+    data.config.nmw_rate_18_20 = 10.85;
+    // Born 19 years ago from FIXED_NOW (2025-06-15)
+    data.staff = [makeStaff({ hourly_rate: 10.85, date_of_birth: '2006-06-16' })];
+    const warnings = validateAll(data);
+    expect(warnings.filter(w => w.includes('NLW') || w.includes('NMW'))).toHaveLength(0);
+  });
+
+  it('warns 18-20 staff below NMW 18-20 rate', () => {
+    const data = baseData();
+    data.config.nlw_rate = 12.71;
+    data.config.nmw_rate_18_20 = 10.85;
+    data.staff = [makeStaff({ hourly_rate: 9.50, date_of_birth: '2006-06-16' })];
+    const warnings = validateAll(data);
+    expect(warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('below NMW (18-20)')])
+    );
+  });
+
+  it('uses under-18 rate for staff under 18', () => {
+    const data = baseData();
+    data.config.nlw_rate = 12.71;
+    data.config.nmw_rate_under_18 = 8.00;
+    // Born 17 years ago from FIXED_NOW (2025-06-15)
+    data.staff = [makeStaff({ hourly_rate: 8.00, date_of_birth: '2008-01-01' })];
+    const warnings = validateAll(data);
+    expect(warnings.filter(w => w.includes('NLW') || w.includes('NMW'))).toHaveLength(0);
+  });
+
+  it('defaults to NLW rate when no DOB provided', () => {
+    const data = baseData();
+    data.config.nlw_rate = 12.71;
+    data.staff = [makeStaff({ hourly_rate: 10.85 })]; // no date_of_birth
+    const warnings = validateAll(data);
+    expect(warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('below NLW')])
+    );
   });
 });
 

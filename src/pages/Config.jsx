@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
+import { getMinimumWageRate } from '../../shared/nmw.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../lib/api.js';
@@ -318,12 +319,16 @@ export default function Config() {
           <Field label="Sickness Rate" path="sickness_rate" step={0.01} />
           <Field label="Night Gap %" path="night_gap_pct" step={0.05} />
           <div>
-            <Field label="NLW Rate" path="nlw_rate" step={0.01} unit="/hr" />
+            <Field label="NLW Rate (21+)" path="nlw_rate" step={0.01} unit="/hr" />
+            <Field label="NMW Rate (18-20)" path="nmw_rate_18_20" step={0.01} unit="/hr" />
+            <Field label="NMW Rate (U18)" path="nmw_rate_under_18" step={0.01} unit="/hr" />
             {(() => {
-              const nlw = config.nlw_rate || 12.21;
-              const below = staff.filter(s => s.active !== false && isCareRole(s.role) && s.hourly_rate < nlw);
+              const below = staff.filter(s => s.active !== false && isCareRole(s.role) && (() => {
+                const { rate } = getMinimumWageRate(s.date_of_birth, config);
+                return s.hourly_rate < rate;
+              })());
               return below.length > 0 ? (
-                <p className="text-xs text-red-600 mt-1">{below.length} staff below this rate</p>
+                <p className="text-xs text-red-600 mt-1">{below.length} staff below minimum wage for their age</p>
               ) : null;
             })()}
           </div>

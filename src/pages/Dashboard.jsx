@@ -4,6 +4,7 @@ import { getCycleDates, getStaffForDay, formatDate, isWorkingShift, isCareRole }
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
+import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
 import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getLoggedInUser } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
@@ -164,12 +165,13 @@ function DashboardInner({ schedData }) {
       }
     });
 
-    // NMW compliance check
-    const nlwRate = config.nlw_rate || 12.21;
+    // NMW compliance check (age-band aware)
     activeCareStaff.forEach((s, idx) => {
-      if (s.hourly_rate != null && s.hourly_rate < nlwRate) {
+      if (s.hourly_rate == null) return;
+      const { rate, label: rateLabel } = getMinimumWageRate(s.date_of_birth, config);
+      if (s.hourly_rate < rate) {
         const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
-        list.push({ type: 'error', msg: `${label}: £${isAdmin ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below NLW £${nlwRate.toFixed(2)}` });
+        list.push({ type: 'error', msg: `${label}: £${isAdmin ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below ${rateLabel} £${rate.toFixed(2)}` });
       }
     });
 
