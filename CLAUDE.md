@@ -125,7 +125,7 @@ backups/               Auto-backups before each save, 20 per home (gitignored)
 
 ## Data Model
 
-All data is in a single JSON file per home (`homes/{name}.json`). Shape:
+Data is stored in PostgreSQL (96+ migrations). The logical shape per home:
 
 ```js
 {
