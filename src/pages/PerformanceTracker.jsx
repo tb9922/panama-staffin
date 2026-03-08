@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
-import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
+import { getCurrentHome, getLoggedInUser, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
 import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
@@ -41,6 +41,7 @@ export default function PerformanceTracker() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const home = getCurrentHome();
+  const isAdmin = getLoggedInUser()?.role === 'admin';
 
   const LIMIT = 50;
 
@@ -149,7 +150,7 @@ export default function PerformanceTracker() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Case</button>
+          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Case</button>}
         </div>
       </div>
 
@@ -195,9 +196,9 @@ export default function PerformanceTracker() {
                       {PERFORMANCE_STATUSES.find(s => s.id === item.status)?.name || item.status}
                     </span>
                   </td>
-                  <td className={TABLE.td}>
+                  {isAdmin && <td className={TABLE.td}>
                     <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
