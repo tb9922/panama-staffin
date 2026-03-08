@@ -60,16 +60,16 @@ export default function CQCEvidence() {
 
     Promise.all([
       getSchedulingData(homeSlug, { from, to }),
-      getTrainingData(homeSlug).catch(() => ({})),
-      getIncidents(homeSlug).catch(() => ({ incidents: [] })),
-      getComplaints(homeSlug).catch(() => ({ complaints: [], surveys: [] })),
-      getMaintenance(homeSlug).catch(() => ({ checks: [] })),
-      getIpcAudits(homeSlug).catch(() => ({ audits: [] })),
-      getRisks(homeSlug).catch(() => ({ risks: [] })),
-      getPolicies(homeSlug).catch(() => ({ policies: [] })),
-      getWhistleblowingConcerns(homeSlug).catch(() => ({ concerns: [] })),
-      getDols(homeSlug).catch(() => ({ dols: [], mcaAssessments: [] })),
-      getCareCertData(homeSlug).catch(() => ({ careCert: {} })),
+      getTrainingData(homeSlug).catch(e => { console.warn('Failed to load training data:', e.message); return {}; }),
+      getIncidents(homeSlug).catch(e => { console.warn('Failed to load incidents:', e.message); return { incidents: [] }; }),
+      getComplaints(homeSlug).catch(e => { console.warn('Failed to load complaints:', e.message); return { complaints: [], surveys: [] }; }),
+      getMaintenance(homeSlug).catch(e => { console.warn('Failed to load maintenance:', e.message); return { checks: [] }; }),
+      getIpcAudits(homeSlug).catch(e => { console.warn('Failed to load IPC audits:', e.message); return { audits: [] }; }),
+      getRisks(homeSlug).catch(e => { console.warn('Failed to load risks:', e.message); return { risks: [] }; }),
+      getPolicies(homeSlug).catch(e => { console.warn('Failed to load policies:', e.message); return { policies: [] }; }),
+      getWhistleblowingConcerns(homeSlug).catch(e => { console.warn('Failed to load whistleblowing:', e.message); return { concerns: [] }; }),
+      getDols(homeSlug).catch(e => { console.warn('Failed to load DoLS:', e.message); return { dols: [], mcaAssessments: [] }; }),
+      getCareCertData(homeSlug).catch(e => { console.warn('Failed to load care cert:', e.message); return { careCert: {} }; }),
     ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
       setModuleData({
         config: sched.config,

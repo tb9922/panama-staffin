@@ -168,7 +168,7 @@ export default function IncidentTracker() {
     setShowModal(true);
     // Load addenda in background
     const home = getCurrentHome();
-    if (home) getIncidentAddenda(home, inc.id).then(setAddenda).catch(() => {});
+    if (home) getIncidentAddenda(home, inc.id).then(setAddenda).catch(e => console.warn('Failed to load addenda:', e.message));
   }
 
   async function handleFreeze() {

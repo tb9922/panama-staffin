@@ -105,8 +105,8 @@ export default function GrievanceTracker() {
     setShowModal(true);
     if (c.id) {
       const [notes, acts] = await Promise.all([
-        getHrCaseNotes(home, 'grievance', c.id).catch(() => []),
-        getGrievanceActions(c.id).catch(() => []),
+        getHrCaseNotes(home, 'grievance', c.id).catch(e => { console.warn('Failed to load case notes:', e.message); return []; }),
+        getGrievanceActions(c.id).catch(e => { console.warn('Failed to load actions:', e.message); return []; }),
       ]);
       if (editReqRef.current !== reqId) return; // stale
       setCaseNotes(notes);

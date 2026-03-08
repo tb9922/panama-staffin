@@ -56,7 +56,7 @@ export default function HandoverNotes() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(() => {});
+    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(e => setError(e.message || 'Failed to load'));
   }, []);
 
   function goDay(delta) {

@@ -17,9 +17,7 @@ export default function FatigueTracker() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
     const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
     return () => clearTimeout(timer);
   }, [today]);

@@ -36,7 +36,7 @@ export default function TaxCodeManager() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(() => {});
+    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
   }, []);
 
   const staffMap = {};
