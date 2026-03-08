@@ -1,5 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import SickTrends from '../SickTrends.jsx';
 

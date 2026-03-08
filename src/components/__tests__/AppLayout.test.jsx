@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import AppLayout from '../AppLayout.jsx';
 

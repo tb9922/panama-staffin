@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import PayrollDetail from '../PayrollDetail.jsx';
 

@@ -18,10 +18,8 @@ import {
   getSupervisionFrequency,
   getSupervisionStatus,
   getSupervisionStats,
-  getSupervisionAlerts,
   getAppraisalStatus,
   getAppraisalStats,
-  getAppraisalAlerts,
   getFireDrillStatus,
   getFireDrillAlerts,
   getTrainingBlockingReasons,
@@ -409,10 +407,7 @@ describe('getSupervisionStatus', () => {
 
   it('returns due_soon when near due date', () => {
     // Next due needs to be 0-14 days away
-    const supDate = '2026-01-25'; // + 49 days = 2026-03-15 — 15 days away → due_soon (0-14) hmm
-    // Let me calculate: 2026-01-25 + 49 = 2026-03-15. From 2026-02-28, that's 15 days.
-    // Status boundary: >14 = up_to_date, so at 15 days it's still up_to_date
-    // Need < 14: 2026-01-12 + 49 = 2026-03-02 — 2 days away → due_soon
+    // 2026-01-12 + 49 = 2026-03-02 — 2 days away → due_soon
     const sups = { S001: [{ date: '2026-01-12', supervisor: 'Manager' }] };
     const result = getSupervisionStatus(staff, config, sups, TODAY);
     expect(result.status).toBe('due_soon');

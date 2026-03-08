@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import TimesheetManager from '../TimesheetManager.jsx';
 
@@ -22,8 +21,8 @@ vi.mock('../../lib/api.js', async () => {
 });
 
 vi.mock('../../lib/payroll.js', () => ({
-  snapToShift: vi.fn((scheduled, actual, window, enabled) => ({
-    snapped: actual,
+  snapToShift: vi.fn((...args) => ({
+    snapped: args[1],
     applied: false,
     savedMinutes: 0,
   })),
