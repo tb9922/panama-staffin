@@ -94,7 +94,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
           safeguarding_to: _g, safeguarding_reference: _h, safeguarding_date: _i,
           police_reference: _j, police_contact_date: _k,
           riddor_reference: _l, riddor_reported_date: _m,
-          cqc_reference: _n, cqc_notified_date: _o,
+          cqc_reference: _n,
           candour_notification_date: _p, candour_letter_sent_date: _q, candour_recipient: _r,
           msp_outcome_preferences: _s, msp_person_involved: _t,
           witnesses: _u,
