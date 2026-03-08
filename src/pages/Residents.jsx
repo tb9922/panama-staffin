@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
-import { FUNDING_TYPES, RESIDENT_STATUSES, getLabel } from '../lib/finance.js';
+import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
 import {
   getCurrentHome, getLoggedInUser,
   getResidentsWithBeds, getBeds,

@@ -65,6 +65,7 @@ function SickTrendsInner({ schedData, isAdmin }) {
   const [filterMonth, setFilterMonth] = useState('All');
 
   // Anonymise staff names for non-admin viewers
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const staffLabel = useMemo(() => {
     if (isAdmin) return (s) => s.name;
     const map = new Map();

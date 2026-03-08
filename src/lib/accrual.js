@@ -2,7 +2,7 @@
 // UK law: entitlement = 5.6 × contracted weekly hours.
 // getLeaveYear is canonical in shared/rotation.js — re-exported here for consumers.
 export { getLeaveYear, STATUTORY_WEEKS } from './rotation.js';
-import { formatDate, parseDate, addDays, getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from './rotation.js';
+import { parseDate, addDays, getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from './rotation.js';
 
 /**
  * Count complete months from start to end (end may be before start → returns 0).

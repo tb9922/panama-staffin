@@ -5,8 +5,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-panama_dev}
       POSTGRES_USER: ${DB_USER:-panama}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

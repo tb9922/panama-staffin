@@ -24,8 +24,10 @@ COPY --from=builder /app/routes ./routes
 COPY --from=builder /app/services ./services
 COPY --from=builder /app/repositories ./repositories
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/scripts ./scripts
 RUN addgroup -S app && adduser -S app -G app
+RUN mkdir -p uploads && chown app:app uploads
 USER app
 EXPOSE 3001
 CMD ["node", "server.js"]

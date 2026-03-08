@@ -87,7 +87,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
       const staffForDay = getStaffForDay(schedData.staff, date, schedData.overrides, config);
       const cost = calculateDayCost(staffForDay, config);
       const workingStaff = staffForDay.filter(s => isWorkingShift(s.shift));
-      cumulative += cost.total;
+      cumulative += cost.total; // eslint-disable-line react-hooks/immutability
       return { date, cost, staffCount: workingStaff.length, cumulative, dayNum: i + 1 };
     });
   }, [schedData, config, monthDates]);

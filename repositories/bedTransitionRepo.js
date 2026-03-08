@@ -1,6 +1,5 @@
 import { pool } from '../db.js';
 
-function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 const f = v => v != null ? parseFloat(v) : null;
 

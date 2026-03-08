@@ -60,9 +60,20 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
       complaintRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
       complaintSurveyRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
-    const complaints = complaintsResult.rows;
+    let complaints = complaintsResult.rows;
     const surveys = surveysResult.rows;
     const complaintCategories = req.home.config?.complaint_categories || [];
+    // Strip GDPR-sensitive fields for non-admin viewers
+    if (req.user.role !== 'admin') {
+      complaints = complaints.map(c => {
+        const {
+          raised_by_name: _a, investigator: _b, investigation_notes: _c,
+          root_cause: _d, improvements: _e, lessons_learned: _f,
+          ...safe
+        } = c;
+        return safe;
+      });
+    }
     res.json({ complaints, surveys, complaintCategories, _total: complaintsResult.total });
   } catch (err) { next(err); }
 });

@@ -64,9 +64,9 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
-- **Backend**: Express 5 (server.js) — JSON file storage, no database
+- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 96+ migrations)
 - **PDF**: jspdf + jspdf-autotable
-- **No test framework** — manual testing via API + browser
+- **Testing**: Vitest — 1,322+ tests across 47 files
 
 ## Architecture
 

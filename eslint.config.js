@@ -14,7 +14,7 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      ecmaVersion: 2020,
+      ecmaVersion: 2022,
       globals: globals.browser,
       parserOptions: {
         ecmaVersion: 'latest',
@@ -27,11 +27,11 @@ export default defineConfig([
     },
   },
   {
-    files: ['server.js', 'config.js', 'db.js', 'routes/**/*.js', 'repositories/**/*.js', 'services/**/*.js', 'middleware/**/*.js', 'lib/**/*.js', 'scripts/**/*.js'],
+    files: ['server.js', 'config.js', 'db.js', 'routes/**/*.js', 'repositories/**/*.js', 'services/**/*.js', 'middleware/**/*.js', 'lib/**/*.js', 'scripts/**/*.js', 'shared/**/*.js'],
     extends: [js.configs.recommended],
     languageOptions: {
-      ecmaVersion: 2020,
-      globals: { ...globals.node, ...globals.es2020 },
+      ecmaVersion: 2022,
+      globals: { ...globals.node, ...globals.es2021 },
       sourceType: 'module',
     },
     rules: {
@@ -42,7 +42,7 @@ export default defineConfig([
     files: ['tests/**/*.js', 'src/lib/__tests__/**/*.js'],
     extends: [js.configs.recommended],
     languageOptions: {
-      ecmaVersion: 2020,
+      ecmaVersion: 2022,
       globals: { ...globals.node, ...globals.es2020 },
       sourceType: 'module',
     },

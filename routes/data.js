@@ -24,16 +24,26 @@ const staffItemSchema = z.object({
   al_entitlement: z.number().nullish(),
   al_carryover: z.number().nullish(),
   leaving_date: z.string().max(20).nullish(),
-}).passthrough();
+}).strip();
 
 const MAX_PAYLOAD_SIZE = 5_000_000; // 5MB cap
+
+const overrideEntrySchema = z.object({
+  shift: z.string().max(10).optional(),
+  reason: z.string().max(500).nullish(),
+  source: z.string().max(50).nullish(),
+  sleep_in: z.boolean().nullish(),
+  replaces_staff_id: z.string().max(50).nullish(),
+  override_hours: z.number().nullish(),
+  al_hours: z.number().nullish(),
+}).strip();
 
 const dataBodySchema = z.object({
   config: homeConfigSchema,
   staff: z.array(staffItemSchema).max(2000),
-  overrides: z.record(z.string(), z.record(z.string(), z.object({}).passthrough())),
+  overrides: z.record(z.string(), z.record(z.string(), overrideEntrySchema)),
   _clientUpdatedAt: z.string().nullish(),
-}).passthrough().refine(
+}).strip().refine(
   obj => JSON.stringify(obj).length < MAX_PAYLOAD_SIZE,
   { message: 'Payload too large (max 5MB)' },
 );
