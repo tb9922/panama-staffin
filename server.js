@@ -129,6 +129,11 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// 404 catch-all for unmatched API routes (SPA routes fall through to index.html)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 // Sentry error handler — must be after routes, before custom error handler
 if (config.sentryDsn) Sentry.setupExpressErrorHandler(app);
 
