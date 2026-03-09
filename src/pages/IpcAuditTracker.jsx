@@ -481,9 +481,11 @@ export default function IpcAuditTracker() {
             <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-          <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
-            {editingId ? 'Update' : 'Save'}
-          </button>
+          {isAdmin && (
+            <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
+              {editingId ? 'Update' : 'Save'}
+            </button>
+          )}
         </div>
       </Modal>
     </div>

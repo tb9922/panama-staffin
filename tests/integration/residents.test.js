@@ -325,15 +325,12 @@ describe('Route: GET /finance/residents/with-beds', () => {
     expect(res.body.total).toBeGreaterThanOrEqual(4);
   });
 
-  it('viewer can access (not admin-only)', async () => {
-    const res = await request(app)
+  it('viewer is blocked (admin-only)', async () => {
+    await request(app)
       .get('/api/finance/residents/with-beds')
       .query({ home: `${PREFIX}-a` })
       .set('Authorization', `Bearer ${viewerToken}`)
-      .expect(200);
-
-    expect(res.body.rows).toBeDefined();
-    expect(res.body.total).toBeGreaterThanOrEqual(4);
+      .expect(403);
   });
 
   it('rejects unauthenticated request', async () => {

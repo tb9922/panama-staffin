@@ -124,7 +124,7 @@ export async function updateResident(id, homeId, data, client, version) {
     }
   }
   if (fields.length === 0) return findResidentById(id, homeId, client);
-  fields.push('version = version + 1');
+  fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_residents SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ' RETURNING *';
@@ -328,7 +328,7 @@ export async function updateInvoice(id, homeId, data, client, version) {
     }
   }
   if (fields.length === 0) return findInvoiceById(id, homeId, client);
-  fields.push('version = version + 1');
+  fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_invoices SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ' RETURNING *';
@@ -448,7 +448,7 @@ export async function updateExpense(id, homeId, data, client, version) {
     }
   }
   if (fields.length === 0) return findExpenseById(id, homeId, client);
-  fields.push('version = version + 1');
+  fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_expenses SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ' RETURNING *';
@@ -728,7 +728,7 @@ export async function updatePaymentSchedule(id, homeId, data, client, version) {
     }
   }
   if (fields.length === 0) return findPaymentScheduleById(id, homeId, client);
-  fields.push('version = version + 1');
+  fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_payment_schedule SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ' RETURNING *';
@@ -782,7 +782,7 @@ export async function getAgencyTotal(homeId, from, to) {
   const { rows } = await pool.query(
     `SELECT COALESCE(SUM(total_cost), 0) AS total
      FROM agency_shifts
-     WHERE home_id = $1 AND shift_date >= $2 AND shift_date <= $3`,
+     WHERE home_id = $1 AND date >= $2 AND date <= $3`,
     [homeId, from, to]);
   return rows[0]?.total != null ? parseFloat(rows[0].total) : 0;
 }

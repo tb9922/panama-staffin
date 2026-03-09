@@ -5,6 +5,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
   getCurrentHome,
+  getLoggedInUser,
   getSchedulingData,
   bulkUpsertOverrides,
   deleteOverride,
@@ -25,6 +26,7 @@ function fmtDate(d) {
 }
 
 export default function AnnualLeave() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -229,7 +231,7 @@ export default function AnnualLeave() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Book AL */}
-        <div className={CARD.padded}>
+        {isAdmin && <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Book Leave</h2>
           <div className="space-y-3">
             <div>
@@ -284,7 +286,7 @@ export default function AnnualLeave() {
               {saving ? 'Booking...' : 'Book Annual Leave'}
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* AL Balances */}
         <div className={`lg:col-span-2 ${CARD.flush}`}>
@@ -355,21 +357,22 @@ export default function AnnualLeave() {
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">AL Calendar — Next 2 Months</h2>
           {(() => {
             const now = new Date();
+            const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
             const months = [
-              { dates: getMonthDates(now.getFullYear(), now.getMonth()), label: now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) },
-              { dates: getMonthDates(new Date(now.getFullYear(), now.getMonth() + 1, 1).getFullYear(), new Date(now.getFullYear(), now.getMonth() + 1, 1).getMonth()), label: new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) },
+              { dates: getMonthDates(now.getUTCFullYear(), now.getUTCMonth()), label: now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) },
+              { dates: getMonthDates(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth()), label: nextMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) },
             ];
             return months.map(m => (
               <div key={m.label} className="mb-4">
                 <h3 className="text-xs font-semibold text-gray-600 mb-1.5">{m.label}</h3>
                 <div className="flex gap-1 flex-wrap">
-                  {Array.from({ length: (m.dates[0].getDay() + 6) % 7 }).map((_, i) => (
+                  {Array.from({ length: (m.dates[0].getUTCDay() + 6) % 7 }).map((_, i) => (
                     <div key={`pad-${i}`} className="w-8 h-8" />
                   ))}
                   {m.dates.map(d => {
                     const alCount = countALOnDate(d, schedData.overrides);
                     const max = schedData.config.max_al_same_day;
-                    const isToday = formatDate(d) === formatDate(new Date());
+                    const isToday = formatDate(d) === today;
                     return (
                       <div key={formatDate(d)} className={`w-8 h-8 rounded-lg text-[10px] flex flex-col items-center justify-center transition-colors ${
                         isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''
@@ -379,7 +382,7 @@ export default function AnnualLeave() {
                         alCount > 0 ? 'bg-yellow-100 text-yellow-800' :
                         'bg-gray-50 text-gray-400'
                       }`} title={`${formatDate(d)}: ${alCount}/${max} AL`}>
-                        <span className="font-medium leading-none">{d.getDate()}</span>
+                        <span className="font-medium leading-none">{d.getUTCDate()}</span>
                         {alCount > 0 && <span className="text-[8px] font-bold leading-none">{alCount}</span>}
                       </div>
                     );
@@ -409,7 +412,7 @@ export default function AnnualLeave() {
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                   </div>
-                  <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>
+                  {isAdmin && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
                 </div>
               ))}
             </div>

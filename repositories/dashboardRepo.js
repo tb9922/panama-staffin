@@ -232,7 +232,7 @@ export async function getFireDrillCounts(homeId, today) {
   );
   const r = rows[0];
   return {
-    lastDate: r.last_date ? r.last_date.toISOString().slice(0, 10) : null,
+    lastDate: r.last_date || null,
     drillsThisYear: r.drills_this_year,
     overdue: r.overdue ?? true,
   };
@@ -526,7 +526,7 @@ export async function getBedAlerts(homeId, today) {
       `/* dashboardRepo – getBedAlerts/sync */
        SELECT COUNT(*)::int AS count
        FROM beds b
-       INNER JOIN finance_residents fr ON fr.id = b.resident_id
+       INNER JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = $1
        WHERE b.home_id = $1 AND b.status = 'occupied'
          AND fr.status IN ('discharged', 'deceased')`,
       [homeId]

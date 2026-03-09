@@ -96,9 +96,9 @@ export async function createInvoiceWithLines(homeId, data, username) {
 
     // Calculate totals from lines
     const lines = data.lines || [];
-    const subtotal = lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0);
+    const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
     const adjustments = parseFloat(data.adjustments) || 0;
-    const totalAmount = subtotal + adjustments;
+    const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
 
     const invoice = await financeRepo.createInvoice(homeId, {
       ...data,
@@ -387,11 +387,10 @@ export async function updatePaymentSchedule(id, homeId, data, version) {
 }
 
 export async function processScheduledPayment(scheduleId, homeId, username) {
-  const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId);
-  if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
-  if (schedule.on_hold) throw Object.assign(new Error('Payment schedule is on hold'), { statusCode: 400 });
-
   return withTransaction(async (client) => {
+    const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId, client);
+    if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
+    if (schedule.on_hold) throw Object.assign(new Error('Payment schedule is on hold'), { statusCode: 400 });
     const expense = await financeRepo.createExpense(homeId, {
       expense_date: schedule.next_due,
       category: schedule.category,
@@ -468,12 +467,12 @@ export async function softDeleteResident(id, homeId, username) {
 }
 
 export async function softDeleteInvoice(id, homeId, username) {
-  const invoice = await financeRepo.findInvoiceById(id, homeId);
-  if (!invoice) return false;
-  if (invoice.status !== 'draft' && invoice.status !== 'void') {
-    throw Object.assign(new Error(`Cannot delete invoice with status '${invoice.status}' — void it first`), { statusCode: 400 });
-  }
   return withTransaction(async (client) => {
+    const invoice = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
+    if (!invoice) return false;
+    if (invoice.status !== 'draft' && invoice.status !== 'void') {
+      throw Object.assign(new Error(`Cannot delete invoice with status '${invoice.status}' — void it first`), { statusCode: 400 });
+    }
     const deleted = await financeRepo.softDelete('invoice', id, homeId, client);
     if (deleted) {
       await financeRepo.deleteInvoiceLines(id, homeId, client);
@@ -484,14 +483,16 @@ export async function softDeleteInvoice(id, homeId, username) {
 }
 
 export async function softDeleteExpense(id, homeId, username) {
-  const expense = await financeRepo.findExpenseById(id, homeId);
-  if (!expense) return false;
-  if (expense.status !== 'pending' && expense.status !== 'void') {
-    throw Object.assign(new Error(`Cannot delete expense with status '${expense.status}' — void it first`), { statusCode: 400 });
-  }
-  const deleted = await financeRepo.softDelete('expense', id, homeId);
-  if (deleted) logger.info({ homeId, expenseId: id, deletedBy: username }, 'Expense soft-deleted');
-  return deleted;
+  return withTransaction(async (client) => {
+    const expense = await financeRepo.findExpenseById(id, homeId, client, { forUpdate: true });
+    if (!expense) return false;
+    if (expense.status !== 'pending' && expense.status !== 'void') {
+      throw Object.assign(new Error(`Cannot delete expense with status '${expense.status}' — void it first`), { statusCode: 400 });
+    }
+    const deleted = await financeRepo.softDelete('expense', id, homeId, client);
+    if (deleted) logger.info({ homeId, expenseId: id, deletedBy: username }, 'Expense soft-deleted');
+    return deleted;
+  });
 }
 
 export async function softDeletePaymentSchedule(id, homeId, username) {

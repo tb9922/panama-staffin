@@ -159,7 +159,7 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
 // Residents with bed assignments — used by standalone Residents page
-router.get('/residents/with-beds', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/residents/with-beds', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const filters = {};
     if (req.query.status) filters.status = safeStr(req.query.status);
@@ -522,7 +522,7 @@ router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAd
 router.get('/dashboard', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const now = new Date();
-    const from = safeDate(req.query.from) || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const from = safeDate(req.query.from) || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
     const to = safeDate(req.query.to) || now.toISOString().slice(0, 10);
     if (from > to) return res.status(400).json({ error: '"from" date must not be after "to" date' });
     res.json(await financeService.getFinanceDashboard(req.home.id, from, to));

@@ -568,13 +568,15 @@ export async function findBreaches(homeId) { const r = await gdprRepo.findBreach
 export async function findBreachById(id, homeId) { return gdprRepo.findBreachById(id, homeId); }
 export async function createBreach(homeId, data) { return gdprRepo.createBreach(homeId, data); }
 export async function updateBreach(id, homeId, data, version) {
-  if (data.status && ['resolved', 'closed'].includes(data.status)) {
-    const current = await gdprRepo.findBreachById(id, homeId);
-    if (current?.ico_notifiable && !current?.ico_notified) {
-      throw new ValidationError('ICO must be notified before resolving a notifiable breach');
+  return withTransaction(async (client) => {
+    if (data.status && ['resolved', 'closed'].includes(data.status)) {
+      const current = await gdprRepo.findBreachById(id, homeId, client);
+      if (current?.ico_notifiable && !current?.ico_notified) {
+        throw new ValidationError('ICO must be notified before resolving a notifiable breach');
+      }
     }
-  }
-  return gdprRepo.updateBreach(id, homeId, data, null, version);
+    return gdprRepo.updateBreach(id, homeId, data, client, version);
+  });
 }
 
 export async function getRetentionSchedule() { return gdprRepo.getRetentionSchedule(); }

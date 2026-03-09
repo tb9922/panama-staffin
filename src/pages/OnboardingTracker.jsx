@@ -579,13 +579,13 @@ export default function OnboardingTracker() {
               </div>
               <div>
                 <label className={INPUT.label}>Contracted Hours / Week</label>
-                <input type="number" step="0.5" value={modalForm.contracted_hours || ''} onChange={e => setField('contracted_hours', parseFloat(e.target.value) || '')} className={INPUT.base} />
+                <input type="number" step="0.5" value={modalForm.contracted_hours ?? ''} onChange={e => { const v = parseFloat(e.target.value); setField('contracted_hours', isNaN(v) ? '' : v); }} className={INPUT.base} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={INPUT.label}>Hourly Rate</label>
-                <input type="number" step="0.01" value={modalForm.hourly_rate || ''} onChange={e => setField('hourly_rate', parseFloat(e.target.value) || '')} className={INPUT.base} />
+                <input type="number" step="0.01" value={modalForm.hourly_rate ?? ''} onChange={e => { const v = parseFloat(e.target.value); setField('hourly_rate', isNaN(v) ? '' : v); }} className={INPUT.base} />
               </div>
               <div>
                 <label className={INPUT.label}>Notice Period</label>

@@ -13,7 +13,7 @@ export default function CoverageAlertBanner() {
   useEffect(() => {
     const homeSlug = getCurrentHome();
     if (!homeSlug) return;
-    getSchedulingData(homeSlug).then(setData).catch(() => {});
+    getSchedulingData(homeSlug).then(setData).catch(e => console.warn('CoverageAlertBanner fetch failed:', e.message));
   }, [today]);
 
   const todayCoverage = useMemo(() => {

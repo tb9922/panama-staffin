@@ -579,9 +579,9 @@ export default function RiskRegister() {
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
+              {isAdmin && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}
-              </button>
+              </button>}
             </div>
       </Modal>
     </div>

@@ -306,8 +306,8 @@ export function getScoreBand(score) {
 // ── Date Range Helper ───────────────────────────────────────────────────────
 
 export function getDateRange(days = 28) {
-  const to = new Date();
-  to.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const from = addDays(to, -(days - 1));
   return { from, to, days };
 }

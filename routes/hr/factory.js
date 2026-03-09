@@ -5,6 +5,11 @@ import { diffFields } from '../../lib/hrFieldMappers.js';
 import { z } from 'zod';
 import { idSchema } from './schemas.js';
 
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
 // ── Case Route Factory ──────────────────────────────────────────────────────
 
 export function registerCaseRoutes(router, { type, path, bodySchema, updateSchema, mapFields, filters, hasGetById = true, repoFind, repoFindById, repoCreate, repoUpdate, auditPrefix, table }) {
@@ -17,7 +22,8 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
       for (const [queryParam, filterKey] of Object.entries(filters || {})) {
         if (req.query[queryParam]) f[filterKey] = req.query[queryParam];
       }
-      const pag = { limit: req.query.limit, offset: req.query.offset };
+      const pagParsed = paginationSchema.safeParse(req.query);
+      const pag = pagParsed.success ? pagParsed.data : {};
       const result = await repoFind(req.home.id, f, null, pag);
       res.json(result);
     } catch (err) { next(err); }

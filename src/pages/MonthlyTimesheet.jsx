@@ -63,8 +63,8 @@ export default function MonthlyTimesheet() {
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState(urlStaffId || '');
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [year, setYear] = useState(() => new Date().getUTCFullYear());
+  const [month, setMonth] = useState(() => new Date().getUTCMonth() + 1);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -132,7 +132,7 @@ export default function MonthlyTimesheet() {
     for (let d = 1; d <= numDays; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateObj = parseDate(dateStr);
-      const dayOfWeek = dateObj.getDay();
+      const dayOfWeek = dateObj.getUTCDay();
 
       // Roster: what should they be doing?
       const actual = getActualShift(staff, dateObj, schedData?.overrides || {}, schedData?.config.cycle_start_date);
@@ -146,9 +146,8 @@ export default function MonthlyTimesheet() {
       // Classify the row
       let rowType;
       if (WORKING_SHIFTS.includes(rosterShift) && !entry) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        rowType = dateObj < today ? 'missing' : 'future';
+        const nowUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        rowType = dateObj < nowUtc ? 'missing' : 'future';
       } else if (WORKING_SHIFTS.includes(rosterShift) && entry) {
         rowType = 'working';
       } else if (isAbsence(rosterShift)) {
@@ -483,7 +482,7 @@ export default function MonthlyTimesheet() {
 
   if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
 
-  const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  const monthName = new Date(Date.UTC(year, month - 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   return (
     <div className={PAGE.container}>

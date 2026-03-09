@@ -4,7 +4,7 @@ import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getAbsenceSummary, getStaffAbsence,
+  getCurrentHome, getLoggedInUser, getAbsenceSummary, getStaffAbsence,
   getHrRtwInterviews, createHrRtwInterview, updateHrRtwInterview,
   getHrOhReferrals, createHrOhReferral, updateHrOhReferral,
 } from '../lib/api.js';
@@ -36,6 +36,7 @@ const emptyOh = () => ({
 const LIMIT = 50;
 
 export default function AbsenceManager() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [tab, setTab] = useState('bradford');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -214,8 +215,8 @@ export default function AbsenceManager() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {tab === 'rtw' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewRtw}>New RTW Interview</button>}
-          {tab === 'oh' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewOh}>New OH Referral</button>}
+          {isAdmin && tab === 'rtw' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewRtw}>New RTW Interview</button>}
+          {isAdmin && tab === 'oh' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewOh}>New OH Referral</button>}
         </div>
       </div>
 
@@ -335,9 +336,11 @@ export default function AbsenceManager() {
                   <td className={TABLE.td}>
                     <span className={BADGE[item.fit_for_work ? 'green' : 'red']}>{item.fit_for_work ? 'Yes' : 'No'}</span>
                   </td>
-                  <td className={TABLE.td}>
-                    <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditRtw(item)}>Edit</button>
-                  </td>
+                  {isAdmin && (
+                    <td className={TABLE.td}>
+                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditRtw(item)}>Edit</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -376,9 +379,11 @@ export default function AbsenceManager() {
                   <td className={TABLE.td}>
                     <span className={BADGE[item.report_received ? 'green' : 'amber']}>{item.report_received ? 'Yes' : 'No'}</span>
                   </td>
-                  <td className={TABLE.td}>
-                    <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditOh(item)}>Edit</button>
-                  </td>
+                  {isAdmin && (
+                    <td className={TABLE.td}>
+                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditOh(item)}>Edit</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

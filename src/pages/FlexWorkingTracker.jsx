@@ -4,6 +4,7 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getLoggedInUser, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
 import { FLEX_WORKING_STATUSES, FLEX_REFUSAL_REASONS, getStatusBadge } from '../lib/hr.js';
+import { parseDate } from '../lib/rotation.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
@@ -87,12 +88,12 @@ export default function FlexWorkingTracker() {
     const today = new Date().toISOString().slice(0, 10);
     // ERA 2025: employer must decide within 2 months
     // Clamp day to avoid month overflow (e.g. Dec 31 + 2 months → Feb 28, not Mar 3)
-    const deadline = new Date(today);
-    const targetMonth = deadline.getMonth() + 2;
-    deadline.setDate(1);
-    deadline.setMonth(targetMonth);
-    const lastDay = new Date(deadline.getFullYear(), deadline.getMonth() + 1, 0).getDate();
-    deadline.setDate(Math.min(new Date(today).getDate(), lastDay));
+    const deadline = parseDate(today);
+    const targetMonth = deadline.getUTCMonth() + 2;
+    deadline.setUTCDate(1);
+    deadline.setUTCMonth(targetMonth);
+    const lastDay = new Date(Date.UTC(deadline.getUTCFullYear(), deadline.getUTCMonth() + 1, 0)).getUTCDate();
+    deadline.setUTCDate(Math.min(parseDate(today).getUTCDate(), lastDay));
     setForm({ ...blankForm(), request_date: today, decision_deadline: deadline.toISOString().slice(0, 10) });
     setShowModal(true);
   }

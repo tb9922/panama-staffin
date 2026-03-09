@@ -131,7 +131,11 @@ export const PAYMENT_STATUSES = [
 export function getPaymentStatus(resident) {
   if (resident.outstanding_balance > 0) {
     if (!resident.last_payment_date) return 'overdue';
-    const daysSince = (Date.now() - new Date(resident.last_payment_date).getTime()) / 86400000;
+    const lp = new Date(resident.last_payment_date);
+    const lpUtc = Date.UTC(lp.getUTCFullYear(), lp.getUTCMonth(), lp.getUTCDate());
+    const now = new Date();
+    const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const daysSince = (nowUtc - lpUtc) / 86400000;
     return daysSince > 35 ? 'overdue' : 'outstanding';
   }
   return resident.last_payment_date ? 'up_to_date' : 'no_invoices';

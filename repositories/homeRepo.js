@@ -119,7 +119,7 @@ export async function upsert(slug, name, configObj, annualLeave, client) {
 export async function updateConfig(homeId, configObj, client) {
   const conn = client || pool;
   await conn.query(
-    'UPDATE homes SET config = $1, updated_at = NOW() WHERE id = $2',
+    'UPDATE homes SET config = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL',
     [JSON.stringify(configObj), homeId]
   );
 }
@@ -133,7 +133,7 @@ export async function updateConfig(homeId, configObj, client) {
 export async function updateAnnualLeave(homeId, alObj, client) {
   const conn = client || pool;
   await conn.query(
-    'UPDATE homes SET annual_leave = $1, updated_at = NOW() WHERE id = $2',
+    'UPDATE homes SET annual_leave = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL',
     [JSON.stringify(alObj || {}), homeId]
   );
 }
@@ -209,7 +209,7 @@ export async function softDelete(id, client) {
 export async function updateName(id, name, client) {
   const conn = client || pool;
   await conn.query(
-    'UPDATE homes SET name = $1, updated_at = NOW() WHERE id = $2',
+    'UPDATE homes SET name = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL',
     [name, id]
   );
 }

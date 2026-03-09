@@ -445,7 +445,7 @@ export default function StaffRegister() {
                         <input type="text" value={r.name} onChange={e => updateEditingRow('name', e.target.value)}
                           className={INPUT.inline + ' w-32 font-medium'} autoFocus />
                       ) : (
-                        <span className="font-medium cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.name}</span>
+                        <span className={`font-medium transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.name}</span>
                       )}
                     </td>
 
@@ -455,7 +455,7 @@ export default function StaffRegister() {
                         <select value={r.role} onChange={e => updateEditingRow('role', e.target.value)} className={INPUT.inlineSelect + ' w-28'}>
                           {ROLES.map(ro => <option key={ro}>{ro}</option>)}
                         </select>
-                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.role}</span>}
+                      ) : <span className={`transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.role}</span>}
                     </td>
 
                     {/* Team — editable */}
@@ -464,7 +464,7 @@ export default function StaffRegister() {
                         <select value={r.team} onChange={e => updateEditingRow('team', e.target.value)} className={INPUT.inlineSelect + ' w-20'}>
                           {TEAMS.map(t => <option key={t}>{t}</option>)}
                         </select>
-                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.team}</span>}
+                      ) : <span className={`transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.team}</span>}
                     </td>
 
                     {/* Pref — editable */}
@@ -473,7 +473,7 @@ export default function StaffRegister() {
                         <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className={INPUT.inlineSelect + ' w-16'}>
                           {PREFS.map(p => <option key={p}>{p}</option>)}
                         </select>
-                      ) : <span className="font-mono text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.pref}</span>}
+                      ) : <span className={`font-mono text-xs transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.pref}</span>}
                     </td>
 
                     {/* Skill — editable */}
@@ -482,7 +482,7 @@ export default function StaffRegister() {
                         <input type="number" step="0.5" min="0" max="2" value={r.skill}
                           onChange={e => updateEditingRow('skill', parseFloat(e.target.value) || 0)}
                           className={INPUT.inline + ' w-14'} />
-                      ) : <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.skill}</span>}
+                      ) : <span className={`transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.skill}</span>}
                     </td>
 
                     {/* Rate — editable (admin only) */}
@@ -515,7 +515,7 @@ export default function StaffRegister() {
                           onChange={e => updateEditingRow('contract_hours', e.target.value ? parseFloat(e.target.value) : null)}
                           className={INPUT.inline + ' w-14'} />
                       ) : (
-                        <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>
+                        <span className={`text-xs transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>
                           {s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}
                         </span>
                       )}
@@ -526,7 +526,7 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="date" value={r.start_date || ''} onChange={e => updateEditingRow('start_date', e.target.value)}
                           className={INPUT.inline} />
-                      ) : <span className="text-xs text-gray-500 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>{s.start_date || '-'}</span>}
+                      ) : <span className={`text-xs text-gray-500 transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>{s.start_date || '-'}</span>}
                     </td>
 
                     {/* WTR Opt-Out — editable */}
@@ -535,8 +535,8 @@ export default function StaffRegister() {
                         <input type="checkbox" checked={!!r.wtr_opt_out}
                           onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
                       ) : (
-                        <span className={`text-xs cursor-pointer hover:text-blue-600 transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'}`}
-                          onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
+                        <span className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'} ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`}
+                          onClick={() => isAdmin && startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
                       )}
                     </td>
 
@@ -545,8 +545,8 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
                           className={INPUT.inline + ' w-40'} placeholder="Notes..." />
-                      ) : <span className="text-xs text-gray-500 max-w-[150px] truncate block cursor-pointer hover:text-blue-600 transition-colors"
-                        title={s.notes} onClick={() => startEditing(s)}>{s.notes || '-'}</span>}
+                      ) : <span className={`text-xs text-gray-500 max-w-[150px] truncate block transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`}
+                        title={s.notes} onClick={() => isAdmin && startEditing(s)}>{s.notes || '-'}</span>}
                     </td>
 
                     {/* AL entitlement / carryover — editable */}
@@ -564,7 +564,7 @@ export default function StaffRegister() {
                             className={INPUT.inline + ' w-16'} />
                         </div>
                       ) : (
-                        <span className="text-xs cursor-pointer hover:text-blue-600 transition-colors" onClick={() => startEditing(s)}>
+                        <span className={`text-xs transition-colors ${isAdmin ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => isAdmin && startEditing(s)}>
                           {s.al_entitlement != null ? (
                             <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
                           ) : (
@@ -592,7 +592,7 @@ export default function StaffRegister() {
                       ) : (
                         <div className="flex flex-col items-center gap-0.5">
                           <span className={s.active !== false ? BADGE.green : BADGE.gray}
-                            onClick={() => startEditing(s)} style={{ cursor: 'pointer' }}>{s.active !== false ? 'Y' : 'N'}</span>
+                            onClick={() => isAdmin && startEditing(s)} style={isAdmin ? { cursor: 'pointer' } : undefined}>{s.active !== false ? 'Y' : 'N'}</span>
                           {s.active === false && s.leaving_date && (
                             <span className="text-[10px] text-gray-400">{s.leaving_date}</span>
                           )}

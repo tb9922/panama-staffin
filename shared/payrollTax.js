@@ -90,9 +90,11 @@ export function getHMRCPaymentDueDate(taxYear, taxMonth) {
  */
 export function getPayPeriodNumber(periodEndDate, payFrequency) {
   const d = new Date(periodEndDate);
+  const dUtc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
   const taxStart = getTaxYearStart(d);
+  const taxStartUtc = Date.UTC(taxStart.getUTCFullYear(), taxStart.getUTCMonth(), taxStart.getUTCDate());
   const msPerDay = 24 * 60 * 60 * 1000;
-  const daysDiff = Math.floor((d.getTime() - taxStart.getTime()) / msPerDay);
+  const daysDiff = Math.floor((dUtc - taxStartUtc) / msPerDay);
   if (payFrequency === 'weekly') {
     return Math.min(52, Math.max(1, Math.floor(daysDiff / 7) + 1));
   }
@@ -246,10 +248,10 @@ function computeTax(annualTaxable, taxBands, parsedCode) {
 
   // BR code: flat 20% on everything
   if (parsedCode.type === 'br') return annualTaxable * 0.20;
-  // D0: flat 40%
-  if (parsedCode.type === 'd0') return annualTaxable * 0.40;
-  // D1: flat 45%
-  if (parsedCode.type === 'd1') return annualTaxable * 0.45;
+  // D0: flat higher rate (40% England/Wales, 42% Scotland)
+  if (parsedCode.type === 'd0') return annualTaxable * (parsedCode.country === 'scotland' ? 0.42 : 0.40);
+  // D1: flat top rate (45% England/Wales, 47% Scotland)
+  if (parsedCode.type === 'd1') return annualTaxable * (parsedCode.country === 'scotland' ? 0.47 : 0.45);
 
   let tax = 0;
   let remaining = annualTaxable;

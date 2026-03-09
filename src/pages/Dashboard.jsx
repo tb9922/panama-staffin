@@ -81,10 +81,8 @@ function DashboardInner({ schedData }) {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 
@@ -317,12 +315,12 @@ function DashboardInner({ schedData }) {
               return (
                 <button key={i} onClick={() => navigate(`/day/${dateStr}`)}
                   className={`flex flex-col items-center p-1 rounded-lg transition-all hover:scale-105 ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
-                  title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`}>
+                  title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}`}>
                   <div className="text-[9px] text-gray-400 mb-0.5">D{i + 1}</div>
                   <div className={`w-8 h-8 rounded-lg ${HEATMAP[d.coverage.overall] || HEATMAP.empty} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
-                    {d.date.getDate()}
+                    {d.date.getUTCDate()}
                   </div>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
+                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
                 </button>
               );
             })}

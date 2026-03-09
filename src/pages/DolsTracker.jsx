@@ -557,11 +557,13 @@ export default function DolsTracker() {
                 <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSaveDols}
-                disabled={!form.resident_name || !form.application_date}
-                className={BTN.primary}>
-                {editingId ? 'Update' : 'Save'}
-              </button>
+              {isAdmin && (
+                <button onClick={handleSaveDols}
+                  disabled={!form.resident_name || !form.application_date}
+                  className={BTN.primary}>
+                  {editingId ? 'Update' : 'Save'}
+                </button>
+              )}
             </div>
       </Modal>
 
@@ -632,11 +634,13 @@ export default function DolsTracker() {
                 <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              <button onClick={handleSaveMca}
-                disabled={!form.resident_name || !form.assessment_date}
-                className={BTN.primary}>
-                {editingId ? 'Update' : 'Save'}
-              </button>
+              {isAdmin && (
+                <button onClick={handleSaveMca}
+                  disabled={!form.resident_name || !form.assessment_date}
+                  className={BTN.primary}>
+                  {editingId ? 'Update' : 'Save'}
+                </button>
+              )}
             </div>
       </Modal>
     </div>

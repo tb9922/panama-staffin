@@ -37,10 +37,8 @@ export default function CostTracker() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 
@@ -75,9 +73,9 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
 
   const { monthDates, monthLabel } = useMemo(() => {
     const now = new Date();
-    const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const dates = getMonthDates(target.getFullYear(), target.getMonth());
-    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1));
+    const dates = getMonthDates(target.getUTCFullYear(), target.getUTCMonth());
+    const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     return { monthDates: dates, monthLabel: label };
   }, [monthOffset]);
 

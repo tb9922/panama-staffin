@@ -56,13 +56,13 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     const result = [];
     const now = new Date();
     for (let i = -6; i <= 5; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
       result.push({
-        year: d.getFullYear(),
-        month: d.getMonth(),
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth(),
+        key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
+        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
         isCurrent: i === 0,
         isFuture: i > 0,
       });
@@ -86,7 +86,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
         bh += cost.bhPremium;
       });
 
-      const budget = budgetOverrides[m.key] || defaultBudget;
+      const budget = budgetOverrides[m.key] ?? defaultBudget;
       const agencyCap = defaultAgencyCap;
       const variance = budget > 0 ? total - budget : 0;
       const variancePct = budget > 0 ? (variance / budget) * 100 : 0;
@@ -141,17 +141,17 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     }
   }
 
-  function saveBudgetOverride(monthKey) {
+  async function saveBudgetOverride(monthKey) {
     const val = parseFloat(budgetInput);
-    if (isNaN(val) || val <= 0) return;
-    patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
+    if (isNaN(val) || val < 0) return;
+    await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
     setEditingBudget(null);
   }
 
-  function saveDefaultBudget() {
+  async function saveDefaultBudget() {
     const total = parseFloat(budgetInput) || 0;
     const agCap = parseFloat(agencyCapInput) || 0;
-    patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
+    await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
     setEditingBudget(null);
   }
 
@@ -346,7 +346,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                 <th scope="col" className={`${TABLE.th} text-right`}>Agency £</th>
                 <th scope="col" className={`${TABLE.th} text-right`}>BH £</th>
                 <th scope="col" className={`${TABLE.th} text-center`}>Status</th>
-                <th scope="col" className={`${TABLE.th} text-center print:hidden`}>Budget</th>
+                {isAdmin && <th scope="col" className={`${TABLE.th} text-center print:hidden`}>Budget</th>}
               </tr>
             </thead>
             <tbody>
@@ -398,8 +398,8 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                 <td className={`${TABLE.tdMono} text-right ${monthData.reduce((s, m) => s + m.variance, 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   £{Math.round(Math.abs(monthData.reduce((s, m) => s + m.variance, 0))).toLocaleString()}
                 </td>
-                <td className={TABLE.td} colSpan={5}></td>
-                <td className={`${TABLE.td} print:hidden`}></td>
+                <td className={TABLE.td} colSpan={6}></td>
+                {isAdmin && <td className={`${TABLE.td} print:hidden`}></td>}
               </tr>
             </tfoot>
           </table>

@@ -39,8 +39,9 @@ export async function findActiveByHome(homeId) {
  * Returns rules effective during a date range (for payroll calculation).
  * A rule is effective if: effective_from <= period_end AND (effective_to IS NULL OR effective_to >= period_start)
  */
-export async function findForPeriod(homeId, periodStart, periodEnd) {
-  const { rows } = await pool.query(
+export async function findForPeriod(homeId, periodStart, periodEnd, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT * FROM pay_rate_rules
      WHERE home_id = $1
        AND effective_from <= $2
@@ -132,8 +133,9 @@ function shapeNmw(row) {
 }
 
 /** All NMW rates, ordered for lookup (most recent first within each bracket). */
-export async function getAllNmwRates() {
-  const { rows } = await pool.query(
+export async function getAllNmwRates(client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT * FROM nmw_rates ORDER BY age_bracket, effective_from DESC`,
   );
   return rows.map(shapeNmw);

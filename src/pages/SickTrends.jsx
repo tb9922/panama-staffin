@@ -83,8 +83,8 @@ function SickTrendsInner({ schedData, isAdmin }) {
           if (actual.shift === 'SICK') {
             sickDates.push({
               date: formatDate(date),
-              day: date.getDate(),
-              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+              day: date.getUTCDate(),
+              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
               reason: actual.reason || '',
             });
           }
@@ -372,7 +372,7 @@ function SickTrendsInner({ schedData, isAdmin }) {
               <option value="All">All Months</option>
               {uniqueMonths.map(m => {
                 const [y, mo] = m.split('-');
-                const label = new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                const label = new Date(Date.UTC(Number(y), Number(mo) - 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
                 return <option key={m} value={m}>{label}</option>;
               })}
             </select>
