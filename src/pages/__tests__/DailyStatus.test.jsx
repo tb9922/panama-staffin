@@ -32,6 +32,7 @@ function renderAdmin() {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   return renderWithProviders(<DailyStatus />, {
     route: `/day/${FIXED_DATE}`,
+    path: '/day/:date',
     user: { username: 'admin', role: 'admin' },
   });
 }
