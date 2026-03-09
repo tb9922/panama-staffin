@@ -66,7 +66,7 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 96+ migrations)
 - **PDF**: jspdf + jspdf-autotable
-- **Testing**: Vitest — 1,322+ tests across 47 files
+- **Testing**: Vitest — 2,130+ tests across 118 files (48 backend + 70 frontend)
 
 ## Architecture
 
@@ -690,20 +690,25 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 - ~~Complaints & feedback~~, ~~Maintenance & environment~~, ~~IPC audits~~
 - ~~Risk register~~, ~~Policy review~~, ~~Whistleblowing / speak up~~, ~~DoLS/LPS & MCA~~
 
+### Built (Phase 2)
+- ~~GDPR~~: SAR workflow, breach notification (ICO tracking), retention schedules, right to erasure, consent records, DP complaints
+- ~~Handover notes~~: structured digital handover with shift linking, categories, priorities, acknowledgements
+- ~~Payroll NMW compliance~~: per-shift NMW check in payroll calculation, blocks approval on violations
+- ~~Payroll Sage/Xero CSV export~~: three-format export (generic, sage, xero) via `/runs/:id/export?format=`
+- ~~Database migration: PostgreSQL~~ — db.js + 96 migrations, fully migrated
+- ~~Shift swap~~: DailyStatus permanent team swap + single-day override swap with `validateSwap()` safety check
+- ~~Audit log export~~: AuditLog.jsx Excel export via `downloadXLSX()`, up to 10,000 entries
+
 ### Remaining
-- GDPR: retention schedules, SAR workflow, breach notification, right to erasure
-- Communication: structured digital handover notes, in-app messaging, mandatory read receipts
+- In-app messaging: mandatory read receipts, inbox/chat between staff
 - GPS clock-in: geofenced attendance, planned vs actual reconciliation, automated timesheets
-- Payroll: NMW deep compliance (sleep-in calc, deduction check), WTR full tracking, Sage/Xero CSV export
-- Clinical API: read-only connectors to Nourish/PCS/Access Group, unified portfolio KPI dashboard
+- WTR full tracking: payroll-level weekly hours rollup against 48hr average (scheduling-level check exists in FatigueTracker)
+- Clinical API: read-only connectors to Nourish/PCS/Access Group
 - Per-staff auth + mobile-friendly staff portal
-- Group/owner dashboard: portfolio-level KPIs, cross-home benchmarking
-- Database migration: PostgreSQL (prerequisite for multi-user, staff portal, scaling)
+- Group/portfolio KPI dashboard: cross-home benchmarking, aggregated compliance scores (PlatformHomes admin CRUD exists)
 - Email/SMS notifications (SendGrid/Twilio)
 
 ### Current Known Gaps
-- Shift swap feature discussed but not built (approach: swap staff `team` field)
-- Audit log only viewable in-app, not exportable
 - AL carryover is set manually — no automatic year-end rollover
 - No UI to set `override_hours` on TRN/ADM overrides (accepted by API, not yet exposed in editor)
 
