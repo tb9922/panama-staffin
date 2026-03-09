@@ -49,7 +49,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
-  const budgetOverrides = config.budget_overrides || {};
+  const budgetOverrides = useMemo(() => config.budget_overrides || {}, [config.budget_overrides]);
 
   // 12-month rolling view: 6 months back, current, 5 months forward
   const months = useMemo(() => {

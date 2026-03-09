@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatDate } from '../../lib/rotation.js';
+import { formatDate, parseDate } from '../../lib/rotation.js';
 import { getFireDrillStatus } from '../../lib/training.js';
 import { createFireDrill, updateFireDrill, deleteFireDrill } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
@@ -15,12 +15,12 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload }
 
   useDirtyGuard(showModal);
 
-  const today = new Date();
-  const todayStr = formatDate(today);
+  const todayStr = formatDate(new Date());
+  const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
-  const drillsList = fireDrills || [];
+  const drillsList = useMemo(() => fireDrills || [], [fireDrills]);
 
-  const drillStatus = useMemo(() => getFireDrillStatus(drillsList, today), [drillsList]);
+  const drillStatus = useMemo(() => getFireDrillStatus(drillsList, today), [drillsList, today]);
 
   function openModal(drill) {
     if (drill) {

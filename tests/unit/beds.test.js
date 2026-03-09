@@ -67,7 +67,7 @@ describe('Constants', () => {
   });
 
   it('all transition targets are valid statuses', () => {
-    for (const [from, targets] of Object.entries(VALID_TRANSITIONS)) {
+    for (const [, targets] of Object.entries(VALID_TRANSITIONS)) {
       for (const to of targets) {
         expect(STATUSES).toContain(to);
       }

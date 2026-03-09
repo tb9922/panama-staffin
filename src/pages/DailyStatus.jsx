@@ -26,7 +26,7 @@ import {
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
-  const currentDate = dateParam ? parseDate(dateParam) : new Date();
+  const currentDate = useMemo(() => dateParam ? parseDate(dateParam) : new Date(), [dateParam]);
   const dateStr = formatDate(currentDate);
 
   const [schedData, setSchedData] = useState(null);
@@ -102,7 +102,7 @@ export default function DailyStatus() {
   const staffForDay = useMemo(() => {
     if (!schedData) return [];
     return getStaffForDay(schedData.staff, currentDate, schedData.overrides, schedData.config);
-  }, [schedData, dateStr]);
+  }, [schedData, currentDate]);
 
   const coverage = useMemo(() => {
     if (!schedData) return {};

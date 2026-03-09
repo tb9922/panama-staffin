@@ -14,8 +14,8 @@ import { app } from '../../server.js';
 
 const PREFIX = 'res-test';
 let homeA, homeB;
-let residentA1, residentA2, residentA3, residentA4;
-let bedA1, bedA2;
+let residentA1, residentA2, _residentA3, residentA4;
+let _bedA1, _bedA2;
 let adminToken, viewerToken;
 
 const ADMIN_USER = `${PREFIX}-admin`;
@@ -98,7 +98,7 @@ beforeAll(async () => {
     created_by: ADMIN_USER,
   });
 
-  residentA3 = await financeRepo.createResident(homeA, {
+  _residentA3 = await financeRepo.createResident(homeA, {
     resident_name: 'Carol Clark',
     room_number: '103',
     admission_date: '2025-03-01',
@@ -126,14 +126,14 @@ beforeAll(async () => {
      VALUES ($1, 'R-101', 'single', 'occupied', $2, $3) RETURNING id`,
     [homeA, residentA1.id, ADMIN_USER]
   );
-  bedA1 = b1.id;
+  _bedA1 = b1.id;
 
   const { rows: [b2] } = await pool.query(
     `INSERT INTO beds (home_id, room_number, room_type, floor, status, resident_id, created_by)
      VALUES ($1, 'R-102', 'nursing', '2', 'hospital_hold', $2, $3) RETURNING id`,
     [homeA, residentA2.id, ADMIN_USER]
   );
-  bedA2 = b2.id;
+  _bedA2 = b2.id;
 
   // Create a resident in homeB for cross-home isolation tests
   await financeRepo.createResident(homeB, {

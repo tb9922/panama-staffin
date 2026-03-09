@@ -37,6 +37,10 @@ const EMPTY_SURVEY = {
   conducted_by: '',
 };
 
+// Minimal config for functions that need complaint_response_days.
+// The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).
+const COMPLAINT_CONFIG = { complaint_response_days: 28 };
+
 export default function ComplaintsTracker() {
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const [complaints, setComplaints] = useState([]);
@@ -61,30 +65,45 @@ export default function ComplaintsTracker() {
 
   const home = getCurrentHome();
 
-  async function load() {
+  useEffect(() => {
+    let cancelled = false;
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await getComplaints(home);
+        if (cancelled) return;
+        setComplaints(result.complaints || []);
+        setSurveys(result.surveys || []);
+        setComplaintCategories(
+          result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
+        );
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Failed to load complaints');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadData();
+    return () => { cancelled = true; };
+  }, [home]);
+
+  function load() {
     setLoading(true);
     setError(null);
-    try {
-      const result = await getComplaints(home);
-      setComplaints(result.complaints || []);
-      setSurveys(result.surveys || []);
-      setComplaintCategories(
-        result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
-      );
-    } catch (err) {
-      setError(err.message || 'Failed to load complaints');
-    } finally {
-      setLoading(false);
-    }
+    getComplaints(home)
+      .then(result => {
+        setComplaints(result.complaints || []);
+        setSurveys(result.surveys || []);
+        setComplaintCategories(
+          result.complaintCategories?.length ? result.complaintCategories : DEFAULT_COMPLAINT_CATEGORIES
+        );
+      })
+      .catch(err => setError(err.message || 'Failed to load complaints'))
+      .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
-
   const today = useLiveDate();
-
-  // Minimal config object for functions that need complaint_response_days.
-  // The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).
-  const complaintConfig = { complaint_response_days: 28 };
 
   const statsRange = useMemo(() => {
     const d = new Date(today + 'T00:00:00Z');
@@ -93,7 +112,7 @@ export default function ComplaintsTracker() {
   }, [today]);
 
   const stats = useMemo(() =>
-    getComplaintStats(complaints, complaintConfig, statsRange.from, statsRange.to),
+    getComplaintStats(complaints, COMPLAINT_CONFIG, statsRange.from, statsRange.to),
     [complaints, statsRange]);
 
   const surveyStats = useMemo(() =>
@@ -117,7 +136,7 @@ export default function ComplaintsTracker() {
 
   function openAdd() {
     setEditingId(null);
-    const deadline = formatDate(new Date(Date.now() + (complaintConfig.complaint_response_days) * 86400000));
+    const deadline = formatDate(new Date(Date.now() + (COMPLAINT_CONFIG.complaint_response_days) * 86400000));
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
     setShowModal(true);
@@ -197,7 +216,7 @@ export default function ComplaintsTracker() {
   function handleExport() {
     const rows = filtered.map(c => {
       const cat = complaintCategories.find(cat => cat.id === c.category);
-      const st = getComplaintStatus(c, complaintConfig);
+      const st = getComplaintStatus(c, COMPLAINT_CONFIG);
       return [
         c.date, c.raised_by, c.raised_by_name, cat?.name || c.category,
         c.title, c.description, c.acknowledged_date || '',
@@ -268,7 +287,7 @@ export default function ComplaintsTracker() {
         <div className={CARD.padded}>
           <div className="text-xs text-gray-500 mb-1">Avg Response</div>
           <div className="text-2xl font-bold text-gray-900">{stats.avgResponseDays !== null ? `${stats.avgResponseDays}d` : '--'}</div>
-          <div className="text-xs text-gray-400">target {complaintConfig.complaint_response_days}d</div>
+          <div className="text-xs text-gray-400">target {COMPLAINT_CONFIG.complaint_response_days}d</div>
         </div>
         <div className={CARD.padded}>
           <div className="text-xs text-gray-500 mb-1">Resolution Rate</div>
@@ -319,7 +338,7 @@ export default function ComplaintsTracker() {
                   )}
                   {filtered.map(c => {
                     const cat = complaintCategories.find(cat => cat.id === c.category);
-                    const st = getComplaintStatus(c, complaintConfig);
+                    const st = getComplaintStatus(c, COMPLAINT_CONFIG);
                     return (
                       <tr key={c.id} className={TABLE.tr}>
                         <td className={TABLE.tdMono}>{c.date}</td>

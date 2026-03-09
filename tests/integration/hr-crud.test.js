@@ -165,7 +165,7 @@ describe('HR CRUD: optimistic locking', () => {
 
   it('blocks cross-home update even with correct version', async () => {
     const current = await hrRepo.findDisciplinaryById(caseId, homeA);
-    const result = await hrRepo.updateDisciplinary(
+    await hrRepo.updateDisciplinary(
       caseId, homeB, // wrong home
       { status: 'closed' },
       null,

@@ -13,6 +13,8 @@ import {
   POLICY_STATUSES,
 } from '../lib/policyReview.js';
 
+const STATUS_ORDER = { overdue: 0, due: 1, current: 2 };
+
 const EMPTY_FORM = {
   policy_name: '',
   policy_ref: '',
@@ -61,17 +63,14 @@ export default function PolicyReviewTracker() {
 
   const stats = useMemo(() => getPolicyStats(policies, today), [policies, today]);
 
-  // Sort: overdue first, then due, then current
-  const statusOrder = { overdue: 0, due: 1, current: 2 };
-
   const filtered = useMemo(() => {
     let list = [...policies];
 
-    // Sort by status priority
+    // Sort: overdue first, then due, then current
     list.sort((a, b) => {
       const sa = getPolicyStatus(a, today);
       const sb = getPolicyStatus(b, today);
-      return (statusOrder[sa.status] ?? 3) - (statusOrder[sb.status] ?? 3);
+      return (STATUS_ORDER[sa.status] ?? 3) - (STATUS_ORDER[sb.status] ?? 3);
     });
 
     if (filterStatus) {

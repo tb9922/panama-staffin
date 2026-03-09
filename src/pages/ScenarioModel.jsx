@@ -84,7 +84,6 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
   const annualSaving = (withoutKill28 - withKill28) / 28 * 365;
 
   // Winter scenarios
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const winterResults = useMemo(() => {
     const floatPool = schedData.staff.filter(s => s.team === 'Float' && s.active !== false).length;
     const otCap = config.weekly_ot_cap || 8;
@@ -96,7 +95,7 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
       const agCostWk = agWk * (0.7 * elHrs * config.agency_rate_day + 0.3 * nHrs * config.agency_rate_night) / 7;
       return { ...s, weekly, floatWk, otWk, agWk, agCostWk: agCostWk * 7 };
     });
-  }, [schedData.staff, config]);
+  }, [schedData.staff, config, elHrs, nHrs]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
