@@ -3,7 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import path from 'path';
 import { randomUUID } from 'crypto';
+import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { AppError } from './errors.js';
 import { pool } from './db.js';
@@ -133,6 +135,18 @@ app.get('/health', async (req, res) => {
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
+
+// ── Production SPA serving ────────────────────────────────────────────────────
+// In production, serve the built React app from dist/.
+// In dev, Vite dev server handles this on :5173.
+if (config.nodeEnv === 'production') {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const distDir = path.join(__dirname, 'dist');
+  app.use(express.static(distDir, { maxAge: '1y', immutable: true }));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
 
 // Sentry error handler — must be after routes, before custom error handler
 if (config.sentryDsn) Sentry.setupExpressErrorHandler(app);
