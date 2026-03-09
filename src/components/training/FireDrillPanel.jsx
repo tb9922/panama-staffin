@@ -143,13 +143,13 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload }
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Time</th>
-                <th className={TABLE.th}>Scenario</th>
-                <th className={TABLE.th}>Evacuation Time</th>
-                <th className={TABLE.th}>Staff</th>
-                <th className={TABLE.th}>Issues</th>
-                <th className={TABLE.th}>Conducted By</th>
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Time</th>
+                <th scope="col" className={TABLE.th}>Scenario</th>
+                <th scope="col" className={TABLE.th}>Evacuation Time</th>
+                <th scope="col" className={TABLE.th}>Staff</th>
+                <th scope="col" className={TABLE.th}>Issues</th>
+                <th scope="col" className={TABLE.th}>Conducted By</th>
               </tr>
             </thead>
             <tbody>

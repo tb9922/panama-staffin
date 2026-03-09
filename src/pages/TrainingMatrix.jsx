@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getCurrentHome, getTrainingData, getLoggedInUser } from '../lib/api.js';
-import { PAGE, TAB } from '../lib/design.js';
+import { PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import TrainingGrid from '../components/training/TrainingGrid.jsx';
 import SupervisionPanel from '../components/training/SupervisionPanel.jsx';
@@ -37,7 +38,7 @@ export default function TrainingMatrix() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
   if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
   if (!state) return null;
 
@@ -57,14 +58,7 @@ export default function TrainingMatrix() {
       </div>
 
       {/* Tabs */}
-      <div className={TAB.bar + ' mb-5 print:hidden'}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`${TAB.button} ${tab === t.id ? TAB.active : TAB.inactive}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-5 print:hidden" />
 
       {tab === 'training' && (
         <TrainingGrid

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -280,7 +281,7 @@ export default function IncidentTracker() {
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
 
-  if (loading) return <div className="p-6 text-gray-400">Loading...</div>;
+  if (loading) return <div className="p-6 text-gray-400" role="status">Loading...</div>;
 
   return (
     <div className={PAGE.container}>
@@ -354,15 +355,15 @@ export default function IncidentTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Time</th>
-                <th className={TABLE.th}>Type</th>
-                <th className={TABLE.th}>Severity</th>
-                <th className={TABLE.th}>Person</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>CQC</th>
-                <th className={TABLE.th}>RIDDOR</th>
-                <th className={TABLE.th}></th>
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Time</th>
+                <th scope="col" className={TABLE.th}>Type</th>
+                <th scope="col" className={TABLE.th}>Severity</th>
+                <th scope="col" className={TABLE.th}>Person</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>CQC</th>
+                <th scope="col" className={TABLE.th}>RIDDOR</th>
+                <th scope="col" className={TABLE.th}></th>
               </tr>
             </thead>
             <tbody>
@@ -416,14 +417,7 @@ export default function IncidentTracker() {
               </div>
             )}
             {/* Tabs */}
-            <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
-              {TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
             {/* Details Tab */}
             {activeTab === 'details' && (
@@ -481,8 +475,8 @@ export default function IncidentTracker() {
                   </div>
                 </div>
 
-                <div>
-                  <label className={INPUT.label}>Staff Involved</label>
+                <fieldset>
+                  <legend className={INPUT.label}>Staff Involved</legend>
                   <div className="border border-gray-200 rounded-lg max-h-32 overflow-y-auto p-2 space-y-1">
                     {activeStaff.map(s => (
                       <label key={s.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-1 rounded">
@@ -492,7 +486,7 @@ export default function IncidentTracker() {
                       </label>
                     ))}
                   </div>
-                </div>
+                </fieldset>
 
                 <div>
                   <label className={INPUT.label}>Description</label>
@@ -503,16 +497,19 @@ export default function IncidentTracker() {
                   <textarea className={`${INPUT.base} h-16`} value={form.immediate_action} onChange={e => setForm({ ...form, immediate_action: e.target.value })} />
                 </div>
 
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input type="checkbox" checked={form.medical_attention} onChange={e => setForm({ ...form, medical_attention: e.target.checked })} className="accent-blue-600" />
-                    Medical Attention Required
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input type="checkbox" checked={form.hospital_attendance} onChange={e => setForm({ ...form, hospital_attendance: e.target.checked })} className="accent-blue-600" />
-                    Hospital Attendance
-                  </label>
-                </div>
+                <fieldset>
+                  <legend className={INPUT.label}>Medical Response</legend>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={form.medical_attention} onChange={e => setForm({ ...form, medical_attention: e.target.checked })} className="accent-blue-600" />
+                      Medical Attention Required
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={form.hospital_attendance} onChange={e => setForm({ ...form, hospital_attendance: e.target.checked })} className="accent-blue-600" />
+                      Hospital Attendance
+                    </label>
+                  </div>
+                </fieldset>
 
                 {/* Witnesses */}
                 <div>

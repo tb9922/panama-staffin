@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
@@ -202,7 +203,7 @@ export default function AbsenceManager() {
   const rf = (key, val) => setRtwForm(prev => ({ ...prev, [key]: val }));
   const ohf = (key, val) => setOhForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading absence data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading absence data...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -221,14 +222,7 @@ export default function AbsenceManager() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}>{t.label}</button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
       {tab === 'bradford' && renderBradford()}
       {tab === 'rtw' && renderRtw()}
@@ -249,11 +243,11 @@ export default function AbsenceManager() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Staff ID</th>
-                  <th className={TABLE.th}>Spells (12m)</th>
-                  <th className={TABLE.th}>Days (12m)</th>
-                  <th className={TABLE.th}>Bradford Score</th>
-                  <th className={TABLE.th}>Trigger Level</th>
+                  <th scope="col" className={TABLE.th}>Staff ID</th>
+                  <th scope="col" className={TABLE.th}>Spells (12m)</th>
+                  <th scope="col" className={TABLE.th}>Days (12m)</th>
+                  <th scope="col" className={TABLE.th}>Bradford Score</th>
+                  <th scope="col" className={TABLE.th}>Trigger Level</th>
                 </tr>
               </thead>
               <tbody>
@@ -286,10 +280,10 @@ export default function AbsenceManager() {
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}>
                     <tr>
-                      <th className={TABLE.th}>Start</th>
-                      <th className={TABLE.th}>End</th>
-                      <th className={TABLE.th}>Days</th>
-                      <th className={TABLE.th}>Reason</th>
+                      <th scope="col" className={TABLE.th}>Start</th>
+                      <th scope="col" className={TABLE.th}>End</th>
+                      <th scope="col" className={TABLE.th}>Days</th>
+                      <th scope="col" className={TABLE.th}>Reason</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -322,12 +316,12 @@ export default function AbsenceManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Absence Start</th>
-                <th className={TABLE.th}>RTW Date</th>
-                <th className={TABLE.th}>Conducted By</th>
-                <th className={TABLE.th}>Fit for Work</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Absence Start</th>
+                <th scope="col" className={TABLE.th}>RTW Date</th>
+                <th scope="col" className={TABLE.th}>Conducted By</th>
+                <th scope="col" className={TABLE.th}>Fit for Work</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -363,12 +357,12 @@ export default function AbsenceManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Referral Date</th>
-                <th className={TABLE.th}>Reason</th>
-                <th className={TABLE.th}>Provider</th>
-                <th className={TABLE.th}>Report Received</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Referral Date</th>
+                <th scope="col" className={TABLE.th}>Reason</th>
+                <th scope="col" className={TABLE.th}>Provider</th>
+                <th scope="col" className={TABLE.th}>Report Received</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

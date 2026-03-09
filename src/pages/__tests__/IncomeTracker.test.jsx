@@ -141,17 +141,17 @@ describe('IncomeTracker', () => {
     await waitFor(() =>
       expect(screen.getByText('Income & Billing')).toBeInTheDocument()
     );
-    expect(screen.getByRole('button', { name: 'Residents' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Invoices' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Residents' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Invoices' })).toBeInTheDocument();
   });
 
   it('switches to invoices tab and shows invoice table', async () => {
     const user = userEvent.setup();
     renderAdmin();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Invoices' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Invoices' })).toBeInTheDocument()
     );
-    await user.click(screen.getByRole('button', { name: 'Invoices' }));
+    await user.click(screen.getByRole('tab', { name: 'Invoices' }));
     await waitFor(() =>
       expect(screen.getByText('INV-001')).toBeInTheDocument()
     );

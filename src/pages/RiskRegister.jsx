@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -344,13 +345,13 @@ export default function RiskRegister() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Title</th>
-                <th className={TABLE.th}>Category</th>
-                <th className={TABLE.th}>Owner</th>
-                <th className={TABLE.th}>Inherent Score</th>
-                <th className={TABLE.th}>Residual Score</th>
-                <th className={TABLE.th}>Next Review</th>
-                <th className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Title</th>
+                <th scope="col" className={TABLE.th}>Category</th>
+                <th scope="col" className={TABLE.th}>Owner</th>
+                <th scope="col" className={TABLE.th}>Inherent Score</th>
+                <th scope="col" className={TABLE.th}>Residual Score</th>
+                <th scope="col" className={TABLE.th}>Next Review</th>
+                <th scope="col" className={TABLE.th}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -400,14 +401,7 @@ export default function RiskRegister() {
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Risk' : 'New Risk'} size="lg">
           <div className="max-h-[75vh] overflow-y-auto">
             {/* Tabs */}
-            <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
-              {TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
             {/* Risk Details Tab */}
             {activeTab === 'details' && (

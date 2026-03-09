@@ -340,18 +340,18 @@ export default function PayrollDetail() {
             <table className={TABLE.table} style={{ minWidth: '1100px' }}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Staff</th>
-                  <th className={TABLE.th + ' text-right'}>Hours</th>
-                  <th className={TABLE.th + ' text-right'}>Base Pay</th>
-                  <th className={TABLE.th + ' text-right'}>Night</th>
-                  <th className={TABLE.th + ' text-right'}>W/E</th>
-                  <th className={TABLE.th + ' text-right'}>BH</th>
-                  <th className={TABLE.th + ' text-right'}>OT</th>
-                  <th className={TABLE.th + ' text-right'}>Sleep-in</th>
-                  <th className={TABLE.th + ' text-right'}>On-call</th>
-                  <th className={TABLE.th + ' text-right font-bold'}>GROSS</th>
-                  <th className={TABLE.th + ' text-right font-bold'}>EST. NET PAY</th>
-                  <th className={TABLE.th}></th>
+                  <th scope="col" className={TABLE.th}>Staff</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Hours</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Base Pay</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Night</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>W/E</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>BH</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>OT</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Sleep-in</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>On-call</th>
+                  <th scope="col" className={TABLE.th + ' text-right font-bold'}>GROSS</th>
+                  <th scope="col" className={TABLE.th + ' text-right font-bold'}>EST. NET PAY</th>
+                  <th scope="col" className={TABLE.th}></th>
                 </tr>
               </thead>
               <tbody>
@@ -426,14 +426,14 @@ export default function PayrollDetail() {
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="text-gray-500 uppercase text-left border-b border-gray-200">
-                                  <th className="pb-1 pr-3">Date</th>
-                                  <th className="pb-1 pr-3">Shift</th>
-                                  <th className="pb-1 pr-3 text-right">Hours</th>
-                                  <th className="pb-1 pr-3 text-right">Base Rate</th>
-                                  <th className="pb-1 pr-3 text-right">Base</th>
-                                  <th className="pb-1 pr-3">Enhancements</th>
-                                  <th className="pb-1 pr-3 text-right">Total</th>
-                                  <th className="pb-1 text-right">Eff. Rate</th>
+                                  <th scope="col" className="pb-1 pr-3">Date</th>
+                                  <th scope="col" className="pb-1 pr-3">Shift</th>
+                                  <th scope="col" className="pb-1 pr-3 text-right">Hours</th>
+                                  <th scope="col" className="pb-1 pr-3 text-right">Base Rate</th>
+                                  <th scope="col" className="pb-1 pr-3 text-right">Base</th>
+                                  <th scope="col" className="pb-1 pr-3">Enhancements</th>
+                                  <th scope="col" className="pb-1 pr-3 text-right">Total</th>
+                                  <th scope="col" className="pb-1 text-right">Eff. Rate</th>
                                 </tr>
                               </thead>
                               <tbody>

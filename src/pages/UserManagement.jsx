@@ -45,7 +45,7 @@ export default function UserManagement() {
     return () => clearTimeout(t);
   }, [success]);
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-400 text-sm py-12 text-center">Loading users...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading users...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -71,13 +71,13 @@ export default function UserManagement() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Username</th>
-                <th className={TABLE.th}>Display Name</th>
-                <th className={TABLE.th}>Role</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Last Login</th>
-                <th className={TABLE.th}>Created</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Username</th>
+                <th scope="col" className={TABLE.th}>Display Name</th>
+                <th scope="col" className={TABLE.th}>Role</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Last Login</th>
+                <th scope="col" className={TABLE.th}>Created</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

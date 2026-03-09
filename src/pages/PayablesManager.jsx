@@ -125,7 +125,7 @@ export default function PayablesManager() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading payment schedules...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading payment schedules...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -166,11 +166,11 @@ export default function PayablesManager() {
             <div className={TABLE.wrapper}>
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}><tr>
-                  <th className={TABLE.th}>Supplier</th>
-                  <th className={TABLE.th}>Category</th>
-                  <th className={`${TABLE.th} text-right`}>Amount</th>
-                  <th className={TABLE.th}>Next Due</th>
-                  <th className={TABLE.th}></th>
+                  <th scope="col" className={TABLE.th}>Supplier</th>
+                  <th scope="col" className={TABLE.th}>Category</th>
+                  <th scope="col" className={`${TABLE.th} text-right`}>Amount</th>
+                  <th scope="col" className={TABLE.th}>Next Due</th>
+                  <th scope="col" className={TABLE.th}></th>
                 </tr></thead>
                 <tbody>
                   {duePayments.map(s => {
@@ -202,14 +202,14 @@ export default function PayablesManager() {
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr>
-              <th className={TABLE.th}>Supplier</th>
-              <th className={TABLE.th}>Category</th>
-              <th className={TABLE.th}>Frequency</th>
-              <th className={`${TABLE.th} text-right`}>Amount</th>
-              <th className={TABLE.th}>Next Due</th>
-              <th className={TABLE.th}>Auto-approve</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}></th>
+              <th scope="col" className={TABLE.th}>Supplier</th>
+              <th scope="col" className={TABLE.th}>Category</th>
+              <th scope="col" className={TABLE.th}>Frequency</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Amount</th>
+              <th scope="col" className={TABLE.th}>Next Due</th>
+              <th scope="col" className={TABLE.th}>Auto-approve</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}></th>
             </tr></thead>
             <tbody>
               {schedules.length === 0 ? (

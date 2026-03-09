@@ -302,12 +302,12 @@ export default function AnnualLeave() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Name</th>
-                  <th className={TABLE.th}>Team</th>
-                  <th className={`${TABLE.th} text-center`}>Entitled</th>
-                  <th className={`${TABLE.th} text-center`}>Used</th>
-                  <th className={`${TABLE.th} text-center`}>Left</th>
-                  <th className={TABLE.th}>Progress</th>
+                  <th scope="col" className={TABLE.th}>Name</th>
+                  <th scope="col" className={TABLE.th}>Team</th>
+                  <th scope="col" className={`${TABLE.th} text-center`}>Entitled</th>
+                  <th scope="col" className={`${TABLE.th} text-center`}>Used</th>
+                  <th scope="col" className={`${TABLE.th} text-center`}>Left</th>
+                  <th scope="col" className={TABLE.th}>Progress</th>
                 </tr>
               </thead>
               <tbody>

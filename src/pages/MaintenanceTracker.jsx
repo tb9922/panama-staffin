@@ -221,13 +221,13 @@ export default function MaintenanceTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Category</th>
-                <th className={TABLE.th}>Frequency</th>
-                <th className={TABLE.th}>Last Completed</th>
-                <th className={TABLE.th}>Next Due</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Certificate</th>
-                <th className={TABLE.th}></th>
+                <th scope="col" className={TABLE.th}>Category</th>
+                <th scope="col" className={TABLE.th}>Frequency</th>
+                <th scope="col" className={TABLE.th}>Last Completed</th>
+                <th scope="col" className={TABLE.th}>Next Due</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Certificate</th>
+                <th scope="col" className={TABLE.th}></th>
               </tr>
             </thead>
             <tbody>

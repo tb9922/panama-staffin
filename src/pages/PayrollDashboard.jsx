@@ -140,14 +140,14 @@ export default function PayrollDashboard() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Period</th>
-                  <th className={TABLE.th}>Frequency</th>
-                  <th className={TABLE.th}>Status</th>
-                  <th className={TABLE.th}>Staff</th>
-                  <th className={TABLE.th}>Total Gross</th>
-                  <th className={TABLE.th}>Enhancements</th>
-                  <th className={TABLE.th}>Exported</th>
-                  <th className={TABLE.th}></th>
+                  <th scope="col" className={TABLE.th}>Period</th>
+                  <th scope="col" className={TABLE.th}>Frequency</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Staff</th>
+                  <th scope="col" className={TABLE.th}>Total Gross</th>
+                  <th scope="col" className={TABLE.th}>Enhancements</th>
+                  <th scope="col" className={TABLE.th}>Exported</th>
+                  <th scope="col" className={TABLE.th}></th>
                 </tr>
               </thead>
               <tbody>

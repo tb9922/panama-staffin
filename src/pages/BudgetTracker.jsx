@@ -37,7 +37,7 @@ export default function BudgetTracker() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading budget data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading budget data...</div>;
   if (error) return <div className="p-6 text-red-600">Error: {error}</div>;
   if (!schedData) return null;
 
@@ -336,17 +336,17 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Month</th>
-                <th className={`${TABLE.th} text-right`}>Budget £</th>
-                <th className={`${TABLE.th} text-right`}>Actual £</th>
-                <th className={`${TABLE.th} text-right`}>Variance £</th>
-                <th className={`${TABLE.th} text-right`}>Var %</th>
-                <th className={`${TABLE.th} text-right`}>Base £</th>
-                <th className={`${TABLE.th} text-right`}>OT £</th>
-                <th className={`${TABLE.th} text-right`}>Agency £</th>
-                <th className={`${TABLE.th} text-right`}>BH £</th>
-                <th className={`${TABLE.th} text-center`}>Status</th>
-                <th className={`${TABLE.th} text-center print:hidden`}>Budget</th>
+                <th scope="col" className={TABLE.th}>Month</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Budget £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Actual £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Variance £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Var %</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Base £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>OT £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Agency £</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>BH £</th>
+                <th scope="col" className={`${TABLE.th} text-center`}>Status</th>
+                <th scope="col" className={`${TABLE.th} text-center print:hidden`}>Budget</th>
               </tr>
             </thead>
             <tbody>

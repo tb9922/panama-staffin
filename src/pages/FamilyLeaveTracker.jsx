@@ -141,7 +141,7 @@ export default function FamilyLeaveTracker() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading family leave data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading family leave data...</p></div></div>;
 
   const isProtected = PROTECTED_TYPES.includes(form.leave_type);
 
@@ -175,13 +175,13 @@ export default function FamilyLeaveTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Leave Type</th>
-                <th className={TABLE.th}>Start Date</th>
-                <th className={TABLE.th}>End Date</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Expected Return</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Leave Type</th>
+                <th scope="col" className={TABLE.th}>Start Date</th>
+                <th scope="col" className={TABLE.th}>End Date</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Expected Return</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

@@ -755,7 +755,7 @@ export default function OnboardingTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
   if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';

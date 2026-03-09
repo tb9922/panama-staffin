@@ -209,11 +209,11 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
                     <table className={TABLE.table}>
                       <thead className={TABLE.thead}>
                         <tr>
-                          <th className={TABLE.th}>Date</th>
-                          <th className={TABLE.th}>Appraiser</th>
-                          <th className={TABLE.th}>Objectives</th>
-                          <th className={TABLE.th}>Training Needs</th>
-                          <th className={TABLE.th}>Next Due</th>
+                          <th scope="col" className={TABLE.th}>Date</th>
+                          <th scope="col" className={TABLE.th}>Appraiser</th>
+                          <th scope="col" className={TABLE.th}>Objectives</th>
+                          <th scope="col" className={TABLE.th}>Training Needs</th>
+                          <th scope="col" className={TABLE.th}>Next Due</th>
                         </tr>
                       </thead>
                       <tbody>

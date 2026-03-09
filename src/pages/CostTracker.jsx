@@ -64,7 +64,7 @@ export default function CostTracker() {
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading cost data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading cost data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <CostTrackerInner schedData={schedData} monthOffset={monthOffset} setMonthOffset={setMonthOffset} today={today} />;
@@ -191,17 +191,17 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Day#</th>
-              <th className={TABLE.th}>Day</th>
-              <th className={TABLE.th}>Date</th>
-              <th className={`${TABLE.th} text-right`}>Base £</th>
-              <th className={`${TABLE.th} text-right`}>OT Prem £</th>
-              <th className={`${TABLE.th} text-right`}>AG Day £</th>
-              <th className={`${TABLE.th} text-right`}>AG Night £</th>
-              <th className={`${TABLE.th} text-right`}>BH Prem £</th>
-              <th className={`${TABLE.th} text-right font-bold`}>Total £</th>
-              <th className={`${TABLE.th} text-right`}>Cumul £</th>
-              <th className={`${TABLE.th} w-24`}>Bar</th>
+              <th scope="col" className={TABLE.th}>Day#</th>
+              <th scope="col" className={TABLE.th}>Day</th>
+              <th scope="col" className={TABLE.th}>Date</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Base £</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>OT Prem £</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>AG Day £</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>AG Night £</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>BH Prem £</th>
+              <th scope="col" className={`${TABLE.th} text-right font-bold`}>Total £</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Cumul £</th>
+              <th scope="col" className={`${TABLE.th} w-24`}>Bar</th>
             </tr>
           </thead>
           <tbody>

@@ -41,11 +41,11 @@ export default function AuditLog() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Time</th>
-              <th className={TABLE.th}>Action</th>
-              <th className={TABLE.th}>Home</th>
-              <th className={TABLE.th}>User</th>
-              <th className={TABLE.th}>Details</th>
+              <th scope="col" className={TABLE.th}>Time</th>
+              <th scope="col" className={TABLE.th}>Action</th>
+              <th scope="col" className={TABLE.th}>Home</th>
+              <th scope="col" className={TABLE.th}>User</th>
+              <th scope="col" className={TABLE.th}>Details</th>
             </tr>
           </thead>
           <tbody>

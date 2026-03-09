@@ -111,7 +111,7 @@ export default function TaxCodeManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -148,16 +148,16 @@ export default function TaxCodeManager() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Staff Member</th>
-              <th className={TABLE.th}>Tax Code</th>
-              <th className={TABLE.th}>Basis</th>
-              <th className={TABLE.th}>NI Cat.</th>
-              <th className={TABLE.th}>Student Loan</th>
-              <th className={TABLE.th}>Prev. Pay (YTD)</th>
-              <th className={TABLE.th}>Prev. Tax (YTD)</th>
-              <th className={TABLE.th}>Effective</th>
-              <th className={TABLE.th}>Source</th>
-              {isAdmin && <th className={TABLE.th}>Actions</th>}
+              <th scope="col" className={TABLE.th}>Staff Member</th>
+              <th scope="col" className={TABLE.th}>Tax Code</th>
+              <th scope="col" className={TABLE.th}>Basis</th>
+              <th scope="col" className={TABLE.th}>NI Cat.</th>
+              <th scope="col" className={TABLE.th}>Student Loan</th>
+              <th scope="col" className={TABLE.th}>Prev. Pay (YTD)</th>
+              <th scope="col" className={TABLE.th}>Prev. Tax (YTD)</th>
+              <th scope="col" className={TABLE.th}>Effective</th>
+              <th scope="col" className={TABLE.th}>Source</th>
+              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -218,7 +218,7 @@ export default function TaxCodeManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th} colSpan={isAdmin ? 10 : 9}>
+                <th scope="col" className={TABLE.th} colSpan={isAdmin ? 10 : 9}>
                   <span className="text-amber-700">Staff using default 1257L (no record on file)</span>
                 </th>
               </tr>

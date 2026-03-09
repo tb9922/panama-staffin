@@ -349,13 +349,13 @@ export default function DolsTracker() {
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
                   <tr>
-                    <th className={TABLE.th}>Resident</th>
-                    <th className={TABLE.th}>Type</th>
-                    <th className={TABLE.th}>Applied</th>
-                    <th className={TABLE.th}>Authorised</th>
-                    <th className={TABLE.th}>Expiry</th>
-                    <th className={TABLE.th}>Status</th>
-                    <th className={TABLE.th}>Room</th>
+                    <th scope="col" className={TABLE.th}>Resident</th>
+                    <th scope="col" className={TABLE.th}>Type</th>
+                    <th scope="col" className={TABLE.th}>Applied</th>
+                    <th scope="col" className={TABLE.th}>Authorised</th>
+                    <th scope="col" className={TABLE.th}>Expiry</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
+                    <th scope="col" className={TABLE.th}>Room</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -393,13 +393,13 @@ export default function DolsTracker() {
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
                   <tr>
-                    <th className={TABLE.th}>Resident</th>
-                    <th className={TABLE.th}>Assessment Date</th>
-                    <th className={TABLE.th}>Assessor</th>
-                    <th className={TABLE.th}>Decision Area</th>
-                    <th className={TABLE.th}>Capacity</th>
-                    <th className={TABLE.th}>Next Review</th>
-                    <th className={TABLE.th}>Status</th>
+                    <th scope="col" className={TABLE.th}>Resident</th>
+                    <th scope="col" className={TABLE.th}>Assessment Date</th>
+                    <th scope="col" className={TABLE.th}>Assessor</th>
+                    <th scope="col" className={TABLE.th}>Decision Area</th>
+                    <th scope="col" className={TABLE.th}>Capacity</th>
+                    <th scope="col" className={TABLE.th}>Next Review</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -90,7 +90,7 @@ export default function ReceivablesManager() {
     return item.days_overdue >= bucket.min && item.days_overdue <= bucket.max;
   }) || [];
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading receivables...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading receivables...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -145,15 +145,15 @@ export default function ReceivablesManager() {
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr>
-              <th className={TABLE.th}>Invoice #</th>
-              <th className={TABLE.th}>Payer</th>
-              <th className={TABLE.th}>Type</th>
-              <th className={`${TABLE.th} text-right`}>Total</th>
-              <th className={`${TABLE.th} text-right`}>Outstanding</th>
-              <th className={TABLE.th}>Due Date</th>
-              <th className={`${TABLE.th} text-right`}>Days Overdue</th>
-              <th className={TABLE.th}>Last Chase</th>
-              <th className={TABLE.th}>Next Action</th>
+              <th scope="col" className={TABLE.th}>Invoice #</th>
+              <th scope="col" className={TABLE.th}>Payer</th>
+              <th scope="col" className={TABLE.th}>Type</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Outstanding</th>
+              <th scope="col" className={TABLE.th}>Due Date</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Days Overdue</th>
+              <th scope="col" className={TABLE.th}>Last Chase</th>
+              <th scope="col" className={TABLE.th}>Next Action</th>
             </tr></thead>
             <tbody>
               {filteredItems.length === 0 ? (
@@ -208,11 +208,11 @@ export default function ReceivablesManager() {
           <div className={`${TABLE.wrapper} mb-4`}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}><tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Method</th>
-                <th className={TABLE.th}>Contact</th>
-                <th className={TABLE.th}>Outcome</th>
-                <th className={TABLE.th}>Next Action</th>
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Method</th>
+                <th scope="col" className={TABLE.th}>Contact</th>
+                <th scope="col" className={TABLE.th}>Outcome</th>
+                <th scope="col" className={TABLE.th}>Next Action</th>
               </tr></thead>
               <tbody>
                 {chases.map(c => (

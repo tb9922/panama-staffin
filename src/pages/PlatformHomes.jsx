@@ -48,7 +48,7 @@ export default function PlatformHomes() {
     return () => clearTimeout(t);
   }, [success]);
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-400 text-sm py-12 text-center">Loading homes...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading homes...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -64,14 +64,14 @@ export default function PlatformHomes() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Name</th>
-              <th className={TABLE.th}>Slug</th>
-              <th className={TABLE.th}>Beds</th>
-              <th className={TABLE.th}>Care Type</th>
-              <th className={TABLE.th}>Staff</th>
-              <th className={TABLE.th}>Users</th>
-              <th className={TABLE.th}>Updated</th>
-              <th className={TABLE.th}>Actions</th>
+              <th scope="col" className={TABLE.th}>Name</th>
+              <th scope="col" className={TABLE.th}>Slug</th>
+              <th scope="col" className={TABLE.th}>Beds</th>
+              <th scope="col" className={TABLE.th}>Care Type</th>
+              <th scope="col" className={TABLE.th}>Staff</th>
+              <th scope="col" className={TABLE.th}>Users</th>
+              <th scope="col" className={TABLE.th}>Updated</th>
+              <th scope="col" className={TABLE.th}>Actions</th>
             </tr>
           </thead>
           <tbody>

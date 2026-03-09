@@ -500,13 +500,13 @@ export default function RotationGrid() {
         <table className="text-[11px] border-collapse">
           <thead>
             <tr className="bg-gray-800 text-white">
-              <th className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
-              <th className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
+              <th scope="col" className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
+              <th scope="col" className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
               {monthDates.map((d, i) => {
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                 const isMonday = d.getDay() === 1 && i > 0;
                 return (
-                  <th key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
+                  <th scope="col" key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
                     isWeekend ? 'bg-gray-700' : ''
                   } ${isMonday ? 'border-l border-gray-600' : ''}`}>
                     <div className="text-[9px] text-gray-400">{d.toLocaleDateString('en-GB', { weekday: 'short' })[0]}</div>
@@ -514,10 +514,10 @@ export default function RotationGrid() {
                   </th>
                 );
               })}
-              <th className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
-              <th className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
-              <th className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
-              <th className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
+              <th scope="col" className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
             </tr>
           </thead>
           <tbody>

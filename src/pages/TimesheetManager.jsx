@@ -266,15 +266,15 @@ export default function TimesheetManager() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Staff</th>
-                  <th className={TABLE.th}>Shift</th>
-                  <th className={TABLE.th}>Scheduled</th>
-                  <th className={TABLE.th}>Actual</th>
-                  <th className={TABLE.th}>Snapped</th>
-                  <th className={TABLE.th}>Saved</th>
-                  <th className={TABLE.th}>Payable Hrs</th>
-                  <th className={TABLE.th}>Status</th>
-                  {isAdmin && <th className={TABLE.th}></th>}
+                  <th scope="col" className={TABLE.th}>Staff</th>
+                  <th scope="col" className={TABLE.th}>Shift</th>
+                  <th scope="col" className={TABLE.th}>Scheduled</th>
+                  <th scope="col" className={TABLE.th}>Actual</th>
+                  <th scope="col" className={TABLE.th}>Snapped</th>
+                  <th scope="col" className={TABLE.th}>Saved</th>
+                  <th scope="col" className={TABLE.th}>Payable Hrs</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>

@@ -120,7 +120,7 @@ export default function TupeManager() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading TUPE transfers...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading TUPE transfers...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -143,13 +143,13 @@ export default function TupeManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Transfer Type</th>
-                <th className={TABLE.th}>Transfer Date</th>
-                <th className={TABLE.th}>Transferor</th>
-                <th className={TABLE.th}>Transferee</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Staff Affected</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Transfer Type</th>
+                <th scope="col" className={TABLE.th}>Transfer Date</th>
+                <th scope="col" className={TABLE.th}>Transferor</th>
+                <th scope="col" className={TABLE.th}>Transferee</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Staff Affected</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

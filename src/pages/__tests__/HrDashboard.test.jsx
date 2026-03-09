@@ -90,15 +90,15 @@ describe('HrDashboard', () => {
   it('shows tabs for Overview and Warning Register', async () => {
     renderWithProviders(<HrDashboard />);
     await waitFor(() => expect(screen.getByText('HR & People')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Warning Register' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Warning Register' })).toBeInTheDocument();
   });
 
   it('switches to Warning Register tab and shows warnings', async () => {
     const user = userEvent.setup();
     renderWithProviders(<HrDashboard />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Warning Register' })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Warning Register' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Warning Register' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Warning Register' }));
     expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     expect(screen.getByText('Bob Jones')).toBeInTheDocument();
     expect(screen.getByText('DISC-001')).toBeInTheDocument();
@@ -108,8 +108,8 @@ describe('HrDashboard', () => {
     api.getHrWarnings.mockResolvedValue([]);
     const user = userEvent.setup();
     renderWithProviders(<HrDashboard />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Warning Register' })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Warning Register' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Warning Register' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Warning Register' }));
     expect(screen.getByText('No active warnings')).toBeInTheDocument();
   });
 

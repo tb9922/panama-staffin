@@ -153,9 +153,9 @@ describe('AgencyTracker', () => {
   it('renders tab buttons for Shift Log, Providers, Weekly Trend', async () => {
     renderAdmin();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Shift Log' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Shift Log' })).toBeInTheDocument()
     );
-    expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Weekly Trend' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Providers' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Weekly Trend' })).toBeInTheDocument();
   });
 });

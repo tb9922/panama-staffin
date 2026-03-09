@@ -92,12 +92,12 @@ describe('GdprDashboard', () => {
   it('renders tab bar with all sections', async () => {
     renderWithProviders(<GdprDashboard />);
     await waitFor(() => expect(screen.getByText('Overview')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Data Requests' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Breaches' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retention' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Consent' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Complaints' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Access Log' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Data Requests' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Breaches' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Retention' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Consent' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Complaints' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Access Log' })).toBeInTheDocument();
   });
 
   it('shows compliance score on overview tab', async () => {
@@ -115,24 +115,24 @@ describe('GdprDashboard', () => {
   it('switches to Data Requests tab and shows empty state', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GdprDashboard />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Data Requests' })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Data Requests' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Data Requests' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Data Requests' }));
     expect(screen.getByText('No data requests')).toBeInTheDocument();
   });
 
   it('shows New Request button for admin on Data Requests tab', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GdprDashboard />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Data Requests' })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Data Requests' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Data Requests' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Data Requests' }));
     expect(screen.getByRole('button', { name: 'New Request' })).toBeInTheDocument();
   });
 
   it('shows data breaches empty state on Breaches tab', async () => {
     const user = userEvent.setup();
     renderWithProviders(<GdprDashboard />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Breaches' })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Breaches' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Breaches' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Breaches' }));
     expect(screen.getByText('No data breaches recorded')).toBeInTheDocument();
   });
 });

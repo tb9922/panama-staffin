@@ -203,7 +203,7 @@ export default function StaffRegister() {
   }, [allStaff]);
 
   const SortHeader = ({ col, children, className = '' }) => (
-    <th className={`${TABLE.th} cursor-pointer select-none hover:text-blue-600 text-xs ${className}`} onClick={() => toggleSort(col)}>
+    <th scope="col" className={`${TABLE.th} cursor-pointer select-none hover:text-blue-600 text-xs ${className}`} onClick={() => toggleSort(col)}>
       {children} {sortCol === col ? (sortDir === 1 ? '\u25B2' : '\u25BC') : ''}
     </th>
   );
@@ -304,7 +304,7 @@ export default function StaffRegister() {
       {/* Add Staff Modal */}
       <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); }} title="Add New Staff" size="md">
             {rowError?.id === 'add' && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3">
+              <div id="add-staff-error" className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3" role="alert">
                 {rowError.msg}
               </div>
             )}
@@ -312,7 +312,7 @@ export default function StaffRegister() {
               <div>
                 <label className={INPUT.label}>Name</label>
                 <input type="text" value={newStaff.name} onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
-                  className={INPUT.base} />
+                  className={INPUT.base} aria-describedby={rowError?.id === 'add' ? 'add-staff-error' : undefined} aria-invalid={rowError?.id === 'add'} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -410,22 +410,22 @@ export default function StaffRegister() {
         <table className={TABLE.table + ' min-w-[1100px]'}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>ID</th>
+              <th scope="col" className={TABLE.th}>ID</th>
               <SortHeader col="name">Name</SortHeader>
               <SortHeader col="role">Role</SortHeader>
               <SortHeader col="team">Team</SortHeader>
               <SortHeader col="pref">Pref</SortHeader>
               <SortHeader col="skill">Skill</SortHeader>
               {isAdmin && <SortHeader col="hourly_rate">Rate</SortHeader>}
-              <th className={TABLE.th}>Hrs/wk</th>
-              <th className={TABLE.th}>Start</th>
-              <th className={TABLE.th}>WTR</th>
-              <th className={TABLE.th}>Notes</th>
-              <th className={TABLE.th}>AL</th>
-              <th className={`${TABLE.th} text-center`}>Active</th>
-              <th className={`${TABLE.th} text-right print:hidden`}>28d Hrs</th>
-              {isAdmin && <th className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
-              <th className={`${TABLE.th} print:hidden`}></th>
+              <th scope="col" className={TABLE.th}>Hrs/wk</th>
+              <th scope="col" className={TABLE.th}>Start</th>
+              <th scope="col" className={TABLE.th}>WTR</th>
+              <th scope="col" className={TABLE.th}>Notes</th>
+              <th scope="col" className={TABLE.th}>AL</th>
+              <th scope="col" className={`${TABLE.th} text-center`}>Active</th>
+              <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Hrs</th>
+              {isAdmin && <th scope="col" className={`${TABLE.th} text-right print:hidden`}>28d Pay</th>}
+              <th scope="col" className={`${TABLE.th} print:hidden`}></th>
             </tr>
           </thead>
           <tbody>

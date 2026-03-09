@@ -75,7 +75,7 @@ export default function FinanceDashboard() {
     if (sheets.length) downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
   }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading finance data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading finance data...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -144,9 +144,9 @@ export default function FinanceDashboard() {
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}><tr>
-                    <th className={TABLE.th}>Category</th>
-                    <th className={`${TABLE.th} text-right`}>Total</th>
-                    <th className={`${TABLE.th} text-right`}>Count</th>
+                    <th scope="col" className={TABLE.th}>Category</th>
+                    <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
+                    <th scope="col" className={`${TABLE.th} text-right`}>Count</th>
                   </tr></thead>
                   <tbody>
                     {dashboard.expenses_by_category.map(c => (
@@ -169,10 +169,10 @@ export default function FinanceDashboard() {
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}><tr>
-                    <th className={TABLE.th}>Month</th>
-                    <th className={`${TABLE.th} text-right`}>Income</th>
-                    <th className={`${TABLE.th} text-right`}>Expenses</th>
-                    <th className={`${TABLE.th} text-right`}>Net</th>
+                    <th scope="col" className={TABLE.th}>Month</th>
+                    <th scope="col" className={`${TABLE.th} text-right`}>Income</th>
+                    <th scope="col" className={`${TABLE.th} text-right`}>Expenses</th>
+                    <th scope="col" className={`${TABLE.th} text-right`}>Net</th>
                   </tr></thead>
                   <tbody>
                     {buildTrendRows(dashboard.income_trend, dashboard.expense_trend).map(r => (

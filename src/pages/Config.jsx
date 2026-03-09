@@ -157,11 +157,11 @@ export default function Config() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Code</th>
-                <th className={TABLE.th}>Name</th>
-                <th className={TABLE.th}>Start</th>
-                <th className={TABLE.th}>End</th>
-                <th className={TABLE.th}>Hours</th>
+                <th scope="col" className={TABLE.th}>Code</th>
+                <th scope="col" className={TABLE.th}>Name</th>
+                <th scope="col" className={TABLE.th}>Start</th>
+                <th scope="col" className={TABLE.th}>End</th>
+                <th scope="col" className={TABLE.th}>Hours</th>
               </tr>
             </thead>
             <tbody>

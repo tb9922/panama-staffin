@@ -95,7 +95,7 @@ export default function CQCEvidence() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading CQC data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
   if (error || !moduleData) return <div className="p-6 text-red-600">{error || 'Failed to load CQC data'}</div>;
 
   return <CQCEvidenceInner data={moduleData} />;

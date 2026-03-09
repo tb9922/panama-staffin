@@ -156,7 +156,7 @@ export default function EdiTracker() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading EDI data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading EDI data...</p></div></div>;
 
   const isHarassment = form.record_type === 'harassment_complaint';
   const isAdjustment = form.record_type === 'reasonable_adjustment';
@@ -191,12 +191,12 @@ export default function EdiTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Record Type</th>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Date Recorded</th>
-                <th className={TABLE.th}>Category</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Record Type</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Date Recorded</th>
+                <th scope="col" className={TABLE.th}>Category</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

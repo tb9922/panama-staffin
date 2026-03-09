@@ -584,17 +584,17 @@ export default function MonthlyTimesheet() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Day</th>
-                <th className={TABLE.th}>Roster</th>
-                <th className={TABLE.th + ' text-right'}>Sched. Hrs</th>
-                <th className={TABLE.th}>Actual In</th>
-                <th className={TABLE.th}>Actual Out</th>
-                <th className={TABLE.th + ' text-right'}>Break</th>
-                <th className={TABLE.th + ' text-right'}>Payable Hrs</th>
-                <th className={TABLE.th + ' text-right'}>Variance</th>
-                <th className={TABLE.th}>Status</th>
-                {isAdmin && <th className={TABLE.th + ' print:hidden'}>Actions</th>}
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Day</th>
+                <th scope="col" className={TABLE.th}>Roster</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Sched. Hrs</th>
+                <th scope="col" className={TABLE.th}>Actual In</th>
+                <th scope="col" className={TABLE.th}>Actual Out</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Break</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Payable Hrs</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Variance</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                {isAdmin && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
               </tr>
             </thead>
             <tbody>

@@ -153,7 +153,7 @@ export default function RtwDbsRenewals() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading renewal data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading renewal data...</p></div></div>;
 
   const overdueCount = items.filter(isHighlighted).length;
 
@@ -194,13 +194,13 @@ export default function RtwDbsRenewals() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Check Type</th>
-                <th className={TABLE.th}>Last Checked</th>
-                <th className={TABLE.th}>Expiry Date</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Checked By</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Check Type</th>
+                <th scope="col" className={TABLE.th}>Last Checked</th>
+                <th scope="col" className={TABLE.th}>Expiry Date</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Checked By</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

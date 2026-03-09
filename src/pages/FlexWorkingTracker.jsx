@@ -159,7 +159,7 @@ export default function FlexWorkingTracker() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading flexible working data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading flexible working data...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -191,13 +191,13 @@ export default function FlexWorkingTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Request Date</th>
-                <th className={TABLE.th}>Requested Change</th>
-                <th className={TABLE.th}>Decision Deadline</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Decision</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Request Date</th>
+                <th scope="col" className={TABLE.th}>Requested Change</th>
+                <th scope="col" className={TABLE.th}>Decision Deadline</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Decision</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

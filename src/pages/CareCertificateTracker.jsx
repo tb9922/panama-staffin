@@ -258,7 +258,7 @@ export default function CareCertificateTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
   if (!state && error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const selectedRecord = getSelectedRecord();
@@ -322,14 +322,14 @@ export default function CareCertificateTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff Name</th>
-                <th className={TABLE.th}>Role</th>
-                <th className={TABLE.th}>Start Date</th>
-                <th className={TABLE.th}>Supervisor</th>
-                <th className={TABLE.th} style={{ minWidth: '160px' }}>Progress</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Weeks</th>
-                <th className={TABLE.th}></th>
+                <th scope="col" className={TABLE.th}>Staff Name</th>
+                <th scope="col" className={TABLE.th}>Role</th>
+                <th scope="col" className={TABLE.th}>Start Date</th>
+                <th scope="col" className={TABLE.th}>Supervisor</th>
+                <th scope="col" className={TABLE.th} style={{ minWidth: '160px' }}>Progress</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Weeks</th>
+                <th scope="col" className={TABLE.th}></th>
               </tr>
             </thead>
             <tbody>
