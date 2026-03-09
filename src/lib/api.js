@@ -10,10 +10,16 @@ export function getCurrentHome() {
   return currentHome;
 }
 
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/);
+  return match ? match[1] : '';
+}
+
 function authHeaders(extra = {}) {
   return {
     'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest', // CSRF protection for cookie-based auth
+    'X-Requested-With': 'XMLHttpRequest', // Defense-in-depth: blocks simple cross-site requests
+    'X-CSRF-Token': getCsrfToken(),       // Double-submit CSRF token from cookie
     ...extra,
   };
 }
@@ -940,6 +946,10 @@ export async function uploadHrAttachment(caseType, caseId, file, description) {
   const res = await fetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
     method: 'POST',
     credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
     body: formData,
   });
   if (res.status === 401) {

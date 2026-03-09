@@ -12,12 +12,21 @@ export function requireAuth(req, res, next) {
     || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
   if (!token) return res.status(401).json({ error: 'Unauthorised' });
 
-  // CSRF protection: cookie-authenticated requests must include X-Requested-With header.
-  // Custom headers can't be sent cross-origin without CORS preflight, so this
-  // blocks cross-site form submissions and simple requests from foreign origins.
-  // Skip for Authorization header (API clients handle their own CSRF) and health checks.
-  if (req.cookies?.panama_token && !req.headers['x-requested-with']) {
-    return res.status(403).json({ error: 'Missing CSRF header' });
+  // CSRF double-submit cookie: on mutating requests from cookie-authenticated users,
+  // verify that the X-CSRF-Token header matches the panama_csrf cookie value.
+  // An attacker from another origin can cause the cookie to be sent but cannot
+  // read its value (same-origin policy), so they can't forge the header.
+  // Safe methods (GET/HEAD/OPTIONS) are exempt — they must not mutate state.
+  // Authorization header requests are exempt (API clients handle their own CSRF).
+  if (req.cookies?.panama_token && !req.headers.authorization) {
+    const safeMethod = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+    if (!safeMethod) {
+      const cookieToken = req.cookies.panama_csrf;
+      const headerToken = req.headers['x-csrf-token'];
+      if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+        return res.status(403).json({ error: 'CSRF token mismatch' });
+      }
+    }
   }
 
   try {
