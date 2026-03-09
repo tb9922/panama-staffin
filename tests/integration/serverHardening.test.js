@@ -26,11 +26,15 @@ describe('Health endpoint', () => {
     expect(res.body).not.toHaveProperty('uptime');
   });
 
-  it('returns only status and db keys', async () => {
+  it('returns expected keys including pool and migration info', async () => {
     const res = await request(app).get('/health');
     const keys = Object.keys(res.body);
-    expect(keys).toEqual(expect.arrayContaining(['status', 'db']));
-    expect(keys).toHaveLength(2);
+    expect(keys).toEqual(expect.arrayContaining(['status', 'db', 'queryMs', 'migrationVersion', 'pool']));
+    expect(res.body.queryMs).toBeTypeOf('number');
+    expect(res.body.migrationVersion).toBeTypeOf('number');
+    expect(res.body.pool).toHaveProperty('total');
+    expect(res.body.pool).toHaveProperty('idle');
+    expect(res.body.pool).toHaveProperty('waiting');
   });
 });
 

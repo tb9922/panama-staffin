@@ -7,8 +7,8 @@ const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
 
 // ── Alert builders ──────────────────────────────────────────────────────────
 
-function pushIf(alerts, condition, type, module, message, link) {
-  if (condition) alerts.push({ type, module, message, link });
+function pushIf(alerts, condition, type, module, message, link, priority = 1, dueDate = null) {
+  if (condition) alerts.push({ type, module, message, link, priority, dueDate });
 }
 
 function buildAlerts(m) {
@@ -16,94 +16,100 @@ function buildAlerts(m) {
   const n = (obj, key) => (obj && typeof obj[key] === 'number') ? obj[key] : 0;
   const b = (obj, key) => !!(obj && obj[key]);
 
-  // Error alerts — regulatory/safety risk
+  // Priority 5 — Regulatory deadline breach (CQC enforcement risk)
   pushIf(alerts, n(m.incidents, 'cqcOverdue') > 0, 'error', 'incidents',
-    `${n(m.incidents, 'cqcOverdue')} CQC notification(s) overdue`, '/incidents');
+    `${n(m.incidents, 'cqcOverdue')} CQC notification(s) overdue`, '/incidents', 5);
   pushIf(alerts, n(m.incidents, 'riddorOverdue') > 0, 'error', 'incidents',
-    `${n(m.incidents, 'riddorOverdue')} RIDDOR report(s) overdue`, '/incidents');
+    `${n(m.incidents, 'riddorOverdue')} RIDDOR report(s) overdue`, '/incidents', 5);
+
+  // Priority 4 — Serious compliance/safety concern
   pushIf(alerts, n(m.incidents, 'docOverdue') > 0, 'error', 'incidents',
-    `${n(m.incidents, 'docOverdue')} Duty of Candour notification(s) overdue`, '/incidents');
+    `${n(m.incidents, 'docOverdue')} Duty of Candour notification(s) overdue`, '/incidents', 4);
   pushIf(alerts, n(m.risks, 'critical') > 0, 'error', 'risks',
-    `${n(m.risks, 'critical')} critical risk(s) on register`, '/risks');
+    `${n(m.risks, 'critical')} critical risk(s) on register`, '/risks', 4);
   pushIf(alerts, n(m.whistleblowing, 'unacknowledged') > 0, 'error', 'whistleblowing',
-    `${n(m.whistleblowing, 'unacknowledged')} unacknowledged whistleblowing concern(s)`, '/speak-up');
-
-  // Warning alerts — action needed
-  pushIf(alerts, n(m.incidents, 'open') > 0, 'warning', 'incidents',
-    `${n(m.incidents, 'open')} open investigation(s)`, '/incidents');
-  pushIf(alerts, n(m.incidents, 'overdueActions') > 0, 'warning', 'incidents',
-    `${n(m.incidents, 'overdueActions')} overdue corrective action(s)`, '/incidents');
-  pushIf(alerts, n(m.complaints, 'unacknowledged') > 0, 'warning', 'complaints',
-    `${n(m.complaints, 'unacknowledged')} unacknowledged complaint(s)`, '/complaints');
-  pushIf(alerts, n(m.complaints, 'overdueResponse') > 0, 'warning', 'complaints',
-    `${n(m.complaints, 'overdueResponse')} overdue complaint response(s)`, '/complaints');
-  pushIf(alerts, n(m.maintenance, 'overdue') > 0, 'warning', 'maintenance',
-    `${n(m.maintenance, 'overdue')} overdue maintenance check(s)`, '/maintenance');
-  pushIf(alerts, n(m.maintenance, 'expiredCerts') > 0, 'warning', 'maintenance',
-    `${n(m.maintenance, 'expiredCerts')} expired certificate(s)`, '/maintenance');
-  pushIf(alerts, n(m.training, 'expired') > 0, 'warning', 'training',
-    `${n(m.training, 'expired')} expired training record(s)`, '/training');
-  pushIf(alerts, n(m.supervisions, 'overdue') > 0, 'warning', 'supervisions',
-    `${n(m.supervisions, 'overdue')} overdue supervision(s)`, '/training');
-  pushIf(alerts, n(m.appraisals, 'overdue') > 0, 'warning', 'appraisals',
-    `${n(m.appraisals, 'overdue')} overdue appraisal(s)`, '/training');
-  pushIf(alerts, b(m.fireDrills, 'overdue'), 'warning', 'fireDrills',
-    'Fire drill overdue', '/training');
-  pushIf(alerts, n(m.ipc, 'activeOutbreaks') > 0, 'warning', 'ipc',
-    `${n(m.ipc, 'activeOutbreaks')} active IPC outbreak(s)`, '/ipc');
-  pushIf(alerts, n(m.ipc, 'overdueActions') > 0, 'warning', 'ipc',
-    `${n(m.ipc, 'overdueActions')} overdue IPC corrective action(s)`, '/ipc');
-  pushIf(alerts, n(m.risks, 'overdueReviews') > 0, 'warning', 'risks',
-    `${n(m.risks, 'overdueReviews')} overdue risk review(s)`, '/risks');
-  pushIf(alerts, n(m.risks, 'overdueActions') > 0, 'warning', 'risks',
-    `${n(m.risks, 'overdueActions')} overdue risk action(s)`, '/risks');
-  pushIf(alerts, n(m.policies, 'overdue') > 0, 'warning', 'policies',
-    `${n(m.policies, 'overdue')} overdue policy review(s)`, '/policies');
-  pushIf(alerts, n(m.dols, 'expiringSoon') > 0, 'warning', 'dols',
-    `${n(m.dols, 'expiringSoon')} DoLS authorisation(s) expiring within 90 days`, '/dols');
-  pushIf(alerts, n(m.dols, 'overdueReviews') > 0, 'warning', 'dols',
-    `${n(m.dols, 'overdueReviews')} overdue DoLS/MCA review(s)`, '/dols');
-  pushIf(alerts, n(m.careCertificate, 'overdue') > 0, 'warning', 'careCertificate',
-    `${n(m.careCertificate, 'overdue')} overdue Care Certificate(s)`, '/care-cert');
-  // Bed occupancy alerts
+    `${n(m.whistleblowing, 'unacknowledged')} unacknowledged whistleblowing concern(s)`, '/speak-up', 4);
   pushIf(alerts, m.beds?.occupancyRate < 80, 'error', 'beds',
-    `Occupancy at ${n(m.beds, 'occupancyRate')}% — significant revenue risk`, '/beds');
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% — significant revenue risk`, '/beds', 4);
+
+  // Priority 3 — Overdue actions requiring attention
+  pushIf(alerts, n(m.incidents, 'open') > 0, 'warning', 'incidents',
+    `${n(m.incidents, 'open')} open investigation(s)`, '/incidents', 3);
+  pushIf(alerts, n(m.incidents, 'overdueActions') > 0, 'warning', 'incidents',
+    `${n(m.incidents, 'overdueActions')} overdue corrective action(s)`, '/incidents', 3);
+  pushIf(alerts, n(m.complaints, 'unacknowledged') > 0, 'warning', 'complaints',
+    `${n(m.complaints, 'unacknowledged')} unacknowledged complaint(s)`, '/complaints', 3);
+  pushIf(alerts, n(m.complaints, 'overdueResponse') > 0, 'warning', 'complaints',
+    `${n(m.complaints, 'overdueResponse')} overdue complaint response(s)`, '/complaints', 3);
+  pushIf(alerts, n(m.maintenance, 'overdue') > 0, 'warning', 'maintenance',
+    `${n(m.maintenance, 'overdue')} overdue maintenance check(s)`, '/maintenance', 3);
+  pushIf(alerts, n(m.maintenance, 'expiredCerts') > 0, 'warning', 'maintenance',
+    `${n(m.maintenance, 'expiredCerts')} expired certificate(s)`, '/maintenance', 3);
+  pushIf(alerts, n(m.training, 'expired') > 0, 'warning', 'training',
+    `${n(m.training, 'expired')} expired training record(s)`, '/training', 3);
+  pushIf(alerts, n(m.supervisions, 'overdue') > 0, 'warning', 'supervisions',
+    `${n(m.supervisions, 'overdue')} overdue supervision(s)`, '/training', 3);
+  pushIf(alerts, n(m.appraisals, 'overdue') > 0, 'warning', 'appraisals',
+    `${n(m.appraisals, 'overdue')} overdue appraisal(s)`, '/training', 3);
+  pushIf(alerts, b(m.fireDrills, 'overdue'), 'warning', 'fireDrills',
+    'Fire drill overdue', '/training', 3);
+  pushIf(alerts, n(m.ipc, 'activeOutbreaks') > 0, 'warning', 'ipc',
+    `${n(m.ipc, 'activeOutbreaks')} active IPC outbreak(s)`, '/ipc', 3);
+  pushIf(alerts, n(m.ipc, 'overdueActions') > 0, 'warning', 'ipc',
+    `${n(m.ipc, 'overdueActions')} overdue IPC corrective action(s)`, '/ipc', 3);
+  pushIf(alerts, n(m.risks, 'overdueReviews') > 0, 'warning', 'risks',
+    `${n(m.risks, 'overdueReviews')} overdue risk review(s)`, '/risks', 3);
+  pushIf(alerts, n(m.risks, 'overdueActions') > 0, 'warning', 'risks',
+    `${n(m.risks, 'overdueActions')} overdue risk action(s)`, '/risks', 3);
+  pushIf(alerts, n(m.policies, 'overdue') > 0, 'warning', 'policies',
+    `${n(m.policies, 'overdue')} overdue policy review(s)`, '/policies', 3);
+  pushIf(alerts, n(m.dols, 'expiringSoon') > 0, 'warning', 'dols',
+    `${n(m.dols, 'expiringSoon')} DoLS authorisation(s) expiring within 90 days`, '/dols', 3);
+  pushIf(alerts, n(m.dols, 'overdueReviews') > 0, 'warning', 'dols',
+    `${n(m.dols, 'overdueReviews')} overdue DoLS/MCA review(s)`, '/dols', 3);
+  pushIf(alerts, n(m.careCertificate, 'overdue') > 0, 'warning', 'careCertificate',
+    `${n(m.careCertificate, 'overdue')} overdue Care Certificate(s)`, '/care-cert', 3);
   pushIf(alerts, n(m.beds, 'residentBedMismatch') > 0, 'warning', 'beds',
-    `${n(m.beds, 'residentBedMismatch')} bed(s) show occupied but resident discharged/deceased`, '/beds');
+    `${n(m.beds, 'residentBedMismatch')} bed(s) show occupied but resident discharged/deceased`, '/beds', 3);
   pushIf(alerts, n(m.beds, 'hospitalHoldExpiring') > 0, 'warning', 'beds',
-    `${n(m.beds, 'hospitalHoldExpiring')} hospital hold(s) expiring within 7 days`, '/beds');
+    `${n(m.beds, 'hospitalHoldExpiring')} hospital hold(s) expiring within 7 days`, '/beds', 3);
   pushIf(alerts, n(m.beds, 'staleReservations') > 0, 'warning', 'beds',
-    `${n(m.beds, 'staleReservations')} stale reservation(s) past expiry`, '/beds');
-  pushIf(alerts, m.beds?.occupancyRate >= 80 && m.beds?.occupancyRate < 90, 'warning', 'beds',
-    `Occupancy at ${n(m.beds, 'occupancyRate')}% — below 90% target`, '/beds');
+    `${n(m.beds, 'staleReservations')} stale reservation(s) past expiry`, '/beds', 3);
   pushIf(alerts, n(m.supervisions, 'noRecord') > 0, 'warning', 'supervisions',
-    `${n(m.supervisions, 'noRecord')} staff with no supervision record`, '/training');
+    `${n(m.supervisions, 'noRecord')} staff with no supervision record`, '/training', 3);
   pushIf(alerts, n(m.appraisals, 'noRecord') > 0, 'warning', 'appraisals',
-    `${n(m.appraisals, 'noRecord')} staff with no appraisal record`, '/training');
+    `${n(m.appraisals, 'noRecord')} staff with no appraisal record`, '/training', 3);
   pushIf(alerts, n(m.whistleblowing, 'open') > 0, 'warning', 'whistleblowing',
-    `${n(m.whistleblowing, 'open')} open whistleblowing concern(s)`, '/speak-up');
+    `${n(m.whistleblowing, 'open')} open whistleblowing concern(s)`, '/speak-up', 3);
   pushIf(alerts, m.ipc?.latestScore != null && m.ipc.latestScore < 70, 'warning', 'ipc',
-    `Latest IPC audit score is ${m.ipc.latestScore}% — below 70% threshold`, '/ipc');
+    `Latest IPC audit score is ${m.ipc.latestScore}% — below 70% threshold`, '/ipc', 3);
 
-  // Info alerts — awareness
+  // Priority 2 — Approaching deadlines (not yet overdue)
+  pushIf(alerts, m.beds?.occupancyRate >= 80 && m.beds?.occupancyRate < 90, 'warning', 'beds',
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% — below 90% target`, '/beds', 2);
   pushIf(alerts, n(m.training, 'expiringSoon') > 0, 'info', 'training',
-    `${n(m.training, 'expiringSoon')} training record(s) expiring in 30 days`, '/training');
+    `${n(m.training, 'expiringSoon')} training record(s) expiring in 30 days`, '/training', 2);
   pushIf(alerts, n(m.maintenance, 'dueSoon') > 0, 'info', 'maintenance',
-    `${n(m.maintenance, 'dueSoon')} maintenance check(s) due in 30 days`, '/maintenance');
+    `${n(m.maintenance, 'dueSoon')} maintenance check(s) due in 30 days`, '/maintenance', 2);
   pushIf(alerts, n(m.supervisions, 'dueSoon') > 0, 'info', 'supervisions',
-    `${n(m.supervisions, 'dueSoon')} supervision(s) due soon`, '/training');
+    `${n(m.supervisions, 'dueSoon')} supervision(s) due soon`, '/training', 2);
   pushIf(alerts, n(m.policies, 'dueSoon') > 0, 'info', 'policies',
-    `${n(m.policies, 'dueSoon')} policy review(s) due soon`, '/policies');
-  pushIf(alerts, n(m.fireDrills, 'drillsThisYear') < 4 && !b(m.fireDrills, 'overdue'), 'info', 'fireDrills',
-    `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year — 4 required`, '/training');
-  pushIf(alerts, n(m.beds, 'available') > 0 && m.beds?.occupancyRate >= 90, 'info', 'beds',
-    `${n(m.beds, 'available')} bed(s) available`, '/beds');
+    `${n(m.policies, 'dueSoon')} policy review(s) due soon`, '/policies', 2);
 
-  // Stable sort: errors first, then warnings, then info
-  alerts.sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type]);
+  // Priority 1 — Informational
+  pushIf(alerts, n(m.fireDrills, 'drillsThisYear') < 4 && !b(m.fireDrills, 'overdue'), 'info', 'fireDrills',
+    `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year — 4 required`, '/training', 1);
+  pushIf(alerts, n(m.beds, 'available') > 0 && m.beds?.occupancyRate >= 90, 'info', 'beds',
+    `${n(m.beds, 'available')} bed(s) available`, '/beds', 1);
+
+  // Stable sort: highest priority first, then errors before warnings before info
+  alerts.sort((a, b) => (b.priority - a.priority) || (TYPE_ORDER[a.type] - TYPE_ORDER[b.type]));
 
   return alerts;
 }
+
+// Exported for unit testing (pure function — no DB, no side effects)
+export { buildAlerts as _buildAlerts };
 
 // ── Default zero-value objects per module ──────────────────────────────────
 
@@ -162,7 +168,10 @@ export async function getDashboardSummary(homeId) {
 
   const alerts = buildAlerts(modules);
 
-  logger.info({ homeId, alertCount: alerts.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
+  // "Action This Week" — priority 3+ items (all are currently overdue/actionable)
+  const weekActions = alerts.filter(a => a.priority >= 3);
 
-  return { modules, alerts };
+  logger.info({ homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
+
+  return { modules, alerts, weekActions };
 }

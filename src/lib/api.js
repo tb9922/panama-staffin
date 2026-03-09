@@ -1481,3 +1481,12 @@ export async function deletePlatformHome(id) {
     method: 'DELETE', headers: authHeaders(),
   });
 }
+
+// Fire-and-forget audit log for report downloads
+export function logReportDownload(reportType, dateRange) {
+  const home = getCurrentHome();
+  if (!home) return;
+  apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
+  }).catch(() => {}); // fire-and-forget — don't block the download
+}

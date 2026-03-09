@@ -5,6 +5,7 @@ import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
+import { zodError } from '../errors.js';
 
 const router = Router();
 router.use(readRateLimiter);
@@ -45,6 +46,23 @@ router.delete('/purge', requireAuth, requireAdmin, requireHomeAccess, async (req
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const deleted = await auditService.purgeOlderThan(parsed.data.days, req.home.slug);
     res.json({ deleted, days: parsed.data.days, home: req.home.slug });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/audit/report-download — log report PDF generation
+const reportDownloadSchema = z.object({
+  reportType: z.string().min(1).max(50),
+  dateRange: z.string().max(100).optional().default(''),
+});
+
+router.post('/report-download', requireAuth, requireHomeAccess, async (req, res, next) => {
+  try {
+    const parsed = reportDownloadSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+    await auditService.log('report_download', req.user.username, req.home.slug, parsed.data);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

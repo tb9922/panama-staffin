@@ -16,6 +16,7 @@ vi.mock('../../lib/api.js', async () => {
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getSchedulingData: vi.fn(),
+    logReportDownload: vi.fn(),
   };
 });
 
@@ -29,6 +30,7 @@ vi.mock('../../lib/pdfReports.js', () => ({
   generateCostPDF: vi.fn(),
   generateCoveragePDF: vi.fn(),
   generateStaffPDF: vi.fn(),
+  generateBoardPackPDF: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -91,7 +93,7 @@ describe('Reports', () => {
     expect(screen.queryByText('PDF Reports')).not.toBeInTheDocument();
   });
 
-  it('admin sees all four report type cards', async () => {
+  it('admin sees all five report type cards', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('PDF Reports')).toBeInTheDocument()
@@ -100,6 +102,7 @@ describe('Reports', () => {
     expect(screen.getByText('Monthly Cost Report')).toBeInTheDocument();
     expect(screen.getByText('Coverage & Escalation')).toBeInTheDocument();
     expect(screen.getByText('Staff Register')).toBeInTheDocument();
+    expect(screen.getByText('Board Pack')).toBeInTheDocument();
   });
 
   it('viewer sees only non-admin report cards (no cost or staff register)', async () => {
@@ -112,6 +115,7 @@ describe('Reports', () => {
     // Admin-only reports should not appear for viewer
     expect(screen.queryByText('Monthly Cost Report')).not.toBeInTheDocument();
     expect(screen.queryByText('Staff Register')).not.toBeInTheDocument();
+    expect(screen.queryByText('Board Pack')).not.toBeInTheDocument();
   });
 
   it('each visible report card has a Download PDF button', async () => {
@@ -120,8 +124,8 @@ describe('Reports', () => {
       expect(screen.getByText('PDF Reports')).toBeInTheDocument()
     );
     const downloadBtns = screen.getAllByRole('button', { name: 'Download PDF' });
-    // Admin sees 4 reports, each with its own button
-    expect(downloadBtns).toHaveLength(4);
+    // Admin sees 5 reports, each with its own button
+    expect(downloadBtns).toHaveLength(5);
   });
 
   it('date range input is shown for roster and coverage reports', async () => {

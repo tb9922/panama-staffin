@@ -383,6 +383,30 @@ function DashboardInner({ schedData }) {
           );
         })()}
 
+        {/* Action This Week — admin only, priority 3+ items needing attention */}
+        {isAdmin && summary?.weekActions?.length > 0 && (
+          <div className={`${CARD.padded} lg:col-span-2`}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Action This Week</h2>
+              <span className={BADGE.red}>{summary.weekActions.length}</span>
+            </div>
+            <ul className="space-y-2">
+              {summary.weekActions.slice(0, 10).map((action, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                    action.priority >= 5 ? 'bg-red-500' :
+                    action.priority >= 4 ? 'bg-orange-500' :
+                    'bg-amber-500'
+                  }`} />
+                  <button className="text-gray-700 hover:text-gray-900 text-left" onClick={() => navigate(action.link)}>
+                    {action.message}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Alerts */}
         <div className={`${CARD.padded} lg:col-span-2`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Alerts</h2>
