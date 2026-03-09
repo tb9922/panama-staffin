@@ -126,15 +126,14 @@ app.get('/health', async (req, res) => {
   let migrationVersion = null;
   try {
     const start = Date.now();
-    await Promise.race([
-      pool.query('SELECT 1'),
+    const [, mv] = await Promise.race([
+      Promise.all([pool.query('SELECT 1'), pool.query('SELECT MAX(id) AS v FROM migrations')]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
     ]);
     queryMs = Date.now() - start;
     dbOk = true;
-    const mv = await pool.query('SELECT MAX(id) AS v FROM migrations');
     migrationVersion = mv.rows[0]?.v ?? null;
-  } catch { /* no-op */ }
+  } catch { /* db down or timeout */ }
   res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',

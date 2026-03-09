@@ -60,7 +60,7 @@ Perform this step at least once per quarter:
 createdb panama_drill_test
 
 # Restore latest backup
-gunzip -c backups/$(ls -t backups/*.sql.gz | head -1) | psql panama_drill_test
+gunzip -c $(ls -t backups/*.sql.gz | head -1) | psql panama_drill_test
 
 # Run migrations
 DATABASE_URL=postgresql://localhost/panama_drill_test node scripts/migrate.js

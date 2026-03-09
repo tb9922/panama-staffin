@@ -78,7 +78,7 @@ The login response includes the JWT in the response body for API clients. Use th
 
 - **Threshold:** 5 consecutive failed login attempts
 - **Duration:** 30 minutes (automatic unlock)
-- **Storage:** `failed_login_attempts` and `locked_until` columns on `users` table (migration 087)
+- **Storage:** `failed_login_count` and `locked_until` columns on `users` table (migration 087)
 - **No user enumeration:** Wrong password, deactivated user, and non-existent user all return the same `401 Invalid credentials` message
 
 ## Rate Limiting

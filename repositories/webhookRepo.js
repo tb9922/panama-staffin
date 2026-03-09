@@ -1,8 +1,10 @@
-import pool from '../db.js';
+import { pool } from '../db.js';
+
+const SAFE_COLS = 'id, home_id, url, events, active, created_at, updated_at';
 
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM webhooks WHERE home_id = $1 ORDER BY created_at DESC',
+    `SELECT ${SAFE_COLS} FROM webhooks WHERE home_id = $1 ORDER BY created_at DESC`,
     [homeId]
   );
   return rows;
@@ -10,7 +12,7 @@ export async function findByHome(homeId) {
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM webhooks WHERE id = $1 AND home_id = $2',
+    `SELECT ${SAFE_COLS} FROM webhooks WHERE id = $1 AND home_id = $2`,
     [id, homeId]
   );
   return rows[0] || null;
@@ -28,7 +30,7 @@ export async function create(homeId, data) {
   const { rows } = await pool.query(
     `INSERT INTO webhooks (home_id, url, secret, events, active)
      VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
+     RETURNING ${SAFE_COLS}`,
     [homeId, data.url, data.secret, data.events, data.active !== false]
   );
   return rows[0];
@@ -38,8 +40,8 @@ export async function update(id, homeId, data) {
   const { rows } = await pool.query(
     `UPDATE webhooks SET url = $3, secret = $4, events = $5, active = $6, updated_at = NOW()
      WHERE id = $1 AND home_id = $2
-     RETURNING *`,
-    [id, homeId, data.url, data.secret, data.events, data.active !== false]
+     RETURNING ${SAFE_COLS}`,
+    [id, homeId, data.url, data.secret, data.events, data.active]
   );
   return rows[0] || null;
 }

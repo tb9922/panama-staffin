@@ -82,7 +82,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query(
-    `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE username LIKE 'auth-test-%'`
+    `UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username LIKE 'auth-test-%'`
   ).catch(() => {});
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);

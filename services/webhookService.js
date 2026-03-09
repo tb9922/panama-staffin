@@ -13,8 +13,8 @@ export async function dispatchEvent(homeId, event, payload) {
   try {
     const hooks = await webhookRepo.findActiveByEvent(homeId, event);
     for (const hook of hooks) {
-      fireWebhook(hook, event, payload).catch(err => {
-        logger.error({ err, webhookId: hook.id, event }, 'Webhook delivery failed');
+      fireWebhook(hook, event, payload).catch(deliveryErr => {
+        logger.error({ err: deliveryErr, webhookId: hook.id, event }, 'Webhook delivery failed');
       });
     }
   } catch (err) {
@@ -30,9 +30,9 @@ async function fireWebhook(hook, event, payload) {
   let statusCode = null;
   let error = null;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(hook.url, {
       method: 'POST',
       headers: {
@@ -43,13 +43,14 @@ async function fireWebhook(hook, event, payload) {
       body,
       signal: controller.signal,
     });
-    clearTimeout(timeout);
     statusCode = res.status;
-  } catch (err) {
-    error = err.message;
+  } catch (fetchErr) {
+    error = fetchErr.message;
+  } finally {
+    clearTimeout(timeout);
   }
 
   const responseMs = Date.now() - start;
-  // Log delivery — fire-and-forget
-  webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, error).catch(() => {});
+  webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, error)
+    .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
 }

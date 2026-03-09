@@ -1195,7 +1195,7 @@ export function generateBoardPackPDF(data, dateRangeDays = 28) {
   const agencyResult = score.metrics.agencyDependency?.detail;
   const trainingResult = score.metrics.trainingCompliance;
   const incidentStats = data.incidents ? getIncidentTrendData(data.incidents, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
-  const complaintStats = data.complaints ? getComplaintStats(data.complaints, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
+  const complaintStats = data.complaints ? getComplaintStats(data.complaints, data.config, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
 
   doc.autoTable({
     startY: y,
@@ -1224,22 +1224,33 @@ export function generateBoardPackPDF(data, dateRangeDays = 28) {
   doc.addPage();
   y = addHeader(doc, 'Coverage Summary', periodLabel, homeName);
 
-  const coverageRows = getCoverageSummary(data, dateRange);
+  const covDaysCap = Math.min(dateRangeDays, 28);
+  const covDateRange = getDateRange(covDaysCap);
+  const coverageRows = getCoverageSummary(data, covDateRange);
+  const escLabels2 = ['Normal', 'Float', 'OT', 'Agency', 'Short', 'UNSAFE'];
   if (coverageRows.length > 0) {
     doc.autoTable({
       startY: y,
-      head: [['Date', 'Early', 'Late', 'Night', 'Overall']],
-      body: coverageRows.map(r => [r.date, r.early, r.late, r.night, r.overall]),
+      head: [['Date', 'Early', 'Late', 'Night', 'Worst']],
+      body: coverageRows.map(r => [
+        r.date,
+        `${r.early.actual}/${r.early.required}`,
+        `${r.late.actual}/${r.late.required}`,
+        `${r.night.actual}/${r.night.required}`,
+        escLabels2[r.worst] || 'Normal',
+      ]),
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
       didParseCell(hookData) {
-        if (hookData.section === 'body' && hookData.column.index >= 1) {
+        if (hookData.section === 'body' && hookData.column.index === 4) {
           const val = hookData.cell.raw;
-          if (val && (val.includes('SHORT') || val.includes('UNSAFE'))) {
+          if (val === 'Short' || val === 'UNSAFE') {
             hookData.cell.styles.fillColor = [254, 226, 226];
             hookData.cell.styles.textColor = [153, 27, 27];
-          } else if (val && val.includes('Agency')) {
+            hookData.cell.styles.fontStyle = 'bold';
+          } else if (val === 'Agency') {
             hookData.cell.styles.fillColor = [254, 249, 195];
+            hookData.cell.styles.textColor = [133, 77, 14];
           }
         }
       },
@@ -1279,12 +1290,14 @@ export function generateBoardPackPDF(data, dateRangeDays = 28) {
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────
-  const finalY2 = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : y + 10;
+  const currentPage = doc.internal.getNumberOfPages();
+  const lastTablePage = doc.lastAutoTable ? doc.lastAutoTable.finalY : null;
+  const finalY2 = (lastTablePage && doc.lastAutoTable.pageNumber === currentPage) ? lastTablePage + 10 : y + 10;
   doc.setFontSize(7);
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(120);
   doc.text('Board pack auto-generated from Panama Staffing. Verify figures against source records before presenting.', 14, finalY2);
   doc.setTextColor(0);
 
-  doc.save(`Board_Pack_${homeName.replace(/\s+/g, '_')}_${today}.pdf`);
+  doc.save(`Board_Pack_${homeName.replace(/[^a-zA-Z0-9]+/g, '_')}_${today}.pdf`);
 }

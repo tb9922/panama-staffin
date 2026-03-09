@@ -1488,5 +1488,5 @@ export function logReportDownload(reportType, dateRange) {
   if (!home) return;
   apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
-  }).catch(() => {}); // fire-and-forget — don't block the download
+  }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
 }

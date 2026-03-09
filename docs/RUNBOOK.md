@@ -27,7 +27,7 @@ psql -c "SELECT username, locked_until FROM users WHERE locked_until > NOW();"
 | Server down | `pm2 restart panama` |
 | DB connection failure | Check PostgreSQL: `pg_isready -h localhost` |
 | JWT_SECRET changed/missing | Verify `.env` has correct `JWT_SECRET` (min 32 chars). Restart server. |
-| Mass lockout (brute force) | Unlock users: `UPDATE users SET locked_until = NULL, failed_login_attempts = 0;` |
+| Mass lockout (brute force) | Unlock users: `UPDATE users SET locked_until = NULL, failed_login_count = 0;` |
 | Token deny list corrupted | Restart server (deny list is in-memory, rebuilds from DB on start) |
 
 **Escalation:** If DB is unreachable after restart, check disk space (`df -h`) and PostgreSQL logs (`journalctl -u postgresql`).

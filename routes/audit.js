@@ -53,7 +53,7 @@ router.delete('/purge', requireAuth, requireAdmin, requireHomeAccess, async (req
 
 // POST /api/audit/report-download — log report PDF generation
 const reportDownloadSchema = z.object({
-  reportType: z.string().min(1).max(50),
+  reportType: z.enum(['roster', 'cost', 'coverage', 'staff', 'boardpack', 'cqc-evidence']),
   dateRange: z.string().max(100).optional().default(''),
 });
 
@@ -61,7 +61,7 @@ router.post('/report-download', requireAuth, requireHomeAccess, async (req, res,
   try {
     const parsed = reportDownloadSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
-    await auditService.log('report_download', req.user.username, req.home.slug, parsed.data);
+    await auditService.log('report_download', req.home.slug, req.user.username, parsed.data);
     res.json({ ok: true });
   } catch (err) {
     next(err);

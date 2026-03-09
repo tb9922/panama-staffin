@@ -14,10 +14,10 @@ const SUPPORTED_EVENTS = [
 ];
 
 const webhookSchema = z.object({
-  url: z.string().url().max(2000),
+  url: z.string().url().max(2000).refine(u => u.startsWith('https://'), 'Webhook URL must use HTTPS'),
   secret: z.string().min(16).max(500),
   events: z.array(z.enum(SUPPORTED_EVENTS)).min(1),
-  active: z.boolean().optional(),
+  active: z.boolean(),
 });
 
 // GET /api/webhooks?home=X — list webhooks

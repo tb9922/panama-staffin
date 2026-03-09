@@ -185,9 +185,10 @@ function DashboardInner({ schedData }) {
     // Compliance module alerts (computed server-side via /api/dashboard/summary)
     if (summary?.alerts) {
       summary.alerts.forEach(a => list.push({
-        type: a.type === 'info' ? 'warning' : a.type,
+        type: a.type,
         msg: a.message,
         link: a.link,
+        priority: a.priority,
       }));
     }
 
@@ -421,14 +422,16 @@ function DashboardInner({ schedData }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {alerts.map((alert, i) => {
                 const cls = `flex items-start gap-2 text-xs px-3 py-2 rounded-lg border ${
-                  alert.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                  alert.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+                  alert.type === 'info' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                  'bg-amber-50 text-amber-700 border-amber-200'
                 }`;
                 const icon = (
                   <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
                       alert.type === 'error'
                         ? 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z'
-                        : 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                        : 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' // info + warning share icon
                     } />
                   </svg>
                 );
