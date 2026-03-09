@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -42,6 +43,16 @@ router.post('/', loginLimiter, async (req, res, next) => {
       maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
     });
 
+    // CSRF double-submit cookie — JS-readable so the frontend can send it back
+    // as X-CSRF-Token header. SameSite=Strict prevents cross-site transmission.
+    res.cookie('panama_csrf', randomBytes(32).toString('hex'), {
+      httpOnly: false,
+      secure: config.nodeEnv === 'production',
+      sameSite: 'strict',
+      path: '/api',
+      maxAge: 4 * 60 * 60 * 1000,
+    });
+
     // Token is also in body for API clients and integration tests.
     // The frontend ignores it — the HttpOnly cookie is the auth mechanism.
     res.json(result);
@@ -57,6 +68,7 @@ router.post('/', loginLimiter, async (req, res, next) => {
 
 router.post('/logout', requireAuth, (req, res) => {
   res.clearCookie('panama_token', { path: '/api' });
+  res.clearCookie('panama_csrf', { path: '/api' });
   res.json({ ok: true });
 });
 
