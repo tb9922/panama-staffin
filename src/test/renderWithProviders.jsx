@@ -9,12 +9,13 @@ import { AuthProvider } from '../contexts/AuthContext.jsx';
  */
 export function renderWithProviders(ui, {
   route = '/',
+  path = '*',
   user = { username: 'admin', role: 'admin' },
   renderOptions = {},
 } = {}) {
   sessionStorage.setItem('user', JSON.stringify(user));
   const router = createMemoryRouter(
-    [{ path: '*', element: ui }],
+    [{ path, element: ui }],
     { initialEntries: [route] },
   );
   return {

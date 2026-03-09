@@ -29,6 +29,11 @@ backups/
 uploads/
 audit_log.json
 
+# Playwright
+.playwright/
+test-results/
+playwright-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
