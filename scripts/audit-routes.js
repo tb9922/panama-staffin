@@ -26,6 +26,7 @@ const rootDir = path.join(__dirname, '..');
 const PUBLIC_ROUTES = new Set([
   'POST /api/login',
   'GET /health',
+  'GET *', // SPA fallback — serves static index.html in production
 ]);
 
 // Routes that require requireAdmin in addition to requireAuth

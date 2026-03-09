@@ -18,7 +18,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
 
   useEffect(() => {
     if (caseId) loadFiles();
-  }, [caseType, caseId]);
+  }, [caseType, caseId]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFiles is stable given caseType+caseId
 
   async function loadFiles() {
     setLoading(true);

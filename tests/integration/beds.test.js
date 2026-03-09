@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { pool, withTransaction } from '../../db.js';
+import { pool } from '../../db.js';
 import * as bedRepo from '../../repositories/bedRepo.js';
 import * as bedTransitionRepo from '../../repositories/bedTransitionRepo.js';
 import * as bedService from '../../services/bedService.js';
@@ -457,7 +457,7 @@ describe('bedService: optimistic locking', () => {
     const staleTs = bed.updated_at;
 
     // Make a change to advance updated_at
-    const updated = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+    await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
       status: 'reserved',
       username: 'admin',
       clientUpdatedAt: staleTs,
@@ -561,7 +561,7 @@ describe('bedService: revertTransition', () => {
     bedIds.push(bed.id);
 
     // Reserve it
-    const reserved = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
+    await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
       status: 'reserved',
       username: 'admin',
       clientUpdatedAt: bed.updated_at,

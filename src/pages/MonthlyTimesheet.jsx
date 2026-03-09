@@ -96,7 +96,7 @@ export default function MonthlyTimesheet() {
     if (urlStaffId && urlStaffId !== selectedStaffId) {
       setSelectedStaffId(urlStaffId);
     }
-  }, [urlStaffId]);
+  }, [urlStaffId, selectedStaffId]);
 
   const staff = useMemo(
     () => activeStaff.find(s => s.id === selectedStaffId),

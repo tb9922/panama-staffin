@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatDate } from '../../lib/rotation.js';
+import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   getSupervisionStatus, getSupervisionStats, getSupervisionFrequency, isInProbation,
 } from '../../lib/training.js';
@@ -32,12 +32,12 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
 
   useDirtyGuard(showModal);
 
-  const today = new Date();
-  const todayStr = formatDate(today);
+  const todayStr = formatDate(new Date());
+  const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
-  const supervisionsData = supervisions || {};
+  const supervisionsData = useMemo(() => supervisions || {}, [supervisions]);
 
-  const supStats = useMemo(() => getSupervisionStats(activeStaff, config, supervisionsData, today), [activeStaff, config, supervisionsData]);
+  const supStats = useMemo(() => getSupervisionStats(activeStaff, config, supervisionsData, today), [activeStaff, config, supervisionsData, today]);
 
   const filteredStaff = useMemo(() => {
     let list = activeStaff;
@@ -56,7 +56,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       });
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeStaff, filterTeam, search, supFilter, config, supervisionsData]);
+  }, [activeStaff, filterTeam, search, supFilter, config, supervisionsData, today]);
 
   // Auto-calculate next_due when date changes (new records only)
   const supNextDue = useMemo(() => {
@@ -67,7 +67,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
     const d = new Date(modalData.date + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + freq);
     return formatDate(d);
-  }, [modalData.date, modalData.staffId, modalData.existing, activeStaff, config]);
+  }, [modalData.date, modalData.staffId, modalData.existing, modalData.next_due, activeStaff, config, today]);
 
   function openModal(staffId, session) {
     if (session) {

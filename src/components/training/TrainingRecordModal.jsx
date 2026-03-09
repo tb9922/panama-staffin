@@ -23,7 +23,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   const [error, setError] = useState(null);
 
   // Reset form when modal opens for a different cell
-  useEffect(() => { if (isOpen) setForm(initForm()); }, [isOpen, staffId, typeId]);
+  useEffect(() => { if (isOpen) setForm(initForm()); }, [isOpen, staffId, typeId]); // eslint-disable-line react-hooks/exhaustive-deps -- initForm derives from existing+today which are stable per open
 
   const modalExpiry = useMemo(() => {
     if (!form.completed || !type) return '';

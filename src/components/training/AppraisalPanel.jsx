@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatDate } from '../../lib/rotation.js';
+import { formatDate, parseDate } from '../../lib/rotation.js';
 import { getAppraisalStatus, getAppraisalStats } from '../../lib/training.js';
 import { createAppraisal, updateAppraisal, deleteAppraisal } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
@@ -30,12 +30,12 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
 
   useDirtyGuard(showModal);
 
-  const today = new Date();
-  const todayStr = formatDate(today);
+  const todayStr = formatDate(new Date());
+  const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
-  const appraisalsData = appraisals || {};
+  const appraisalsData = useMemo(() => appraisals || {}, [appraisals]);
 
-  const aprStats = useMemo(() => getAppraisalStats(activeStaff, appraisalsData, today), [activeStaff, appraisalsData]);
+  const aprStats = useMemo(() => getAppraisalStats(activeStaff, appraisalsData, today), [activeStaff, appraisalsData, today]);
 
   const filteredStaff = useMemo(() => {
     let list = activeStaff;
@@ -54,7 +54,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
       });
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeStaff, filterTeam, search, aprFilter, appraisalsData]);
+  }, [activeStaff, filterTeam, search, aprFilter, appraisalsData, today]);
 
   // Auto-calculate next_due (+1 year) when date changes (new records only)
   const aprNextDue = useMemo(() => {
@@ -62,7 +62,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload }
     const d = new Date(modalData.date + 'T00:00:00Z');
     d.setUTCFullYear(d.getUTCFullYear() + 1);
     return formatDate(d);
-  }, [modalData.date, modalData.existing]);
+  }, [modalData.date, modalData.existing, modalData.next_due]);
 
   function openModal(staffId, appraisal) {
     if (appraisal) {

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatDate } from '../../lib/rotation.js';
+import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   buildComplianceMatrix, getComplianceStats,
   calculateExpiry, TRAINING_METHODS, TRAINING_STATUS, STATUS_DISPLAY,
@@ -41,12 +41,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState(null);
 
-  const today = new Date();
-  const _todayStr = formatDate(today);
+  const todayStr = formatDate(new Date());
+  const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
   const activeTypes = useMemo(() => trainingTypes.filter(t => t.active), [trainingTypes]);
 
-  const matrix = useMemo(() => buildComplianceMatrix(activeStaff, activeTypes, training || {}, today), [activeStaff, activeTypes, training]);
+  const matrix = useMemo(() => buildComplianceMatrix(activeStaff, activeTypes, training || {}, today), [activeStaff, activeTypes, training, today]);
   const stats = useMemo(() => getComplianceStats(matrix), [matrix]);
 
   const filteredTypes = useMemo(() => {
