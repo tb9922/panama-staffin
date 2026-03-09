@@ -330,13 +330,13 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="py-2 px-2 text-left font-semibold text-gray-600 sticky left-0 bg-white z-10 min-w-[140px]">Staff</th>
+                  <th scope="col" className="py-2 px-2 text-left font-semibold text-gray-600 sticky left-0 bg-white z-10 min-w-[140px]">Staff</th>
                   {filteredTypes.map(t => (
-                    <th key={t.id} className="py-2 px-0.5 text-center font-medium text-gray-600" style={{ minWidth: '80px', maxWidth: '120px', fontSize: '10px', lineHeight: '1.2' }}>
+                    <th scope="col" key={t.id} className="py-2 px-0.5 text-center font-medium text-gray-600" style={{ minWidth: '80px', maxWidth: '120px', fontSize: '10px', lineHeight: '1.2' }}>
                       {t.name}
                     </th>
                   ))}
-                  <th className="py-2 px-2 text-center font-semibold text-gray-600 min-w-[50px]">%</th>
+                  <th scope="col" className="py-2 px-2 text-center font-semibold text-gray-600 min-w-[50px]">%</th>
                 </tr>
               </thead>
               <tbody>
@@ -438,14 +438,14 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Name</th>
-                  <th className={TABLE.th}>Category</th>
-                  <th className={TABLE.th}>Refresher</th>
-                  <th className={TABLE.th}>Roles</th>
-                  <th className={TABLE.th}>Levels</th>
-                  <th className={TABLE.th}>Legislation</th>
-                  <th className={`${TABLE.th} text-center`}>Active</th>
-                  <th className={TABLE.th}></th>
+                  <th scope="col" className={TABLE.th}>Name</th>
+                  <th scope="col" className={TABLE.th}>Category</th>
+                  <th scope="col" className={TABLE.th}>Refresher</th>
+                  <th scope="col" className={TABLE.th}>Roles</th>
+                  <th scope="col" className={TABLE.th}>Levels</th>
+                  <th scope="col" className={TABLE.th}>Legislation</th>
+                  <th scope="col" className={`${TABLE.th} text-center`}>Active</th>
+                  <th scope="col" className={TABLE.th}></th>
                 </tr>
               </thead>
               <tbody>
@@ -572,12 +572,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
                   <tr>
-                    <th className={TABLE.th}>Row</th>
-                    <th className={TABLE.th}>Staff</th>
-                    <th className={TABLE.th}>Training</th>
-                    <th className={TABLE.th}>Date</th>
-                    <th className={TABLE.th}>Trainer</th>
-                    <th className={TABLE.th}>Status</th>
+                    <th scope="col" className={TABLE.th}>Row</th>
+                    <th scope="col" className={TABLE.th}>Staff</th>
+                    <th scope="col" className={TABLE.th}>Training</th>
+                    <th scope="col" className={TABLE.th}>Date</th>
+                    <th scope="col" className={TABLE.th}>Trainer</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
                   </tr>
                 </thead>
                 <tbody>

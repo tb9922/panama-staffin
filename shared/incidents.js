@@ -310,7 +310,7 @@ export function isDutyOfCandourOverdue(incident) {
   const incDate = parseDate(incident.date);
   const deadlineDays = 14; // 10 working days ≈ 14 calendar days
   const deadline = addDays(incDate, deadlineDays);
-  return new Date() > deadline;
+  return formatDate(new Date()) > formatDate(deadline);
 }
 
 // ── Corrective Action Completion Rate ────────────────────────────────────────

@@ -59,16 +59,16 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Name</th>
-              <th className={TABLE.th}>Room / Bed</th>
-              <th className={TABLE.th}>Funding</th>
-              <th className={TABLE.th + ' text-right'}>Weekly Fee</th>
-              <th className={TABLE.th}>Admitted</th>
-              <th className={TABLE.th}>Fee Review</th>
-              <th className={TABLE.th + ' text-right'}>Balance</th>
-              <th className={TABLE.th}>Last Paid</th>
-              <th className={TABLE.th}>Status</th>
-              {isAdmin && <th className={TABLE.th}>Actions</th>}
+              <th scope="col" className={TABLE.th}>Name</th>
+              <th scope="col" className={TABLE.th}>Room / Bed</th>
+              <th scope="col" className={TABLE.th}>Funding</th>
+              <th scope="col" className={TABLE.th + ' text-right'}>Weekly Fee</th>
+              <th scope="col" className={TABLE.th}>Admitted</th>
+              <th scope="col" className={TABLE.th}>Fee Review</th>
+              <th scope="col" className={TABLE.th + ' text-right'}>Balance</th>
+              <th scope="col" className={TABLE.th}>Last Paid</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>

@@ -11,6 +11,7 @@ import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 import {
   getCurrentHome,
+  getLoggedInUser,
   getSchedulingData,
   upsertOverride,
   deleteOverride,
@@ -79,6 +80,7 @@ function parseLocalDate(str) {
 }
 
 export default function RotationGrid() {
+  const isAdmin = getLoggedInUser()?.role === 'admin';
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -340,7 +342,7 @@ export default function RotationGrid() {
     const sickRows = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(parseLocalDate(startDateStr));
-      d.setDate(d.getDate() + i);
+      d.setUTCDate(d.getUTCDate() + i);
       const dk = formatDate(d);
       const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
       const sched = getScheduledShift(staff, cycleDay, d);
@@ -486,8 +488,8 @@ export default function RotationGrid() {
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
-            className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>
+          {isAdmin && <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
+            className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>}
           <button onClick={exportCSV}
             className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
           <button onClick={() => window.print()}
@@ -500,24 +502,24 @@ export default function RotationGrid() {
         <table className="text-[11px] border-collapse">
           <thead>
             <tr className="bg-gray-800 text-white">
-              <th className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
-              <th className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
+              <th scope="col" className="py-1.5 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[120px]">Staff</th>
+              <th scope="col" className="py-1.5 px-1 text-left min-w-[35px]">Pref</th>
               {monthDates.map((d, i) => {
-                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const isMonday = d.getDay() === 1 && i > 0;
+                const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
+                const isMonday = d.getUTCDay() === 1 && i > 0;
                 return (
-                  <th key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
+                  <th scope="col" key={i} className={`py-1.5 px-0.5 text-center min-w-[32px] ${
                     isWeekend ? 'bg-gray-700' : ''
                   } ${isMonday ? 'border-l border-gray-600' : ''}`}>
-                    <div className="text-[9px] text-gray-400">{d.toLocaleDateString('en-GB', { weekday: 'short' })[0]}</div>
-                    <div>{d.getDate()}</div>
+                    <div className="text-[9px] text-gray-400">{d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })[0]}</div>
+                    <div>{d.getUTCDate()}</div>
                   </th>
                 );
               })}
-              <th className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
-              <th className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
-              <th className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
-              <th className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[50px]">Hrs</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[55px]">Pay £</th>
+              <th scope="col" className="py-1.5 px-2 text-right min-w-[40px]">OT</th>
+              <th scope="col" className="py-1.5 px-2 text-center min-w-[50px]">WTR</th>
             </tr>
           </thead>
           <tbody>
@@ -555,15 +557,15 @@ export default function RotationGrid() {
                     const shift = actual.shift;
                     const isOverride = !!schedData.overrides[dateKey]?.[s.id];
                     const isEditing = editing?.staffId === s.id && editing?.dateStr === dateKey;
-                    const isMonday = date.getDay() === 1 && i > 0;
+                    const isMonday = date.getUTCDay() === 1 && i > 0;
                     return (
                       <td key={i} className={`py-0.5 px-0.5 text-center ${isMonday ? 'border-l border-gray-200' : ''}`}>
                         <button
-                          onClick={() => openEditor(s.id, dateKey)}
-                          disabled={saving}
-                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium cursor-pointer transition-all ${
+                          onClick={() => isAdmin && openEditor(s.id, dateKey)}
+                          disabled={saving || !isAdmin}
+                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium ${isAdmin ? 'cursor-pointer hover:scale-105' : 'cursor-default'} transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
-                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : 'hover:scale-105'} disabled:cursor-not-allowed`}
+                          } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : ''} disabled:cursor-not-allowed`}
                           title={[
                             `${s.name} — ${shift}${isOverride ? ' (override)' : ''}`,
                             schedData.overrides[dateKey]?.[s.id]?.sleep_in ? '+Sleep In' : '',
@@ -884,7 +886,7 @@ export default function RotationGrid() {
               <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>
                 Cancel
               </button>
-              <div className="flex gap-2">
+              {isAdmin && <div className="flex gap-2">
                 <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
                   disabled={saving}
                   className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}>
@@ -914,7 +916,7 @@ export default function RotationGrid() {
                    impact?.warnings.length > 0 ? 'Apply (with warnings)' :
                    'Approve & Apply'}
                 </button>
-              </div>
+              </div>}
             </div>
           </>}
       </Modal>

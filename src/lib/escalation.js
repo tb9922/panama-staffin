@@ -246,8 +246,8 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
   const agNightFills = afterOT - agDayFills;
 
   const days = 28;
-  const elHours = config.shifts.EL.hours;
-  const nHours = config.shifts.N.hours;
+  const elHours = config.shifts?.EL?.hours ?? 12;
+  const nHours = config.shifts?.N?.hours ?? 10;
 
   // Average float rate — use actual float staff rates, fall back to NLW minimum
   const floatStaff = config.staff ? config.staff.filter(s => s.team === 'Float' && s.active !== false) : [];
@@ -255,7 +255,7 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
     ? floatStaff.reduce((sum, s) => sum + (s.hourly_rate || 0), 0) / floatStaff.length
     : (config.nlw_rate || 12.21);
   const floatCost = floatFills * elHours * avgFloatRate * days;
-  const otCost = otFills * elHours * config.ot_premium * days;
+  const otCost = otFills * elHours * (avgFloatRate + config.ot_premium) * days;
   const agDayCost = agDayFills * elHours * config.agency_rate_day * days;
   const agNightCost = agNightFills * nHours * config.agency_rate_night * days;
 

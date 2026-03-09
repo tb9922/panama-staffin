@@ -31,7 +31,7 @@ export default function FatigueTracker() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading fatigue data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading fatigue data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <FatigueTrackerInner schedData={schedData} today={today} />;
@@ -141,17 +141,17 @@ function FatigueTrackerInner({ schedData, today }) {
           <table className="text-[11px] border-collapse">
             <thead>
               <tr className="bg-gray-800 text-white">
-                <th className="py-2 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[130px]">Staff</th>
-                <th className="py-2 px-1 text-center min-w-[40px]">Now</th>
-                <th className="py-2 px-1 text-center min-w-[40px]">Max</th>
-                <th className="py-2 px-1 text-center min-w-[40px]">Status</th>
+                <th scope="col" className="py-2 px-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[130px]">Staff</th>
+                <th scope="col" className="py-2 px-1 text-center min-w-[40px]">Now</th>
+                <th scope="col" className="py-2 px-1 text-center min-w-[40px]">Max</th>
+                <th scope="col" className="py-2 px-1 text-center min-w-[40px]">Status</th>
                 {cycleDates.map((d, i) => (
-                  <th key={i} className={`py-2 px-0 text-center min-w-[22px] ${i === todayIdx ? 'bg-blue-700' : ''}`}>
+                  <th scope="col" key={i} className={`py-2 px-0 text-center min-w-[22px] ${i === todayIdx ? 'bg-blue-700' : ''}`}>
                     <div className="text-[8px]">{d.getDate()}</div>
                   </th>
                 ))}
-                <th className="py-2 px-2 text-center min-w-[50px]">Shifts</th>
-                <th className="py-2 px-2 text-center min-w-[50px]">Avg/wk</th>
+                <th scope="col" className="py-2 px-2 text-center min-w-[50px]">Shifts</th>
+                <th scope="col" className="py-2 px-2 text-center min-w-[50px]">Avg/wk</th>
               </tr>
             </thead>
             <tbody>

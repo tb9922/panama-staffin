@@ -81,7 +81,7 @@ export async function findShiftsByHomePeriod(homeId, start, end) {
   const { rows } = await pool.query(
     `SELECT s.*, p.name AS agency_name
      FROM agency_shifts s
-     JOIN agency_providers p ON p.id = s.agency_id
+     JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
      WHERE s.home_id = $1 AND s.date >= $2 AND s.date <= $3
      ORDER BY s.date DESC`,
     [homeId, start, end],
@@ -113,7 +113,7 @@ export async function findShiftById(id, homeId, client) {
   const { rows } = await conn.query(
     `SELECT s.*, p.name AS agency_name
      FROM agency_shifts s
-     JOIN agency_providers p ON p.id = s.agency_id
+     JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
      WHERE s.id = $1 AND s.home_id = $2`,
     [id, homeId],
   );

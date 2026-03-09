@@ -136,7 +136,7 @@ export default function ContractManager() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading contracts...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading contracts...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -195,13 +195,13 @@ export default function ContractManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Contract Type</th>
-                <th className={TABLE.th}>Start Date</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Probation End</th>
-                <th className={TABLE.th}>Hours/Week</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Contract Type</th>
+                <th scope="col" className={TABLE.th}>Start Date</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Probation End</th>
+                <th scope="col" className={TABLE.th}>Hours/Week</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>

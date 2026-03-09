@@ -132,11 +132,11 @@ describe('TrainingMatrix', () => {
   it('renders the four tab buttons', async () => {
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Training' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Training' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Supervisions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Appraisals' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Fire Drills' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Supervisions' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Appraisals' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Fire Drills' })).toBeInTheDocument();
   });
 
   it('switches to Supervisions tab on click', async () => {
@@ -144,10 +144,10 @@ describe('TrainingMatrix', () => {
     renderAdmin();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Supervisions' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Supervisions' })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Supervisions' }));
+    await user.click(screen.getByRole('tab', { name: 'Supervisions' }));
 
     await waitFor(() => {
       // SupervisionPanel renders a heading or relevant content
@@ -183,7 +183,7 @@ describe('TrainingMatrix', () => {
       expect(headings.length).toBeGreaterThanOrEqual(1);
     });
     // All four tabs are visible regardless of role
-    expect(screen.getByRole('button', { name: 'Training' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Supervisions' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Training' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Supervisions' })).toBeInTheDocument();
   });
 });

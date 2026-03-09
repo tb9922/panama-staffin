@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
@@ -30,14 +31,7 @@ export default function IncomeTracker() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}>{t.label}</button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
       {tab === 'residents' && <ResidentsTab home={home} isAdmin={isAdmin} />}
       {tab === 'invoices' && <InvoicesTab home={home} isAdmin={isAdmin} />}
@@ -127,7 +121,7 @@ function ResidentsTab({ home, isAdmin }) {
     }]);
   }
 
-  if (loading) return <div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading residents...</p></div>;
+  if (loading) return <div className={CARD.padded} role="status"><p className="text-center py-10 text-gray-500">Loading residents...</p></div>;
 
   return (
     <>
@@ -152,15 +146,15 @@ function ResidentsTab({ home, isAdmin }) {
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr>
-              <th className={TABLE.th}>Name</th>
-              <th className={TABLE.th}>Room</th>
-              <th className={TABLE.th}>Care Type</th>
-              <th className={TABLE.th}>Funding</th>
-              <th className={`${TABLE.th} text-right`}>Weekly Fee</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}>Fee Review</th>
-              <th className={`${TABLE.th} text-right`}>Balance</th>
-              <th className={TABLE.th}>Last Paid</th>
+              <th scope="col" className={TABLE.th}>Name</th>
+              <th scope="col" className={TABLE.th}>Room</th>
+              <th scope="col" className={TABLE.th}>Care Type</th>
+              <th scope="col" className={TABLE.th}>Funding</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Weekly Fee</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}>Fee Review</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Balance</th>
+              <th scope="col" className={TABLE.th}>Last Paid</th>
             </tr></thead>
             <tbody>
               {residents.length === 0 ? (
@@ -275,11 +269,11 @@ function ResidentsTab({ home, isAdmin }) {
                   <div className={TABLE.wrapper}>
                     <table className={TABLE.table}>
                       <thead className={TABLE.thead}><tr>
-                        <th className={TABLE.th}>Date</th>
-                        <th className={`${TABLE.th} text-right`}>Previous</th>
-                        <th className={`${TABLE.th} text-right`}>New</th>
-                        <th className={TABLE.th}>Reason</th>
-                        <th className={TABLE.th}>By</th>
+                        <th scope="col" className={TABLE.th}>Date</th>
+                        <th scope="col" className={`${TABLE.th} text-right`}>Previous</th>
+                        <th scope="col" className={`${TABLE.th} text-right`}>New</th>
+                        <th scope="col" className={TABLE.th}>Reason</th>
+                        <th scope="col" className={TABLE.th}>By</th>
                       </tr></thead>
                       <tbody>
                         {feeHistory.map(f => (
@@ -441,7 +435,7 @@ function InvoicesTab({ home, isAdmin }) {
     }]);
   }
 
-  if (loading) return <div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading invoices...</p></div>;
+  if (loading) return <div className={CARD.padded} role="status"><p className="text-center py-10 text-gray-500">Loading invoices...</p></div>;
 
   return (
     <>
@@ -466,14 +460,14 @@ function InvoicesTab({ home, isAdmin }) {
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr>
-              <th className={TABLE.th}>Invoice #</th>
-              <th className={TABLE.th}>Payer</th>
-              <th className={TABLE.th}>Type</th>
-              <th className={TABLE.th}>Period</th>
-              <th className={`${TABLE.th} text-right`}>Total</th>
-              <th className={`${TABLE.th} text-right`}>Balance</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}>Due</th>
+              <th scope="col" className={TABLE.th}>Invoice #</th>
+              <th scope="col" className={TABLE.th}>Payer</th>
+              <th scope="col" className={TABLE.th}>Type</th>
+              <th scope="col" className={TABLE.th}>Period</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Balance</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}>Due</th>
             </tr></thead>
             <tbody>
               {invoices.length === 0 ? (

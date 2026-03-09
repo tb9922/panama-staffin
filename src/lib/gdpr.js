@@ -146,9 +146,10 @@ export function calculateGdprComplianceScore(requests, breaches, complaints, ret
   score -= retentionViolations.length * 3;
   if (retentionViolations.length > 0) issues.push(`${retentionViolations.length} retention category(-ies) with expired data`);
 
+  const clampedScore = Math.max(0, Math.min(100, score));
   return {
-    score: Math.max(0, Math.min(100, score)),
-    band: score >= 90 ? 'good' : score >= 70 ? 'adequate' : score >= 50 ? 'requires_improvement' : 'inadequate',
+    score: clampedScore,
+    band: clampedScore >= 90 ? 'good' : clampedScore >= 70 ? 'adequate' : clampedScore >= 50 ? 'requires_improvement' : 'inadequate',
     issues,
   };
 }

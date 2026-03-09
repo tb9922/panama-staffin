@@ -218,11 +218,11 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
                     <table className={TABLE.table}>
                       <thead className={TABLE.thead}>
                         <tr>
-                          <th className={TABLE.th}>Date</th>
-                          <th className={TABLE.th}>Supervisor</th>
-                          <th className={TABLE.th}>Topics</th>
-                          <th className={TABLE.th}>Actions</th>
-                          <th className={TABLE.th}>Next Due</th>
+                          <th scope="col" className={TABLE.th}>Date</th>
+                          <th scope="col" className={TABLE.th}>Supervisor</th>
+                          <th scope="col" className={TABLE.th}>Topics</th>
+                          <th scope="col" className={TABLE.th}>Actions</th>
+                          <th scope="col" className={TABLE.th}>Next Due</th>
                         </tr>
                       </thead>
                       <tbody>

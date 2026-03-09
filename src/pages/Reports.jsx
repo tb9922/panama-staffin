@@ -26,7 +26,7 @@ export default function Reports() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading report data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading report data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <ReportsInner data={schedData} />;
@@ -38,7 +38,7 @@ function ReportsInner({ data }) {
   const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));
   const [costMonth, setCostMonth] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   });
 
   async function generate(type) {

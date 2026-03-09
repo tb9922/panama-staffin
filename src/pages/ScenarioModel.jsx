@@ -39,7 +39,7 @@ export default function ScenarioModel() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading scenario data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading scenario data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <ScenarioModelInner schedData={schedData} customSick={customSick} setCustomSick={setCustomSick} customAL={customAL} setCustomAL={setCustomAL} customName={customName} setCustomName={setCustomName} />;
@@ -146,19 +146,19 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
           <table className={TABLE.table}>
             <thead className="bg-gray-800 text-white text-xs">
               <tr>
-                <th className={TABLE.th}>Scenario</th>
-                <th className={TABLE.th + ' text-center'}>Sick/d</th>
-                <th className={TABLE.th + ' text-center'}>AL/d</th>
-                <th className={TABLE.th + ' text-center'}>Gaps</th>
-                <th className={TABLE.th + ' text-center'}>Float</th>
-                <th className={TABLE.th + ' text-center'}>OT</th>
-                <th className={TABLE.th + ' text-center'}>AG Day</th>
-                <th className={TABLE.th + ' text-center'}>AG Night</th>
-                <th className={TABLE.th + ' text-right'}>Base £</th>
-                <th className={TABLE.th + ' text-right'}>Extra £</th>
-                <th className={TABLE.th + ' text-right font-bold'}>Total 28d £</th>
-                <th className={TABLE.th + ' text-right'}>Monthly £</th>
-                <th className={TABLE.th + ' text-right'}>Annual £</th>
+                <th scope="col" className={TABLE.th}>Scenario</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Sick/d</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>AL/d</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Gaps</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Float</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>OT</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>AG Day</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>AG Night</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Base £</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Extra £</th>
+                <th scope="col" className={TABLE.th + ' text-right font-bold'}>Total 28d £</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Monthly £</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Annual £</th>
               </tr>
             </thead>
             <tbody>
@@ -223,12 +223,12 @@ function ScenarioModelInner({ schedData, customSick, setCustomSick, customAL, se
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Scenario</th>
-                <th className={TABLE.th + ' text-center'}>Gaps/d</th>
-                <th className={TABLE.th + ' text-center'}>Float</th>
-                <th className={TABLE.th + ' text-center'}>OT</th>
-                <th className={TABLE.th + ' text-center'}>Agency</th>
-                <th className={TABLE.th + ' text-right'}>AG £/wk</th>
+                <th scope="col" className={TABLE.th}>Scenario</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Gaps/d</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Float</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>OT</th>
+                <th scope="col" className={TABLE.th + ' text-center'}>Agency</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>AG £/wk</th>
               </tr>
             </thead>
             <tbody>

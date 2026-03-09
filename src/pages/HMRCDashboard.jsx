@@ -101,7 +101,7 @@ export default function HMRCDashboard() {
   const now = currentTaxYear();
   for (let y = now; y >= now - 4; y--) taxYearOptions.push(y);
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -170,16 +170,16 @@ export default function HMRCDashboard() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Tax Month</th>
-              <th className={TABLE.th}>Period</th>
-              <th className={TABLE.th}>PAYE</th>
-              <th className={TABLE.th}>Employee NI</th>
-              <th className={TABLE.th}>Employer NI</th>
-              <th className={TABLE.th}>Total Due</th>
-              <th className={TABLE.th}>Payment Due</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}>Paid Reference</th>
-              {isAdmin && <th className={TABLE.th}>Actions</th>}
+              <th scope="col" className={TABLE.th}>Tax Month</th>
+              <th scope="col" className={TABLE.th}>Period</th>
+              <th scope="col" className={TABLE.th}>PAYE</th>
+              <th scope="col" className={TABLE.th}>Employee NI</th>
+              <th scope="col" className={TABLE.th}>Employer NI</th>
+              <th scope="col" className={TABLE.th}>Total Due</th>
+              <th scope="col" className={TABLE.th}>Payment Due</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}>Paid Reference</th>
+              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>

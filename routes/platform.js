@@ -107,10 +107,10 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
 
     const { name, registered_beds, care_type } = parsed.data;
 
-    await withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       const home = await homeRepo.findByIdIncludingDeleted(id.data, client);
-      if (!home) return res.status(404).json({ error: 'Home not found' });
-      if (home.deleted_at) return res.status(410).json({ error: 'Home has been deleted' });
+      if (!home) return { status: 404, error: 'Home not found' };
+      if (home.deleted_at) return { status: 410, error: 'Home has been deleted' };
 
       if (name) await homeRepo.updateName(id.data, name, client);
 
@@ -125,8 +125,11 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
         changes: { name, registered_beds, care_type },
       });
 
-      res.json({ ok: true });
+      return { ok: true };
     });
+
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json(result);
   } catch (err) { next(err); }
 });
 
@@ -136,20 +139,20 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid home ID' });
 
-    await withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       // Lock the row to prevent concurrent delete race
       const { rows } = await client.query(
         'SELECT * FROM homes WHERE id = $1 FOR UPDATE',
         [id.data]
       );
       const home = rows[0];
-      if (!home) return res.status(404).json({ error: 'Home not found' });
-      if (home.deleted_at) return res.status(400).json({ error: 'Home is already deleted' });
+      if (!home) return { status: 404, error: 'Home not found' };
+      if (home.deleted_at) return { status: 400, error: 'Home is already deleted' };
 
       // Count active homes inside transaction — prevents last-home race
       const count = await homeRepo.countActive(client);
       if (count <= 1) {
-        return res.status(400).json({ error: 'Cannot delete the last home' });
+        return { status: 400, error: 'Cannot delete the last home' };
       }
 
       // Capture affected users before revoking
@@ -161,8 +164,11 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
         usersRevoked: revokedUsers,
       });
 
-      res.json({ ok: true });
+      return { ok: true };
     });
+
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json(result);
   } catch (err) { next(err); }
 });
 

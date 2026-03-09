@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 /**
  * Return all day notes for a home, shaped as:
@@ -12,9 +12,7 @@ export async function findByHome(homeId) {
   );
   const result = {};
   for (const row of rows) {
-    const dateStr = row.date instanceof Date
-      ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
-      : String(row.date).slice(0, 10);
+    const dateStr = toDateStr(row.date);
     result[dateStr] = row.note;
   }
   return result;

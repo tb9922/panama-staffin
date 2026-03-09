@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, toDateStr } from '../db.js';
 
 /**
  * Return overrides for a home, shaped as:
@@ -26,9 +26,7 @@ export async function findByHome(homeId, fromDate, toDate, client) {
   const { rows } = await conn.query(sql, params);
   const result = {};
   for (const row of rows) {
-    const dateStr = row.date instanceof Date
-      ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
-      : String(row.date).slice(0, 10);
+    const dateStr = toDateStr(row.date);
     if (!result[dateStr]) result[dateStr] = {};
     const entry = { shift: row.shift, sleep_in: !!row.sleep_in };
     if (row.reason) entry.reason = row.reason;

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -245,13 +246,13 @@ export default function IpcAuditTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Type</th>
-                <th className={TABLE.th}>Auditor</th>
-                <th className={TABLE.th}>Score</th>
-                <th className={TABLE.th}>Risk Areas</th>
-                <th className={TABLE.th}>Actions</th>
-                <th className={TABLE.th}>Outbreak</th>
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Type</th>
+                <th scope="col" className={TABLE.th}>Auditor</th>
+                <th scope="col" className={TABLE.th}>Score</th>
+                <th scope="col" className={TABLE.th}>Risk Areas</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Outbreak</th>
               </tr>
             </thead>
             <tbody>
@@ -301,14 +302,7 @@ export default function IpcAuditTracker() {
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit IPC Audit' : 'New IPC Audit'} size="lg">
         <div className="max-h-[90vh] overflow-y-auto">
           {/* Tabs */}
-          <div className="flex gap-1 mb-4 border-b border-gray-100 pb-2">
-            {TABS.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
           {/* Details Tab */}
           {activeTab === 'details' && (
@@ -487,9 +481,11 @@ export default function IpcAuditTracker() {
             <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-          <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
-            {editingId ? 'Update' : 'Save'}
-          </button>
+          {isAdmin && (
+            <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
+              {editingId ? 'Update' : 'Save'}
+            </button>
+          )}
         </div>
       </Modal>
     </div>

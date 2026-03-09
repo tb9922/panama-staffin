@@ -35,6 +35,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
     if (!isOpen) return;
 
     previousFocus.current = document.activeElement;
+    document.body.style.overflow = 'hidden';
 
     // Focus first focusable element inside modal after render
     const timer = requestAnimationFrame(() => {
@@ -74,6 +75,7 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
     return () => {
       cancelAnimationFrame(timer);
       document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
       // Restore focus to previously focused element
       if (previousFocus.current?.focus) previousFocus.current.focus();
     };

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import {
   getCurrentHome, getLoggedInUser, getHrGrievance, createHrGrievance, updateHrGrievance,
   getGrievanceActions, createGrievanceAction, updateGrievanceAction,
@@ -208,7 +209,7 @@ export default function GrievanceTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading grievance cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading grievance cases...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -244,11 +245,11 @@ export default function GrievanceTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Date Raised</th>
-                <th className={TABLE.th}>Category</th>
-                <th className={TABLE.th}>Confidential</th>
-                <th className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Date Raised</th>
+                <th scope="col" className={TABLE.th}>Category</th>
+                <th scope="col" className={TABLE.th}>Confidential</th>
+                <th scope="col" className={TABLE.th}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -285,15 +286,7 @@ export default function GrievanceTracker() {
     return (
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Grievance Case' : 'New Grievance Case'} size="xl">
           {/* Modal tabs */}
-          <div className={TAB.bar}>
-            {MODAL_TABS.map(t => {
-              if ((t.id === 'notes' || t.id === 'actions') && !editing) return null;
-              return (
-                <button key={t.id} onClick={() => setModalTab(t.id)}
-                  className={`${TAB.button} ${modalTab === t.id ? TAB.active : TAB.inactive}`}>{t.label}</button>
-              );
-            })}
-          </div>
+          <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes' && t.id !== 'actions')} activeTab={modalTab} onTabChange={setModalTab} />
 
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'acknowledgement' && renderAcknowledgementTab()}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getLoggedInUser, getIncidents } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -40,7 +41,7 @@ export default function HandoverNotes() {
 
   const isAdmin = getLoggedInUser()?.role === 'admin';
   const slug = getCurrentHome();
-  const todayStr = formatDate(new Date());
+  const todayStr = useLiveDate();
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +57,7 @@ export default function HandoverNotes() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(e => setError(e.message || 'Failed to load'));
+    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(e => console.warn('HandoverNotes incidents fetch failed:', e.message));
   }, []);
 
   function goDay(delta) {

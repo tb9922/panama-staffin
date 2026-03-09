@@ -26,8 +26,9 @@ export async function grantAccess(username, homeId, client) {
 /**
  * Revoke a user's access to a home.
  */
-export async function revokeAccess(username, homeId) {
-  await pool.query(
+export async function revokeAccess(username, homeId, client) {
+  const conn = client || pool;
+  await conn.query(
     'DELETE FROM user_home_access WHERE username = $1 AND home_id = $2',
     [username, homeId]
   );
@@ -36,8 +37,9 @@ export async function revokeAccess(username, homeId) {
 /**
  * Get all home IDs a user can access.
  */
-export async function findHomeIdsForUser(username) {
-  const { rows } = await pool.query(
+export async function findHomeIdsForUser(username, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     'SELECT home_id FROM user_home_access WHERE username = $1',
     [username]
   );

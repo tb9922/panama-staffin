@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import { getCurrentHome, getHrStats, getHrWarnings } from '../lib/api.js';
 import { WARNING_LEVELS } from '../lib/hr.js';
 
@@ -45,7 +46,7 @@ export default function HrDashboard() {
     }]);
   }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading HR data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading HR data...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -58,14 +59,7 @@ export default function HrDashboard() {
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
-      <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}>{t.label}</button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
       {tab === 'overview' && renderOverview()}
       {tab === 'warnings' && renderWarnings()}
@@ -120,12 +114,12 @@ export default function HrDashboard() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Staff ID</th>
-                  <th className={TABLE.th}>Staff Name</th>
-                  <th className={TABLE.th}>Warning Type</th>
-                  <th className={TABLE.th}>Outcome</th>
-                  <th className={TABLE.th}>Expiry Date</th>
-                  <th className={TABLE.th}>Case ID</th>
+                  <th scope="col" className={TABLE.th}>Staff ID</th>
+                  <th scope="col" className={TABLE.th}>Staff Name</th>
+                  <th scope="col" className={TABLE.th}>Warning Type</th>
+                  <th scope="col" className={TABLE.th}>Outcome</th>
+                  <th scope="col" className={TABLE.th}>Expiry Date</th>
+                  <th scope="col" className={TABLE.th}>Case ID</th>
                 </tr>
               </thead>
               <tbody>

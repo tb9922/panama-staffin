@@ -311,13 +311,13 @@ export default function PolicyReviewTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Policy Name</th>
-                <th className={TABLE.th}>Ref</th>
-                <th className={TABLE.th}>Version</th>
-                <th className={TABLE.th}>Last Reviewed</th>
-                <th className={TABLE.th}>Next Due</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Reviewed By</th>
+                <th scope="col" className={TABLE.th}>Policy Name</th>
+                <th scope="col" className={TABLE.th}>Ref</th>
+                <th scope="col" className={TABLE.th}>Version</th>
+                <th scope="col" className={TABLE.th}>Last Reviewed</th>
+                <th scope="col" className={TABLE.th}>Next Due</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Reviewed By</th>
               </tr>
             </thead>
             <tbody>

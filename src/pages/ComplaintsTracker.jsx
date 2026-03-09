@@ -4,6 +4,7 @@ import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   DEFAULT_COMPLAINT_CATEGORIES, getComplaintStats, getSurveyStats,
@@ -303,13 +304,13 @@ export default function ComplaintsTracker() {
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
                   <tr>
-                    <th className={TABLE.th}>Date</th>
-                    <th className={TABLE.th}>Raised By</th>
-                    <th className={TABLE.th}>Category</th>
-                    <th className={TABLE.th}>Title</th>
-                    <th className={TABLE.th}>Status</th>
-                    <th className={TABLE.th}>Deadline</th>
-                    <th className={TABLE.th}></th>
+                    <th scope="col" className={TABLE.th}>Date</th>
+                    <th scope="col" className={TABLE.th}>Raised By</th>
+                    <th scope="col" className={TABLE.th}>Category</th>
+                    <th scope="col" className={TABLE.th}>Title</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
+                    <th scope="col" className={TABLE.th}>Deadline</th>
+                    <th scope="col" className={TABLE.th}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -356,12 +357,12 @@ export default function ComplaintsTracker() {
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
                   <tr>
-                    <th className={TABLE.th}>Date</th>
-                    <th className={TABLE.th}>Type</th>
-                    <th className={TABLE.th}>Title</th>
-                    <th className={TABLE.th}>Responses</th>
-                    <th className={TABLE.th}>Satisfaction</th>
-                    <th className={TABLE.th}></th>
+                    <th scope="col" className={TABLE.th}>Date</th>
+                    <th scope="col" className={TABLE.th}>Type</th>
+                    <th scope="col" className={TABLE.th}>Title</th>
+                    <th scope="col" className={TABLE.th}>Responses</th>
+                    <th scope="col" className={TABLE.th}>Satisfaction</th>
+                    <th scope="col" className={TABLE.th}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -397,14 +398,7 @@ export default function ComplaintsTracker() {
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Complaint' : 'Log Complaint'} size="lg">
 
             {/* Tabs */}
-            <div className="flex gap-1 mb-4 border-b border-gray-200 pb-2">
-              {TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
               {activeTab === 'details' && (

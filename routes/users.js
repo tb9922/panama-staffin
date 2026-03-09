@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { withTransaction } from '../db.js';
 import * as userService from '../services/userService.js';
 import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
@@ -45,8 +46,9 @@ const idSchema = z.coerce.number().int().positive();
 // Must be defined BEFORE /:id to avoid being caught by the param route
 router.get('/all-homes', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const homes = await homeRepo.listAllWithIds();
-    res.json(homes);
+    const allHomes = await homeRepo.listAllWithIds();
+    const accessibleIds = new Set(await userHomeRepo.findHomeIdsForUser(req.user.username));
+    res.json(allHomes.filter(h => accessibleIds.has(h.id)));
   } catch (err) { next(err); }
 });
 
@@ -177,16 +179,18 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requireAdmin, async (req
       return res.status(403).json({ error: 'You cannot grant access to homes you do not have access to' });
     }
 
-    // Get current home IDs, then diff to grant/revoke
-    const currentIds = new Set(await userHomeRepo.findHomeIdsForUser(user.username));
-    const desiredIds = new Set(parsed.data.homeIds);
+    // Get current home IDs, then diff to grant/revoke — all in one transaction
+    await withTransaction(async (client) => {
+      const currentIds = new Set(await userHomeRepo.findHomeIdsForUser(user.username, client));
+      const desiredIds = new Set(parsed.data.homeIds);
 
-    for (const hid of desiredIds) {
-      if (!currentIds.has(hid)) await userHomeRepo.grantAccess(user.username, hid);
-    }
-    for (const hid of currentIds) {
-      if (!desiredIds.has(hid)) await userHomeRepo.revokeAccess(user.username, hid);
-    }
+      for (const hid of desiredIds) {
+        if (!currentIds.has(hid)) await userHomeRepo.grantAccess(user.username, hid, client);
+      }
+      for (const hid of currentIds) {
+        if (!desiredIds.has(hid)) await userHomeRepo.revokeAccess(user.username, hid, client);
+      }
+    });
 
     await auditService.log('user_homes_update', '-', req.user.username, {
       userId: id.data, username: user.username, homeIds: parsed.data.homeIds,

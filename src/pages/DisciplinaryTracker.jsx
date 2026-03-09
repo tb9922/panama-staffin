@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import {
   getCurrentHome, getLoggedInUser, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
@@ -173,7 +174,7 @@ export default function DisciplinaryTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading disciplinary cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading disciplinary cases...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -209,11 +210,11 @@ export default function DisciplinaryTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Date Raised</th>
-                <th className={TABLE.th}>Category</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Outcome</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Date Raised</th>
+                <th scope="col" className={TABLE.th}>Category</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Outcome</th>
               </tr>
             </thead>
             <tbody>
@@ -250,15 +251,7 @@ export default function DisciplinaryTracker() {
     return (
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Disciplinary Case' : 'New Disciplinary Case'} size="xl">
           {/* Modal tabs */}
-          <div className={TAB.bar}>
-            {MODAL_TABS.map(t => {
-              if (t.id === 'notes' && !editing) return null;
-              return (
-                <button key={t.id} onClick={() => setModalTab(t.id)}
-                  className={`${TAB.button} ${modalTab === t.id ? TAB.active : TAB.inactive}`}>{t.label}</button>
-              );
-            })}
-          </div>
+          <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes')} activeTab={modalTab} onTabChange={setModalTab} />
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 

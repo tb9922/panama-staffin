@@ -393,7 +393,7 @@ export default function DailyStatus() {
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.skill}</td>
       <td className={`${TABLE.td} text-xs text-gray-500`}>{s.reason || ''}</td>
       <td className={TABLE.td}>
-        {s.isOverride && (
+        {isAdmin && s.isOverride && (
           <button onClick={() => withLockCheck(() => removeOverride(s.id))} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50`}>Revert</button>
         )}
       </td>
@@ -533,9 +533,9 @@ export default function DailyStatus() {
             <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Handover Notes</h3>
             <textarea
               value={schedData.day_notes?.[dateStr] || ''}
-              readOnly={isLocked}
+              readOnly={isLocked || !isAdmin}
               onChange={e => {
-                if (isLocked) return;
+                if (isLocked || !isAdmin) return;
                 const note = e.target.value;
                 // Optimistic local update for responsive UI
                 setSchedData(prev => ({
@@ -551,7 +551,7 @@ export default function DailyStatus() {
                   }
                 }, 800);
               }}
-              placeholder={isLocked ? 'Unlock to edit notes' : 'Add notes for handover, incidents, or reminders...'}
+              placeholder={isLocked ? 'Unlock to edit notes' : !isAdmin ? 'View only' : 'Add notes for handover, incidents, or reminders...'}
               className={`${INPUT.base} h-20 resize-y ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
           </div>
@@ -561,7 +561,7 @@ export default function DailyStatus() {
         <div className={`lg:col-span-2 ${CARD.padded}`}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
-            <div className="flex gap-1.5 print:hidden">
+            {isAdmin && <div className="flex gap-1.5 print:hidden">
               <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
               <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
               <button onClick={() => withLockCheck(() => setModal('ot'))} disabled={saving} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100 disabled:opacity-50`}>+OT</button>
@@ -569,7 +569,7 @@ export default function DailyStatus() {
               <button onClick={() => withLockCheck(() => setModal('training'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Training</button>
               <button onClick={() => withLockCheck(() => setModal('sleepIn'))} disabled={saving} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100 disabled:opacity-50`}>+Sleep In</button>
               <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>Swap</button>
-            </div>
+            </div>}
           </div>
 
           <StaffTable title="Early" staff={earlyStaff} bgColor="bg-blue-50 text-blue-700" />

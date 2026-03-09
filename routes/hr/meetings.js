@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
@@ -41,10 +42,10 @@ router.put('/meetings/:id', requireAuth, requireAdmin, requireHomeAccess, async 
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
-    const parsed = meetingBodySchema.partial().safeParse(req.body);
+    const versionedSchema = meetingBodySchema.partial().extend({ _version: z.number().int().nonnegative().optional() });
+    const parsed = versionedSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const { _version } = req.body;
-    const version = _version != null ? parseInt(_version, 10) : null;
+    const version = parsed.data._version != null ? parsed.data._version : null;
     const existing = await hrRepo.findMeetingById(id, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Meeting not found' });
     const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data, null, version);

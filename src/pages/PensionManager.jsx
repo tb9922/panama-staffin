@@ -153,7 +153,7 @@ export default function PensionManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -219,15 +219,15 @@ export default function PensionManager() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Staff Member</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}>Enrolment Date</th>
-              <th className={TABLE.th}>Opt-Out Date</th>
-              <th className={TABLE.th}>Re-enrolment Due</th>
-              <th className={TABLE.th}>EE Rate</th>
-              <th className={TABLE.th}>ER Rate</th>
-              <th className={TABLE.th}>Notes</th>
-              {isAdmin && <th className={TABLE.th}>Actions</th>}
+              <th scope="col" className={TABLE.th}>Staff Member</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}>Enrolment Date</th>
+              <th scope="col" className={TABLE.th}>Opt-Out Date</th>
+              <th scope="col" className={TABLE.th}>Re-enrolment Due</th>
+              <th scope="col" className={TABLE.th}>EE Rate</th>
+              <th scope="col" className={TABLE.th}>ER Rate</th>
+              <th scope="col" className={TABLE.th}>Notes</th>
+              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -296,7 +296,7 @@ export default function PensionManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th} colSpan={isAdmin ? 9 : 8}>
+                <th scope="col" className={TABLE.th} colSpan={isAdmin ? 9 : 8}>
                   <span className="text-amber-700">Staff awaiting pension assessment</span>
                 </th>
               </tr>

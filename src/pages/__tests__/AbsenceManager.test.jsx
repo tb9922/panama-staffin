@@ -119,19 +119,19 @@ describe('AbsenceManager', () => {
   it('renders three tab buttons', async () => {
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Bradford Scores' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Bradford Scores' })).toBeInTheDocument()
     );
-    expect(screen.getByRole('button', { name: 'RTW Interviews' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'OH Referrals' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'RTW Interviews' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'OH Referrals' })).toBeInTheDocument();
   });
 
   it('switches to RTW Interviews tab and shows data', async () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'RTW Interviews' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'RTW Interviews' })).toBeInTheDocument()
     );
-    await user.click(screen.getByRole('button', { name: 'RTW Interviews' }));
+    await user.click(screen.getByRole('tab', { name: 'RTW Interviews' }));
     expect(screen.getByText('S001')).toBeInTheDocument();
     expect(screen.getByText('Manager A')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New RTW Interview' })).toBeInTheDocument();
@@ -141,9 +141,9 @@ describe('AbsenceManager', () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'OH Referrals' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'OH Referrals' })).toBeInTheDocument()
     );
-    await user.click(screen.getByRole('button', { name: 'OH Referrals' }));
+    await user.click(screen.getByRole('tab', { name: 'OH Referrals' }));
     expect(screen.getByText('S002')).toBeInTheDocument();
     expect(screen.getByText('Back pain')).toBeInTheDocument();
     expect(screen.getByText('Occupational Health Ltd')).toBeInTheDocument();

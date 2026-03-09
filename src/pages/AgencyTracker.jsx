@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
@@ -7,6 +8,12 @@ import {
   getAgencyMetrics, getCurrentHome, getLoggedInUser,
 } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+
+const TABS = [
+  { id: 'shifts', label: 'Shift Log' },
+  { id: 'providers', label: 'Providers' },
+  { id: 'metrics', label: 'Weekly Trend' },
+];
 
 const SHIFT_OPTIONS = ['E', 'L', 'EL', 'N', 'AG-E', 'AG-L', 'AG-N'];
 
@@ -342,25 +349,7 @@ export default function AgencyTracker() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {[
-          { key: 'shifts',    label: 'Shift Log' },
-          { key: 'providers', label: 'Providers' },
-          { key: 'metrics',   label: 'Weekly Trend' },
-        ].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-4" />
 
       {/* ── Shift Log Tab ── */}
       {tab === 'shifts' && (
@@ -386,17 +375,17 @@ export default function AgencyTracker() {
                 <table className={TABLE.table}>
                   <thead className={TABLE.thead}>
                     <tr>
-                      <th className={TABLE.th}>Date</th>
-                      <th className={TABLE.th}>Provider</th>
-                      <th className={TABLE.th}>Shift</th>
-                      <th className={TABLE.th}>Worker</th>
-                      <th className={TABLE.th}>Role Covered</th>
-                      <th className={TABLE.th + ' text-right'}>Hours</th>
-                      <th className={TABLE.th + ' text-right'}>Rate</th>
-                      <th className={TABLE.th + ' text-right'}>Cost</th>
-                      <th className={TABLE.th}>Invoice</th>
-                      <th className={TABLE.th}>Status</th>
-                      {isAdmin && <th className={TABLE.th}></th>}
+                      <th scope="col" className={TABLE.th}>Date</th>
+                      <th scope="col" className={TABLE.th}>Provider</th>
+                      <th scope="col" className={TABLE.th}>Shift</th>
+                      <th scope="col" className={TABLE.th}>Worker</th>
+                      <th scope="col" className={TABLE.th}>Role Covered</th>
+                      <th scope="col" className={TABLE.th + ' text-right'}>Hours</th>
+                      <th scope="col" className={TABLE.th + ' text-right'}>Rate</th>
+                      <th scope="col" className={TABLE.th + ' text-right'}>Cost</th>
+                      <th scope="col" className={TABLE.th}>Invoice</th>
+                      <th scope="col" className={TABLE.th}>Status</th>
+                      {isAdmin && <th scope="col" className={TABLE.th}></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -444,12 +433,12 @@ export default function AgencyTracker() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Provider</th>
-                  <th className={TABLE.th}>Contact</th>
-                  <th className={TABLE.th + ' text-right'}>Day Rate</th>
-                  <th className={TABLE.th + ' text-right'}>Night Rate</th>
-                  <th className={TABLE.th}>Status</th>
-                  {isAdmin && <th className={TABLE.th}></th>}
+                  <th scope="col" className={TABLE.th}>Provider</th>
+                  <th scope="col" className={TABLE.th}>Contact</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Day Rate</th>
+                  <th scope="col" className={TABLE.th + ' text-right'}>Night Rate</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -491,11 +480,11 @@ export default function AgencyTracker() {
                   <table className={TABLE.table}>
                     <thead className={TABLE.thead}>
                       <tr>
-                        <th className={TABLE.th}>Week Starting</th>
-                        <th className={TABLE.th + ' text-right'}>Shifts</th>
-                        <th className={TABLE.th + ' text-right'}>Hours</th>
-                        <th className={TABLE.th + ' text-right'}>Cost</th>
-                        <th className={TABLE.th}>Providers Used</th>
+                        <th scope="col" className={TABLE.th}>Week Starting</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Shifts</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Hours</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Cost</th>
+                        <th scope="col" className={TABLE.th}>Providers Used</th>
                       </tr>
                     </thead>
                     <tbody>

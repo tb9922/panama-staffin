@@ -128,7 +128,7 @@ export default function SickPayTracker() {
     setShowUpdate(period);
   }
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
 
   return (
     <div className={PAGE.container}>
@@ -206,16 +206,16 @@ export default function SickPayTracker() {
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
             <tr>
-              <th className={TABLE.th}>Staff Member</th>
-              <th className={TABLE.th}>Start Date</th>
-              <th className={TABLE.th}>End Date</th>
-              <th className={TABLE.th}>Duration</th>
-              <th className={TABLE.th}>Qualifying Days</th>
-              <th className={TABLE.th}>Waiting Days</th>
-              <th className={TABLE.th}>SSP Weeks Paid</th>
-              <th className={TABLE.th}>Fit Note</th>
-              <th className={TABLE.th}>Status</th>
-              {isAdmin && <th className={TABLE.th}>Actions</th>}
+              <th scope="col" className={TABLE.th}>Staff Member</th>
+              <th scope="col" className={TABLE.th}>Start Date</th>
+              <th scope="col" className={TABLE.th}>End Date</th>
+              <th scope="col" className={TABLE.th}>Duration</th>
+              <th scope="col" className={TABLE.th}>Qualifying Days</th>
+              <th scope="col" className={TABLE.th}>Waiting Days</th>
+              <th scope="col" className={TABLE.th}>SSP Weeks Paid</th>
+              <th scope="col" className={TABLE.th}>Fit Note</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>

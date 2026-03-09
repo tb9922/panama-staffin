@@ -83,11 +83,11 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>File</th>
-                <th className={TABLE.th}>Size</th>
-                <th className={TABLE.th}>Description</th>
-                <th className={TABLE.th}>Uploaded</th>
-                <th className={TABLE.th}></th>
+                <th scope="col" className={TABLE.th}>File</th>
+                <th scope="col" className={TABLE.th}>Size</th>
+                <th scope="col" className={TABLE.th}>Description</th>
+                <th scope="col" className={TABLE.th}>Uploaded</th>
+                <th scope="col" className={TABLE.th}></th>
               </tr>
             </thead>
             <tbody>

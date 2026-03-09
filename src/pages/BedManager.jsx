@@ -348,14 +348,14 @@ export default function BedManager() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Room</th>
-                  <th className={TABLE.th}>Name</th>
-                  <th className={TABLE.th}>Floor</th>
-                  <th className={TABLE.th}>Type</th>
-                  <th className={TABLE.th}>Status</th>
-                  <th className={TABLE.th}>Resident</th>
-                  <th className={TABLE.th}>Since</th>
-                  <th className={TABLE.th}>Actions</th>
+                  <th scope="col" className={TABLE.th}>Room</th>
+                  <th scope="col" className={TABLE.th}>Name</th>
+                  <th scope="col" className={TABLE.th}>Floor</th>
+                  <th scope="col" className={TABLE.th}>Type</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Resident</th>
+                  <th scope="col" className={TABLE.th}>Since</th>
+                  <th scope="col" className={TABLE.th}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -565,11 +565,11 @@ export default function BedManager() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Date</th>
-                  <th className={TABLE.th}>From</th>
-                  <th className={TABLE.th}>To</th>
-                  <th className={TABLE.th}>By</th>
-                  <th className={TABLE.th}>Reason</th>
+                  <th scope="col" className={TABLE.th}>Date</th>
+                  <th scope="col" className={TABLE.th}>From</th>
+                  <th scope="col" className={TABLE.th}>To</th>
+                  <th scope="col" className={TABLE.th}>By</th>
+                  <th scope="col" className={TABLE.th}>Reason</th>
                 </tr>
               </thead>
               <tbody>

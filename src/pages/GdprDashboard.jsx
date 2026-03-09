@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import {
   getDataRequests, createDataRequest, updateDataRequest, gatherRequestData, executeErasure,
@@ -200,7 +201,7 @@ export default function GdprDashboard() {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -214,14 +215,7 @@ export default function GdprDashboard() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}>{t.label}</button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
       {/* Tab content */}
       {tab === 'overview' && renderOverview()}
@@ -333,7 +327,7 @@ export default function GdprDashboard() {
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
-                <tr><th className={TABLE.th}>Type</th><th className={TABLE.th}>Subject</th><th className={TABLE.th}>Received</th><th className={TABLE.th}>Deadline</th><th className={TABLE.th}>Status</th><th className={TABLE.th}>Actions</th></tr>
+                <tr><th scope="col" className={TABLE.th}>Type</th><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Received</th><th scope="col" className={TABLE.th}>Deadline</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
                 {requests.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data requests</td></tr>}
@@ -391,7 +385,7 @@ export default function GdprDashboard() {
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
-                <tr><th className={TABLE.th}>Title</th><th className={TABLE.th}>Discovered</th><th className={TABLE.th}>Severity</th><th className={TABLE.th}>ICO</th><th className={TABLE.th}>Status</th><th className={TABLE.th}>Actions</th></tr>
+                <tr><th scope="col" className={TABLE.th}>Title</th><th scope="col" className={TABLE.th}>Discovered</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
                 {breaches.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data breaches recorded</td></tr>}
@@ -436,9 +430,9 @@ export default function GdprDashboard() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Category</th><th className={TABLE.th}>Period</th><th className={TABLE.th}>Basis</th>
-                  <th className={TABLE.th}>Special</th><th className={TABLE.th}>Table</th>
-                  {retentionScan && <><th className={TABLE.th}>Records</th><th className={TABLE.th}>Expired</th></>}
+                  <th scope="col" className={TABLE.th}>Category</th><th scope="col" className={TABLE.th}>Period</th><th scope="col" className={TABLE.th}>Basis</th>
+                  <th scope="col" className={TABLE.th}>Special</th><th scope="col" className={TABLE.th}>Table</th>
+                  {retentionScan && <><th scope="col" className={TABLE.th}>Records</th><th scope="col" className={TABLE.th}>Expired</th></>}
                 </tr>
               </thead>
               <tbody>
@@ -476,7 +470,7 @@ export default function GdprDashboard() {
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
-                <tr><th className={TABLE.th}>Subject</th><th className={TABLE.th}>Purpose</th><th className={TABLE.th}>Legal Basis</th><th className={TABLE.th}>Given</th><th className={TABLE.th}>Status</th><th className={TABLE.th}>Actions</th></tr>
+                <tr><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Purpose</th><th scope="col" className={TABLE.th}>Legal Basis</th><th scope="col" className={TABLE.th}>Given</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
                 {consent.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No consent records</td></tr>}
@@ -515,7 +509,7 @@ export default function GdprDashboard() {
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
-                <tr><th className={TABLE.th}>Date</th><th className={TABLE.th}>Category</th><th className={TABLE.th}>Description</th><th className={TABLE.th}>Severity</th><th className={TABLE.th}>ICO</th><th className={TABLE.th}>Status</th><th className={TABLE.th}>Actions</th></tr>
+                <tr><th scope="col" className={TABLE.th}>Date</th><th scope="col" className={TABLE.th}>Category</th><th scope="col" className={TABLE.th}>Description</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
                 {complaints.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No DP complaints</td></tr>}
@@ -551,7 +545,7 @@ export default function GdprDashboard() {
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
-                <tr><th className={TABLE.th}>Time</th><th className={TABLE.th}>User</th><th className={TABLE.th}>Role</th><th className={TABLE.th}>Method</th><th className={TABLE.th}>Endpoint</th><th className={TABLE.th}>Categories</th><th className={TABLE.th}>Status</th></tr>
+                <tr><th scope="col" className={TABLE.th}>Time</th><th scope="col" className={TABLE.th}>User</th><th scope="col" className={TABLE.th}>Role</th><th scope="col" className={TABLE.th}>Method</th><th scope="col" className={TABLE.th}>Endpoint</th><th scope="col" className={TABLE.th}>Categories</th><th scope="col" className={TABLE.th}>Status</th></tr>
               </thead>
               <tbody>
                 {accessLogData.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No access log entries</td></tr>}

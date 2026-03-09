@@ -63,7 +63,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading dashboard...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <DashboardInner schedData={schedData} />;
@@ -81,10 +81,8 @@ function DashboardInner({ schedData }) {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 
@@ -317,12 +315,12 @@ function DashboardInner({ schedData }) {
               return (
                 <button key={i} onClick={() => navigate(`/day/${dateStr}`)}
                   className={`flex flex-col items-center p-1 rounded-lg transition-all hover:scale-105 ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
-                  title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`}>
+                  title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}`}>
                   <div className="text-[9px] text-gray-400 mb-0.5">D{i + 1}</div>
                   <div className={`w-8 h-8 rounded-lg ${HEATMAP[d.coverage.overall] || HEATMAP.empty} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
-                    {d.date.getDate()}
+                    {d.date.getUTCDate()}
                   </div>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
+                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
                 </button>
               );
             })}
@@ -402,7 +400,7 @@ function DashboardInner({ schedData }) {
                   alert.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                 }`;
                 const icon = (
-                  <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
                       alert.type === 'error'
                         ? 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z'
@@ -411,12 +409,11 @@ function DashboardInner({ schedData }) {
                   </svg>
                 );
                 return alert.link ? (
-                  <div key={i} className={`${cls} cursor-pointer hover:brightness-95 transition-all`}
-                    onClick={() => navigate(alert.link)} role="link" tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter') navigate(alert.link); }}>
+                  <button key={i} className={`${cls} cursor-pointer hover:brightness-95 transition-all w-full text-left`}
+                    onClick={() => navigate(alert.link)}>
                     {icon}
                     <span>{alert.msg}</span>
-                  </div>
+                  </button>
                 ) : (
                   <div key={i} className={cls}>
                     {icon}

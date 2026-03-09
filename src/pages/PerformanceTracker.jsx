@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, TAB } from '../lib/design.js';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
+import TabBar from '../components/TabBar.jsx';
 import { getCurrentHome, getLoggedInUser, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
 import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -9,7 +10,15 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import Pagination from '../components/Pagination.jsx';
 
-const MODAL_TABS = ['Concern', 'Informal', 'PIP', 'Hearing', 'Outcome', 'Appeal', 'Notes'];
+const MODAL_TABS = [
+  { id: 'concern', label: 'Concern' },
+  { id: 'informal', label: 'Informal' },
+  { id: 'pip', label: 'PIP' },
+  { id: 'hearing', label: 'Hearing' },
+  { id: 'outcome', label: 'Outcome' },
+  { id: 'appeal', label: 'Appeal' },
+  { id: 'notes', label: 'Notes' },
+];
 
 const emptyForm = () => ({
   staff_id: '', date_raised: new Date().toISOString().slice(0, 10), type: 'capability',
@@ -28,7 +37,7 @@ export default function PerformanceTracker() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
-  const [modalTab, setModalTab] = useState(0);
+  const [modalTab, setModalTab] = useState('concern');
   const [saving, setSaving] = useState(false);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -68,7 +77,7 @@ export default function PerformanceTracker() {
   function openNew() {
     setEditing(null);
     setForm(emptyForm());
-    setModalTab(0);
+    setModalTab('concern');
     setShowModal(true);
   }
 
@@ -93,7 +102,7 @@ export default function PerformanceTracker() {
       appeal_date: item.appeal_date || '',
       appeal_outcome: item.appeal_outcome || '',
     });
-    setModalTab(0);
+    setModalTab('concern');
     setShowModal(true);
   }
 
@@ -139,7 +148,7 @@ export default function PerformanceTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading performance cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading performance cases...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -173,11 +182,11 @@ export default function PerformanceTracker() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff ID</th>
-                <th className={TABLE.th}>Date Raised</th>
-                <th className={TABLE.th}>Type</th>
-                <th className={TABLE.th}>Status</th>
-                <th className={TABLE.th}>Actions</th>
+                <th scope="col" className={TABLE.th}>Staff ID</th>
+                <th scope="col" className={TABLE.th}>Date Raised</th>
+                <th scope="col" className={TABLE.th}>Type</th>
+                <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -212,15 +221,10 @@ export default function PerformanceTracker() {
         <ModalWrapper isOpen={showModal} onClose={() => { setShowModal(false); setForm(emptyForm()); setEditing(null); setError(null); }} title={editing ? 'Edit Performance Case' : 'New Performance Case'} size="xl">
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
             {/* Modal tab bar */}
-            <div className={TAB.bar}>
-              {MODAL_TABS.map((t, i) => (
-                <button key={t} onClick={() => setModalTab(i)}
-                  className={`${TAB.button} ${modalTab === i ? TAB.active : TAB.inactive}`}>{t}</button>
-              ))}
-            </div>
+            <TabBar tabs={MODAL_TABS} activeTab={modalTab} onTabChange={setModalTab} />
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              {modalTab === 0 && <>
+              {modalTab === 'concern' && <>
                 <div className="grid grid-cols-2 gap-4">
                   <StaffPicker value={form.staff_id} onChange={val => f('staff_id', val)} label="Staff Member" />
                   <div>
@@ -248,7 +252,7 @@ export default function PerformanceTracker() {
                 </div>
               </>}
 
-              {modalTab === 1 && <>
+              {modalTab === 'informal' && <>
                 <div>
                   <label className={INPUT.label}>Informal Stage Notes</label>
                   <textarea className={INPUT.base} rows={4} value={form.informal_notes} onChange={e => f('informal_notes', e.target.value)} placeholder="Notes from informal discussions..." />
@@ -259,7 +263,7 @@ export default function PerformanceTracker() {
                 </div>
               </>}
 
-              {modalTab === 2 && <>
+              {modalTab === 'pip' && <>
                 <div>
                   <label className={INPUT.label}>PIP Objectives</label>
                   <textarea className={INPUT.base} rows={4} value={form.pip_objectives} onChange={e => f('pip_objectives', e.target.value)} placeholder="SMART objectives for performance improvement..." />
@@ -277,7 +281,7 @@ export default function PerformanceTracker() {
                 <InvestigationMeetings caseType="performance" caseId={editing?.id} />
               </>}
 
-              {modalTab === 3 && <>
+              {modalTab === 'hearing' && <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={INPUT.label}>Hearing Date</label>
@@ -290,7 +294,7 @@ export default function PerformanceTracker() {
                 </div>
               </>}
 
-              {modalTab === 4 && <>
+              {modalTab === 'outcome' && <>
                 <div>
                   <label className={INPUT.label}>Outcome</label>
                   <input className={INPUT.base} value={form.outcome} onChange={e => f('outcome', e.target.value)} placeholder="e.g. Extended PIP, Returned to normal management" />
@@ -307,7 +311,7 @@ export default function PerformanceTracker() {
                 </div>
               </>}
 
-              {modalTab === 5 && <>
+              {modalTab === 'appeal' && <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={INPUT.label}>Appeal Date</label>
@@ -320,7 +324,7 @@ export default function PerformanceTracker() {
                 </div>
               </>}
 
-              {modalTab === 6 && <>
+              {modalTab === 'notes' && <>
                 <FileAttachments caseType="performance" caseId={editing?.id} />
               </>}
             </div>

@@ -579,13 +579,13 @@ export default function OnboardingTracker() {
               </div>
               <div>
                 <label className={INPUT.label}>Contracted Hours / Week</label>
-                <input type="number" step="0.5" value={modalForm.contracted_hours || ''} onChange={e => setField('contracted_hours', parseFloat(e.target.value) || '')} className={INPUT.base} />
+                <input type="number" step="0.5" value={modalForm.contracted_hours ?? ''} onChange={e => { const v = parseFloat(e.target.value); setField('contracted_hours', isNaN(v) ? '' : v); }} className={INPUT.base} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={INPUT.label}>Hourly Rate</label>
-                <input type="number" step="0.01" value={modalForm.hourly_rate || ''} onChange={e => setField('hourly_rate', parseFloat(e.target.value) || '')} className={INPUT.base} />
+                <input type="number" step="0.01" value={modalForm.hourly_rate ?? ''} onChange={e => { const v = parseFloat(e.target.value); setField('hourly_rate', isNaN(v) ? '' : v); }} className={INPUT.base} />
               </div>
               <div>
                 <label className={INPUT.label}>Notice Period</label>
@@ -755,7 +755,7 @@ export default function OnboardingTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container}><p className="text-gray-500 mt-8">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
   if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';

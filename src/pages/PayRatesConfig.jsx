@@ -153,12 +153,12 @@ export default function PayRatesConfig() {
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
                 <tr>
-                  <th className={TABLE.th}>Rule Name</th>
-                  <th className={TABLE.th}>Applies To</th>
-                  <th className={TABLE.th}>Rate Type</th>
-                  <th className={TABLE.th}>Amount</th>
-                  <th className={TABLE.th}>Effective From</th>
-                  {isAdmin && <th className={TABLE.th}></th>}
+                  <th scope="col" className={TABLE.th}>Rule Name</th>
+                  <th scope="col" className={TABLE.th}>Applies To</th>
+                  <th scope="col" className={TABLE.th}>Rate Type</th>
+                  <th scope="col" className={TABLE.th}>Amount</th>
+                  <th scope="col" className={TABLE.th}>Effective From</th>
+                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -199,9 +199,9 @@ export default function PayRatesConfig() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Age Bracket</th>
-                <th className={TABLE.th}>Effective From</th>
-                <th className={TABLE.th}>Hourly Rate</th>
+                <th scope="col" className={TABLE.th}>Age Bracket</th>
+                <th scope="col" className={TABLE.th}>Effective From</th>
+                <th scope="col" className={TABLE.th}>Hourly Rate</th>
               </tr>
             </thead>
             <tbody>

@@ -50,7 +50,7 @@ export default function SickTrends() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading sick trend data...</div>;
+  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading sick trend data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
 
   return <SickTrendsInner schedData={schedData} isAdmin={isAdmin} />;
@@ -83,8 +83,8 @@ function SickTrendsInner({ schedData, isAdmin }) {
           if (actual.shift === 'SICK') {
             sickDates.push({
               date: formatDate(date),
-              day: date.getDate(),
-              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
+              day: date.getUTCDate(),
+              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
               reason: actual.reason || '',
             });
           }
@@ -295,14 +295,14 @@ function SickTrendsInner({ schedData, isAdmin }) {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Staff</th>
-                <th className={TABLE.th}>Team</th>
-                <th className={TABLE.th}>Role</th>
+                <th scope="col" className={TABLE.th}>Staff</th>
+                <th scope="col" className={TABLE.th}>Team</th>
+                <th scope="col" className={TABLE.th}>Role</th>
                 {months.map(m => (
-                  <th key={m.label} className={`${TABLE.th} text-center`}>{m.label}</th>
+                  <th scope="col" key={m.label} className={`${TABLE.th} text-center`}>{m.label}</th>
                 ))}
-                <th className={`${TABLE.th} text-center font-bold`}>Total</th>
-                <th className={`${TABLE.th} text-center`}>Trend</th>
+                <th scope="col" className={`${TABLE.th} text-center font-bold`}>Total</th>
+                <th scope="col" className={`${TABLE.th} text-center`}>Trend</th>
               </tr>
             </thead>
             <tbody>
@@ -372,7 +372,7 @@ function SickTrendsInner({ schedData, isAdmin }) {
               <option value="All">All Months</option>
               {uniqueMonths.map(m => {
                 const [y, mo] = m.split('-');
-                const label = new Date(Number(y), Number(mo) - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                const label = new Date(Date.UTC(Number(y), Number(mo) - 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
                 return <option key={m} value={m}>{label}</option>;
               })}
             </select>
@@ -384,12 +384,12 @@ function SickTrendsInner({ schedData, isAdmin }) {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th className={TABLE.th}>Date</th>
-                <th className={TABLE.th}>Day</th>
-                <th className={TABLE.th}>Staff</th>
-                <th className={TABLE.th}>Team</th>
-                <th className={TABLE.th}>Role</th>
-                <th className={TABLE.th}>Reason</th>
+                <th scope="col" className={TABLE.th}>Date</th>
+                <th scope="col" className={TABLE.th}>Day</th>
+                <th scope="col" className={TABLE.th}>Staff</th>
+                <th scope="col" className={TABLE.th}>Team</th>
+                <th scope="col" className={TABLE.th}>Role</th>
+                <th scope="col" className={TABLE.th}>Reason</th>
               </tr>
             </thead>
             <tbody>

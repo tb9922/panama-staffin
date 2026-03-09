@@ -123,7 +123,7 @@ export default function ExpenseTracker() {
     });
   }
 
-  if (loading) return <div className={PAGE.container}><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading expenses...</p></div></div>;
+  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading expenses...</p></div></div>;
 
   return (
     <div className={PAGE.container}>
@@ -155,15 +155,15 @@ export default function ExpenseTracker() {
         <div className={TABLE.wrapper}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}><tr>
-              <th className={TABLE.th}>Date</th>
-              <th className={TABLE.th}>Category</th>
-              <th className={TABLE.th}>Description</th>
-              <th className={TABLE.th}>Supplier</th>
-              <th className={`${TABLE.th} text-right`}>Net</th>
-              <th className={`${TABLE.th} text-right`}>VAT</th>
-              <th className={`${TABLE.th} text-right`}>Gross</th>
-              <th className={TABLE.th}>Status</th>
-              <th className={TABLE.th}></th>
+              <th scope="col" className={TABLE.th}>Date</th>
+              <th scope="col" className={TABLE.th}>Category</th>
+              <th scope="col" className={TABLE.th}>Description</th>
+              <th scope="col" className={TABLE.th}>Supplier</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Net</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>VAT</th>
+              <th scope="col" className={`${TABLE.th} text-right`}>Gross</th>
+              <th scope="col" className={TABLE.th}>Status</th>
+              <th scope="col" className={TABLE.th}></th>
             </tr></thead>
             <tbody>
               {expenses.length === 0 ? (
