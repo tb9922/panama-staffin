@@ -44,6 +44,8 @@ import schedulingRouter from './routes/scheduling.js';
 import usersRouter from './routes/users.js';
 import bedsRouter from './routes/beds.js';
 import platformRouter from './routes/platform.js';
+import webhookRouter from './routes/webhooks.js';
+import importRouter from './routes/import.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
@@ -114,6 +116,8 @@ app.use('/api/scheduling', schedulingRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/beds', bedsRouter);
 app.use('/api/platform', platformRouter);
+app.use('/api/webhooks', webhookRouter);
+app.use('/api/import', importRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {

@@ -35,6 +35,15 @@ const ADMIN_ROUTES = new Set([
   'GET /api/audit',
   'DELETE /api/audit/purge',
   'GET /api/export',
+  // Webhooks — admin-only
+  'GET /api/webhooks',
+  'POST /api/webhooks',
+  'PUT /api/webhooks/:id',
+  'DELETE /api/webhooks/:id',
+  'GET /api/webhooks/:id/deliveries',
+  // Staff import — admin-only
+  'GET /api/import/staff/template',
+  'POST /api/import/staff',
   'POST /api/handover',
   'PUT /api/handover/:id',
   'DELETE /api/handover/:id',

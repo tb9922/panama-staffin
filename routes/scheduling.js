@@ -9,6 +9,7 @@ import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
+import { dispatchEvent } from '../services/webhookService.js';
 import {
   getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
@@ -224,6 +225,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHom
       ...(replaces_staff_id && { replaces_staff_id }),
       ...(computedALHours != null && { al_hours: computedALHours }),
     });
+    dispatchEvent(req.home.id, 'override.created', { date, staffId, shift });
     res.json({ ok: true });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
