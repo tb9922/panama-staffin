@@ -533,13 +533,8 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
 
     // Load YTD for each staff member for the CSV
     const taxYear = getTaxYear(new Date(run.period_end));
-    const ytdMap = new Map();
-    await Promise.all(
-      lines.map(async line => {
-        const ytd = await taxRepo.getYTD(homeId, line.staff_id, taxYear, client);
-        if (ytd) ytdMap.set(line.staff_id, ytd);
-      })
-    );
+    const staffIds = [...new Set(lines.map(l => l.staff_id))];
+    const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
 
     const csv = format === 'sage'
       ? buildSageCSV(lines, staffMap, run, ytdMap)
@@ -615,12 +610,10 @@ export async function assemblePayslipData(runId, homeId, staffId) {
   // Fetch YTD for approved runs (null for draft/calculated — payslip shows "Estimated")
   const isApproved = ['approved', 'exported', 'locked'].includes(run.status);
   const taxYear = getTaxYear(new Date(run.period_end));
-  const ytdMap = new Map();
+  let ytdMap = new Map();
   if (isApproved) {
-    for (const line of targetLines) {
-      const ytd = await taxRepo.getYTD(homeId, line.staff_id, taxYear);
-      if (ytd) ytdMap.set(line.staff_id, ytd);
-    }
+    const staffIds = [...new Set(targetLines.map(l => l.staff_id))];
+    ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear);
   }
 
   return targetLines.map(line => ({

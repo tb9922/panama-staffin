@@ -147,7 +147,7 @@ function FatigueTrackerInner({ schedData, today }) {
                 <th scope="col" className="py-2 px-1 text-center min-w-[40px]">Status</th>
                 {cycleDates.map((d, i) => (
                   <th scope="col" key={i} className={`py-2 px-0 text-center min-w-[22px] ${i === todayIdx ? 'bg-blue-700' : ''}`}>
-                    <div className="text-[8px]">{d.getDate()}</div>
+                    <div className="text-[8px]">{d.getUTCDate()}</div>
                   </th>
                 ))}
                 <th scope="col" className="py-2 px-2 text-center min-w-[50px]">Shifts</th>

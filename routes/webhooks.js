@@ -13,8 +13,19 @@ const SUPPORTED_EVENTS = [
   'override.created',
 ];
 
+// Block private/internal IPs to prevent SSRF
+const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|::1|fc|fd|fe80)/i;
+function isPrivateUrl(url) {
+  try {
+    const { hostname } = new URL(url);
+    return PRIVATE_HOST_RE.test(hostname) || hostname === '[::1]';
+  } catch { return true; }
+}
+
 const webhookSchema = z.object({
-  url: z.string().url().max(2000).refine(u => u.startsWith('https://'), 'Webhook URL must use HTTPS'),
+  url: z.string().url().max(2000)
+    .refine(u => u.startsWith('https://'), 'Webhook URL must use HTTPS')
+    .refine(u => !isPrivateUrl(u), 'Webhook URL must not target private/internal networks'),
   secret: z.string().min(16).max(500),
   events: z.array(z.enum(SUPPORTED_EVENTS)).min(1),
   active: z.boolean(),

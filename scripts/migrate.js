@@ -48,12 +48,14 @@ try {
 }
 
 const { Pool } = pg;
+const sslEnabled = (process.env.DB_SSL || 'true').toLowerCase() !== 'false';
 const pool = new Pool({
   host:     process.env.DB_HOST     || 'localhost',
   port:     parseInt(process.env.DB_PORT || '5432', 10),
   database: dbOverride || process.env.DB_NAME || 'panama_dev',
   user:     process.env.DB_USER     || 'panama',
   password: process.env.DB_PASSWORD,
+  ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 async function migrate() {

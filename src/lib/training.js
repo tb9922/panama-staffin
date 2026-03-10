@@ -114,6 +114,11 @@ export function getTrainingStatus(staffMember, trainingType, staffRecords, asOfD
     return { status: TRAINING_STATUS.NOT_STARTED, record: null, daysUntilExpiry: null, requiredLevel };
   }
 
+  if (!record.expiry) {
+    // No expiry = non-expiring training (e.g. induction) — treat as compliant
+    const requiredLevel = getRequiredLevel(trainingType, staffMember.role);
+    return { status: TRAINING_STATUS.COMPLIANT, record, daysUntilExpiry: null, requiredLevel };
+  }
   const expiry = parseDate(record.expiry);
   const now = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
   const diffMs = expiry.getTime() - now.getTime();

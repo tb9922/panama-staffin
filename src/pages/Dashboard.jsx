@@ -142,7 +142,7 @@ function DashboardInner({ schedData }) {
   const alerts = useMemo(() => {
     const list = [];
     cycleData.forEach(d => {
-      const dateLabel = d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const dateLabel = d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
       ['early', 'late', 'night'].forEach(period => {
         const esc = d.coverage[period]?.escalation;
         if (!esc) return;

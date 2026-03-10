@@ -72,8 +72,8 @@ function getTransitionLabel(fromStatus, toStatus) {
 
 function defaultDate(daysAhead = 0) {
   const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  return d.toISOString().slice(0, 10);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysAhead))
+    .toISOString().slice(0, 10);
 }
 
 const EMPTY_BED_FORM = {

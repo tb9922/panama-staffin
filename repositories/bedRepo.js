@@ -171,7 +171,7 @@ export async function findExpiringHolds(homeId, withinDays = 7, client) {
      SELECT * FROM beds
      WHERE home_id = $1 AND status = 'hospital_hold'
        AND hold_expires IS NOT NULL
-       AND hold_expires <= (CURRENT_DATE + ($2 || ' days')::interval)
+       AND hold_expires <= (CURRENT_DATE + make_interval(days => $2))
      ORDER BY hold_expires ASC`,
     [homeId, withinDays]
   );

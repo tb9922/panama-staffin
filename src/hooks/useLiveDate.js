@@ -11,10 +11,8 @@ export function useLiveDate() {
 
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const timer = setTimeout(() => setToday(formatDate(new Date())), tomorrow - now);
+    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const timer = setTimeout(() => setToday(formatDate(new Date())), utcTomorrow - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

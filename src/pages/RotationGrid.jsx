@@ -688,7 +688,7 @@ export default function RotationGrid() {
           {editing && <>
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs text-gray-500">
-                {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}
               </p>
               <div className="text-right">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLORS[editing.currentShift] || 'bg-gray-100'}`}>

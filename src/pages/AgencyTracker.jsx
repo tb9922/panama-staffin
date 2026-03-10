@@ -241,8 +241,9 @@ export default function AgencyTracker() {
   // Default last 12 weeks
   const defaultEnd   = new Date().toISOString().slice(0, 10);
   const defaultStart = (() => {
-    const d = new Date(); d.setDate(d.getDate() - 84);
-    return d.toISOString().slice(0, 10);
+    const d = new Date();
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 84))
+      .toISOString().slice(0, 10);
   })();
 
   const [tab, setTab]             = useState('shifts'); // 'shifts' | 'providers' | 'metrics'

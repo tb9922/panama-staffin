@@ -68,7 +68,14 @@ export function getLoggedInUser() {
 export function logout() {
   sessionStorage.removeItem('user');
   // Clear HttpOnly cookie via server endpoint (fire-and-forget)
-  fetch(`${API_BASE}/login/logout`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  fetch(`${API_BASE}/login/logout`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+  }).catch(() => {});
 }
 
 export async function loadAuditLog(limit = 100) {

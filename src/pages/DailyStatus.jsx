@@ -279,7 +279,7 @@ export default function DailyStatus() {
   };
 
   const alCount = schedData ? countALOnDate(currentDate, schedData.overrides) : 0;
-  const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dayName = currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   const getBlockingReasons = (s) => {
     if (!schedData) return [];

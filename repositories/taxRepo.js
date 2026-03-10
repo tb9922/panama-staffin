@@ -204,6 +204,21 @@ export async function upsertYTD(homeId, staffId, taxYear, increments, client) {
   return shapeYTD(rows[0]);
 }
 
+/**
+ * Batch-fetch YTD totals for multiple staff in a single query.
+ * Replaces N sequential getYTD calls.
+ */
+export async function getYTDBatch(homeId, staffIds, taxYear, client) {
+  if (!staffIds.length) return new Map();
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM payroll_ytd
+     WHERE home_id = $1 AND staff_id = ANY($2) AND tax_year = $3`,
+    [homeId, staffIds, taxYear]
+  );
+  return new Map(rows.map(r => [r.staff_id, shapeYTD(r)]));
+}
+
 function shapeYTD(row) {
   return {
     home_id: row.home_id,

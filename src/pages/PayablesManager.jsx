@@ -33,13 +33,13 @@ export default function PayablesManager() {
   const today = new Date().toISOString().slice(0, 10);
   const in28Days = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 28);
-    return d.toISOString().slice(0, 10);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 28))
+      .toISOString().slice(0, 10);
   })();
   const in7Days = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 7))
+      .toISOString().slice(0, 10);
   })();
 
   // KPI calculations

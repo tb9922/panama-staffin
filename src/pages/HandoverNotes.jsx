@@ -146,7 +146,7 @@ export default function HandoverNotes() {
   // Display helpers
   const incidentMap = Object.fromEntries(incidents.map(i => [i.id, i]));
   const dateObj = parseDate(dateStr);
-  const displayDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const displayDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   const todayIncidents = incidents.filter(i => i.date === dateStr);
 

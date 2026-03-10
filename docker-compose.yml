@@ -33,6 +33,7 @@ services:
       DB_NAME: ${DB_NAME:-panama_dev}
       DB_USER: ${DB_USER:-panama}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_SSL: 'false'
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:5173}
     ports:

@@ -158,8 +158,18 @@ app.use('/api', (req, res) => {
 if (config.nodeEnv === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distDir = path.join(__dirname, 'dist');
-  app.use(express.static(distDir, { maxAge: '1y', immutable: true }));
+  app.use(express.static(distDir, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders(res, filePath) {
+      // index.html is NOT content-hashed — must not be cached long-term
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(distDir, 'index.html'));
   });
 }

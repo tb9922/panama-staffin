@@ -580,7 +580,7 @@ export async function getMonthlyIncomeTrend(homeId, months, client) {
             COALESCE(SUM(amount_paid), 0) AS received
      FROM finance_invoices
      WHERE home_id = $1 AND deleted_at IS NULL
-       AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - ($2 || ' months')::interval)
+       AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);
   return rows.map(r => ({ month: r.month, invoiced: f(r.invoiced), received: f(r.received) }));
@@ -593,7 +593,7 @@ export async function getMonthlyExpenseTrend(homeId, months, client) {
             COALESCE(SUM(gross_amount), 0) AS total
      FROM finance_expenses
      WHERE home_id = $1 AND deleted_at IS NULL AND status != 'void'
-       AND expense_date >= (CURRENT_DATE - ($2 || ' months')::interval)
+       AND expense_date >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);
   return rows.map(r => ({ month: r.month, total: f(r.total) }));

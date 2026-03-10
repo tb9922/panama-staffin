@@ -125,7 +125,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     const recent = monthData.filter(m => !m.isFuture && m.actual > 0).slice(-3);
     if (recent.length === 0) return null;
     const avgMonthly = recent.reduce((s, m) => s + m.actual, 0) / recent.length;
-    const remainingMonths = 12 - (now.getMonth() + 1);
+    const remainingMonths = 12 - (now.getUTCMonth() + 1);
     const projected = ytd.actual + (avgMonthly * remainingMonths);
     const annualBudget = defaultBudget * 12;
     return { avgMonthly, projected, annualBudget, remaining: remainingMonths };
