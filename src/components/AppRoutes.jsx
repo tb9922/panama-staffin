@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
+import { RequireAdmin, RequirePlatformAdmin } from './RequireRole.jsx';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -63,6 +64,7 @@ const PlatformHomes = lazy(() => import('../pages/PlatformHomes.jsx'));
 export default function AppRoutes() {
   return (
     <Routes>
+      {/* Open routes — viewers have legitimate read access */}
       <Route path="/" element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
       <Route path="/residents" element={<RouteErrorBoundary><Residents /></RouteErrorBoundary>} />
       <Route path="/beds" element={<RouteErrorBoundary><BedManager /></RouteErrorBoundary>} />
@@ -88,39 +90,49 @@ export default function AppRoutes() {
       <Route path="/speak-up" element={<RouteErrorBoundary><WhistleblowingTracker /></RouteErrorBoundary>} />
       <Route path="/dols" element={<RouteErrorBoundary><DolsTracker /></RouteErrorBoundary>} />
       <Route path="/care-cert" element={<RouteErrorBoundary><CareCertificateTracker /></RouteErrorBoundary>} />
-      <Route path="/budget" element={<RouteErrorBoundary><BudgetTracker /></RouteErrorBoundary>} />
-      <Route path="/payroll/rates"      element={<RouteErrorBoundary><PayRatesConfig /></RouteErrorBoundary>} />
-      <Route path="/payroll/timesheets" element={<RouteErrorBoundary><TimesheetManager /></RouteErrorBoundary>} />
-      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><MonthlyTimesheet /></RouteErrorBoundary>} />
-      <Route path="/payroll/agency"     element={<RouteErrorBoundary><AgencyTracker /></RouteErrorBoundary>} />
-      <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><TaxCodeManager /></RouteErrorBoundary>} />
-      <Route path="/payroll/pensions"   element={<RouteErrorBoundary><PensionManager /></RouteErrorBoundary>} />
-      <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><SickPayTracker /></RouteErrorBoundary>} />
-      <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><HMRCDashboard /></RouteErrorBoundary>} />
-      <Route path="/payroll/:runId"     element={<RouteErrorBoundary><PayrollDetail /></RouteErrorBoundary>} />
-      <Route path="/payroll"            element={<RouteErrorBoundary><PayrollDashboard /></RouteErrorBoundary>} />
-      <Route path="/gdpr"              element={<RouteErrorBoundary><GdprDashboard /></RouteErrorBoundary>} />
-      <Route path="/hr"                element={<RouteErrorBoundary><HrDashboard /></RouteErrorBoundary>} />
-      <Route path="/hr/disciplinary"   element={<RouteErrorBoundary><DisciplinaryTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/grievance"      element={<RouteErrorBoundary><GrievanceTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/performance"    element={<RouteErrorBoundary><PerformanceTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/absence"        element={<RouteErrorBoundary><AbsenceManager /></RouteErrorBoundary>} />
-      <Route path="/hr/contracts"      element={<RouteErrorBoundary><ContractManager /></RouteErrorBoundary>} />
-      <Route path="/hr/family-leave"   element={<RouteErrorBoundary><FamilyLeaveTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/flex-working"   element={<RouteErrorBoundary><FlexWorkingTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/edi"            element={<RouteErrorBoundary><EdiTracker /></RouteErrorBoundary>} />
-      <Route path="/hr/tupe"           element={<RouteErrorBoundary><TupeManager /></RouteErrorBoundary>} />
-      <Route path="/hr/renewals"       element={<RouteErrorBoundary><RtwDbsRenewals /></RouteErrorBoundary>} />
-      <Route path="/finance"             element={<RouteErrorBoundary><FinanceDashboard /></RouteErrorBoundary>} />
-      <Route path="/finance/income"      element={<RouteErrorBoundary><IncomeTracker /></RouteErrorBoundary>} />
-      <Route path="/finance/expenses"    element={<RouteErrorBoundary><ExpenseTracker /></RouteErrorBoundary>} />
-      <Route path="/finance/receivables" element={<RouteErrorBoundary><ReceivablesManager /></RouteErrorBoundary>} />
-      <Route path="/finance/payables"    element={<RouteErrorBoundary><PayablesManager /></RouteErrorBoundary>} />
       <Route path="/reports" element={<RouteErrorBoundary><Reports /></RouteErrorBoundary>} />
-      <Route path="/audit" element={<RouteErrorBoundary><AuditLog /></RouteErrorBoundary>} />
-      <Route path="/users" element={<RouteErrorBoundary><UserManagement /></RouteErrorBoundary>} />
-      <Route path="/settings" element={<RouteErrorBoundary><Config /></RouteErrorBoundary>} />
-      <Route path="/platform/homes" element={<RouteErrorBoundary><PlatformHomes /></RouteErrorBoundary>} />
+
+      {/* Admin-only: HR */}
+      <Route path="/hr"                element={<RouteErrorBoundary><RequireAdmin><HrDashboard /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/disciplinary"   element={<RouteErrorBoundary><RequireAdmin><DisciplinaryTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/grievance"      element={<RouteErrorBoundary><RequireAdmin><GrievanceTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/performance"    element={<RouteErrorBoundary><RequireAdmin><PerformanceTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/absence"        element={<RouteErrorBoundary><RequireAdmin><AbsenceManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/contracts"      element={<RouteErrorBoundary><RequireAdmin><ContractManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/family-leave"   element={<RouteErrorBoundary><RequireAdmin><FamilyLeaveTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/flex-working"   element={<RouteErrorBoundary><RequireAdmin><FlexWorkingTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/edi"            element={<RouteErrorBoundary><RequireAdmin><EdiTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/tupe"           element={<RouteErrorBoundary><RequireAdmin><TupeManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/hr/renewals"       element={<RouteErrorBoundary><RequireAdmin><RtwDbsRenewals /></RequireAdmin></RouteErrorBoundary>} />
+
+      {/* Admin-only: Finance */}
+      <Route path="/finance"             element={<RouteErrorBoundary><RequireAdmin><FinanceDashboard /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/finance/income"      element={<RouteErrorBoundary><RequireAdmin><IncomeTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/finance/expenses"    element={<RouteErrorBoundary><RequireAdmin><ExpenseTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/finance/receivables" element={<RouteErrorBoundary><RequireAdmin><ReceivablesManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/finance/payables"    element={<RouteErrorBoundary><RequireAdmin><PayablesManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/budget" element={<RouteErrorBoundary><RequireAdmin><BudgetTracker /></RequireAdmin></RouteErrorBoundary>} />
+
+      {/* Admin-only: Payroll */}
+      <Route path="/payroll/rates"      element={<RouteErrorBoundary><RequireAdmin><PayRatesConfig /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/timesheets" element={<RouteErrorBoundary><RequireAdmin><TimesheetManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><RequireAdmin><MonthlyTimesheet /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/agency"     element={<RouteErrorBoundary><RequireAdmin><AgencyTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><RequireAdmin><TaxCodeManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/pensions"   element={<RouteErrorBoundary><RequireAdmin><PensionManager /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/sick-pay"   element={<RouteErrorBoundary><RequireAdmin><SickPayTracker /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/hmrc"       element={<RouteErrorBoundary><RequireAdmin><HMRCDashboard /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll/:runId"     element={<RouteErrorBoundary><RequireAdmin><PayrollDetail /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/payroll"            element={<RouteErrorBoundary><RequireAdmin><PayrollDashboard /></RequireAdmin></RouteErrorBoundary>} />
+
+      {/* Admin-only: GDPR, Audit, Users, Config */}
+      <Route path="/gdpr"     element={<RouteErrorBoundary><RequireAdmin><GdprDashboard /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/audit"    element={<RouteErrorBoundary><RequireAdmin><AuditLog /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/users"    element={<RouteErrorBoundary><RequireAdmin><UserManagement /></RequireAdmin></RouteErrorBoundary>} />
+      <Route path="/settings" element={<RouteErrorBoundary><RequireAdmin><Config /></RequireAdmin></RouteErrorBoundary>} />
+
+      {/* Platform admin only */}
+      <Route path="/platform/homes" element={<RouteErrorBoundary><RequirePlatformAdmin><PlatformHomes /></RequirePlatformAdmin></RouteErrorBoundary>} />
     </Routes>
   );
 }

@@ -45,7 +45,6 @@ jobs:
 
       - name: Security audit
         run: npm audit --audit-level=moderate
-        continue-on-error: true
 
       - name: Run database migrations
         run: node scripts/migrate.js
@@ -111,6 +110,7 @@ jobs:
             git pull origin main
             npm ci --omit=dev
             npm run build
+            ./scripts/backup-db.sh
             node scripts/migrate.js
             pm2 restart panama --update-env
             sleep 5

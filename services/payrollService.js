@@ -117,7 +117,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
     const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff    = allStaffResult.rows;
-    const overrides   = await overrideRepo.findByHome(homeId, undefined, undefined, client);
+    const overrides   = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates(client);
 

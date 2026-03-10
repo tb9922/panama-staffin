@@ -57,17 +57,17 @@ export function generateRosterPDF(data, weekStart) {
   const dates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     dates.push(d);
   }
 
-  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
   let y = addHeader(doc, 'Weekly Roster', weekLabel, data.config.home_name);
 
   const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
   const headers = [
     'Staff', 'Team', 'Role',
-    ...dates.map(d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })),
+    ...dates.map(d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: 'UTC' })),
     'Hours',
   ];
 
@@ -154,7 +154,7 @@ export function generateRosterPDF(data, weekStart) {
 export function generateCostPDF(data, year, month) {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const monthDates = getMonthDates(year, month);
-  const monthLabel = new Date(year, month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(Date.UTC(year, month)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   let y = addHeader(doc, 'Monthly Cost Report', monthLabel, data.config.home_name);
 
@@ -273,11 +273,11 @@ export function generateCoveragePDF(data, weekStart) {
   const dates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     dates.push(d);
   }
 
-  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
   let y = addHeader(doc, 'Coverage & Escalation Report', weekLabel, data.config.home_name);
 
   // Min staffing reference

@@ -17,8 +17,10 @@ export default function FinanceDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
     return {
-      from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      from: `${y}-${String(m + 1).padStart(2, '0')}-01`,
       to: now.toISOString().slice(0, 10),
     };
   });

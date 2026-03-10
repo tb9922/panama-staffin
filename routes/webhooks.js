@@ -32,7 +32,7 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, a
 router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = webhookSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+    if (!parsed.success) return zodError(res, parsed);
     const hook = await webhookRepo.create(req.home.id, parsed.data);
     res.status(201).json(hook);
   } catch (err) { next(err); }
@@ -44,7 +44,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });
     const parsed = webhookSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+    if (!parsed.success) return zodError(res, parsed);
     const hook = await webhookRepo.update(id, req.home.id, parsed.data);
     if (!hook) return res.status(404).json({ error: 'Webhook not found' });
     res.json(hook);

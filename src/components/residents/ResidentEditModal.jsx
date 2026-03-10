@@ -16,7 +16,7 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
 
   useEffect(() => {
     if (tab === 'history') {
-      getFinanceFeeHistory(home, resident.id).then(r => setFeeHistory(r.rows || r || [])).catch(() => {});
+      getFinanceFeeHistory(home, resident.id).then(r => setFeeHistory(r.rows || r || [])).catch(() => setFeeHistory([]));
     }
   }, [tab, home, resident.id]);
 

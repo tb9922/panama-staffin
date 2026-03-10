@@ -24,7 +24,7 @@ function downloadCSV(filename, headers, rows) {
 
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
-  hourly_rate: 11.00, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
+  hourly_rate: 12.21, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
   contract_hours: null, al_entitlement: null, al_carryover: 0,
 };
 

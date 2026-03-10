@@ -41,7 +41,7 @@ cat migrations/090_create_beds.sql   # look for the "-- DOWN" section
 psql -h localhost -U panama -d panama_dev -c "DROP TABLE IF EXISTS bed_transitions; DROP TABLE IF EXISTS beds;"
 
 # 3. Remove the migration record so it can be re-run later
-psql -h localhost -U panama -d panama_dev -c "DELETE FROM schema_migrations WHERE filename = '090_create_beds.sql'"
+psql -h localhost -U panama -d panama_dev -c "DELETE FROM migrations WHERE name = '090_create_beds.sql'"
 
 # 4. Revert code to before the migration was added
 git checkout <previous-commit> -- .

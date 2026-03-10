@@ -60,7 +60,7 @@ const reportDownloadSchema = z.object({
 router.post('/report-download', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = reportDownloadSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+    if (!parsed.success) return zodError(res, parsed);
     await auditService.log('report_download', req.home.slug, req.user.username, parsed.data);
     res.json({ ok: true });
   } catch (err) {

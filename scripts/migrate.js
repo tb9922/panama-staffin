@@ -8,7 +8,7 @@
  *   --db <name>   Override database name (default: DB_NAME env var or 'panama_dev')
  *
  * Reads all .sql files from migrations/ in alphabetical order and runs any
- * that haven't been run yet. Tracks completed migrations in the `schema_migrations`
+ * that haven't been run yet. Tracks completed migrations in the `migrations`
  * table. Each migration runs in its own transaction — failure stops the run.
  * Safe to run multiple times (idempotent).
  *
@@ -59,6 +59,9 @@ const pool = new Pool({
 async function migrate() {
   const client = await pool.connect();
   try {
+    // Acquire advisory lock to prevent concurrent migration runners
+    await client.query('SELECT pg_advisory_lock(999999)');
+
     // Create migrations tracking table if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS migrations (
@@ -104,6 +107,7 @@ async function migrate() {
       console.log(`\n  ${ran} migration${ran > 1 ? 's' : ''} applied.`);
     }
   } finally {
+    await client.query('SELECT pg_advisory_unlock(999999)').catch(() => {});
     client.release();
     await pool.end();
   }

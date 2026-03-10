@@ -16,10 +16,16 @@ export async function assembleData(homeSlug, userRole) {
   const home = await homeRepo.findBySlug(homeSlug);
   if (!home) throw new NotFoundError(`Home not found: ${homeSlug}`);
 
+  // Bound overrides + day notes to a reasonable window (6 months back, 3 months forward)
+  // to prevent unbounded data growth as deployment ages.
+  const today = new Date();
+  const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+
   const [staffResult, overrides, dayNotes] = await Promise.all([
     staffRepo.findByHome(home.id),
-    overrideRepo.findByHome(home.id),
-    dayNoteRepo.findByHome(home.id),
+    overrideRepo.findByHome(home.id, from, to),
+    dayNoteRepo.findByHome(home.id, from, to),
   ]);
   const staff = staffResult.rows;
 

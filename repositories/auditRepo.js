@@ -85,7 +85,8 @@ export async function exportHrByHome(homeSlug, from, to) {
     `SELECT id, ts, action, home_slug, user_name, details
        FROM audit_log
       WHERE home_slug = $1 AND action LIKE 'hr_%' AND ts >= $2 AND ts <= $3
-      ORDER BY ts DESC`,
+      ORDER BY ts DESC
+      LIMIT 50000`,
     [homeSlug, from, to]
   );
   return rows.map(r => ({

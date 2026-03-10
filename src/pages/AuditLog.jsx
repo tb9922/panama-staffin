@@ -5,8 +5,9 @@ import { CARD, TABLE, BTN, BADGE } from '../lib/design.js';
 
 export default function AuditLog() {
   const [log, setLog] = useState([]);
+  const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
-  useEffect(() => { loadAuditLog().then(setLog); }, []);
+  useEffect(() => { loadAuditLog().then(setLog).catch(err => setError(err.message)); }, []);
 
   async function handleExport() {
     setExporting(true);
@@ -37,6 +38,7 @@ export default function AuditLog() {
         </button>
       </div>
       <p className="text-sm text-gray-500 mb-5">Last 100 actions — who changed what and when</p>
+      {error && <p className="text-red-600 mb-4">Failed to load audit log: {error}</p>}
       <div className={CARD.flush}>
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>

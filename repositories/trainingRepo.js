@@ -5,14 +5,14 @@ import { pool, toDateStr } from '../db.js';
  * { "staffId": { "typeId": { completed, expiry, trainer, method, certificate_ref, level, notes } } }
  * @param {number} homeId
  */
-export async function findByHome(homeId, { limit = 500, offset = 0 } = {}) {
+export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT *, COUNT(*) OVER() AS _total
      FROM training_records
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY staff_id, training_type_id
      LIMIT $2 OFFSET $3`,
-    [homeId, Math.min(limit, 2000), Math.max(offset, 0)]
+    [homeId, Math.min(limit, 10000), Math.max(offset, 0)]
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
   const result = {};

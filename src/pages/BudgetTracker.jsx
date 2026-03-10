@@ -112,7 +112,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   // YTD calculations (Jan to current month of current year)
   const ytd = useMemo(() => {
     const now = new Date();
-    const yearMonths = monthData.filter(m => m.year === now.getFullYear() && m.month <= now.getMonth());
+    const yearMonths = monthData.filter(m => m.year === now.getUTCFullYear() && m.month <= now.getUTCMonth());
     const actualYTD = yearMonths.reduce((s, m) => s + m.actual, 0);
     const budgetYTD = yearMonths.reduce((s, m) => s + m.budget, 0);
     const agencyYTD = yearMonths.reduce((s, m) => s + m.agency, 0);
