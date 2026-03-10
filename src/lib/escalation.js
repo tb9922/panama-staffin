@@ -3,7 +3,7 @@
 import {
   isCareRole, isWorkingShift, isEarlyShift, isLateShift, isNightShift,
   isOTShift, isAgencyShift, isBHShift, getShiftHours,
-  getActualShift, addDays, formatDate, AGENCY_SHIFTS,
+  getActualShift, addDays, formatDate, parseDate, AGENCY_SHIFTS,
 } from './rotation.js';
 import { BLOCKING_TRAINING_TYPES } from './training.js';
 
@@ -161,11 +161,13 @@ export function calculateDayCost(staffForDay, config) {
     }
   });
 
-  // AL cost: pay matches the shift the staff member would have worked
+  // AL cost: use stored al_hours from override if available, else heuristic
   staffForDay.forEach(s => {
     if (s.shift !== 'AL') return;
     let alHours;
-    if (s.team === 'Float') {
+    if (s.al_hours != null) {
+      alHours = parseFloat(s.al_hours);
+    } else if (s.team === 'Float') {
       alHours = (parseFloat(s.contract_hours) || 0) / 5;
     } else if (s.team && s.team.startsWith('Night')) {
       alHours = getShiftHours('N', config);
@@ -197,8 +199,7 @@ export function checkFatigueRisk(staffMember, date, overrides, config) {
   // Scan up to 14 days (full Panama cycle) in each direction to catch heavy OT override runs
   const scanRadius = Math.max(config.max_consecutive_days + 3, 14);
   let backward = 0;
-  let checkDate = new Date(date);
-  checkDate.setHours(0, 0, 0, 0);
+  let checkDate = typeof date === 'string' ? parseDate(date) : parseDate(formatDate(date));
 
   for (let i = 0; i < scanRadius; i++) {
     checkDate = addDays(checkDate, -1);
@@ -208,8 +209,7 @@ export function checkFatigueRisk(staffMember, date, overrides, config) {
   }
 
   let forward = 0;
-  checkDate = new Date(date);
-  checkDate.setHours(0, 0, 0, 0);
+  checkDate = typeof date === 'string' ? parseDate(date) : parseDate(formatDate(date));
   const todayActual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
   if (isWorkingShift(todayActual.shift)) {
     forward = 1;

@@ -614,7 +614,7 @@ export default function DisciplinaryTracker() {
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
               <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {n.author || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                {n.author || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString('en-GB') : ''}
               </p>
             </div>
           ))}

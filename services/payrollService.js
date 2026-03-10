@@ -151,6 +151,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const taxBandsCache = new Map();
     const niRatesCache  = new Map();
 
+    // Pre-load tax codes and YTD for all active staff (avoid N+1 per-staff queries)
+    const activeStaffIds = activeStaff.map(s => s.id);
+    const taxCodeMap = await taxRepo.getTaxCodeBatch(homeId, activeStaffIds, run.period_end, client);
+    const ytdMap = await taxRepo.getYTDBatch(homeId, activeStaffIds, taxYear, client);
+
     // Payroll run totals (accumulated across all staff)
     let totalGross = 0;
     let totalEnhancements = 0;
@@ -298,13 +303,13 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
       // ── Phase 2: Deductions block ──────────────────────────────────────────
 
-      const taxCodeRow = await taxRepo.getTaxCodeForStaff(homeId, s.id, run.period_end, client);
+      const taxCodeRow = taxCodeMap.get(s.id) || null;
       const parsedCode = parseTaxCode(taxCodeRow?.tax_code || null);
       // Preserve basis from DB record (cumulative vs w1m1)
       if (taxCodeRow?.basis) parsedCode.basis = taxCodeRow.basis;
 
       // YTD: read from approved runs only — never written here (written in approveRun)
-      const priorYTD = await taxRepo.getYTD(homeId, s.id, taxYear, client) || ZERO_YTD;
+      const priorYTD = ytdMap.get(s.id) || ZERO_YTD;
 
       // Tax bands and NI rates: cached by country/category (same for most staff)
       const country = parsedCode.country;
@@ -646,5 +651,5 @@ export function eachDayInRange(start, end) {
 }
 
 function round2(n) {
-  return Math.round(n * 100) / 100;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

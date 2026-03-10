@@ -13,12 +13,20 @@ const SUPPORTED_EVENTS = [
   'override.created',
 ];
 
-// Block private/internal IPs to prevent SSRF
-const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|::1|fc|fd|fe80)/i;
+// Block private/internal IPs to prevent SSRF (covers RFC 1918, link-local, loopback, cloud metadata)
+const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|fc|fd|fe80|\[::1\])/i;
 function isPrivateUrl(url) {
   try {
     const { hostname } = new URL(url);
-    return PRIVATE_HOST_RE.test(hostname) || hostname === '[::1]';
+    const h = hostname.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+    if (PRIVATE_HOST_RE.test(h)) return true;
+    // Block cloud metadata endpoints (AWS, GCP, Azure)
+    if (h === '169.254.169.254' || h === 'metadata.google.internal') return true;
+    // Block IPv4-mapped IPv6 (::ffff:127.0.0.1)
+    if (/^::ffff:/i.test(h)) return true;
+    // Block numeric/hex/octal IP encoding of loopback (0x7f000001, 2130706433, 017700000001)
+    if (/^(0x[0-9a-f]+|[0-9]+|0[0-7]+)$/i.test(h)) return true;
+    return false;
   } catch { return true; }
 }
 

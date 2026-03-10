@@ -14,6 +14,8 @@
 
 set -euo pipefail
 
+: "${DB_PASSWORD:?DB_PASSWORD is required}"
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 BACKUP_DIR="${BACKUP_DIR:-./backups/db}"

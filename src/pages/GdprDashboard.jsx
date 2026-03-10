@@ -551,7 +551,7 @@ export default function GdprDashboard() {
                 {accessLogData.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No access log entries</td></tr>}
                 {accessLogData.map(a => (
                   <tr key={a.id} className={TABLE.tr}>
-                    <td className={TABLE.td + ' text-xs font-mono'}>{a.ts ? new Date(a.ts).toLocaleString() : '—'}</td>
+                    <td className={TABLE.td + ' text-xs font-mono'}>{a.ts ? new Date(a.ts).toLocaleString('en-GB') : '—'}</td>
                     <td className={TABLE.td}>{a.user_name || '—'}</td>
                     <td className={TABLE.td}>{a.user_role || '—'}</td>
                     <td className={TABLE.td}><span className="font-mono text-xs">{a.method}</span></td>

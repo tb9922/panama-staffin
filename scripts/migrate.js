@@ -40,7 +40,8 @@ try {
     const eq = trimmed.indexOf('=');
     if (eq < 0) continue;
     const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
+    const raw = trimmed.slice(eq + 1).trim();
+    const val = raw.replace(/^(['"])(.*)\1$/, '$2');
     if (key && !(key in process.env)) process.env[key] = val;
   }
 } catch {
@@ -55,7 +56,7 @@ const pool = new Pool({
   database: dbOverride || process.env.DB_NAME || 'panama_dev',
   user:     process.env.DB_USER     || 'panama',
   password: process.env.DB_PASSWORD,
-  ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
+  ...(sslEnabled ? { ssl: { rejectUnauthorized: (process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false' } } : {}),
 });
 
 async function migrate() {

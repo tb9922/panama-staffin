@@ -123,7 +123,7 @@ export function generateRosterPDF(data, weekStart) {
     const worst = Math.max(cov.early.escalation.level, cov.late.escalation.level, cov.night.escalation.level);
     const escLabel = worst <= 1 ? 'Normal' : worst <= 2 ? 'OT' : worst <= 3 ? 'Agency' : worst <= 4 ? 'SHORT' : 'UNSAFE';
     return [
-      date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+      date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
       `${cov.early.coverage.headCount}/${cov.early.coverage.required.heads}`,
       `${cov.late.coverage.headCount}/${cov.late.coverage.required.heads}`,
       `${cov.night.coverage.headCount}/${cov.night.coverage.required.heads}`,
@@ -230,8 +230,8 @@ export function generateCostPDF(data, year, month) {
 
   const headers = ['Day', 'Date', 'Base £', 'OT £', 'AG Day £', 'AG Night £', 'BH £', 'Total £', 'Cumul £'];
   const rows = dayData.map(d => [
-    d.date.toLocaleDateString('en-GB', { weekday: 'short' }),
-    d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+    d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
+    d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
     d.cost.base.toFixed(0),
     d.cost.otPremium > 0 ? d.cost.otPremium.toFixed(0) : '-',
     d.cost.agencyDay > 0 ? d.cost.agencyDay.toFixed(0) : '-',
@@ -305,7 +305,7 @@ export function generateCoveragePDF(data, weekStart) {
     const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
     const cov = getDayCoverageStatus(staffForDay, data.config);
     const cost = calculateDayCost(staffForDay, data.config);
-    const dateLabel = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const dateLabel = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
     ['early', 'late', 'night'].forEach(period => {
       const c = cov[period];

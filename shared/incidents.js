@@ -276,8 +276,8 @@ export function calculateCqcNotificationsPct(incidents, fromDate, toDate) {
   for (const inc of notifiable) {
     if (!inc.cqc_notified || !inc.cqc_notified_date) continue;
     respondedCount++;
-    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00');
-    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00');
+    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = (notifiedTime - incTime) / (1000 * 60 * 60);
     const deadline = getCqcNotificationDeadline(inc);
     if (deadline.hoursAllowed && hours <= deadline.hoursAllowed) onTime++;

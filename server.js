@@ -218,7 +218,9 @@ const server = isMainModule ? app.listen(config.port, async () => {
   server.headersTimeout = 66000;   // must exceed keepAliveTimeout
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
-  await loadDenyList().catch(() => {});
+  await loadDenyList().catch(err =>
+    logger.error({ err: err?.message }, 'Failed to load token deny list — revoked tokens may be accepted')
+  );
   // Seed database users from env vars on first run (non-fatal)
   await ensureSeedUsers().catch(err =>
     logger.warn({ err: err?.message }, 'User seeding skipped')

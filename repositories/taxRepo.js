@@ -20,6 +20,23 @@ export async function getTaxCodeForStaff(homeId, staffId, asOfDate, client) {
   return rows[0] ? shapeCode(rows[0]) : null;
 }
 
+/**
+ * Batch: get most recent tax code for multiple staff as of a given date.
+ * Returns Map<staffId, shapedCode>.
+ */
+export async function getTaxCodeBatch(homeId, staffIds, asOfDate, client) {
+  if (!staffIds.length) return new Map();
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT DISTINCT ON (staff_id) *
+     FROM tax_codes
+     WHERE home_id = $1 AND staff_id = ANY($2) AND effective_from <= $3
+     ORDER BY staff_id, effective_from DESC`,
+    [homeId, staffIds, asOfDate]
+  );
+  return new Map(rows.map(r => [r.staff_id, shapeCode(r)]));
+}
+
 export async function listTaxCodesByHome(homeId) {
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (staff_id)

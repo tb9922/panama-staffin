@@ -23,6 +23,7 @@ module.exports = {
       exec_mode: 'fork',
       autorestart: true,
       watch: false,              // nodemon handles dev; PM2 handles production
+      node_args: '--max-old-space-size=768',
       max_memory_restart: '1G',
       min_uptime: '10s',         // consider crash if dies within 10s of start
       max_restarts: 10,          // stop restart loop after 10 rapid failures

@@ -69,7 +69,7 @@ export async function getMonthlyOccupancy(homeId, months = 12, client) {
      WITH month_series AS (
        SELECT TO_CHAR(d, 'YYYY-MM') AS month
        FROM generate_series(
-         DATE_TRUNC('month', CURRENT_DATE - ($2 || ' months')::interval),
+         DATE_TRUNC('month', CURRENT_DATE - make_interval(months => $2)),
          DATE_TRUNC('month', CURRENT_DATE),
          '1 month'
        ) AS d
@@ -106,7 +106,7 @@ export async function getAverageVacancyDuration(homeId, months = 12, client) {
        FROM bed_transitions
        WHERE home_id = $1
          AND to_status = 'available'
-         AND changed_at >= (CURRENT_DATE - ($2 || ' months')::interval)
+         AND changed_at >= (CURRENT_DATE - make_interval(months => $2))
      ),
      next_occupied AS (
        SELECT vs.bed_id, vs.vacant_at,
@@ -139,7 +139,7 @@ export async function getAverageTurnaroundTime(homeId, months = 12, client) {
        WHERE home_id = $1
          AND from_status = 'occupied'
          AND to_status != 'occupied'
-         AND changed_at >= (CURRENT_DATE - ($2 || ' months')::interval)
+         AND changed_at >= (CURRENT_DATE - make_interval(months => $2))
      ),
      next_available AS (
        SELECT ve.bed_id, ve.vacated_at,
