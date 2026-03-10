@@ -1,17 +1,16 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+const pf = v => v != null ? parseFloat(v) : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  if (shaped.audit_date instanceof Date) shaped.audit_date = shaped.audit_date.toISOString().slice(0, 10);
-  if (shaped.reported_at instanceof Date) shaped.reported_at = shaped.reported_at.toISOString();
-  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
-  if (shaped.overall_score != null) shaped.overall_score = parseFloat(shaped.overall_score);
-  if (shaped.compliance_pct != null) shaped.compliance_pct = parseFloat(shaped.compliance_pct);
-  if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    audit_date: row.audit_date, audit_type: row.audit_type, auditor: row.auditor,
+    overall_score: pf(row.overall_score), compliance_pct: pf(row.compliance_pct),
+    risk_areas: row.risk_areas, corrective_actions: row.corrective_actions, outbreak: row.outbreak,
+    notes: row.notes, reported_at: ts(row.reported_at), updated_at: ts(row.updated_at),
+  };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {

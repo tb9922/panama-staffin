@@ -1,21 +1,20 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  for (const col of [
-    'date_raised', 'acknowledgement_date', 'investigation_start_date',
-    'follow_up_date', 'resolution_date',
-  ]) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  for (const col of ['reported_at', 'updated_at']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
-  }
-  if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    date_raised: row.date_raised, raised_by_role: row.raised_by_role, anonymous: row.anonymous,
+    category: row.category, description: row.description, severity: row.severity,
+    status: row.status, acknowledgement_date: row.acknowledgement_date,
+    investigator: row.investigator, investigation_start_date: row.investigation_start_date, findings: row.findings,
+    outcome: row.outcome, outcome_details: row.outcome_details,
+    reporter_protected: row.reporter_protected, protection_details: row.protection_details,
+    follow_up_date: row.follow_up_date, follow_up_completed: row.follow_up_completed,
+    resolution_date: row.resolution_date, lessons_learned: row.lessons_learned,
+    reported_at: ts(row.reported_at), updated_at: ts(row.updated_at),
+  };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {

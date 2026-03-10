@@ -1,16 +1,17 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  for (const col of ['last_reviewed', 'next_review']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
-  if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    title: row.title, description: row.description, category: row.category, owner: row.owner,
+    likelihood: row.likelihood, impact: row.impact, inherent_risk: row.inherent_risk,
+    controls: row.controls,
+    residual_likelihood: row.residual_likelihood, residual_impact: row.residual_impact, residual_risk: row.residual_risk,
+    actions: row.actions, last_reviewed: row.last_reviewed, next_review: row.next_review,
+    status: row.status, updated_at: ts(row.updated_at),
+  };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {

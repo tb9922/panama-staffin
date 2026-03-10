@@ -41,10 +41,10 @@ export default function TimesheetManager() {
   const [editForm, setEditForm]         = useState({});
   const [saving, setSaving]             = useState(false);
   useDirtyGuard(!!editModal);
-  const [snapConfig]                    = useState({
+  const snapConfig = useMemo(() => ({
     enabled: schedData?.config?.snap_enabled ?? true,
     window:  schedData?.config?.snap_window_minutes ?? 15,
-  });
+  }), [schedData]);
 
   // Staff scheduled for the selected date (from rota)
   const scheduledStaff = useMemo(() => {

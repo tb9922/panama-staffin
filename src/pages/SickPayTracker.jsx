@@ -14,8 +14,11 @@ const EMPTY_UPDATE = {
 };
 
 function daysOpen(startDate, endDate) {
-  const s = new Date(startDate);
-  const e = endDate ? new Date(endDate) : new Date();
+  const s = new Date(startDate + 'T00:00:00Z');
+  const now = new Date();
+  const e = endDate
+    ? new Date(endDate + 'T00:00:00Z')
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return Math.round((e - s) / 86400000) + 1;
 }
 

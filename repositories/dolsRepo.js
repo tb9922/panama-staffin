@@ -1,31 +1,28 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeDolsRow(row) {
-  const shaped = { ...row };
-  for (const col of [
-    'dob', 'application_date', 'authorisation_date', 'expiry_date',
-    'reviewed_date', 'next_review_date',
-  ]) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
-  if (typeof shaped.restrictions === 'string') shaped.restrictions = JSON.parse(shaped.restrictions);
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    resident_name: row.resident_name, dob: row.dob, room_number: row.room_number,
+    application_type: row.application_type, application_date: row.application_date,
+    authorised: row.authorised, authorisation_date: row.authorisation_date, expiry_date: row.expiry_date,
+    authorisation_number: row.authorisation_number, authorising_authority: row.authorising_authority,
+    restrictions: typeof row.restrictions === 'string' ? JSON.parse(row.restrictions) : row.restrictions,
+    reviewed_date: row.reviewed_date, review_status: row.review_status, next_review_date: row.next_review_date,
+    notes: row.notes, updated_at: ts(row.updated_at),
+  };
 }
 
 function shapeMcaRow(row) {
-  const shaped = { ...row };
-  for (const col of ['assessment_date', 'next_review_date']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    resident_name: row.resident_name, assessment_date: row.assessment_date, assessor: row.assessor,
+    decision_area: row.decision_area, lacks_capacity: row.lacks_capacity,
+    best_interest_decision: row.best_interest_decision, next_review_date: row.next_review_date,
+    notes: row.notes, updated_at: ts(row.updated_at),
+  };
 }
 
 function paginate(rows, shapeFn) {

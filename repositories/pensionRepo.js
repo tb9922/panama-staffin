@@ -43,6 +43,16 @@ export async function getEnrolment(homeId, staffId, client) {
   return rows[0] ? shapeEnrolment(rows[0]) : null;
 }
 
+export async function getEnrolmentBatch(homeId, staffIds, client) {
+  if (!staffIds.length) return new Map();
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    'SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = ANY($2)',
+    [homeId, staffIds]
+  );
+  return new Map(rows.map(r => [r.staff_id, shapeEnrolment(r)]));
+}
+
 export async function listEnrolmentsByHome(homeId) {
   const { rows } = await pool.query(
     'SELECT * FROM pension_enrolments WHERE home_id = $1 ORDER BY staff_id',

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -75,8 +75,11 @@ export default function PayrollDetail() {
   }, []);
 
   // staffMap from scheduling API for name/role lookup
-  const staffMap = {};
-  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  const staffMap = useMemo(() => {
+    const map = {};
+    (schedData?.staff || []).forEach(s => { map[s.id] = s; });
+    return map;
+  }, [schedData]);
 
   const load = useCallback(async () => {
     if (!homeSlug || !runId) return;
@@ -85,12 +88,7 @@ export default function PayrollDetail() {
       setError(null);
       const result = await getPayrollRun(homeSlug, runId);
       setRun(result.run);
-      const sorted = [...(result.lines || [])].sort((a, b) => {
-        const na = staffMap[a.staff_id]?.name || a.staff_id;
-        const nb = staffMap[b.staff_id]?.name || b.staff_id;
-        return na.localeCompare(nb);
-      });
-      setLines(sorted);
+      setLines(result.lines || []);
       // Load shift breakdowns if calculated or beyond
       if (['calculated', 'approved', 'exported', 'locked'].includes(result.run?.status)) {
         const slips = await getPayslips(homeSlug, runId);
@@ -103,7 +101,17 @@ export default function PayrollDetail() {
     } finally {
       setLoading(false);
     }
-  }, [homeSlug, runId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [homeSlug, runId]);
+
+  // Sort lines by staff name in render phase (after schedData loads)
+  const sortedLines = useMemo(() => {
+    if (!lines.length) return lines;
+    return [...lines].sort((a, b) => {
+      const na = staffMap[a.staff_id]?.name || a.staff_id;
+      const nb = staffMap[b.staff_id]?.name || b.staff_id;
+      return na.localeCompare(nb);
+    });
+  }, [lines, staffMap]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -113,12 +121,7 @@ export default function PayrollDetail() {
     try {
       const result = await calculatePayrollRun(homeSlug, runId);
       setRun(result.run);
-      const sorted = [...(result.lines || [])].sort((a, b) => {
-        const na = staffMap[a.staff_id]?.name || a.staff_id;
-        const nb = staffMap[b.staff_id]?.name || b.staff_id;
-        return na.localeCompare(nb);
-      });
-      setLines(sorted);
+      setLines(result.lines || []);
       const slips = await getPayslips(homeSlug, runId);
       const slipMap = {};
       (slips || []).forEach(s => { slipMap[s.staff_id] = s; });
@@ -355,7 +358,7 @@ export default function PayrollDetail() {
                 </tr>
               </thead>
               <tbody>
-                {lines.map(line => {
+                {sortedLines.map(line => {
                   const staff  = staffMap[line.staff_id];
                   const name   = staff?.name || line.staff_id;
                   const role   = staff?.role || '';

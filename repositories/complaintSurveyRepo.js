@@ -1,14 +1,17 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+const pf = v => v != null ? parseFloat(v) : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  if (shaped.date instanceof Date) shaped.date = shaped.date.toISOString().slice(0, 10);
-  if (shaped.reported_at instanceof Date) shaped.reported_at = shaped.reported_at.toISOString();
-  if (shaped.overall_satisfaction != null) shaped.overall_satisfaction = parseFloat(shaped.overall_satisfaction);
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    type: row.type, date: row.date, title: row.title,
+    total_sent: row.total_sent, responses: row.responses,
+    overall_satisfaction: pf(row.overall_satisfaction), area_scores: row.area_scores,
+    key_feedback: row.key_feedback, actions: row.actions,
+    conducted_by: row.conducted_by, reported_at: ts(row.reported_at),
+  };
 }
 
 function paginate(rows, shapeFn) {

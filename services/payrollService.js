@@ -151,10 +151,12 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const taxBandsCache = new Map();
     const niRatesCache  = new Map();
 
-    // Pre-load tax codes and YTD for all active staff (avoid N+1 per-staff queries)
+    // Pre-load tax codes, YTD, pension enrolments, and sick periods for all active staff (avoid N+1 per-staff queries)
     const activeStaffIds = activeStaff.map(s => s.id);
     const taxCodeMap = await taxRepo.getTaxCodeBatch(homeId, activeStaffIds, run.period_end, client);
     const ytdMap = await taxRepo.getYTDBatch(homeId, activeStaffIds, taxYear, client);
+    const enrolmentMap = await pensionRepo.getEnrolmentBatch(homeId, activeStaffIds, client);
+    const sickPeriodsMap = await sspRepo.getActiveSickPeriodsBatch(homeId, activeStaffIds, run.period_start, run.period_end, client);
 
     // Payroll run totals (accumulated across all staff)
     let totalGross = 0;
@@ -207,7 +209,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (shift === 'SICK') {
           const sspConfig = getSSPConfig(date, allSSPConfigs);
           if (sspConfig) {
-            const sickPeriod = await sspRepo.getActiveSickPeriod(homeId, s.id, date, date, client);
+            const staffPeriods = sickPeriodsMap.get(s.id) || [];
+            const sickPeriod = staffPeriods.find(p => p.start_date <= date && (!p.end_date || p.end_date >= date)) || null;
             if (sickPeriod) {
               const r = calculateSSP(sickPeriod, date, sspConfig);
               if (r.eligible) {
@@ -341,7 +344,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
 
       // Pension contributions — auto-enrol if eligible (Pensions Act 2008)
-      let enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      let enrolment = enrolmentMap.get(s.id) || null;
       if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
         const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
         if (eligibility.shouldAutoEnrol) {

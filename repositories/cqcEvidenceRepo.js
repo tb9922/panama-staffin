@@ -1,14 +1,12 @@
 import { pool } from '../db.js';
 
 function shapeRow(row) {
-  const shaped = { ...row };
-  for (const col of ['date_from', 'date_to', 'added_at']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    quality_statement: row.quality_statement, type: row.type, title: row.title,
+    description: row.description, date_from: row.date_from, date_to: row.date_to,
+    added_by: row.added_by, added_at: row.added_at,
+  };
 }
 
 function paginate(rows, shapeFn) {

@@ -67,7 +67,8 @@ export default function Residents() {
     const inHospital = active.filter(r => r.bed?.status === 'hospital_hold');
     const reviewDue = active.filter(r => {
       if (!r.next_fee_review) return false;
-      const daysUntil = (new Date(r.next_fee_review) - new Date()) / 86400000;
+      const now = new Date();
+      const daysUntil = (new Date(r.next_fee_review + 'T00:00:00Z') - new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) / 86400000;
       return daysUntil <= 30 && daysUntil >= 0;
     });
     const withBalance = active.filter(r => r.outstanding_balance > 0);
