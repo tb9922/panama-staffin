@@ -4,9 +4,11 @@ import { getStaffForDay, parseDate } from '../lib/rotation.js';
 import { getDayCoverageStatus } from '../lib/escalation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 export default function CoverageAlertBanner() {
   const navigate = useNavigate();
+  const { activeHome } = useData();
   const today = useLiveDate();
   const [data, setData] = useState(null);
 
@@ -14,7 +16,7 @@ export default function CoverageAlertBanner() {
     const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     getSchedulingData(homeSlug).then(setData).catch(e => console.warn('CoverageAlertBanner fetch failed:', e.message));
-  }, [today]);
+  }, [today, activeHome]);
 
   const todayCoverage = useMemo(() => {
     if (!data) return null;

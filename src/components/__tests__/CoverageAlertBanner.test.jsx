@@ -4,11 +4,17 @@ import CoverageAlertBanner from '../CoverageAlertBanner.jsx';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
+let mockActiveHome = 'test-home';
+
+vi.mock('../../contexts/DataContext.jsx', () => ({
+  useData: vi.fn(() => ({ activeHome: mockActiveHome })),
+}));
+
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
   return {
     ...actual,
-    getCurrentHome: vi.fn(() => 'test-home'),
+    getCurrentHome: vi.fn(() => mockActiveHome),
     getSchedulingData: vi.fn(),
   };
 });
@@ -18,6 +24,7 @@ vi.mock('../../hooks/useLiveDate.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
+import { useData } from '../../contexts/DataContext.jsx';
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -81,6 +88,12 @@ function renderBanner() {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('CoverageAlertBanner', () => {
+  beforeEach(() => {
+    mockActiveHome = 'test-home';
+    api.getCurrentHome.mockReturnValue('test-home');
+    useData.mockReturnValue({ activeHome: 'test-home' });
+  });
+
   it('smoke test — renders without crashing', () => {
     api.getSchedulingData.mockResolvedValue(makeSchedulingData());
     expect(() => renderBanner()).not.toThrow();
@@ -136,5 +149,18 @@ describe('CoverageAlertBanner', () => {
 
     const viewDetails = screen.getByRole('button', { name: /View Details/i });
     expect(viewDetails).toBeInTheDocument();
+  });
+
+  it('fetches data for the current home from context', async () => {
+    mockActiveHome = 'oakwood';
+    api.getCurrentHome.mockReturnValue('oakwood');
+    useData.mockReturnValue({ activeHome: 'oakwood' });
+    api.getSchedulingData.mockResolvedValue(makeSchedulingData({ minimumHeads: 0 }));
+
+    renderBanner();
+
+    await waitFor(() => {
+      expect(api.getSchedulingData).toHaveBeenCalledWith('oakwood');
+    });
   });
 });
