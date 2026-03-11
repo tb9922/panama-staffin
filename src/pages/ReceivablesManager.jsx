@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getLoggedInUser, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const BUCKETS = [
   { id: 'all', label: 'All', key: null },
@@ -162,7 +163,7 @@ export default function ReceivablesManager() {
                 const today = new Date().toISOString().slice(0, 10);
                 const actionOverdue = item.last_chase?.next_action_date && item.last_chase.next_action_date <= today;
                 return (
-                  <tr key={item.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openChaseModal(item)}>
+                  <tr key={item.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openChaseModal(item))}>
                     <td className={`${TABLE.td} font-medium font-mono`}>{item.invoice_number}</td>
                     <td className={TABLE.td}>{item.payer_name}</td>
                     <td className={TABLE.td}>{getLabel(item.payer_type, PAYER_TYPES)}</td>

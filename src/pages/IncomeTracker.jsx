@@ -11,6 +11,7 @@ import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const TABS = [
   { id: 'residents', label: 'Residents' },
@@ -160,7 +161,7 @@ function ResidentsTab({ home, isAdmin }) {
               {residents.length === 0 ? (
                 <tr><td colSpan={9} className={TABLE.empty}>No residents found</td></tr>
               ) : residents.map(r => (
-                <tr key={r.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(r)}>
+                <tr key={r.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(r))}>
                   <td className={`${TABLE.td} font-medium`}>{r.resident_name}</td>
                   <td className={TABLE.td}>{r.room_number || '—'}</td>
                   <td className={TABLE.td}>{getLabel(r.care_type, CARE_TYPES)}</td>
@@ -473,7 +474,7 @@ function InvoicesTab({ home, isAdmin }) {
               {invoices.length === 0 ? (
                 <tr><td colSpan={8} className={TABLE.empty}>No invoices found</td></tr>
               ) : invoices.map(inv => (
-                <tr key={inv.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(inv)}>
+                <tr key={inv.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(inv))}>
                   <td className={`${TABLE.td} font-medium font-mono`}>{inv.invoice_number}</td>
                   <td className={TABLE.td}>{inv.payer_name}</td>
                   <td className={TABLE.td}>{getLabel(inv.payer_type, PAYER_TYPES)}</td>

@@ -12,6 +12,7 @@ import {
   getPolicyStatus, getPolicyStats,
   POLICY_STATUSES,
 } from '../lib/policyReview.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const STATUS_ORDER = { overdue: 0, due: 1, current: 2 };
 
@@ -326,7 +327,7 @@ export default function PolicyReviewTracker() {
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);
                 return (
-                  <tr key={policy.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(policy)}>
+                  <tr key={policy.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(policy))}>
                     <td className={TABLE.td}>{policy.policy_name}</td>
                     <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
                     <td className={TABLE.td}>{policy.version}</td>

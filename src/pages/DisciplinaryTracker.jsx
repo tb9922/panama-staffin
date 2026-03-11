@@ -18,6 +18,7 @@ import Pagination from '../components/Pagination.jsx';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const MODAL_TABS = [
   { id: 'details', label: 'Details' },
@@ -220,7 +221,7 @@ export default function DisciplinaryTracker() {
             <tbody>
               {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No disciplinary cases</td></tr>}
               {cases.map(c => (
-                <tr key={c.id} className={`${TABLE.tr}${isAdmin ? ' cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(c)}>
+                <tr key={c.id} className={`${TABLE.tr}${isAdmin ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(c))}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
                   <td className={TABLE.td}>{c.date_raised}</td>
                   <td className={TABLE.td}>{DISCIPLINARY_CATEGORIES.find(cat => cat.id === c.category)?.name || c.category}</td>
