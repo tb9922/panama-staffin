@@ -410,7 +410,7 @@ export default function AnnualLeave() {
                 <div key={i} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-sm">
                   <div>
                     <div className="font-medium">{b.staffName}</div>
-                    <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                    <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}</div>
                   </div>
                   {isAdmin && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
                 </div>

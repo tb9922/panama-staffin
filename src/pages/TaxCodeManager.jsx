@@ -8,12 +8,14 @@ const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
 const NI_CATEGORIES = ['A','B','C','F','H','I','J','L','M','S','V','Z'];
 
-const EMPTY_FORM = {
-  staff_id: '', tax_code: '1257L', basis: 'cumulative', ni_category: 'A',
-  effective_from: new Date().toISOString().slice(0, 10),
-  previous_pay: '', previous_tax: '', student_loan_plan: '',
-  source: 'manual', notes: '',
-};
+function emptyForm() {
+  return {
+    staff_id: '', tax_code: '1257L', basis: 'cumulative', ni_category: 'A',
+    effective_from: new Date().toISOString().slice(0, 10),
+    previous_pay: '', previous_tax: '', student_loan_plan: '',
+    source: 'manual', notes: '',
+  };
+}
 
 function fmt(n) {
   if (n == null || n === '') return '—';
@@ -30,7 +32,7 @@ export default function TaxCodeManager() {
   const [error, setError]       = useState(null);
   const [saving, setSaving]     = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm]         = useState(EMPTY_FORM);
+  const [form, setForm]         = useState(emptyForm());
   const [editStaffId, setEditStaffId] = useState(null); // null = new, else = editing
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export default function TaxCodeManager() {
 
   function openNew() {
     setEditStaffId(null);
-    setForm({ ...EMPTY_FORM });
+    setForm(emptyForm());
     setShowModal(true);
   }
 
@@ -241,7 +243,7 @@ export default function TaxCodeManager() {
                         className={BTN.primary + ' ' + BTN.xs}
                         onClick={() => {
                           setEditStaffId(null);
-                          setForm({ ...EMPTY_FORM, staff_id: s.id });
+                          setForm({ ...emptyForm(), staff_id: s.id });
                           setShowModal(true);
                         }}
                       >

@@ -1,17 +1,18 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  for (const col of ['date', 'acknowledged_date', 'response_deadline', 'resolution_date']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  for (const col of ['reported_at', 'updated_at']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
-  }
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    date: row.date, raised_by: row.raised_by, raised_by_name: row.raised_by_name,
+    category: row.category, title: row.title, description: row.description,
+    acknowledged_date: row.acknowledged_date, response_deadline: row.response_deadline, status: row.status,
+    investigator: row.investigator, investigation_notes: row.investigation_notes,
+    resolution: row.resolution, resolution_date: row.resolution_date, outcome_shared: row.outcome_shared,
+    root_cause: row.root_cause, improvements: row.improvements, lessons_learned: row.lessons_learned,
+    reported_by: row.reported_by, reported_at: ts(row.reported_at), updated_at: ts(row.updated_at),
+  };
 }
 
 function paginate(rows, shapeFn) {

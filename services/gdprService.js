@@ -50,7 +50,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         conn.query(
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
-        // Name-based queries use pre-resolved staffName (no subquery)
+        // Name-based queries use pre-resolved staffName (no subquery).
+        // Note: access_log.home_id is always NULL. SAR returns all access logs for this person
+        // across all homes — this is correct per GDPR (it's their personal data regardless of home).
         staffName
           ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 ORDER BY ts DESC LIMIT 500`, [staffName])
           : { rows: [] },
@@ -343,13 +345,20 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
-    // Anonymise access/audit log entries for this staff member
-    // access_log.home_id is always NULL — filter by user_name only
+    // Anonymise access/audit log entries for this staff member.
+    // access_log.home_id is always NULL — cannot scope by home.
+    // Only redact if staff name is unique across all homes to prevent cross-tenant impact.
     if (originalName) {
-      await client.query(
-        `UPDATE access_log SET user_name = '[REDACTED]' WHERE user_name = $1`,
+      const { rows: nameCount } = await client.query(
+        `SELECT COUNT(DISTINCT home_id) AS cnt FROM staff WHERE name = $1`,
         [originalName]
       );
+      if (nameCount[0]?.cnt <= 1) {
+        await client.query(
+          `UPDATE access_log SET user_name = '[REDACTED]' WHERE user_name = $1`,
+          [originalName]
+        );
+      }
     }
 
     // Anonymise handover entries authored by this staff member

@@ -64,8 +64,8 @@ export function ensureComplaintDefaults(data) {
 
 // ── Status Calculation ──────────────────────────────────────────────────────
 
-export function getComplaintStatus(complaint, config) {
-  const today = formatDate(new Date());
+export function getComplaintStatus(complaint, config, asOfDate) {
+  const today = asOfDate ? (typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate)) : formatDate(new Date());
   const responseDays = config?.complaint_response_days || 28;
   const deadline = complaint.response_deadline || (complaint.date ? formatDate(addDays(parseDate(complaint.date), responseDays)) : null);
 

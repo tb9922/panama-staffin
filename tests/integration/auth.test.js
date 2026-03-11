@@ -42,8 +42,8 @@ beforeAll(async () => {
   homeBId = hb.id;
 
   // Create test users
-  const adminHash = await bcrypt.hash(ADMIN_PW, 12);
-  const viewerHash = await bcrypt.hash(VIEWER_PW, 12);
+  const adminHash = await bcrypt.hash(ADMIN_PW, 4);
+  const viewerHash = await bcrypt.hash(VIEWER_PW, 4);
   const { rows: [au] } = await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup') RETURNING id`,
@@ -66,9 +66,24 @@ beforeAll(async () => {
     `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
     [VIEWER_USER, homeAId]
   );
-});
+
+  // Create lockout user
+  const lockHash = await bcrypt.hash('LockoutTest!2025', 4);
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ('auth-test-lockout', $1, 'viewer', true, 'Lockout User', 'test-setup')`,
+    [lockHash]
+  );
+  await pool.query(
+    `INSERT INTO user_home_access (username, home_id) VALUES ('auth-test-lockout', $1)`,
+    [homeAId]
+  );
+}, 15000);
 
 afterAll(async () => {
+  await pool.query(
+    `UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username LIKE 'auth-test-%'`
+  ).catch(() => {});
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE 'auth-test-%'`);
@@ -102,20 +117,22 @@ describe('POST /api/login', () => {
     viewerToken = res.body.token;
   });
 
-  it('rejects wrong password with 401', async () => {
+  it('rejects wrong password with 401 and generic message', async () => {
     const res = await request(app)
       .post('/api/login')
       .send({ username: ADMIN_USER, password: 'wrongpassword' })
       .expect(401);
 
-    expect(res.body.error).toBeDefined();
+    expect(res.body.error).toBe('Invalid credentials');
   });
 
-  it('rejects unknown username with 401', async () => {
-    await request(app)
+  it('rejects unknown username with same 401 message (anti-enumeration)', async () => {
+    const res = await request(app)
       .post('/api/login')
       .send({ username: 'nonexistent-user-xyz', password: 'anything' })
       .expect(401);
+
+    expect(res.body.error).toBe('Invalid credentials');
   });
 
   it('rejects empty body with 400', async () => {
@@ -132,21 +149,46 @@ describe('POST /api/login', () => {
       .expect(400);
   });
 
-  it('rejects deactivated account', async () => {
+  it('rejects deactivated account with same 401 message (anti-enumeration)', async () => {
     // Create and deactivate a user
-    const hash = await bcrypt.hash('Deactivated!2025', 12);
+    const hash = await bcrypt.hash('Deactivated!2025', 4);
     await pool.query(
       `INSERT INTO users (username, password_hash, role, active, created_by)
        VALUES ('auth-test-deactivated', $1, 'viewer', false, 'test-setup')`,
       [hash]
     );
 
-    await request(app)
+    const res = await request(app)
       .post('/api/login')
       .send({ username: 'auth-test-deactivated', password: 'Deactivated!2025' })
       .expect(401);
 
+    // Same error message as wrong password / unknown user — no enumeration
+    expect(res.body.error).toBe('Invalid credentials');
+
     await pool.query(`DELETE FROM users WHERE username = 'auth-test-deactivated'`);
+  });
+});
+
+// ── Account Lockout ──────────────────────────────────────────────────────────
+
+describe('Account lockout', () => {
+  it('locks account after 5 failed attempts', async () => {
+    // 5 failed attempts
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/api/login')
+        .send({ username: 'auth-test-lockout', password: 'WrongPassword!123' });
+    }
+
+    // 6th attempt with correct password should still fail (locked)
+    const res = await request(app)
+      .post('/api/login')
+      .send({ username: 'auth-test-lockout', password: 'LockoutTest!2025' })
+      .expect(401);
+
+    // Same generic message — no indication of lockout (anti-enumeration)
+    expect(res.body.error).toBe('Invalid credentials');
   });
 });
 
@@ -452,7 +494,7 @@ describe('Password management', () => {
 describe('Token revocation', () => {
   it('admin can revoke a user tokens', async () => {
     // Create a temporary user and login
-    const hash = await bcrypt.hash('RevokeTest!2025', 12);
+    const hash = await bcrypt.hash('RevokeTest!2025', 4);
     const { rows: [u] } = await pool.query(
       `INSERT INTO users (username, password_hash, role, active, created_by)
        VALUES ('auth-test-revokee', $1, 'viewer', true, 'test') RETURNING id`,

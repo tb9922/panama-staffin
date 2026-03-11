@@ -12,6 +12,7 @@ import {
   getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, getLoggedInUser,
 } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -266,7 +267,7 @@ export default function IpcAuditTracker() {
                 const actionsTotal = (audit.corrective_actions || []).length;
                 const hasOutbreak = audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed');
                 return (
-                  <tr key={audit.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(audit)}>
+                  <tr key={audit.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(audit))}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
                     <td className={TABLE.td}>{typeDef?.name || audit.audit_type}</td>
                     <td className={TABLE.td}>{audit.auditor || '-'}</td>

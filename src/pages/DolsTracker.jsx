@@ -12,6 +12,7 @@ import {
   getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
 } from '../lib/dols.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const EMPTY_DOLS_FORM = {
   resident_name: '', dob: '', room_number: '',
@@ -367,7 +368,7 @@ export default function DolsTracker() {
                     const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
                     const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={dol.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEditDols(dol)}>
+                      <tr key={dol.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEditDols(dol))}>
                         <td className={TABLE.td}>{dol.resident_name}</td>
                         <td className={TABLE.td}><span className={typeBadge(dol.application_type)}>{typeDef?.name || dol.application_type}</span></td>
                         <td className={TABLE.td}>{dol.application_date}</td>
@@ -410,7 +411,7 @@ export default function DolsTracker() {
                     const st = getMcaStatus(mca, today);
                     const statusDef = MCA_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={mca.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEditMca(mca)}>
+                      <tr key={mca.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEditMca(mca))}>
                         <td className={TABLE.td}>{mca.resident_name}</td>
                         <td className={TABLE.td}>{mca.assessment_date}</td>
                         <td className={TABLE.td}>{mca.assessor || '-'}</td>

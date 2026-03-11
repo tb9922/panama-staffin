@@ -67,8 +67,8 @@ router.post('/', loginLimiter, async (req, res, next) => {
 // ── Logout (clear cookie) ───────────────────────────────────────────────────
 
 router.post('/logout', requireAuth, (req, res) => {
-  res.clearCookie('panama_token', { path: '/api' });
-  res.clearCookie('panama_csrf', { path: '/api' });
+  res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
+  res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
   res.json({ ok: true });
 });
 

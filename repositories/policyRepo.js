@@ -1,18 +1,18 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  for (const col of ['last_reviewed', 'next_review_due']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  if (shaped.updated_at instanceof Date) shaped.updated_at = shaped.updated_at.toISOString();
-  if (typeof shaped.changes === 'string') shaped.changes = JSON.parse(shaped.changes);
-  if (shaped.version != null) shaped.version = parseInt(shaped.version, 10);
-  // doc_version is the policy document version (VARCHAR), not the optimistic lock version (INTEGER)
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    policy_name: row.policy_name, policy_ref: row.policy_ref, category: row.category,
+    doc_version: row.doc_version,
+    last_reviewed: row.last_reviewed, next_review_due: row.next_review_due,
+    review_frequency_months: row.review_frequency_months, status: row.status,
+    reviewed_by: row.reviewed_by, approved_by: row.approved_by,
+    changes: typeof row.changes === 'string' ? JSON.parse(row.changes) : row.changes,
+    notes: row.notes, updated_at: ts(row.updated_at),
+  };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {

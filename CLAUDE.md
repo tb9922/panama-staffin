@@ -66,7 +66,7 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 96+ migrations)
 - **PDF**: jspdf + jspdf-autotable
-- **Testing**: Vitest — 2,130+ tests across 118 files (48 backend + 70 frontend)
+- **Testing**: Vitest — 2,162+ tests across 121 files (50 backend + 71 frontend)
 
 ## Architecture
 
@@ -427,10 +427,13 @@ Training/admin shifts pay differently based on whether the day was scheduled as 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | /api/login | Auth — returns {username, role} |
+| POST | /api/login | Auth — returns {username, role, token} + sets cookies |
+| POST | /api/login/logout | Clear auth cookies |
+| POST | /api/login/revoke | Admin — revoke all tokens for a user |
 | GET | /api/homes | List all homes |
 | GET | /api/data?home=X | Load home data |
 | POST | /api/data?home=X&user=Y | Save home data (validates, backs up, audits) |
+| GET | /api/dashboard?home=X | Dashboard KPIs + alerts |
 | GET | /api/audit | Last 100 audit entries |
 | GET | /api/export?home=X | Download home data as JSON |
 | GET | /api/bank-holidays | Proxy to GOV.UK API |

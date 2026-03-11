@@ -45,7 +45,6 @@ jobs:
 
       - name: Security audit
         run: npm audit --audit-level=moderate
-        continue-on-error: true
 
       - name: Run database migrations
         run: node scripts/migrate.js
@@ -100,7 +99,7 @@ jobs:
 
     steps:
       - name: Deploy to production
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -108,10 +107,19 @@ jobs:
           script: |
             set -e
             cd /var/www/panama-staffing
+            PREV_COMMIT=$(git rev-parse HEAD)
             git pull origin main
             npm ci --omit=dev
             npm run build
-            node scripts/migrate.js
+            ./scripts/backup-db.sh
+            if ! node scripts/migrate.js; then
+              echo "Migration failed — rolling back code to $PREV_COMMIT"
+              git checkout "$PREV_COMMIT"
+              npm ci --omit=dev
+              npm run build
+              pm2 restart panama --update-env
+              exit 1
+            fi
             pm2 restart panama --update-env
             sleep 5
             curl -f http://localhost:3001/health || exit 1

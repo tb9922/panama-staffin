@@ -8,7 +8,7 @@
  *   --db <name>   Override database name (default: DB_NAME env var or 'panama_dev')
  *
  * Reads all .sql files from migrations/ in alphabetical order and runs any
- * that haven't been run yet. Tracks completed migrations in the `schema_migrations`
+ * that haven't been run yet. Tracks completed migrations in the `migrations`
  * table. Each migration runs in its own transaction — failure stops the run.
  * Safe to run multiple times (idempotent).
  *
@@ -40,7 +40,8 @@ try {
     const eq = trimmed.indexOf('=');
     if (eq < 0) continue;
     const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
+    const raw = trimmed.slice(eq + 1).trim();
+    const val = raw.replace(/^(['"])(.*)\1$/, '$2');
     if (key && !(key in process.env)) process.env[key] = val;
   }
 } catch {
@@ -48,17 +49,22 @@ try {
 }
 
 const { Pool } = pg;
+const sslEnabled = (process.env.DB_SSL || 'true').toLowerCase() !== 'false';
 const pool = new Pool({
   host:     process.env.DB_HOST     || 'localhost',
   port:     parseInt(process.env.DB_PORT || '5432', 10),
   database: dbOverride || process.env.DB_NAME || 'panama_dev',
   user:     process.env.DB_USER     || 'panama',
   password: process.env.DB_PASSWORD,
+  ...(sslEnabled ? { ssl: { rejectUnauthorized: (process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false' } } : {}),
 });
 
 async function migrate() {
   const client = await pool.connect();
   try {
+    // Acquire advisory lock to prevent concurrent migration runners
+    await client.query('SELECT pg_advisory_lock(999999)');
+
     // Create migrations tracking table if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS migrations (
@@ -104,6 +110,7 @@ async function migrate() {
       console.log(`\n  ${ran} migration${ran > 1 ? 's' : ''} applied.`);
     }
   } finally {
+    await client.query('SELECT pg_advisory_unlock(999999)').catch(() => {});
     client.release();
     await pool.end();
   }

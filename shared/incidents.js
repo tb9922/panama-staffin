@@ -166,8 +166,8 @@ export function getIncidentStats(incidents, config, fromDate, toDate) {
     }
 
     if (inc.cqc_notifiable && inc.cqc_notified && inc.cqc_notified_date && inc.date) {
-      const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00');
-      const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00');
+      const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+      const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
       const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
       totalResponseHours += hours;
       respondedCount++;
@@ -248,8 +248,8 @@ export function calculateIncidentResponseTime(incidents, fromDate, toDate) {
     if (!inc.cqc_notified) continue;
     respondedCount++;
 
-    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00');
-    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00');
+    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
     totalHours += hours;
 
@@ -276,8 +276,8 @@ export function calculateCqcNotificationsPct(incidents, fromDate, toDate) {
   for (const inc of notifiable) {
     if (!inc.cqc_notified || !inc.cqc_notified_date) continue;
     respondedCount++;
-    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00');
-    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00');
+    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = (notifiedTime - incTime) / (1000 * 60 * 60);
     const deadline = getCqcNotificationDeadline(inc);
     if (deadline.hoursAllowed && hours <= deadline.hoursAllowed) onTime++;
@@ -304,21 +304,22 @@ export function getSafeguardingIncidentStats(incidents, fromDate, toDate) {
 
 // ── Duty of Candour ──────────────────────────────────────────────────────────
 
-export function isDutyOfCandourOverdue(incident) {
+export function isDutyOfCandourOverdue(incident, asOfDate) {
   if (!incident.duty_of_candour_applies || !incident.date) return false;
   if (incident.candour_notification_date) return false;
   const incDate = parseDate(incident.date);
   const deadlineDays = 14; // 10 working days ≈ 14 calendar days
   const deadline = addDays(incDate, deadlineDays);
-  return formatDate(new Date()) > formatDate(deadline);
+  const today = asOfDate ? formatDate(typeof asOfDate === 'string' ? parseDate(asOfDate) : asOfDate) : formatDate(new Date());
+  return today > formatDate(deadline);
 }
 
 // ── Corrective Action Completion Rate ────────────────────────────────────────
 
-export function calculateActionCompletionRate(incidents, fromDate, toDate) {
+export function calculateActionCompletionRate(incidents, fromDate, toDate, asOfDate) {
   const filtered = filterByDateRange(incidents || [], fromDate, toDate);
   let total = 0, completed = 0, overdue = 0;
-  const now = formatDate(new Date());
+  const now = asOfDate ? (typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate)) : formatDate(new Date());
 
   for (const inc of filtered) {
     const actions = inc.corrective_actions || [];

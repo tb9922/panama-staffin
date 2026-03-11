@@ -29,6 +29,7 @@ import * as sspRepo           from '../repositories/sspRepo.js';
 import * as hmrcRepo          from '../repositories/hmrcRepo.js';
 import * as payrollService    from '../services/payrollService.js';
 import * as auditService      from '../services/auditService.js';
+import { dispatchEvent }      from '../services/webhookService.js';
 
 import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
@@ -325,6 +326,7 @@ router.post('/runs/:runId/approve', writeRateLimiter, requireAuth, requireAdmin,
     await payrollService.approveRun(runIdP.data, req.home.id, req.home.slug, req.user.username);
     const run = await payrollRunRepo.findById(runIdP.data, req.home.id);
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', action: 'approve' });
+    dispatchEvent(req.home.id, 'payroll_run.approved', { runId: runIdP.data, homeSlug: req.home.slug, approvedBy: req.user.username });
     res.json(run);
   } catch (err) { next(err); }
 });

@@ -1,24 +1,34 @@
 import { pool } from '../db.js';
 
+const ts = v => v instanceof Date ? v.toISOString() : v;
+
 function shapeRow(row) {
-  const shaped = { ...row };
-  // Convert Date objects to ISO strings
-  for (const col of ['date', 'cqc_notified_date', 'riddor_reported_date', 'safeguarding_date',
-    'candour_notification_date', 'candour_letter_sent_date', 'police_contact_date',
-    'investigation_start_date', 'investigation_review_date', 'investigation_closed_date']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString().slice(0, 10);
-  }
-  for (const col of ['reported_at', 'updated_at', 'frozen_at']) {
-    if (shaped[col] instanceof Date) shaped[col] = shaped[col].toISOString();
-  }
-  if (shaped.cqc_notification_deadline instanceof Date) {
-    shaped.cqc_notification_deadline = shaped.cqc_notification_deadline.toISOString();
-  }
-  // Remove DB-internal columns
-  delete shaped.home_id;
-  delete shaped.created_at;
-  delete shaped.deleted_at;
-  return shaped;
+  return {
+    id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
+    date: row.date, time: row.time, location: row.location, type: row.type, severity: row.severity,
+    description: row.description, person_affected: row.person_affected, person_affected_name: row.person_affected_name,
+    staff_involved: row.staff_involved, immediate_action: row.immediate_action,
+    medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
+    cqc_notifiable: row.cqc_notifiable, cqc_notification_type: row.cqc_notification_type,
+    cqc_notification_deadline: ts(row.cqc_notification_deadline),
+    cqc_notified: row.cqc_notified, cqc_notified_date: row.cqc_notified_date, cqc_reference: row.cqc_reference,
+    riddor_reportable: row.riddor_reportable, riddor_category: row.riddor_category,
+    riddor_reported: row.riddor_reported, riddor_reported_date: row.riddor_reported_date, riddor_reference: row.riddor_reference,
+    safeguarding_referral: row.safeguarding_referral, safeguarding_to: row.safeguarding_to,
+    safeguarding_reference: row.safeguarding_reference, safeguarding_date: row.safeguarding_date,
+    witnesses: row.witnesses,
+    duty_of_candour_applies: row.duty_of_candour_applies,
+    candour_notification_date: row.candour_notification_date, candour_letter_sent_date: row.candour_letter_sent_date,
+    candour_recipient: row.candour_recipient,
+    police_involved: row.police_involved, police_reference: row.police_reference, police_contact_date: row.police_contact_date,
+    msp_wishes_recorded: row.msp_wishes_recorded, msp_outcome_preferences: row.msp_outcome_preferences,
+    msp_person_involved: row.msp_person_involved,
+    investigation_status: row.investigation_status, investigation_start_date: row.investigation_start_date,
+    investigation_lead: row.investigation_lead, investigation_review_date: row.investigation_review_date,
+    root_cause: row.root_cause, lessons_learned: row.lessons_learned, investigation_closed_date: row.investigation_closed_date,
+    corrective_actions: row.corrective_actions, reported_by: row.reported_by,
+    reported_at: ts(row.reported_at), updated_at: ts(row.updated_at), frozen_at: ts(row.frozen_at),
+  };
 }
 
 function paginate(rows, shapeFn) {

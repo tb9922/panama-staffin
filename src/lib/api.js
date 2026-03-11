@@ -68,7 +68,14 @@ export function getLoggedInUser() {
 export function logout() {
   sessionStorage.removeItem('user');
   // Clear HttpOnly cookie via server endpoint (fire-and-forget)
-  fetch(`${API_BASE}/login/logout`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  fetch(`${API_BASE}/login/logout`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+  }).catch(() => {});
 }
 
 export async function loadAuditLog(limit = 100) {
@@ -1480,4 +1487,13 @@ export async function deletePlatformHome(id) {
   return apiFetch(`${API_BASE}/platform/homes/${id}`, {
     method: 'DELETE', headers: authHeaders(),
   });
+}
+
+// Fire-and-forget audit log for report downloads
+export function logReportDownload(reportType, dateRange) {
+  const home = getCurrentHome();
+  if (!home) return;
+  apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
+  }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
 }

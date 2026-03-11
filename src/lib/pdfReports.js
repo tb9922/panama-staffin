@@ -57,17 +57,17 @@ export function generateRosterPDF(data, weekStart) {
   const dates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     dates.push(d);
   }
 
-  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
   let y = addHeader(doc, 'Weekly Roster', weekLabel, data.config.home_name);
 
   const activeStaff = data.staff.filter(s => s.active !== false && isCareRole(s.role));
   const headers = [
     'Staff', 'Team', 'Role',
-    ...dates.map(d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })),
+    ...dates.map(d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: 'UTC' })),
     'Hours',
   ];
 
@@ -123,7 +123,7 @@ export function generateRosterPDF(data, weekStart) {
     const worst = Math.max(cov.early.escalation.level, cov.late.escalation.level, cov.night.escalation.level);
     const escLabel = worst <= 1 ? 'Normal' : worst <= 2 ? 'OT' : worst <= 3 ? 'Agency' : worst <= 4 ? 'SHORT' : 'UNSAFE';
     return [
-      date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+      date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
       `${cov.early.coverage.headCount}/${cov.early.coverage.required.heads}`,
       `${cov.late.coverage.headCount}/${cov.late.coverage.required.heads}`,
       `${cov.night.coverage.headCount}/${cov.night.coverage.required.heads}`,
@@ -154,7 +154,7 @@ export function generateRosterPDF(data, weekStart) {
 export function generateCostPDF(data, year, month) {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const monthDates = getMonthDates(year, month);
-  const monthLabel = new Date(year, month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(Date.UTC(year, month)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   let y = addHeader(doc, 'Monthly Cost Report', monthLabel, data.config.home_name);
 
@@ -230,8 +230,8 @@ export function generateCostPDF(data, year, month) {
 
   const headers = ['Day', 'Date', 'Base £', 'OT £', 'AG Day £', 'AG Night £', 'BH £', 'Total £', 'Cumul £'];
   const rows = dayData.map(d => [
-    d.date.toLocaleDateString('en-GB', { weekday: 'short' }),
-    d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+    d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
+    d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
     d.cost.base.toFixed(0),
     d.cost.otPremium > 0 ? d.cost.otPremium.toFixed(0) : '-',
     d.cost.agencyDay > 0 ? d.cost.agencyDay.toFixed(0) : '-',
@@ -273,11 +273,11 @@ export function generateCoveragePDF(data, weekStart) {
   const dates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     dates.push(d);
   }
 
-  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekLabel = `${dates[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} — ${dates[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
   let y = addHeader(doc, 'Coverage & Escalation Report', weekLabel, data.config.home_name);
 
   // Min staffing reference
@@ -305,7 +305,7 @@ export function generateCoveragePDF(data, weekStart) {
     const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
     const cov = getDayCoverageStatus(staffForDay, data.config);
     const cost = calculateDayCost(staffForDay, data.config);
-    const dateLabel = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const dateLabel = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
     ['early', 'late', 'night'].forEach(period => {
       const c = cov[period];
@@ -1159,4 +1159,145 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28) {
   doc.setTextColor(0);
 
   doc.save(`CQC_Evidence_Pack_${homeName.replace(/\s+/g, '_')}_${today}.pdf`);
+}
+
+// ── Board Pack PDF ──────────────────────────────────────────────────────────
+
+export function generateBoardPackPDF(data, dateRangeDays = 28) {
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const today = formatDate(new Date());
+  const dateRange = getDateRange(dateRangeDays);
+  const homeName = data.config.home_name || 'Care Home';
+  const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
+
+  // ── Page 1: Executive Summary ─────────────────────────────────────────────
+  let y = addHeader(doc, 'Board Pack — Executive Summary', periodLabel, homeName);
+
+  // CQC compliance score
+  const score = calculateComplianceScore(data, dateRange, today);
+  const bandLabel = score.band.label;
+  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CQC Compliance', 14, y);
+  y += 6;
+  doc.setFontSize(22);
+  doc.setTextColor(...scoreColor);
+  doc.text(`${score.overallScore}%`, 14, y + 6);
+  doc.setFontSize(10);
+  doc.text(bandLabel, 40, y + 6);
+  doc.setTextColor(0);
+  y += 14;
+
+  // Key metrics table
+  const fillResult = score.metrics.staffingFillRate?.detail;
+  const agencyResult = score.metrics.agencyDependency?.detail;
+  const trainingResult = score.metrics.trainingCompliance;
+  const incidentStats = data.incidents ? getIncidentTrendData(data.incidents, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
+  const complaintStats = data.complaints ? getComplaintStats(data.complaints, data.config, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
+
+  doc.autoTable({
+    startY: y,
+    head: [['Key Performance Indicator', 'Value', 'Status']],
+    body: [
+      ['Staffing Fill Rate', `${fillResult?.pct ?? '-'}%`, fillResult?.pct >= 95 ? 'Good' : fillResult?.pct >= 85 ? 'Monitor' : 'Action'],
+      ['Agency Dependency', `${agencyResult?.pct ?? 0}%`, agencyResult?.pct <= 5 ? 'Good' : agencyResult?.pct <= 15 ? 'Monitor' : 'Action'],
+      ['Training Compliance', `${trainingResult?.raw ?? '-'}%`, trainingResult?.raw >= 90 ? 'Good' : trainingResult?.raw >= 70 ? 'Monitor' : 'Action'],
+      ['Incidents (period)', `${incidentStats ? incidentStats.monthlyTrend.reduce((s, m) => s + m.count, 0) : 0}`, '-'],
+      ['Complaints (open)', `${complaintStats?.open ?? 0}`, complaintStats?.open > 0 ? 'Action' : 'Good'],
+      ['Total Staffing Cost', `£${(agencyResult?.totalCost ?? 0).toLocaleString()}`, '-'],
+    ],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [31, 41, 55] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 65 } },
+    didParseCell(hookData) {
+      if (hookData.section === 'body' && hookData.column.index === 2) {
+        if (hookData.cell.raw === 'Action') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+        else if (hookData.cell.raw === 'Monitor') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+        else if (hookData.cell.raw === 'Good') { hookData.cell.styles.fillColor = [220, 252, 231]; hookData.cell.styles.textColor = [22, 101, 52]; }
+      }
+    },
+  });
+
+  // ── Page 2: Coverage Summary ──────────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Coverage Summary', periodLabel, homeName);
+
+  const covDaysCap = Math.min(dateRangeDays, 28);
+  const covDateRange = getDateRange(covDaysCap);
+  const coverageRows = getCoverageSummary(data, covDateRange);
+  const escLabels2 = ['Normal', 'Float', 'OT', 'Agency', 'Short', 'UNSAFE'];
+  if (coverageRows.length > 0) {
+    doc.autoTable({
+      startY: y,
+      head: [['Date', 'Early', 'Late', 'Night', 'Worst']],
+      body: coverageRows.map(r => [
+        r.date,
+        `${r.early.actual}/${r.early.required}`,
+        `${r.late.actual}/${r.late.required}`,
+        `${r.night.actual}/${r.night.required}`,
+        escLabels2[r.worst] || 'Normal',
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 4) {
+          const val = hookData.cell.raw;
+          if (val === 'Short' || val === 'UNSAFE') {
+            hookData.cell.styles.fillColor = [254, 226, 226];
+            hookData.cell.styles.textColor = [153, 27, 27];
+            hookData.cell.styles.fontStyle = 'bold';
+          } else if (val === 'Agency') {
+            hookData.cell.styles.fillColor = [254, 249, 195];
+            hookData.cell.styles.textColor = [133, 77, 14];
+          }
+        }
+      },
+    });
+  } else {
+    doc.setFontSize(9);
+    doc.text('No coverage data available for this period.', 14, y);
+  }
+
+  // ── Page 3: Training Compliance ───────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'Training Compliance', `As of ${today}`, homeName);
+
+  const trainingBreakdown = calculateTrainingBreakdown(data, today);
+  if (trainingBreakdown.length > 0) {
+    doc.autoTable({
+      startY: y,
+      head: [['Training Type', 'Compliant', 'Expired', 'Not Started', 'Compliance %']],
+      body: trainingBreakdown.map(t => [
+        t.name,
+        t.compliant,
+        t.expired,
+        t.notStarted,
+        `${t.compliancePct}%`,
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+      didParseCell(hookData) {
+        if (hookData.section === 'body' && hookData.column.index === 4) {
+          const pct = parseInt(hookData.cell.raw);
+          if (pct < 70) { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+          else if (pct < 90) { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
+          else { hookData.cell.styles.fillColor = [220, 252, 231]; hookData.cell.styles.textColor = [22, 101, 52]; }
+        }
+      },
+    });
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const currentPage = doc.internal.getNumberOfPages();
+  const lastTablePage = doc.lastAutoTable ? doc.lastAutoTable.finalY : null;
+  const finalY2 = (lastTablePage && doc.lastAutoTable.pageNumber === currentPage) ? lastTablePage + 10 : y + 10;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(120);
+  doc.text('Board pack auto-generated from Panama Staffing. Verify figures against source records before presenting.', 14, finalY2);
+  doc.setTextColor(0);
+
+  doc.save(`Board_Pack_${homeName.replace(/[^a-zA-Z0-9]+/g, '_')}_${today}.pdf`);
 }

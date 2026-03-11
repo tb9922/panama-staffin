@@ -8,6 +8,7 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { dispatchEvent } from '../services/webhookService.js';
 
 const router = Router();
 const incidentIdSchema = z.string().min(1).max(100);
@@ -116,6 +117,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
     if (!parsed.success) return zodError(res, parsed);
     const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
     await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident?.id });
+    if (incident?.id) dispatchEvent(req.home.id, 'incident.created', { incidentId: incident.id, severity: parsed.data.severity, type: parsed.data.type });
     res.status(201).json(incident);
   } catch (err) { next(err); }
 });

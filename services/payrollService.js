@@ -117,7 +117,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
     const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff    = allStaffResult.rows;
-    const overrides   = await overrideRepo.findByHome(homeId, undefined, undefined, client);
+    const overrides   = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates(client);
 
@@ -150,6 +150,13 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const pensionConf   = await pensionRepo.getPensionConfig(run.period_end, client);
     const taxBandsCache = new Map();
     const niRatesCache  = new Map();
+
+    // Pre-load tax codes, YTD, pension enrolments, and sick periods for all active staff (avoid N+1 per-staff queries)
+    const activeStaffIds = activeStaff.map(s => s.id);
+    const taxCodeMap = await taxRepo.getTaxCodeBatch(homeId, activeStaffIds, run.period_end, client);
+    const ytdMap = await taxRepo.getYTDBatch(homeId, activeStaffIds, taxYear, client);
+    const enrolmentMap = await pensionRepo.getEnrolmentBatch(homeId, activeStaffIds, client);
+    const sickPeriodsMap = await sspRepo.getActiveSickPeriodsBatch(homeId, activeStaffIds, run.period_start, run.period_end, client);
 
     // Payroll run totals (accumulated across all staff)
     let totalGross = 0;
@@ -202,7 +209,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (shift === 'SICK') {
           const sspConfig = getSSPConfig(date, allSSPConfigs);
           if (sspConfig) {
-            const sickPeriod = await sspRepo.getActiveSickPeriod(homeId, s.id, date, date, client);
+            const staffPeriods = sickPeriodsMap.get(s.id) || [];
+            const sickPeriod = staffPeriods.find(p => p.start_date <= date && (!p.end_date || p.end_date >= date)) || null;
             if (sickPeriod) {
               const r = calculateSSP(sickPeriod, date, sspConfig);
               if (r.eligible) {
@@ -298,13 +306,13 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
       // ── Phase 2: Deductions block ──────────────────────────────────────────
 
-      const taxCodeRow = await taxRepo.getTaxCodeForStaff(homeId, s.id, run.period_end, client);
+      const taxCodeRow = taxCodeMap.get(s.id) || null;
       const parsedCode = parseTaxCode(taxCodeRow?.tax_code || null);
       // Preserve basis from DB record (cumulative vs w1m1)
       if (taxCodeRow?.basis) parsedCode.basis = taxCodeRow.basis;
 
       // YTD: read from approved runs only — never written here (written in approveRun)
-      const priorYTD = await taxRepo.getYTD(homeId, s.id, taxYear, client) || ZERO_YTD;
+      const priorYTD = ytdMap.get(s.id) || ZERO_YTD;
 
       // Tax bands and NI rates: cached by country/category (same for most staff)
       const country = parsedCode.country;
@@ -336,7 +344,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
 
       // Pension contributions — auto-enrol if eligible (Pensions Act 2008)
-      let enrolment = await pensionRepo.getEnrolment(homeId, s.id, client);
+      let enrolment = enrolmentMap.get(s.id) || null;
       if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
         const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
         if (eligibility.shouldAutoEnrol) {
@@ -533,13 +541,8 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
 
     // Load YTD for each staff member for the CSV
     const taxYear = getTaxYear(new Date(run.period_end));
-    const ytdMap = new Map();
-    await Promise.all(
-      lines.map(async line => {
-        const ytd = await taxRepo.getYTD(homeId, line.staff_id, taxYear, client);
-        if (ytd) ytdMap.set(line.staff_id, ytd);
-      })
-    );
+    const staffIds = [...new Set(lines.map(l => l.staff_id))];
+    const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
 
     const csv = format === 'sage'
       ? buildSageCSV(lines, staffMap, run, ytdMap)
@@ -615,12 +618,10 @@ export async function assemblePayslipData(runId, homeId, staffId) {
   // Fetch YTD for approved runs (null for draft/calculated — payslip shows "Estimated")
   const isApproved = ['approved', 'exported', 'locked'].includes(run.status);
   const taxYear = getTaxYear(new Date(run.period_end));
-  const ytdMap = new Map();
+  let ytdMap = new Map();
   if (isApproved) {
-    for (const line of targetLines) {
-      const ytd = await taxRepo.getYTD(homeId, line.staff_id, taxYear);
-      if (ytd) ytdMap.set(line.staff_id, ytd);
-    }
+    const staffIds = [...new Set(targetLines.map(l => l.staff_id))];
+    ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear);
   }
 
   return targetLines.map(line => ({
@@ -653,5 +654,5 @@ export function eachDayInRange(start, end) {
 }
 
 function round2(n) {
-  return Math.round(n * 100) / 100;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

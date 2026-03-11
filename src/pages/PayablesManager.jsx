@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getLoggedInUser, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 export default function PayablesManager() {
   const isAdmin = getLoggedInUser()?.role === 'admin';
@@ -33,13 +34,13 @@ export default function PayablesManager() {
   const today = new Date().toISOString().slice(0, 10);
   const in28Days = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 28);
-    return d.toISOString().slice(0, 10);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 28))
+      .toISOString().slice(0, 10);
   })();
   const in7Days = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 7))
+      .toISOString().slice(0, 10);
   })();
 
   // KPI calculations
@@ -215,7 +216,7 @@ export default function PayablesManager() {
               {schedules.length === 0 ? (
                 <tr><td colSpan={8} className={TABLE.empty}>No payment schedules</td></tr>
               ) : schedules.map(s => (
-                <tr key={s.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(s)}>
+                <tr key={s.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(s))}>
                   <td className={`${TABLE.td} font-medium`}>{s.supplier}</td>
                   <td className={TABLE.td}>{getLabel(s.category, EXPENSE_CATEGORIES)}</td>
                   <td className={TABLE.td}>{getLabel(s.frequency, SCHEDULE_FREQUENCIES)}</td>

@@ -136,7 +136,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
               d.dayNum,
-              d.date.toLocaleDateString('en-GB', { weekday: 'short' }),
+              d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
               formatDate(d.date),
               d.cost.base.toFixed(2),
               d.cost.otPremium.toFixed(2),
@@ -152,7 +152,7 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
             const headers = ['Day#', 'Day', 'Date', 'Base £', 'OT Prem £', 'AG Day £', 'AG Night £', 'BH Prem £', 'Total £', 'Cumulative £'];
             const rows = dayData.map(d => [
               d.dayNum,
-              d.date.toLocaleDateString('en-GB', { weekday: 'short' }),
+              d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
               formatDate(d.date),
               parseFloat(d.cost.base.toFixed(2)),
               parseFloat(d.cost.otPremium.toFixed(2)),
@@ -209,10 +209,10 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
               return (
                 <tr key={d.dayNum} className={`${TABLE.tr} ${isToday ? 'bg-blue-50/70' : ''}`}>
                   <td className={`${TABLE.td} font-mono text-gray-400`}>{d.dayNum}</td>
-                  <td className={`${TABLE.td} text-xs`}>{d.date.toLocaleDateString('en-GB', { weekday: 'short' })}</td>
+                  <td className={`${TABLE.td} text-xs`}>{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</td>
                   <td className={`${TABLE.td} text-xs`}>
                     <span className={isToday ? 'font-bold text-blue-700' : ''}>
-                      {d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      {d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
                     </span>
                   </td>
                   <td className={`${TABLE.tdMono} text-right`}>{d.cost.base.toFixed(2)}</td>

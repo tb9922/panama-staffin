@@ -44,6 +44,8 @@ import schedulingRouter from './routes/scheduling.js';
 import usersRouter from './routes/users.js';
 import bedsRouter from './routes/beds.js';
 import platformRouter from './routes/platform.js';
+import webhookRouter from './routes/webhooks.js';
+import importRouter from './routes/import.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
@@ -114,20 +116,34 @@ app.use('/api/scheduling', schedulingRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/beds', bedsRouter);
 app.use('/api/platform', platformRouter);
+app.use('/api/webhooks', webhookRouter);
+app.use('/api/import', importRouter);
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
+  let queryMs = null;
+  let migrationVersion = null;
   try {
-    await Promise.race([
-      pool.query('SELECT 1'),
+    const start = Date.now();
+    const [, mv] = await Promise.race([
+      Promise.all([pool.query('SELECT 1'), pool.query('SELECT MAX(id) AS v FROM migrations')]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
     ]);
+    queryMs = Date.now() - start;
     dbOk = true;
-  } catch { /* no-op */ }
+    migrationVersion = mv.rows[0]?.v ?? null;
+  } catch { /* db down or timeout */ }
   res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',
+    queryMs,
+    migrationVersion,
+    pool: {
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+    },
   });
 });
 
@@ -142,8 +158,18 @@ app.use('/api', (req, res) => {
 if (config.nodeEnv === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distDir = path.join(__dirname, 'dist');
-  app.use(express.static(distDir, { maxAge: '1y', immutable: true }));
+  app.use(express.static(distDir, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders(res, filePath) {
+      // index.html is NOT content-hashed — must not be cached long-term
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(distDir, 'index.html'));
   });
 }
@@ -192,7 +218,9 @@ const server = isMainModule ? app.listen(config.port, async () => {
   server.headersTimeout = 66000;   // must exceed keepAliveTimeout
   logger.info({ port: config.port, origin: config.allowedOrigin }, 'server started');
   // Load token deny-list into memory (non-blocking, non-fatal)
-  await loadDenyList().catch(() => {});
+  await loadDenyList().catch(err =>
+    logger.error({ err: err?.message }, 'Failed to load token deny list — revoked tokens may be accepted')
+  );
   // Seed database users from env vars on first run (non-fatal)
   await ensureSeedUsers().catch(err =>
     logger.warn({ err: err?.message }, 'User seeding skipped')

@@ -42,6 +42,30 @@ export async function getActiveSickPeriod(homeId, staffId, fromDate, toDate, cli
   return rows[0] ? shapePeriod(rows[0]) : null;
 }
 
+/**
+ * Batch-load active sick periods for multiple staff overlapping a date range.
+ * Returns Map<staffId, sickPeriod[]>.
+ */
+export async function getActiveSickPeriodsBatch(homeId, staffIds, fromDate, toDate, client) {
+  if (!staffIds.length) return new Map();
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT * FROM sick_periods
+     WHERE home_id = $1 AND staff_id = ANY($2)
+       AND start_date <= $3
+       AND (end_date IS NULL OR end_date >= $4)
+     ORDER BY staff_id, start_date DESC`,
+    [homeId, staffIds, toDate, fromDate]
+  );
+  const map = new Map();
+  for (const r of rows) {
+    const shaped = shapePeriod(r);
+    if (!map.has(r.staff_id)) map.set(r.staff_id, []);
+    map.get(r.staff_id).push(shaped);
+  }
+  return map;
+}
+
 export async function listSickPeriods(homeId, staffId, client) {
   const conn = client || pool;
   const params = staffId ? [homeId, staffId] : [homeId];

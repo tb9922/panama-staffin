@@ -16,6 +16,7 @@ import {
   CQC_NOTIFICATION_TYPES, RIDDOR_CATEGORIES, PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES, isCqcNotificationOverdue, isRiddorOverdue,
 } from '../lib/incidents.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -376,7 +377,7 @@ export default function IncidentTracker() {
                 const cqcOverdue = isCqcNotificationOverdue(inc);
                 const riddorOverdue = isRiddorOverdue(inc);
                 return (
-                  <tr key={inc.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(inc)}>
+                  <tr key={inc.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(inc))}>
                     <td className={TABLE.td}>{inc.date}</td>
                     <td className={TABLE.td}>{inc.time || '-'}</td>
                     <td className={TABLE.td}>{typeDef?.name || inc.type}</td>

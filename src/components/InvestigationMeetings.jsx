@@ -286,7 +286,7 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
 
             {/* Footer */}
             <p className="text-xs text-gray-400 mt-2">
-              Recorded by {m.recorded_by || 'unknown'}{m.created_at ? ` \u2014 ${new Date(m.created_at).toLocaleDateString()}` : ''}
+              Recorded by {m.recorded_by || 'unknown'}{m.created_at ? ` \u2014 ${new Date(m.created_at).toLocaleDateString('en-GB')}` : ''}
             </p>
           </div>
         );

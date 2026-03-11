@@ -21,7 +21,7 @@ const STATUS_BADGE = {
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function daysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 function isAbsence(shift) {

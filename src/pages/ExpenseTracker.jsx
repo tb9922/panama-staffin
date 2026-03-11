@@ -9,6 +9,7 @@ import {
   EXPENSE_CATEGORIES, EXPENSE_STATUSES, PAYMENT_METHODS, SCHEDULE_FREQUENCIES,
   getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 export default function ExpenseTracker() {
   const [expenses, setExpenses] = useState([]);
@@ -169,7 +170,7 @@ export default function ExpenseTracker() {
               {expenses.length === 0 ? (
                 <tr><td colSpan={9} className={TABLE.empty}>No expenses found</td></tr>
               ) : expenses.map(exp => (
-                <tr key={exp.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openEdit(exp)}>
+                <tr key={exp.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(exp))}>
                   <td className={TABLE.td}>{exp.expense_date}</td>
                   <td className={TABLE.td}>{getLabel(exp.category, EXPENSE_CATEGORIES)}</td>
                   <td className={`${TABLE.td} max-w-48 truncate`}>{exp.description}</td>

@@ -13,6 +13,7 @@ import {
   RISK_SCORE_BANDS, RISK_STATUSES,
 } from '../lib/riskRegister.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const TABS = [
   { id: 'details', label: 'Risk Details' },
@@ -366,7 +367,7 @@ export default function RiskRegister() {
                 const _residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
-                  <tr key={risk.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(risk)}>
+                  <tr key={risk.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(risk))}>
                     <td className={TABLE.td}>
                       <div className="font-medium text-gray-900">{risk.title}</div>
                       {risk.description && <div className="text-xs text-gray-400 truncate max-w-xs">{risk.description}</div>}

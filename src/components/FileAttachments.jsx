@@ -101,7 +101,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
                   <td className={TABLE.td + ' text-gray-500 text-xs'}>{formatBytes(f.size_bytes)}</td>
                   <td className={TABLE.td + ' text-gray-500 text-xs'}>{f.description || '\u2014'}</td>
                   <td className={TABLE.td + ' text-gray-400 text-xs'}>
-                    {f.uploaded_by} {'\u2014'} {f.created_at ? new Date(f.created_at).toLocaleDateString() : ''}
+                    {f.uploaded_by} {'\u2014'} {f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB') : ''}
                   </td>
                   <td className={TABLE.td}>
                     {!readOnly && (

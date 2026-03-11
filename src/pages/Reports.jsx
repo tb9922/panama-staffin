@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
-import { getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getLoggedInUser, logReportDownload } from '../lib/api.js';
 
 function getMonday(date) {
   const d = new Date(date);
@@ -40,22 +40,31 @@ function ReportsInner({ data }) {
     const now = new Date();
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   });
+  const [boardDays, setBoardDays] = useState(28);
 
   async function generate(type) {
     setGenerating(type);
     try {
-      const { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF } = await import('../lib/pdfReports.js');
+      const { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF, generateBoardPackPDF } = await import('../lib/pdfReports.js');
 
+      let dateRange = '';
       if (type === 'roster') {
         generateRosterPDF(data, parseDate(weekDate));
+        dateRange = weekDate;
       } else if (type === 'cost') {
         const [y, m] = costMonth.split('-').map(Number);
         generateCostPDF(data, y, m - 1);
+        dateRange = costMonth;
       } else if (type === 'coverage') {
         generateCoveragePDF(data, parseDate(weekDate));
+        dateRange = weekDate;
       } else if (type === 'staff') {
         generateStaffPDF(data);
+      } else if (type === 'boardpack') {
+        generateBoardPackPDF(data, boardDays);
+        dateRange = `${boardDays} days`;
       }
+      logReportDownload(type, dateRange);
     } catch (err) {
       console.error('PDF generation error:', err);
       alert('Failed to generate PDF: ' + err.message);
@@ -115,6 +124,23 @@ function ReportsInner({ data }) {
       color: 'purple',
       dateInput: null,
     }] : []),
+    ...(isAdmin ? [{
+      id: 'boardpack',
+      title: 'Board Pack',
+      description: 'Executive summary for board meeting — CQC score, coverage, training, incidents, costs.',
+      icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+      color: 'indigo',
+      dateInput: (
+        <div>
+          <label className={INPUT.label}>Date range (days)</label>
+          <select value={boardDays} onChange={e => setBoardDays(Number(e.target.value))} className={INPUT.sm}>
+            <option value={28}>28 days</option>
+            <option value={90}>90 days</option>
+            <option value={365}>1 year</option>
+          </select>
+        </div>
+      ),
+    }] : []),
   ];
 
   const colorClasses = {
@@ -122,6 +148,7 @@ function ReportsInner({ data }) {
     green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'text-green-600', btn: 'bg-green-600 hover:bg-green-700 active:bg-green-800' },
     amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', btn: 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800' },
     purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', btn: 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800' },
+    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', icon: 'text-indigo-600', btn: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800' },
   };
 
   return (

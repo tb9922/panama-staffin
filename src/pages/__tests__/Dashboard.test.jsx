@@ -241,7 +241,62 @@ describe('Dashboard', () => {
     expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
   });
 
-  // 14. Heatmap legend is rendered
+  // 14. Action This Week card renders when weekActions present
+  it('renders Action This Week card when summary has weekActions', async () => {
+    api.getDashboardSummary.mockResolvedValue({
+      modules: {},
+      alerts: [
+        { type: 'error', module: 'incidents', message: 'CQC overdue', link: '/incidents', priority: 5 },
+        { type: 'warning', module: 'training', message: '3 expired training', link: '/training', priority: 3 },
+      ],
+      weekActions: [
+        { type: 'error', module: 'incidents', message: 'CQC overdue', link: '/incidents', priority: 5 },
+        { type: 'warning', module: 'training', message: '3 expired training', link: '/training', priority: 3 },
+      ],
+    });
+    renderDashboard();
+
+    await waitFor(() =>
+      expect(screen.getByText('Action This Week')).toBeInTheDocument()
+    );
+    expect(screen.getByText('CQC overdue')).toBeInTheDocument();
+    expect(screen.getByText('3 expired training')).toBeInTheDocument();
+  });
+
+  // 15. Action This Week card hidden when no weekActions
+  it('does not render Action This Week card when weekActions is empty', async () => {
+    api.getDashboardSummary.mockResolvedValue({
+      modules: {},
+      alerts: [],
+      weekActions: [],
+    });
+    renderDashboard();
+
+    await waitFor(() =>
+      expect(screen.getByText('Alerts')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+  });
+
+  // 16. Action This Week card hidden for viewer role
+  it('does not render Action This Week card for viewer role', async () => {
+    api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
+    api.getDashboardSummary.mockResolvedValue({
+      modules: {},
+      alerts: [],
+      weekActions: [
+        { type: 'error', module: 'incidents', message: 'CQC overdue', link: '/incidents', priority: 5 },
+      ],
+    });
+    renderDashboard({ username: 'viewer', role: 'viewer' });
+
+    await waitFor(() =>
+      expect(screen.getByText('Alerts')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+  });
+
+  // 17. Heatmap legend is rendered
   it('renders the coverage heatmap legend', async () => {
     renderDashboard();
 

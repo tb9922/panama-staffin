@@ -11,6 +11,7 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getLoggedInUser, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const STATUS_BADGE_MAP = {
   not_started: BADGE.gray,
@@ -346,7 +347,7 @@ export default function CareCertificateTracker() {
                 const badgeClass = STATUS_BADGE_MAP[result.status] || BADGE.gray;
                 const statusLabel = CC_STATUSES[result.status]?.label || result.status;
                 return (
-                  <tr key={s.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openDetailModal(s.id)}>
+                  <tr key={s.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openDetailModal(s.id))}>
                     <td className={`${TABLE.td} font-medium`}>{s.name}</td>
                     <td className={TABLE.td}>{s.role}</td>
                     <td className={TABLE.tdMono}>{record?.start_date || '-'}</td>

@@ -32,10 +32,10 @@ function fmt(n) {
 
 function currentTaxYear() {
   const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  if (m > 4 || (m === 4 && d >= 6)) return now.getFullYear();
-  return now.getFullYear() - 1;
+  const m = now.getUTCMonth() + 1;
+  const d = now.getUTCDate();
+  if (m > 4 || (m === 4 && d >= 6)) return now.getUTCFullYear();
+  return now.getUTCFullYear() - 1;
 }
 
 export default function HMRCDashboard() {

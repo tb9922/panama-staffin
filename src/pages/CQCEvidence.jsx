@@ -10,7 +10,7 @@ import {
   getIncidents, getComplaints, getMaintenance, getIpcAudits,
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
   getCqcEvidence, createCqcEvidence,
-  deleteCqcEvidence, getLoggedInUser,
+  deleteCqcEvidence, getLoggedInUser, logReportDownload,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -198,6 +198,7 @@ function CQCEvidenceInner({ data }) {
       await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
       generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
+      logReportDownload('cqc-evidence', `${dateRangeDays} days`);
     } catch (err) {
       alert('Failed to generate PDF: ' + err.message);
     } finally {

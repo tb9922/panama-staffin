@@ -517,10 +517,10 @@ export async function getReceivablesAgeing(homeId, asOfDate, client) {
     [homeId]);
   const buckets = { current: 0, days_1_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0 };
   const items = [];
-  const asOf = new Date(asOfDate);
+  const asOf = new Date(asOfDate + 'T00:00:00Z');
   for (const row of rows) {
     const outstanding = f(row.balance_due);
-    const due = new Date(row.due_date);
+    const due = new Date(row.due_date + 'T00:00:00Z');
     const daysOverdue = Math.floor((asOf - due) / 86400000);
     if (daysOverdue <= 0) buckets.current += outstanding;
     else if (daysOverdue <= 30) buckets.days_1_30 += outstanding;
@@ -580,7 +580,7 @@ export async function getMonthlyIncomeTrend(homeId, months, client) {
             COALESCE(SUM(amount_paid), 0) AS received
      FROM finance_invoices
      WHERE home_id = $1 AND deleted_at IS NULL
-       AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - ($2 || ' months')::interval)
+       AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);
   return rows.map(r => ({ month: r.month, invoiced: f(r.invoiced), received: f(r.received) }));
@@ -593,7 +593,7 @@ export async function getMonthlyExpenseTrend(homeId, months, client) {
             COALESCE(SUM(gross_amount), 0) AS total
      FROM finance_expenses
      WHERE home_id = $1 AND deleted_at IS NULL AND status != 'void'
-       AND expense_date >= (CURRENT_DATE - ($2 || ' months')::interval)
+       AND expense_date >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);
   return rows.map(r => ({ month: r.month, total: f(r.total) }));

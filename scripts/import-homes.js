@@ -65,7 +65,7 @@ async function importHome(jsonFile) {
 
   await withTransaction(async (client) => {
     // 1. Upsert the home row
-    const home = await homeRepo.upsert(slug, homeName, data.config || {}, data.annual_leave || {});
+    const home = await homeRepo.upsert(slug, homeName, data.config || {}, data.annual_leave || {}, client);
     const homeId = home.id;
     console.log(`  home:              OK (id=${homeId})`);
 

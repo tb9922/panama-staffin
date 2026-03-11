@@ -15,6 +15,15 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
   app:
     build: .
@@ -28,11 +37,23 @@ services:
       DB_NAME: ${DB_NAME:-panama_dev}
       DB_USER: ${DB_USER:-panama}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_SSL: 'false'
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:5173}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:?ALLOWED_ORIGIN is required}
     ports:
       - "3001:3001"
+    volumes:
+      - uploads:/app/uploads
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 30s
@@ -41,3 +62,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:

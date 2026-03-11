@@ -13,6 +13,7 @@ import {
   CONCERN_CATEGORIES, CONCERN_SEVERITIES, CONCERN_STATUSES,
   CONCERN_OUTCOMES, REPORTER_ROLES,
 } from '../lib/whistleblowing.js';
+import { clickableRowProps } from '../lib/a11y.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 
 const TABS = [
@@ -274,7 +275,7 @@ export default function WhistleblowingTracker() {
                 const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
                 const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
                 return (
-                  <tr key={concern.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} onClick={() => isAdmin && openEdit(concern)}>
+                  <tr key={concern.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(concern))}>
                     <td className={TABLE.td}>{concern.date_raised}</td>
                     <td className={TABLE.td}>{catDef?.name || concern.category}</td>
                     <td className={TABLE.td}>

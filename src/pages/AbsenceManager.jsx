@@ -12,6 +12,7 @@ import { BRADFORD_TRIGGERS, getAbsenceTriggerBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { clickableRowProps } from '../lib/a11y.js';
 
 const TABS = [
   { id: 'bradford', label: 'Bradford Scores' },
@@ -256,7 +257,7 @@ export default function AbsenceManager() {
                 {summary.map(s => {
                   const trigger = getAbsenceTriggerBadge(s.trigger_level);
                   return (
-                    <tr key={s.staff_id} className={TABLE.tr + ' cursor-pointer'} onClick={() => handleSelectStaff(s.staff_id)}>
+                    <tr key={s.staff_id} className={TABLE.tr + ' cursor-pointer'} {...clickableRowProps(() => handleSelectStaff(s.staff_id))}>
                       <td className={TABLE.td + ' font-medium'}>{s.staff_id}</td>
                       <td className={TABLE.tdMono}>{s.spells ?? 0}</td>
                       <td className={TABLE.tdMono}>{s.days ?? 0}</td>
