@@ -135,7 +135,7 @@ export default function ExpenseTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto`}>

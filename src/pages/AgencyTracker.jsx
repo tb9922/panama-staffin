@@ -63,7 +63,7 @@ function ProviderModal({ existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Provider' : 'Add Agency Provider'}>
-      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
+      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
       <div className="space-y-4">
         <div>
           <label className={INPUT.label}>Provider Name *</label>
@@ -164,7 +164,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Agency Shift' : 'Log Agency Shift'} size="lg">
-      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
+      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -324,7 +324,7 @@ export default function AgencyTracker() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
       )}
 
       {/* Summary Cards */}

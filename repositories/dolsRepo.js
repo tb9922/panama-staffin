@@ -2,6 +2,17 @@ import { pool } from '../db.js';
 
 const ts = v => v instanceof Date ? v.toISOString() : v;
 
+/* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */
+const DOLS_COLS = `id, home_id, resident_name, dob, room_number,
+  application_type, application_date, authorised,
+  authorisation_date, expiry_date, authorisation_number, authorising_authority,
+  restrictions, reviewed_date, review_status, next_review_date,
+  notes, version, updated_at, created_at, deleted_at`;
+
+const MCA_COLS = `id, home_id, resident_name, assessment_date, assessor,
+  decision_area, lacks_capacity, best_interest_decision,
+  next_review_date, notes, version, updated_at, created_at, deleted_at`;
+
 function shapeDolsRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -32,7 +43,7 @@ function paginate(rows, shapeFn) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM dols
+    `SELECT ${DOLS_COLS}, COUNT(*) OVER() AS _total FROM dols
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY application_date DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
@@ -106,7 +117,7 @@ import { randomUUID } from 'crypto';
 
 export async function findDolsById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM dols WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${DOLS_COLS} FROM dols WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeDolsRow(rows[0]) : null;
@@ -129,7 +140,7 @@ export async function upsertDols(homeId, data) {
        authorisation_date=$9,expiry_date=$10,authorisation_number=$11,
        authorising_authority=$12,restrictions=$13,reviewed_date=$14,
        review_status=$15,next_review_date=$16,notes=$17,updated_at=$18,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${DOLS_COLS}`,
     [
       id, homeId, data.resident_name || null, data.dob || null, data.room_number || null,
       data.application_type || null, data.application_date || null,
@@ -162,7 +173,7 @@ export async function updateDols(id, homeId, data, version) {
   const params = [id, homeId, ...values];
   let sql = `UPDATE dols SET ${setClause}, version = version + 1, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${DOLS_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeDolsRow(rows[0]) : null;
@@ -178,7 +189,7 @@ export async function softDeleteDols(id, homeId) {
 
 export async function findMcaByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM mca_assessments
+    `SELECT ${MCA_COLS}, COUNT(*) OVER() AS _total FROM mca_assessments
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY assessment_date DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
@@ -240,7 +251,7 @@ export async function syncMca(homeId, arr, client) {
 
 export async function findMcaById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM mca_assessments WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${MCA_COLS} FROM mca_assessments WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeMcaRow(rows[0]) : null;
@@ -259,7 +270,7 @@ export async function upsertMca(homeId, data) {
        resident_name=$3,assessment_date=$4,assessor=$5,
        decision_area=$6,lacks_capacity=$7,best_interest_decision=$8,
        next_review_date=$9,notes=$10,updated_at=$11,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${MCA_COLS}`,
     [
       id, homeId, data.resident_name || null, data.assessment_date || null,
       data.assessor || null, data.decision_area || null,
@@ -285,7 +296,7 @@ export async function updateMca(id, homeId, data, version) {
   const params = [id, homeId, ...values];
   let sql = `UPDATE mca_assessments SET ${setClause}, version = version + 1, updated_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${MCA_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeMcaRow(rows[0]) : null;

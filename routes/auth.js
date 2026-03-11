@@ -53,8 +53,11 @@ router.post('/', loginLimiter, async (req, res, next) => {
       maxAge: 4 * 60 * 60 * 1000,
     });
 
-    // Token is also in body for API clients and integration tests.
+    // Security trade-off: token is included in the response body for API clients
+    // using Bearer auth and integration tests (30+ test files read res.body.token).
     // The frontend ignores it — the HttpOnly cookie is the auth mechanism.
+    // If removing, all integration tests and any external API consumers would need
+    // to extract the JWT from the Set-Cookie header instead.
     res.json(result);
   } catch (err) {
     // Log failed login attempt for brute-force detection

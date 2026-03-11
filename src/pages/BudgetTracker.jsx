@@ -38,7 +38,7 @@ export default function BudgetTracker() {
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading budget data...</div>;
-  if (error) return <div className="p-6 text-red-600">Error: {error}</div>;
+  if (error) return <div className="p-6 text-red-600" role="alert">Error: {error}</div>;
   if (!schedData) return null;
 
   return <BudgetTrackerInner schedData={schedData} setSchedData={setSchedData} editingBudget={editingBudget} setEditingBudget={setEditingBudget} budgetInput={budgetInput} setBudgetInput={setBudgetInput} agencyCapInput={agencyCapInput} setAgencyCapInput={setAgencyCapInput} />;

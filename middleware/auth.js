@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess } from '../repositories/userHomeRepo.js';
@@ -23,7 +24,10 @@ export function requireAuth(req, res, next) {
     if (!safeMethod) {
       const cookieToken = req.cookies.panama_csrf;
       const headerToken = req.headers['x-csrf-token'];
-      if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      const tokensMatch = cookieToken && headerToken &&
+        cookieToken.length === headerToken.length &&
+        timingSafeEqual(Buffer.from(cookieToken, 'utf8'), Buffer.from(headerToken, 'utf8'));
+      if (!tokensMatch) {
         return res.status(403).json({ error: 'CSRF token mismatch' });
       }
     }

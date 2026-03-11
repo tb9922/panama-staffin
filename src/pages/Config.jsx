@@ -285,8 +285,8 @@ export default function Config() {
               const ly = config.leave_year_start || '04-01';
               const [mm, dd] = ly.split('-').map(Number);
               const now = new Date();
-              const thisYr = new Date(Date.UTC(now.getFullYear(), mm - 1, dd));
-              const start = now >= thisYr ? thisYr : new Date(Date.UTC(now.getFullYear() - 1, mm - 1, dd));
+              const thisYr = new Date(Date.UTC(now.getUTCFullYear(), mm - 1, dd));
+              const start = now >= thisYr ? thisYr : new Date(Date.UTC(now.getUTCFullYear() - 1, mm - 1, dd));
               const end = new Date(start); end.setUTCFullYear(end.getUTCFullYear() + 1); end.setUTCDate(end.getUTCDate() - 1);
               const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
               return <p className="text-xs text-gray-400 mt-1">Current: {fmt(start)} – {fmt(end)}</p>;

@@ -14,6 +14,7 @@ import { calculateAge } from './payroll.js';
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 function round2(n) {
+  if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
@@ -488,13 +489,15 @@ export function calculateSSP(sickPeriod, payDate, sspConfig) {
 
   if (!isQualifyingDay) return ZERO;
 
-  // Count qualifying days from start of period to this date
-  let qualDayCount = 0;
-  const cursor = new Date(startDate);
-  while (cursor <= payD) {
-    const dow = cursor.getUTCDay();
+  // Count qualifying days (Mon-Fri) from start of period to this date — O(1) formula
+  const totalDays = Math.floor((payD - startDate) / 86400000) + 1;
+  const fullWeeks = Math.floor(totalDays / 7);
+  const remainderDays = totalDays % 7;
+  const startDow = startDate.getUTCDay();
+  let qualDayCount = fullWeeks * 5;
+  for (let i = 0; i < remainderDays; i++) {
+    const dow = (startDow + i) % 7;
     if (dow >= 1 && dow <= 5) qualDayCount++;
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   // If still within waiting period

@@ -219,7 +219,7 @@ export default function PerformanceTracker() {
       {/* Modal */}
       {showModal && (
         <ModalWrapper isOpen={showModal} onClose={() => { setShowModal(false); setForm(emptyForm()); setEditing(null); setError(null); }} title={editing ? 'Edit Performance Case' : 'New Performance Case'} size="xl">
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
             {/* Modal tab bar */}
             <TabBar tabs={MODAL_TABS} activeTab={modalTab} onTabChange={setModalTab} />
 

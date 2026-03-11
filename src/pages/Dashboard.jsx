@@ -64,7 +64,7 @@ export default function Dashboard() {
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
   return <DashboardInner schedData={schedData} />;
 }

@@ -298,7 +298,7 @@ export default function GrievanceTracker() {
           {modalTab === 'actions' && renderActionsTab()}
           {modalTab === 'notes' && renderNotesTab()}
 
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3" role="alert">{error}</div>}
           <div className={MODAL.footer}>
             <button className={BTN.secondary} onClick={closeModal} disabled={saving}>Cancel</button>
             <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>

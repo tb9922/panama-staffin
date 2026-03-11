@@ -105,6 +105,15 @@ export async function logDelivery(webhookId, event, payload, statusCode, respons
   );
 }
 
+export async function purgeDeliveriesOlderThan(days, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    `DELETE FROM webhook_deliveries WHERE delivered_at < NOW() - INTERVAL '1 day' * $1`,
+    [days]
+  );
+  return rowCount;
+}
+
 export async function getRecentDeliveries(webhookId, homeId, limit = 50) {
   const { rows } = await pool.query(
     `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.status_code,

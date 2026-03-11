@@ -215,9 +215,11 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHom
         }, client);
       });
     } else {
-      // Non-AL shifts: al_hours should be null
-      await overrideRepo.upsertOne(req.home.id, date, staffId, {
-        shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours: null,
+      // Non-AL shifts: al_hours should be null — wrap in transaction for atomicity
+      await withTransaction(async (client) => {
+        await overrideRepo.upsertOne(req.home.id, date, staffId, {
+          shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours: null,
+        }, client);
       });
     }
     await auditService.log('override_upsert', req.home.slug, req.user.username, {

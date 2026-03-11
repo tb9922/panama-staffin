@@ -23,7 +23,6 @@
     "@sentry/react": "^10.40.0",
     "@tailwindcss/vite": "^4.2.1",
     "bcryptjs": "^3.0.3",
-    "concurrently": "^9.2.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "exceljs": "^4.4.0",
@@ -44,6 +43,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^6.9.1",

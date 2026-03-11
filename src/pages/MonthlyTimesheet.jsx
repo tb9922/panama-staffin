@@ -553,7 +553,7 @@ export default function MonthlyTimesheet() {
         </div>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+      {error && <p className="text-red-600 text-sm mb-4" role="alert">{error}</p>}
 
       {/* Action buttons */}
       {isAdmin && (

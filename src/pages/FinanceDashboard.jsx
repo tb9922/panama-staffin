@@ -98,7 +98,7 @@ export default function FinanceDashboard() {
       </div>
 
       {datesReversed && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg mb-4 text-sm">"From" date is after "To" date — adjust the date range to load data.</div>}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
 
       {/* KPI Cards */}
       {dashboard && (

@@ -275,7 +275,7 @@ export default function PayrollDetail() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
       )}
 
       {/* NMW Alert Banner */}

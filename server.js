@@ -50,6 +50,7 @@ import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
 import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
+import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from './repositories/webhookRepo.js';
 
 const app = express();
 
@@ -233,6 +234,11 @@ const server = isMainModule ? app.listen(config.port, async () => {
   // Purge audit entries past 7-year retention daily
   setInterval(
     () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
+    24 * 60 * 60 * 1000
+  ).unref();
+  // Purge webhook delivery logs past 90-day retention daily
+  setInterval(
+    () => purgeWebhookDeliveries(90).catch(err => logger.warn({ err: err?.message }, 'webhook delivery purge failed')),
     24 * 60 * 60 * 1000
   ).unref();
 }) : null;

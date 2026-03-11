@@ -60,6 +60,7 @@ const AuditLog = lazy(() => import('../pages/AuditLog.jsx'));
 const BedManager = lazy(() => import('../pages/BedManager.jsx'));
 const Residents = lazy(() => import('../pages/Residents.jsx'));
 const PlatformHomes = lazy(() => import('../pages/PlatformHomes.jsx'));
+const NotFound = lazy(() => import('../pages/NotFound.jsx'));
 
 export default function AppRoutes() {
   return (
@@ -133,6 +134,9 @@ export default function AppRoutes() {
 
       {/* Platform admin only */}
       <Route path="/platform/homes" element={<RouteErrorBoundary><RequirePlatformAdmin><PlatformHomes /></RequirePlatformAdmin></RouteErrorBoundary>} />
+
+      {/* 404 catch-all */}
+      <Route path="*" element={<RouteErrorBoundary><NotFound /></RouteErrorBoundary>} />
     </Routes>
   );
 }

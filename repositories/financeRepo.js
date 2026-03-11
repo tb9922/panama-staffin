@@ -4,6 +4,56 @@ function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 const f = v => v != null ? parseFloat(v) : null;
 
+/* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */
+const RESIDENT_COLS = `id, home_id, resident_name, room_number,
+  admission_date, discharge_date, care_type,
+  funding_type, funding_authority, funding_reference,
+  weekly_fee, la_contribution, chc_contribution, fnc_amount,
+  top_up_amount, top_up_payer, top_up_contact,
+  last_fee_review, next_fee_review,
+  last_payment_date, last_payment_amount, outstanding_balance,
+  status, notes, version,
+  created_by, created_at, updated_at`;
+
+const INVOICE_COLS = `id, home_id, invoice_number, resident_id,
+  payer_type, payer_name, payer_reference,
+  period_start, period_end,
+  subtotal, adjustments, total_amount, amount_paid, balance_due,
+  status, issue_date, due_date, paid_date,
+  payment_method, payment_reference,
+  notes, version,
+  created_by, created_at, updated_at`;
+
+const INVOICE_LINE_COLS = `id, invoice_id, home_id,
+  description, quantity, unit_price, amount, line_type,
+  created_at`;
+
+const EXPENSE_COLS = `id, home_id,
+  expense_date, category, subcategory, description, supplier, invoice_ref,
+  net_amount, vat_amount, gross_amount,
+  status, approved_by, approved_date,
+  rejected_by, rejected_date, rejection_reason,
+  paid_date, payment_method, payment_reference,
+  recurring, recurrence_frequency,
+  notes, version,
+  created_by, created_at, updated_at`;
+
+const FEE_CHANGE_COLS = `id, home_id, resident_id,
+  effective_date, previous_weekly, new_weekly,
+  reason, approved_by, notes,
+  created_by, created_at`;
+
+const CHASE_COLS = `id, home_id, invoice_id,
+  chase_date, method, contact_name, outcome,
+  next_action_date, notes,
+  created_by, created_at`;
+
+const SCHEDULE_COLS = `id, home_id,
+  supplier, category, description, frequency, amount,
+  next_due, auto_approve, on_hold, hold_reason,
+  notes, version,
+  created_by, created_at, updated_at`;
+
 // ── Finance Residents ─────────────────────────────────────────────────────────
 
 function shapeResident(row) {
@@ -29,7 +79,7 @@ function shapeResident(row) {
 
 export async function findResidents(homeId, { status, fundingType, limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
-  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_residents WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${RESIDENT_COLS}, COUNT(*) OVER() AS _total FROM finance_residents WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
   if (fundingType) { params.push(fundingType); sql += ` AND funding_type = $${params.length}`; }
@@ -56,8 +106,9 @@ function shapeResidentWithBed(row) {
 
 export async function findResidentsWithBeds(homeId, { status, fundingType, search, limit = 200, offset = 0 } = {}, client) {
   const conn = client || pool;
+  const frCols = RESIDENT_COLS.split(',').map(c => `fr.${c.trim()}`).join(', ');
   let sql = `
-    SELECT fr.*, COUNT(*) OVER() AS _total,
+    SELECT ${frCols}, COUNT(*) OVER() AS _total,
       b.id AS bed_id, b.room_number AS bed_room, b.room_type AS bed_room_type,
       b.floor AS bed_floor, b.status AS bed_status
     FROM finance_residents fr
@@ -79,7 +130,7 @@ export async function findResidentsWithBeds(homeId, { status, fundingType, searc
 export async function findResidentById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${RESIDENT_COLS} FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeResident(rows[0]);
 }
 
@@ -93,7 +144,7 @@ export async function createResident(homeId, data, client) {
         top_up_amount, top_up_payer, top_up_contact,
         last_fee_review, next_fee_review, status, notes, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-     RETURNING *`,
+     RETURNING ${RESIDENT_COLS}`,
     [homeId, data.resident_name, data.room_number || null,
      data.admission_date || null, data.discharge_date || null,
      data.care_type ?? 'residential',
@@ -127,7 +178,7 @@ export async function updateResident(id, homeId, data, client, version) {
   fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_residents SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${RESIDENT_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeResident(rows[0]) : null;
@@ -202,7 +253,7 @@ function shapeFeeChange(row) {
 export async function findFeeChanges(residentId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM finance_fee_changes WHERE resident_id = $1 AND home_id = $2 ORDER BY effective_date DESC',
+    `SELECT ${FEE_CHANGE_COLS} FROM finance_fee_changes WHERE resident_id = $1 AND home_id = $2 ORDER BY effective_date DESC`,
     [residentId, homeId]);
   return rows.map(shapeFeeChange);
 }
@@ -212,7 +263,7 @@ export async function createFeeChange(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO finance_fee_changes
        (home_id, resident_id, effective_date, previous_weekly, new_weekly, reason, approved_by, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${FEE_CHANGE_COLS}`,
     [homeId, data.resident_id, data.effective_date,
      data.previous_weekly ?? null, data.new_weekly,
      data.reason || null, data.approved_by || null, data.notes || null, data.created_by]
@@ -251,7 +302,7 @@ function shapeInvoiceLine(row) {
 
 export async function findInvoices(homeId, { status, payerType, from, to, residentId, limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
-  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_invoices WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${INVOICE_COLS}, COUNT(*) OVER() AS _total FROM finance_invoices WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
   if (payerType) { params.push(payerType); sql += ` AND payer_type = $${params.length}`; }
@@ -268,7 +319,7 @@ export async function findInvoices(homeId, { status, payerType, from, to, reside
 
 export async function findInvoiceById(id, homeId, client, { forUpdate } = {}) {
   const conn = client || pool;
-  const sql = `SELECT * FROM finance_invoices WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
+  const sql = `SELECT ${INVOICE_COLS} FROM finance_invoices WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
   const { rows } = await conn.query(sql, [id, homeId]);
   return shapeInvoice(rows[0]);
 }
@@ -298,7 +349,7 @@ export async function createInvoice(homeId, data, client) {
         period_start, period_end, subtotal, adjustments, total_amount, amount_paid, balance_due,
         status, issue_date, due_date, notes, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-     RETURNING *`,
+     RETURNING ${INVOICE_COLS}`,
     [homeId, data.invoice_number, data.resident_id || null,
      data.payer_type, data.payer_name, data.payer_reference || null,
      data.period_start || null, data.period_end || null,
@@ -331,7 +382,7 @@ export async function updateInvoice(id, homeId, data, client, version) {
   fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_invoices SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${INVOICE_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeInvoice(rows[0]) : null;
@@ -342,7 +393,7 @@ export async function updateInvoice(id, homeId, data, client, version) {
 export async function findInvoiceLines(invoiceId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM finance_invoice_lines WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL ORDER BY id',
+    `SELECT ${INVOICE_LINE_COLS} FROM finance_invoice_lines WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL ORDER BY id`,
     [invoiceId, homeId]);
   return rows.map(shapeInvoiceLine);
 }
@@ -351,7 +402,7 @@ export async function createInvoiceLine(invoiceId, homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO finance_invoice_lines (invoice_id, home_id, description, quantity, unit_price, amount, line_type)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ${INVOICE_LINE_COLS}`,
     [invoiceId, homeId, data.description, data.quantity ?? 1, data.unit_price, data.amount, data.line_type ?? 'fee']);
   return shapeInvoiceLine(rows[0]);
 }
@@ -385,7 +436,7 @@ function shapeExpense(row) {
 
 export async function findExpenses(homeId, { category, status, from, to, limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
-  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_expenses WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${EXPENSE_COLS}, COUNT(*) OVER() AS _total FROM finance_expenses WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (category) { params.push(category); sql += ` AND category = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
@@ -403,7 +454,7 @@ export async function findExpenseById(id, homeId, client, options = {}) {
   const conn = client || pool;
   const forUpdate = options.forUpdate ? ' FOR UPDATE' : '';
   const { rows } = await conn.query(
-    `SELECT * FROM finance_expenses WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate}`,
+    `SELECT ${EXPENSE_COLS} FROM finance_expenses WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate}`,
     [id, homeId]);
   return shapeExpense(rows[0]);
 }
@@ -417,7 +468,7 @@ export async function createExpense(homeId, data, client) {
         approved_by, approved_date, paid_date, payment_method, payment_reference,
         recurring, recurrence_frequency, notes, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-     RETURNING *`,
+     RETURNING ${EXPENSE_COLS}`,
     [homeId, data.expense_date, data.category, data.subcategory || null,
      data.description, data.supplier || null, data.invoice_ref || null,
      data.net_amount, data.vat_amount ?? 0, data.gross_amount,
@@ -451,7 +502,7 @@ export async function updateExpense(id, homeId, data, client, version) {
   fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_expenses SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${EXPENSE_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeExpense(rows[0]) : null;
@@ -615,7 +666,7 @@ function shapeChase(row) {
 export async function findChasesByInvoice(invoiceId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM finance_invoice_chase
+    `SELECT ${CHASE_COLS} FROM finance_invoice_chase
      WHERE invoice_id = $1 AND home_id = $2 AND deleted_at IS NULL
      ORDER BY chase_date DESC, id DESC`,
     [invoiceId, homeId]);
@@ -628,7 +679,7 @@ export async function createChase(homeId, data, client) {
     `INSERT INTO finance_invoice_chase
        (home_id, invoice_id, chase_date, method, contact_name, outcome,
         next_action_date, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${CHASE_COLS}`,
     [homeId, data.invoice_id, data.chase_date, data.method,
      data.contact_name || null, data.outcome || null,
      data.next_action_date || null, data.notes || null, data.created_by]);
@@ -638,7 +689,8 @@ export async function createChase(homeId, data, client) {
 export async function getChasesDueForAction(homeId, beforeDate, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT c.*, i.invoice_number, i.payer_name, i.balance_due
+    `SELECT ${CHASE_COLS.split(',').map(c => `c.${c.trim()}`).join(', ')},
+       i.invoice_number, i.payer_name, i.balance_due
      FROM finance_invoice_chase c
      JOIN finance_invoices i ON i.id = c.invoice_id AND i.deleted_at IS NULL
      WHERE c.home_id = $1 AND c.deleted_at IS NULL
@@ -656,7 +708,7 @@ export async function getChasesDueForAction(homeId, beforeDate, client) {
 export async function getLastChasePerInvoice(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT DISTINCT ON (invoice_id) *
+    `SELECT DISTINCT ON (invoice_id) ${CHASE_COLS}
      FROM finance_invoice_chase
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY invoice_id, chase_date DESC, id DESC`,
@@ -682,7 +734,7 @@ function shapeSchedule(row) {
 
 export async function findPaymentSchedules(homeId, { onHold, dueBefore, limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
-  let sql = 'SELECT *, COUNT(*) OVER() AS _total FROM finance_payment_schedule WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${SCHEDULE_COLS}, COUNT(*) OVER() AS _total FROM finance_payment_schedule WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (onHold !== undefined) { params.push(onHold); sql += ` AND on_hold = $${params.length}`; }
   if (dueBefore) { params.push(dueBefore); sql += ` AND next_due <= $${params.length}`; }
@@ -697,7 +749,7 @@ export async function findPaymentSchedules(homeId, { onHold, dueBefore, limit = 
 export async function findPaymentScheduleById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM finance_payment_schedule WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${SCHEDULE_COLS} FROM finance_payment_schedule WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeSchedule(rows[0]);
 }
 
@@ -707,7 +759,7 @@ export async function createPaymentSchedule(homeId, data, client) {
     `INSERT INTO finance_payment_schedule
        (home_id, supplier, category, description, frequency, amount, next_due,
         auto_approve, on_hold, hold_reason, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${SCHEDULE_COLS}`,
     [homeId, data.supplier, data.category, data.description || null,
      data.frequency, data.amount, data.next_due,
      data.auto_approve ?? false, data.on_hold ?? false, data.hold_reason || null,
@@ -731,7 +783,7 @@ export async function updatePaymentSchedule(id, homeId, data, client, version) {
   fields.push('version = version + 1', 'updated_at = NOW()');
   let sql = `UPDATE finance_payment_schedule SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${SCHEDULE_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeSchedule(rows[0]) : null;
@@ -740,7 +792,7 @@ export async function updatePaymentSchedule(id, homeId, data, client, version) {
 export async function getUpcomingPayments(homeId, withinDate, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM finance_payment_schedule
+    `SELECT ${SCHEDULE_COLS} FROM finance_payment_schedule
      WHERE home_id = $1 AND deleted_at IS NULL AND on_hold = false AND next_due <= $2
      ORDER BY next_due ASC`,
     [homeId, withinDate]);

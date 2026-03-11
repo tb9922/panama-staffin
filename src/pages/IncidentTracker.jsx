@@ -298,7 +298,7 @@ export default function IncidentTracker() {
         </div>
       </div>
 
-      {error && <div className="mb-4 text-red-600 text-sm">{error}</div>}
+      {error && <div className="mb-4 text-red-600 text-sm" role="alert">{error}</div>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">

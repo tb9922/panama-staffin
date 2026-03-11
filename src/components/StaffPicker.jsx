@@ -2,18 +2,6 @@ import { useState, useEffect } from 'react';
 import { INPUT } from '../lib/design.js';
 import { getCurrentHome, getHrStaffList } from '../lib/api.js';
 
-const staffCache = new Map();
-
-async function loadStaff(home) {
-  if (staffCache.has(home)) return staffCache.get(home);
-  const list = await getHrStaffList(home);
-  staffCache.set(home, list);
-  return list;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function clearStaffCache() { staffCache.clear(); }
-
 export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -23,7 +11,7 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
     if (!home) return;
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    loadStaff(home).then(list => {
+    getHrStaffList(home).then(list => {
       if (!cancelled) { setStaff(list); setLoading(false); }
     }).catch((err) => { if (!cancelled) { setLoading(false); console.error('Failed to load staff list', err); } });
     return () => { cancelled = true; };

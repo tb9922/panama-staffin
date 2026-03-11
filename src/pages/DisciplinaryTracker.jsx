@@ -254,7 +254,7 @@ export default function DisciplinaryTracker() {
           {/* Modal tabs */}
           <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes')} activeTab={modalTab} onTabChange={setModalTab} />
 
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
 
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'investigation' && renderInvestigationTab()}

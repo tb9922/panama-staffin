@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import StaffPicker, { clearStaffCache } from '../StaffPicker.jsx';
+import StaffPicker from '../StaffPicker.jsx';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -26,8 +26,6 @@ const MOCK_STAFF = [
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  // Clear the module-level staff cache between tests so each test gets fresh data
-  clearStaffCache();
   api.getHrStaffList.mockResolvedValue(MOCK_STAFF);
 });
 
@@ -111,7 +109,6 @@ describe('StaffPicker', () => {
 
   it('is disabled while loading staff list', () => {
     api.getHrStaffList.mockReturnValue(new Promise(() => {}));
-    clearStaffCache();
     render(<StaffPicker value="" onChange={vi.fn()} />);
     expect(screen.getByRole('combobox')).toBeDisabled();
   });

@@ -57,7 +57,7 @@ export default function PlatformHomes() {
         <button className={BTN.primary} onClick={() => setAddOpen(true)}>Add Home</button>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4">{error}</div>}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4" role="alert">{error}</div>}
       {success && <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{success}</div>}
 
       <div className={CARD.base}>
@@ -136,7 +136,7 @@ function CreateHomeModal({ onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Create Home">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {err && <div className="text-red-600 text-sm">{err}</div>}
+        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
 
         <div>
           <label className={INPUT.label}>Home Name *</label>
@@ -208,7 +208,7 @@ function EditHomeModal({ home, onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Edit Home">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {err && <div className="text-red-600 text-sm">{err}</div>}
+        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
 
         <div>
           <label className={INPUT.label}>Slug</label>
@@ -273,7 +273,7 @@ function DeleteHomeModal({ home, onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Delete Home">
       <div className="space-y-4">
-        {err && <div className="text-red-600 text-sm">{err}</div>}
+        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800 text-sm font-medium">This will soft-delete the home and revoke access for all users.</p>

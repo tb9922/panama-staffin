@@ -2,6 +2,23 @@ import { pool } from '../db.js';
 
 const ts = v => v instanceof Date ? v.toISOString() : v;
 
+/* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
+const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, description,
+  person_affected, person_affected_name, staff_involved, immediate_action,
+  medical_attention, hospital_attendance,
+  cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
+  cqc_notified, cqc_notified_date, cqc_reference,
+  riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+  safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
+  witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
+  police_involved, police_reference, police_contact_date,
+  msp_wishes_recorded, msp_outcome_preferences, msp_person_involved,
+  investigation_status, investigation_start_date, investigation_lead,
+  investigation_review_date, root_cause, lessons_learned, investigation_closed_date,
+  corrective_actions, reported_by, reported_at, updated_at, frozen_at, version`;
+
+const ADDENDUM_COLS = 'id, incident_id, home_id, author, content, created_at';
+
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -43,7 +60,7 @@ function paginate(rows, shapeFn) {
  */
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM incidents
+    `SELECT ${INCIDENT_COLS}, COUNT(*) OVER() AS _total FROM incidents
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY date DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
@@ -241,7 +258,7 @@ export async function isFrozen(incidentId, homeId) {
 export async function addAddendum(incidentId, homeId, author, content) {
   const { rows } = await pool.query(
     `INSERT INTO incident_addenda (incident_id, home_id, author, content)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
+     VALUES ($1, $2, $3, $4) RETURNING ${ADDENDUM_COLS}`,
     [incidentId, homeId, author, content]
   );
   return rows[0];
@@ -269,7 +286,7 @@ import { randomUUID } from 'crypto';
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM incidents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${INCIDENT_COLS} FROM incidents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
@@ -319,7 +336,7 @@ export async function upsert(homeId, data) {
        corrective_actions=$48,reported_by=$49,reported_at=$50,updated_at=$51,
        deleted_at=NULL
      WHERE incidents.frozen_at IS NULL
-     RETURNING *`,
+     RETURNING ${INCIDENT_COLS}`,
     [
       id, homeId, data.date || null, data.time || null, data.location || null,
       data.type || null, data.severity || null, data.description || null,
@@ -381,7 +398,7 @@ export async function update(id, homeId, data, version) {
   let sql = `UPDATE incidents SET ${setClause}, version = version + 1, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL AND frozen_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${INCIDENT_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
