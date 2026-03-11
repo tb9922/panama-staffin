@@ -39,7 +39,7 @@ export default function TrainingMatrix() {
   }, [homeSlug, refreshKey]);
 
   if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
+  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
   if (!state) return null;
 
   return (

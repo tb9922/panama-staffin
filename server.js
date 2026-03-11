@@ -50,6 +50,7 @@ import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
 import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
+import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from './repositories/webhookRepo.js';
 
 const app = express();
 
@@ -118,6 +119,13 @@ app.use('/api/beds', bedsRouter);
 app.use('/api/platform', platformRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/import', importRouter);
+
+// Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
+let shuttingDown = false;
+app.get('/readiness', (req, res) => {
+  if (shuttingDown) return res.status(503).json({ status: 'shutting_down' });
+  res.json({ status: 'ready' });
+});
 
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
@@ -225,21 +233,32 @@ const server = isMainModule ? app.listen(config.port, async () => {
   await ensureSeedUsers().catch(err =>
     logger.warn({ err: err?.message }, 'User seeding skipped')
   );
-  // Prune expired deny-list entries hourly
-  setInterval(
-    () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
-    60 * 60 * 1000
-  ).unref();
-  // Purge audit entries past 7-year retention daily
-  setInterval(
-    () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
-    24 * 60 * 60 * 1000
-  ).unref();
+  // Background cron jobs — only run on instance 0 in cluster mode.
+  // PM2 sets NODE_APP_INSTANCE for each worker; without it (fork mode / dev), run on all.
+  if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0') {
+    // Prune expired deny-list entries hourly
+    setInterval(
+      () => pruneDenyList().catch(err => logger.warn({ err: err?.message }, 'deny-list prune failed')),
+      60 * 60 * 1000
+    ).unref();
+    // Purge audit entries past 7-year retention daily
+    setInterval(
+      () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
+      24 * 60 * 60 * 1000
+    ).unref();
+    // Purge webhook delivery logs past 90-day retention daily
+    setInterval(
+      () => purgeWebhookDeliveries(90).catch(err => logger.warn({ err: err?.message }, 'webhook delivery purge failed')),
+      24 * 60 * 60 * 1000
+    ).unref();
+    logger.info('Background jobs registered (instance 0)');
+  }
 }) : null;
 
 // Graceful shutdown — drain in-flight requests then close DB pool
 function shutdown(signal) {
   logger.info({ signal }, 'shutdown signal received');
+  shuttingDown = true;
   if (!server) { process.exit(0); return; }
   server.close(async () => {
     logger.info('HTTP server closed');

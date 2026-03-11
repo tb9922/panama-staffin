@@ -251,7 +251,7 @@ export default function PolicyReviewTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-red-600 py-12 text-center">{error}</div>
+        <div className="text-sm text-red-600 py-12 text-center" role="alert">{error}</div>
       </div>
     );
   }

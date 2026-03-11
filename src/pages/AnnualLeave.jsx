@@ -39,8 +39,8 @@ export default function AnnualLeave() {
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
+  const homeSlug = getCurrentHome();
   const loadData = useCallback(async () => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     setLoading(true);
     try {
@@ -50,7 +50,7 @@ export default function AnnualLeave() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -195,7 +195,7 @@ export default function AnnualLeave() {
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
     </div>
   );
 

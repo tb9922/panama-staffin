@@ -4,6 +4,7 @@ import {
   getScheduledShift,
   getActualShift,
   formatDate,
+  parseDate,
   addDays,
   isBankHoliday,
   getStaffForDay,
@@ -559,5 +560,24 @@ describe('getALDeductionHours', () => {
     const staff = { id: 'S1', team: 'Day A', pref: 'EL', contract_hours: 36, start_date: '2024-01-01' };
     const hrs = getALDeductionHours(staff, '2025-01-06', { cycle_start_date: '2025-01-06', shifts: {} });
     expect(hrs).toBe(0); // missing config = cannot calculate
+  });
+});
+
+// ── addDays DST correctness ─────────────────────────────────────────────────
+
+describe('addDays DST boundaries', () => {
+  it('BST spring-forward: 2025-03-30 + 1 = 2025-03-31', () => {
+    const result = addDays(parseDate('2025-03-30'), 1);
+    expect(formatDate(result)).toBe('2025-03-31');
+  });
+
+  it('BST autumn-back: 2025-10-26 + 1 = 2025-10-27', () => {
+    const result = addDays(parseDate('2025-10-26'), 1);
+    expect(formatDate(result)).toBe('2025-10-27');
+  });
+
+  it('non-leap year boundary: 2025-02-28 + 1 = 2025-03-01', () => {
+    const result = addDays(parseDate('2025-02-28'), 1);
+    expect(formatDate(result)).toBe('2025-03-01');
   });
 });

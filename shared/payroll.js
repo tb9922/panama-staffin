@@ -423,6 +423,7 @@ export function buildGenericCSV(payrollLines, staffMap, run, ytdMap = null) {
 // ── Internal Helpers ──────────────────────────────────────────────────────────
 
 function round2(n) {
+  if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 

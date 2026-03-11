@@ -92,8 +92,8 @@ export default function RotationGrid() {
   const [bulkModal, setBulkModal] = useState(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
+  const homeSlug = getCurrentHome();
   const loadData = useCallback(async () => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     setLoading(true);
     try {
@@ -103,7 +103,7 @@ export default function RotationGrid() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -409,7 +409,7 @@ export default function RotationGrid() {
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
     </div>
   );
 

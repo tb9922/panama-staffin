@@ -756,7 +756,7 @@ export default function OnboardingTracker() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8">{error}</p></div>;
+  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';
   const staffName = activeStaff.find(s => s.id === modalStaffId)?.name || '';
@@ -771,7 +771,7 @@ export default function OnboardingTracker() {
         <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
+      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert">{error}</div>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">

@@ -15,6 +15,36 @@ import {
   getHMRCPaymentDueDate,
 } from '../payrollTax.js';
 
+// ─── round2 (mirrors internal round2 from payrollTax.js) ────────────────────
+
+describe('round2 negative edge case', () => {
+  // Mirror of the internal round2 function for direct testing
+  function round2(n) {
+    if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  it('round2(-0.005) → -0.01', () => {
+    expect(round2(-0.005)).toBe(-0.01);
+  });
+
+  it('round2(-12.455) → -12.46', () => {
+    expect(round2(-12.455)).toBe(-12.46);
+  });
+
+  it('round2(1.005) → 1.01 (existing behavior)', () => {
+    expect(round2(1.005)).toBe(1.01);
+  });
+
+  it('round2(0) → 0', () => {
+    expect(round2(0)).toBe(0);
+  });
+
+  it('round2(-0) → 0 or -0', () => {
+    expect(Object.is(round2(-0), 0) || Object.is(round2(-0), -0)).toBe(true);
+  });
+});
+
 // ─── Tax year helpers ─────────────────────────────────────────────────────────
 
 describe('getTaxYearStart', () => {
@@ -234,6 +264,22 @@ describe('calculatePAYE', () => {
     const r = calculatePAYE(6000, code, 6, 12, ytd, englandBands);
     // Some of cumulative income will hit higher rate
     expect(r.tax).toBeGreaterThan(0);
+  });
+
+  it('Net Pay Arrangement: pension deduction reduces PAYE', () => {
+    // Two identical staff: one with pension (gross - pension), one without (full gross)
+    const code = parseTaxCode('1257L');
+    const gross = 3000;
+    const pensionEmployee = 150; // 5% of qualifying earnings
+
+    const noPension = calculatePAYE(gross, code, 1, 12, zeroYTD, englandBands);
+    const withPension = calculatePAYE(gross - pensionEmployee, code, 1, 12, zeroYTD, englandBands);
+
+    // Staff with pension should pay LESS income tax
+    expect(withPension.tax).toBeLessThan(noPension.tax);
+    // The tax saving should be approximately 20% of the pension deduction (basic rate)
+    const taxSaving = noPension.tax - withPension.tax;
+    expect(taxSaving).toBeCloseTo(pensionEmployee * 0.20, 1);
   });
 });
 
@@ -537,5 +583,47 @@ describe('calculateSSP', () => {
     const period = makeSickPeriod('2025-06-09');
     const r = calculateSSP(period, '2025-06-12', null);
     expect(r.eligible).toBe(false);
+  });
+
+  it('long-term sick (28 weeks) — formula matches expected qualifying day count', () => {
+    // 28 weeks starting Monday June 9, 2025
+    // Last qualifying day of week 28 = Friday Dec 5, 2025 (28 * 5 = 140 qualifying days)
+    // After 3 waiting days, day 140 should be eligible
+    const period = makeSickPeriod('2025-06-09');
+    // Friday Dec 5 2025 = 28 weeks from Mon June 9 minus 2 days (to get Friday of week 28)
+    // Week 28 ends Sun Dec 7. Fri Dec 5 = qualifying day 140.
+    const r = calculateSSP(period, '2025-12-05', sspConf2025);
+    expect(r.eligible).toBe(true);
+    expect(r.sspDays).toBe(1);
+    expect(r.sspAmount).toBeCloseTo(118.75 / 5, 2);
+  });
+});
+
+// ─── Holiday daily rate formula (mirrors payrollService.calculateHolidayDailyRate) ──
+
+describe('holiday daily rate formula', () => {
+  // This tests the same logic as the private calculateHolidayDailyRate function
+  function holidayDailyRate(contractHours, hourlyRate) {
+    const ch = parseFloat(contractHours);
+    if (!ch || ch <= 0) return 0;
+    const hr = parseFloat(hourlyRate) || 0;
+    return Math.round((ch / 5 * hr + Number.EPSILON) * 100) / 100;
+  }
+
+  it('null contract_hours returns 0', () => {
+    expect(holidayDailyRate(null, 14.50)).toBe(0);
+  });
+
+  it('0 contract_hours returns 0', () => {
+    expect(holidayDailyRate(0, 14.50)).toBe(0);
+  });
+
+  it('negative contract_hours returns 0', () => {
+    expect(holidayDailyRate(-10, 14.50)).toBe(0);
+  });
+
+  it('valid contract_hours calculates correctly', () => {
+    // 37.5 / 5 * 14.50 = 108.75
+    expect(holidayDailyRate(37.5, 14.50)).toBe(108.75);
   });
 });

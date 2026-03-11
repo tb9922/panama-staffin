@@ -1,5 +1,11 @@
 import { pool, toDateStr } from '../db.js';
 
+/* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
+const STAFF_COLS = `id, home_id, name, role, team, pref, skill, hourly_rate,
+  active, wtr_opt_out, start_date, contract_hours,
+  date_of_birth, ni_number, al_entitlement, al_carryover,
+  leaving_date, version, created_at, updated_at, deleted_at`;
+
 function shapeRow(row) {
   return {
     id: row.id,
@@ -29,7 +35,7 @@ function shapeRow(row) {
 export async function findByHome(homeId, { limit = 200, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM staff
+    `SELECT ${STAFF_COLS}, COUNT(*) OVER() AS _total FROM staff
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY name LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 1000), Math.max(offset, 0)]
@@ -112,7 +118,7 @@ export async function sync(homeId, staffArr, client) {
  */
 export async function findById(homeId, staffId) {
   const { rows } = await pool.query(
-    'SELECT * FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL',
+    `SELECT ${STAFF_COLS} FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
@@ -136,7 +142,7 @@ export async function upsertOne(homeId, staff) {
        date_of_birth=$13, ni_number=$14, contract_hours=$15,
        al_entitlement=$16, al_carryover=$17, updated_at=NOW(),
        deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${STAFF_COLS}`,
     [
       staff.id, homeId, staff.name, staff.role || null, staff.team || null,
       staff.pref || null,
@@ -184,7 +190,7 @@ export async function updateOne(homeId, staffId, fields, version) {
   }
   if (setClauses.length === 0) {
     const { rows } = await pool.query(
-      'SELECT * FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL',
+      `SELECT ${STAFF_COLS} FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
       [homeId, staffId]
     );
     return rows[0] ? shapeRow(rows[0]) : null;
@@ -193,7 +199,7 @@ export async function updateOne(homeId, staffId, fields, version) {
   setClauses.push('version = version + 1');
   let sql = `UPDATE staff SET ${setClauses.join(', ')} WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${STAFF_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

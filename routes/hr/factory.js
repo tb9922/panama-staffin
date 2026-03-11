@@ -2,6 +2,7 @@ import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/a
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { diffFields } from '../../lib/hrFieldMappers.js';
+import { zodError } from '../../errors.js';
 import { z } from 'zod';
 import { idSchema } from './schemas.js';
 
@@ -33,7 +34,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
   router.post(path, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
     try {
       const parsed = bodySchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
+      if (!parsed.success) return zodError(res, parsed);
       const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
       const result = await repoCreate(req.home.id, { ...mapped, created_by: req.user.username });
       await auditService.log(`hr_${prefix}_create`, req.home.slug, req.user.username, { id: result.id });
@@ -61,7 +62,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
       const versionedSchema = updateSchema.extend({ _version: z.number().int().nonnegative().optional() });
       const parsed = versionedSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message, details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
+      if (!parsed.success) return zodError(res, parsed);
 
       const version = parsed.data._version != null ? parsed.data._version : null;
       const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;

@@ -40,7 +40,7 @@ export default function ScenarioModel() {
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading scenario data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
   return <ScenarioModelInner schedData={schedData} customSick={customSick} setCustomSick={setCustomSick} customAL={customAL} setCustomAL={setCustomAL} customName={customName} setCustomName={setCustomName} />;
 }

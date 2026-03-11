@@ -1,5 +1,22 @@
 import { pool } from '../db.js';
 
+/* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
+const HOME_COLS = 'id, slug, name, config, annual_leave, created_at, updated_at, deleted_at';
+
+function shapeHome(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    config: row.config,
+    annual_leave: row.annual_leave,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at,
+  };
+}
+
 /**
  * Find a home by its integer primary key.
  * Returns null if not found.
@@ -8,10 +25,10 @@ import { pool } from '../db.js';
 export async function findById(id, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM homes WHERE id = $1 AND deleted_at IS NULL',
+    `SELECT ${HOME_COLS} FROM homes WHERE id = $1 AND deleted_at IS NULL`,
     [id],
   );
-  return rows[0] || null;
+  return shapeHome(rows[0]) || null;
 }
 
 /**
@@ -21,10 +38,10 @@ export async function findById(id, client) {
 export async function findByIdIncludingDeleted(id, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM homes WHERE id = $1',
+    `SELECT ${HOME_COLS} FROM homes WHERE id = $1`,
     [id],
   );
-  return rows[0] || null;
+  return shapeHome(rows[0]) || null;
 }
 
 /**
@@ -34,10 +51,10 @@ export async function findByIdIncludingDeleted(id, client) {
  */
 export async function findBySlug(slug) {
   const { rows } = await pool.query(
-    'SELECT * FROM homes WHERE slug = $1 AND deleted_at IS NULL',
+    `SELECT ${HOME_COLS} FROM homes WHERE slug = $1 AND deleted_at IS NULL`,
     [slug]
   );
-  return rows[0] || null;
+  return shapeHome(rows[0]) || null;
 }
 
 /**
@@ -47,10 +64,10 @@ export async function findBySlug(slug) {
  */
 export async function findBySlugForUpdate(slug, client) {
   const { rows } = await client.query(
-    'SELECT * FROM homes WHERE slug = $1 AND deleted_at IS NULL FOR UPDATE',
+    `SELECT ${HOME_COLS} FROM homes WHERE slug = $1 AND deleted_at IS NULL FOR UPDATE`,
     [slug]
   );
-  return rows[0] || null;
+  return shapeHome(rows[0]) || null;
 }
 
 /**
@@ -104,10 +121,10 @@ export async function upsert(slug, name, configObj, annualLeave, client) {
        annual_leave = EXCLUDED.annual_leave,
        deleted_at = NULL,
        updated_at = NOW()
-     RETURNING *`,
+     RETURNING ${HOME_COLS}`,
     [slug, name, JSON.stringify(configObj), JSON.stringify(annualLeave || {})]
   );
-  return rows[0];
+  return shapeHome(rows[0]);
 }
 
 /**
@@ -160,10 +177,10 @@ export async function create(slug, name, configObj, client) {
   const { rows } = await client.query(
     `INSERT INTO homes (slug, name, config, annual_leave)
      VALUES ($1, $2, $3, '{}')
-     RETURNING *`,
+     RETURNING ${HOME_COLS}`,
     [slug, name, JSON.stringify(configObj)]
   );
-  return rows[0];
+  return shapeHome(rows[0]);
 }
 
 /**

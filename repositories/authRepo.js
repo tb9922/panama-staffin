@@ -107,3 +107,34 @@ export async function isUserRevoked(username) {
   );
   return rows.length > 0;
 }
+
+/**
+ * Check if a token is denied by jti OR username in a single query.
+ * Used on every authenticated request in cluster mode (replaces in-memory Set).
+ * jti column is UUID — conditionally include it to avoid cast errors on missing jti.
+ * @param {string|null} jti - JWT ID (UUID string) or null
+ * @param {string|null} username
+ * @returns {Promise<boolean>}
+ */
+export async function isDenied(jti, username) {
+  if (jti) {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM token_denylist
+       WHERE jti = $1 OR (username = $2 AND expires_at > NOW())
+       LIMIT 1`,
+      [jti, username || '']
+    );
+    return rows.length > 0;
+  }
+  // No jti — check username only
+  if (username) {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM token_denylist
+       WHERE username = $1 AND expires_at > NOW()
+       LIMIT 1`,
+      [username]
+    );
+    return rows.length > 0;
+  }
+  return false;
+}

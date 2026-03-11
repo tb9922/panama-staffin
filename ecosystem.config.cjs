@@ -19,8 +19,8 @@ module.exports = {
     {
       name: 'panama',
       script: 'server.js',
-      instances: 1,              // single instance — no cluster (avoids shared-state issues)
-      exec_mode: 'fork',
+      instances: 4,              // cluster mode — 4 workers behind PM2 load balancer
+      exec_mode: 'cluster',
       autorestart: true,
       watch: false,              // nodemon handles dev; PM2 handles production
       node_args: '--max-old-space-size=768',

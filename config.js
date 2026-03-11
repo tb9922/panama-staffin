@@ -90,7 +90,7 @@ export const config = {
     name: process.env.DB_NAME || 'panama_dev',
     user: process.env.DB_USER || 'panama',
     password: process.env.DB_PASSWORD,
-    poolMax: parseInt(process.env.DB_POOL_MAX || '20', 10),
+    poolMax: parseInt(process.env.DB_POOL_MAX || '10', 10),
     idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
     connectionTimeoutMs: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000', 10),
     ssl: process.env.DB_SSL === 'false'

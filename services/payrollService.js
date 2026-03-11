@@ -335,15 +335,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // Gross for deductions = base pay + enhancements + holiday pay + SSP
       const grossForTax = round2(acc.gross_pay + acc.holiday_pay + acc.ssp_amount);
 
-      const { tax, isRefund: _isRefund } = calculatePAYE(grossForTax, parsedCode, payPeriod, periodsInYear, priorYTD, taxBands);
-      const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
-
-      const { employeeNI, employerNI } = calculateNI(grossForTax, run.pay_frequency, niThresholds, niRates);
-
-      const planStr    = taxCodeRow?.student_loan_plan || null;
-      const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
-
-      // Pension contributions — auto-enrol if eligible (Pensions Act 2008)
+      // Pension contributions — calculated FIRST (UK Net Pay Arrangement:
+      // employee pension is deducted before PAYE, reducing taxable income)
       let enrolment = enrolmentMap.get(s.id) || null;
       if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
         const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
@@ -373,6 +366,19 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
           }, client);
         }
       }
+
+      // PAYE on gross MINUS pension employee contribution (Net Pay Arrangement).
+      // Use taxable_pay from YTD (pension-reduced) for cumulative consistency.
+      const grossForPAYE = round2(grossForTax - pensionEmployee);
+      const payeYTD = { ...priorYTD, gross_pay: priorYTD.taxable_pay ?? priorYTD.gross_pay ?? 0 };
+      const { tax, isRefund: _isRefund } = calculatePAYE(grossForPAYE, parsedCode, payPeriod, periodsInYear, payeYTD, taxBands);
+      const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
+
+      // NI is on full gross (pension relief does not apply to NI)
+      const { employeeNI, employerNI } = calculateNI(grossForTax, run.pay_frequency, niThresholds, niRates);
+
+      const planStr    = taxCodeRow?.student_loan_plan || null;
+      const studentLoan = planStr ? calculateStudentLoan(grossForTax, planStr, run.pay_frequency, slThresholds) : 0;
 
       // taxDeducted may be negative (refund) — subtracting a negative increases net pay.
       // HMRC requires PAYE refunds to be paid through the payroll, not clamped to zero.
@@ -579,7 +585,8 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
  */
 async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, config, staff) {
   if (!staff) return 0;
-  const contractHours = parseFloat(staff.contract_hours) || 37.5;
+  const contractHours = parseFloat(staff.contract_hours);
+  if (!contractHours || contractHours <= 0) return 0;
   const hourlyRate = parseFloat(staff.hourly_rate) || 0;
   return round2((contractHours / 5) * hourlyRate);
 }
@@ -654,5 +661,6 @@ export function eachDayInRange(start, end) {
 }
 
 function round2(n) {
+  if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }

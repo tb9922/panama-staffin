@@ -63,7 +63,7 @@ export default function CostTracker() {
   }
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading cost data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600">{error || 'Failed to load scheduling data'}</div>;
+  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
   return <CostTrackerInner schedData={schedData} monthOffset={monthOffset} setMonthOffset={setMonthOffset} today={today} />;
 }

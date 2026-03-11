@@ -65,8 +65,8 @@ export default function IncidentTracker() {
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
 
+  const home = getCurrentHome();
   async function load() {
-    const home = getCurrentHome();
     if (!home) return;
     setLoading(true);
     setError(null);
@@ -85,7 +85,7 @@ export default function IncidentTracker() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = useLiveDate();
   const activeStaff = useMemo(() => staff.filter(s => s.active !== false), [staff]);
@@ -298,7 +298,7 @@ export default function IncidentTracker() {
         </div>
       </div>
 
-      {error && <div className="mb-4 text-red-600 text-sm">{error}</div>}
+      {error && <div className="mb-4 text-red-600 text-sm" role="alert">{error}</div>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
