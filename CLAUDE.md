@@ -64,9 +64,10 @@ Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
-- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 96+ migrations)
+- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
 - **PDF**: jspdf + jspdf-autotable
-- **Testing**: Vitest — 2,162+ tests across 121 files (50 backend + 71 frontend)
+- **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
+- **Testing**: Vitest — 2,309+ tests across 127 files (56 backend + 71 frontend)
 
 ## Architecture
 
@@ -95,7 +96,8 @@ src/
     bankHolidays.js    GOV.UK bank holiday sync
     pdfReports.js      PDF report generation — 15-page CQC evidence pack covering all 5 core questions + 8 modules
   pages/
-    Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary, 24-item alert feed
+    # Scheduling & Operations
+    Dashboard.jsx      KPI cards, 7-day coverage forecast, cost summary, priority-scored alert feed
     DailyStatus.jsx    Day view — staff list, shift overrides, coverage/escalation per period
     RotationGrid.jsx   Calendar-month roster grid with cover arrows, absence/cover summary rows, print + CSV export
     StaffRegister.jsx  Staff CRUD — add/edit/deactivate, set team/role/rate/skill
@@ -104,10 +106,16 @@ src/
     ScenarioModel.jsx  What-if modelling: sick/AL gaps → float → OT → agency cascade
     FatigueTracker.jsx Consecutive days + WTR 48hr checks per staff
     SickTrends.jsx     Monthly sick counts with exact dates, staff names, reasons
+    AbsenceManager.jsx Staff absence overview, trends, period selector
+    BudgetTracker.jsx  Monthly budget vs actual with variance tracking
+    Reports.jsx        PDF export for roster, costs, coverage, board pack
+    Config.jsx         Settings — shifts, rates, minimums, bank holidays, home details
+    # Training & Compliance
     TrainingMatrix.jsx Mandatory training matrix — grid/list view, record modal, type management
     OnboardingTracker.jsx Staff onboarding — 9 CQC Reg 19 sections, expandable staff list, Excel export
     CareCertificateTracker.jsx Care Certificate — 16 standards, per-staff progress, expandable standards
     CQCEvidence.jsx    CQC compliance evidence — 5 core questions, 34 statements, scorecard, manual evidence, PDF pack
+    # Safety & Quality
     IncidentTracker.jsx Incident & safety reporting — log, CQC/RIDDOR notifications, DoC, corrective actions
     ComplaintsTracker.jsx Complaints & feedback — complaints table, 3-tab modal, surveys, satisfaction scoring
     MaintenanceTracker.jsx Maintenance & environment — checks, certificates, auto-calculated next due
@@ -116,16 +124,49 @@ src/
     PolicyReviewTracker.jsx Policy review — 8 pre-populated policies, version history, mark as reviewed
     WhistleblowingTracker.jsx Whistleblowing — anonymous concerns, investigation workflow, protection tracking
     DolsTracker.jsx    DoLS/LPS & MCA — applications, authorisations, capacity assessments
-    BudgetTracker.jsx  Monthly budget vs actual with variance tracking
-    Reports.jsx        PDF export for roster, costs, coverage
-    Config.jsx         Settings — shifts, rates, minimums, bank holidays, home details
+    # Finance
+    FinanceDashboard.jsx Finance KPIs, charts, period selector
+    IncomeTracker.jsx  Invoicing, resident payments, outstanding balance tracking
+    ExpenseTracker.jsx Expense management
+    ReceivablesManager.jsx AR tracking, chase modal
+    PayablesManager.jsx AP tracking, payment schedules
+    BedManager.jsx     Bed occupancy, admit/discharge workflows
+    Residents.jsx      Resident data, fee reviews, payment info
+    # Payroll
+    PayrollDashboard.jsx Run management, approval workflow
+    PayrollDetail.jsx  Run detail, employee breakdowns, CSV export (sage/xero/generic)
+    TimesheetManager.jsx Manual timesheet entry with snap config
+    MonthlyTimesheet.jsx Per-staff monthly timesheet view
+    AgencyTracker.jsx  Agency staff cost tracking
+    TaxCodeManager.jsx PAYE tax code management
+    PensionManager.jsx Pension auto-enrolment, opt-out tracking
+    SickPayTracker.jsx SSP tracking, sick periods
+    HMRCDashboard.jsx  HMRC submissions, RTI, regulatory compliance
+    PayRatesConfig.jsx Pay rate configuration
+    # HR Case Management
+    HrDashboard.jsx    HR module overview
+    DisciplinaryTracker.jsx Disciplinary case tracking
+    GrievanceTracker.jsx Employee grievance management
+    PerformanceTracker.jsx Performance review tracking
+    ContractManager.jsx Employment contract management
+    FamilyLeaveTracker.jsx Parental/family leave tracking
+    FlexWorkingTracker.jsx Flexible working requests
+    EdiTracker.jsx     Equality, Diversity & Inclusion
+    TupeManager.jsx    Transfer of Undertakings
+    RtwDbsRenewals.jsx Right to Work & DBS renewal tracking
+    # Platform & System
+    PlatformHomes.jsx  Multi-home management (platform admin)
+    UserManagement.jsx User CRUD, role assignment, home access control
+    GdprDashboard.jsx  SAR, breach notification, erasure, consent, DP complaints
+    HandoverNotes.jsx  Structured shift handover with priorities, acknowledgements
+    AuditLog.jsx       Audit trail viewer + Excel export
 homes/                 JSON data files per care home (gitignored)
 backups/               Auto-backups before each save, 20 per home (gitignored)
 ```
 
 ## Data Model
 
-Data is stored in PostgreSQL (96+ migrations). The logical shape per home:
+Data is stored in PostgreSQL (100+ migrations). The logical shape per home:
 
 ```js
 {
@@ -443,6 +484,19 @@ Training/admin shifts pay differently based on whether the day was scheduled as 
 | DELETE | /api/scheduling/overrides?home=X&date=D&staffId=S | Delete single override |
 | DELETE | /api/scheduling/overrides/month?home=X&fromDate=D&toDate=D | Delete range (revert month) |
 | PUT | /api/scheduling/day-notes?home=X | Upsert or delete day note |
+| * | /api/finance/* | Invoices, payments, expenses, receivables, payables, residents, beds |
+| * | /api/payroll/* | Runs, timesheets, rates, tax codes, pensions, SSP, agency, HMRC |
+| * | /api/hr/* | Disciplinary, grievance, performance, contracts, leave, flex, EDI, TUPE, RTW/DBS |
+| * | /api/gdpr/* | Data requests (SAR/erasure), breaches, consent, DP complaints, retention |
+| * | /api/platform/* | Multi-home CRUD, user management (platform admin only) |
+| * | /api/users/* | User CRUD, role assignment, home access |
+| * | /api/import/* | Staff CSV import — template download, dry-run, live import |
+| * | /api/webhooks/* | Webhook CRUD, delivery logs (admin only) |
+| * | /api/incidents/* | Incident CRUD with CQC/RIDDOR/DoC tracking |
+| * | /api/complaints/* | Complaints CRUD, surveys |
+| * | /api/training/* | Training records, types, supervision, appraisals, fire drills |
+| * | /api/handover/* | Handover notes CRUD |
+| GET | /health | Health check — DB status, pool stats, migration version |
 
 Server-side `validateOverrides()` checks max AL per day, entitlement per staff, NLW compliance, training compliance, and all 8 compliance module deadlines (complaints, maintenance, IPC, risks, policies, whistleblowing, DoLS, Care Certificate) on every save.
 
@@ -630,7 +684,9 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 - **Repo**: github.com/tb9922/panama-staffin
 - **Branch**: main
 - **gitignored**: homes/, backups/, audit_log.json, node_modules, dist
-- **No CI/CD** — manual deploy
+- **CI/CD**: GitHub Actions (`.github/workflows/test.yml`) — lint, test, security audit on every push; auto-deploy on push to main (requires `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` secrets). Rollback on migration failure.
+- **Docker**: Multi-stage Dockerfile (node:22.14.0-alpine, non-root user, HEALTHCHECK), docker-compose with resource limits, `cap_drop: ALL`, health checks on both app + db
+- **Backups**: `scripts/backup-db.sh` with 30-day retention — runs during deploy; schedule via cron for continuous backup
 - **No co-author tags** in commits
 - **Commit style**: concise, no emojis
 
@@ -696,11 +752,15 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 ### Built (Phase 2)
 - ~~GDPR~~: SAR workflow, breach notification (ICO tracking), retention schedules, right to erasure, consent records, DP complaints
 - ~~Handover notes~~: structured digital handover with shift linking, categories, priorities, acknowledgements
-- ~~Payroll NMW compliance~~: per-shift NMW check in payroll calculation, blocks approval on violations
-- ~~Payroll Sage/Xero CSV export~~: three-format export (generic, sage, xero) via `/runs/:id/export?format=`
-- ~~Database migration: PostgreSQL~~ — db.js + 96 migrations, fully migrated
+- ~~Payroll~~: runs, timesheets, tax codes, pensions, SSP, agency, HMRC dashboard, NMW compliance, Sage/Xero CSV export
+- ~~Finance module~~: dashboard, invoicing, receivables, payables, expenses, bed management, resident payments
+- ~~HR case management~~: 9 trackers (disciplinary, grievance, performance, contracts, family leave, flex working, EDI, TUPE, RTW/DBS renewals)
+- ~~Platform admin~~: multi-home CRUD, user management, home access control
+- ~~Database migration: PostgreSQL~~ — db.js + 100 migrations, fully migrated
 - ~~Shift swap~~: DailyStatus permanent team swap + single-day override swap with `validateSwap()` safety check
 - ~~Audit log export~~: AuditLog.jsx Excel export via `downloadXLSX()`, up to 10,000 entries
+- ~~Staff CSV import~~: template download, dry-run validation, transactional insert, duplicate detection
+- ~~Webhook outbound~~: HMAC-signed, delivery logging, payroll/incident/override events, encrypted secrets
 
 ### Remaining
 - In-app messaging: mandatory read receipts, inbox/chat between staff
@@ -714,6 +774,7 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 ### Current Known Gaps
 - AL carryover is set manually — no automatic year-end rollover
 - No UI to set `override_hours` on TRN/ADM overrides (accepted by API, not yet exposed in editor)
+- Frontend loads full home data blob into state — backend is paginated but frontend doesn't use it yet
 
 ## Design System
 
