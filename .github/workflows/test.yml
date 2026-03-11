@@ -117,10 +117,10 @@ jobs:
               git checkout "$PREV_COMMIT"
               npm ci --omit=dev
               npm run build
-              pm2 restart panama --update-env
+              pm2 reload panama --update-env
               exit 1
             fi
-            pm2 restart panama --update-env
+            pm2 reload panama --update-env
             sleep 5
-            curl -f http://localhost:3001/health || exit 1
+            curl -f http://localhost:3001/readiness || exit 1
             echo "Health check passed — deploy complete: $(date)"

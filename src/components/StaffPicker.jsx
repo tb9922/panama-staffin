@@ -5,9 +5,9 @@ import { getCurrentHome, getHrStaffList } from '../lib/api.js';
 export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(false);
+  const home = getCurrentHome();
 
   useEffect(() => {
-    const home = getCurrentHome();
     if (!home) return;
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
@@ -15,7 +15,7 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
       if (!cancelled) { setStaff(list); setLoading(false); }
     }).catch((err) => { if (!cancelled) { setLoading(false); console.error('Failed to load staff list', err); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [home]);
 
   const active = staff.filter(s => s.active).sort((a, b) => a.name.localeCompare(b.name));
   const inactive = staff.filter(s => !s.active).sort((a, b) => a.name.localeCompare(b.name));

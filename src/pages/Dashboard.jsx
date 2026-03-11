@@ -53,15 +53,15 @@ export default function Dashboard() {
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const homeSlug = getCurrentHome();
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
@@ -90,8 +90,8 @@ function DashboardInner({ schedData }) {
   const [hrData, setHrData] = useState({ stats: null, warnings: [] });
   const [financeAlerts, setFinanceAlerts] = useState([]);
   const [summary, setSummary] = useState(null);
+  const home = getCurrentHome();
   useEffect(() => {
-    const home = getCurrentHome();
     if (!home) return;
     let cancelled = false;
     Promise.all([
@@ -106,7 +106,7 @@ function DashboardInner({ schedData }) {
       setSummary(dashSummary);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [home]);
 
   const cycleDates = useMemo(() => getCycleDates(config.cycle_start_date, today, 28), [config.cycle_start_date, today]);
 

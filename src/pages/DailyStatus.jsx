@@ -72,9 +72,9 @@ export default function DailyStatus() {
 
   const currentUser = getLoggedInUser();
   const isAdmin = currentUser?.role === 'admin';
+  const homeSlug = getCurrentHome();
 
   const loadData = useCallback(async () => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     setLoading(true);
     try {
@@ -84,7 +84,7 @@ export default function DailyStatus() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

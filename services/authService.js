@@ -7,24 +7,18 @@ import * as authRepo from '../repositories/authRepo.js';
 import * as userRepo from '../repositories/userRepo.js';
 import logger from '../logger.js';
 
-// In-memory deny-list for fast lookups (jti Set + username Set)
-const deniedJtis = new Set();
-const deniedUsernames = new Set();
-
 /**
- * Load active deny-list entries from DB into memory.
- * Called once on startup.
+ * Verify deny-list table is reachable on startup.
+ * In cluster mode, each instance checks DB on every request (no in-memory Set).
  */
 export async function loadDenyList() {
   try {
     const jtis = await authRepo.loadActive();
-    jtis.forEach(jti => deniedJtis.add(jti));
     const usernames = await authRepo.loadActiveUsernames();
-    usernames.forEach(u => deniedUsernames.add(u));
-    logger.info({ jtis: jtis.length, usernames: usernames.length }, 'Token deny-list loaded');
+    logger.info({ jtis: jtis.length, usernames: usernames.length }, 'Token deny-list verified');
   } catch (err) {
     // Non-fatal on startup — table may not exist yet (pre-migration)
-    logger.warn({ error: err.message }, 'Could not load token deny-list');
+    logger.warn({ error: err.message }, 'Could not verify token deny-list');
   }
 }
 
@@ -46,9 +40,11 @@ export async function login(username, password) {
       await userRepo.incrementFailedLogin(username);
       throw new AuthenticationError('Invalid credentials');
     }
-    // Successful login — reset failed counter and clear deny entry
+    // Successful login — reset failed counter and clear deny-list entries.
+    // In cluster mode, deny-list is DB-backed; clearing ensures the fresh
+    // JWT from this login isn't blocked by a prior revocation (e.g. password change).
     await userRepo.resetFailedLogin(username);
-    deniedUsernames.delete(username);
+    await authRepo.clearForUser(username);
     userRepo.updateLastLogin(username).catch(() => {});
     const jti = randomUUID();
     const token = jwt.sign(
@@ -79,14 +75,14 @@ export function verifyToken(token) {
 
 /**
  * Check if a decoded token has been revoked.
- * Checks both the specific jti and the username.
+ * Queries DB directly — cluster-safe (no in-memory Set drift between workers).
+ * Single indexed query per authenticated request (~0.1ms on PK lookup).
  * @param {object} decoded - decoded JWT payload
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-export function isTokenDenied(decoded) {
-  if (decoded.jti && deniedJtis.has(decoded.jti)) return true;
-  if (decoded.username && deniedUsernames.has(decoded.username)) return true;
-  return false;
+export async function isTokenDenied(decoded) {
+  if (!decoded.jti && !decoded.username) return false;
+  return authRepo.isDenied(decoded.jti || null, decoded.username || null);
 }
 
 /**
@@ -96,7 +92,6 @@ export function isTokenDenied(decoded) {
  */
 export async function revokeUser(username) {
   await authRepo.revokeAllForUser(username);
-  deniedUsernames.add(username);
   logger.info({ username }, 'All tokens revoked for user');
 }
 
@@ -107,13 +102,6 @@ export async function revokeUser(username) {
 export async function pruneDenyList() {
   const count = await authRepo.pruneExpired();
   if (count > 0) {
-    // Rebuild in-memory sets from DB after pruning
-    deniedJtis.clear();
-    deniedUsernames.clear();
-    const jtis = await authRepo.loadActive();
-    jtis.forEach(j => deniedJtis.add(j));
-    const usernames = await authRepo.loadActiveUsernames();
-    usernames.forEach(u => deniedUsernames.add(u));
-    logger.info({ pruned: count, active: jtis.length }, 'Deny-list pruned');
+    logger.info({ pruned: count }, 'Deny-list pruned');
   }
 }
