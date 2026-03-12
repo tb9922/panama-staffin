@@ -163,7 +163,7 @@ function AddUserModal({ onClose, onSuccess }) {
         <div className="space-y-3">
           <div>
             <label className={INPUT.label}>Username</label>
-            <input className={INPUT.base} value={form.username} onChange={e => set('username', e.target.value)} required minLength={3} maxLength={100} pattern="[a-zA-Z0-9._-]+" title="Letters, numbers, dots, underscores, hyphens" autoFocus />
+            <input className={INPUT.base} value={form.username} onChange={e => set('username', e.target.value)} required minLength={3} maxLength={100} pattern="[a-zA-Z0-9._\-]+" title="Letters, numbers, dots, underscores, hyphens" autoFocus />
           </div>
           <div>
             <label className={INPUT.label}>Display Name</label>
