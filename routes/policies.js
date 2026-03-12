@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as policyRepo from '../repositories/policyRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -44,7 +44,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 });
 
 // POST /api/policies?home=X
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = policyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -55,7 +55,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // PUT /api/policies/:id?home=X
-router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -75,7 +75,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
 });
 
 // DELETE /api/policies/:id?home=X
-router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

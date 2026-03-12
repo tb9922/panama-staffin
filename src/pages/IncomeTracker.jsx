@@ -5,13 +5,13 @@ import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
-  recordFinancePayment, getLoggedInUser,
-} from '../lib/api.js';
+  recordFinancePayment, } from '../lib/api.js';
 import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'residents', label: 'Residents' },
@@ -19,7 +19,8 @@ const TABS = [
 ];
 
 export default function IncomeTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
   const [tab, setTab] = useState('residents');
   const home = getCurrentHome();
 
@@ -34,15 +35,15 @@ export default function IncomeTracker() {
 
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
-      {tab === 'residents' && <ResidentsTab home={home} isAdmin={isAdmin} />}
-      {tab === 'invoices' && <InvoicesTab home={home} isAdmin={isAdmin} />}
+      {tab === 'residents' && <ResidentsTab home={home} canEdit={canEdit} />}
+      {tab === 'invoices' && <InvoicesTab home={home} canEdit={canEdit} />}
     </div>
   );
 }
 
 // ── Residents Tab ────────────────────────────────────────────────────────────
 
-function ResidentsTab({ home, isAdmin }) {
+function ResidentsTab({ home, canEdit }) {
   const [residents, setResidents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -140,7 +141,7 @@ function ResidentsTab({ home, isAdmin }) {
         <span className="text-sm text-gray-500">{total} resident{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExportResidents} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        {isAdmin && <button onClick={openCreate} className={BTN.primary}>Add Resident</button>}
+        {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Resident</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -302,7 +303,7 @@ function ResidentsTab({ home, isAdmin }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {isAdmin && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
+              {canEdit && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
       </Modal>
     </>
@@ -311,7 +312,7 @@ function ResidentsTab({ home, isAdmin }) {
 
 // ── Invoices Tab ─────────────────────────────────────────────────────────────
 
-function InvoicesTab({ home, isAdmin }) {
+function InvoicesTab({ home, canEdit }) {
   const [invoices, setInvoices] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -454,7 +455,7 @@ function InvoicesTab({ home, isAdmin }) {
         <span className="text-sm text-gray-500">{total} invoice{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExportInvoices} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        {isAdmin && <button onClick={openCreate} className={BTN.primary}>New Invoice</button>}
+        {canEdit && <button onClick={openCreate} className={BTN.primary}>New Invoice</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -587,7 +588,7 @@ function InvoicesTab({ home, isAdmin }) {
                       </select></div>
                     <div className="col-span-2"><label className={INPUT.label}>Reference</label>
                       <input value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
-                    {isAdmin && <div className="col-span-2">
+                    {canEdit && <div className="col-span-2">
                       <button onClick={handlePayment} className={BTN.success}>Record Payment</button>
                     </div>}
                   </div>
@@ -597,7 +598,7 @@ function InvoicesTab({ home, isAdmin }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {isAdmin && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
+              {canEdit && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
       </Modal>
     </>

@@ -5,9 +5,9 @@ import Modal from '../components/Modal.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
-  getAgencyMetrics, getCurrentHome, getLoggedInUser,
-} from '../lib/api.js';
+  getAgencyMetrics, getCurrentHome, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'shifts', label: 'Shift Log' },
@@ -236,7 +236,8 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
 export default function AgencyTracker() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   // Default last 12 weeks
   const defaultEnd   = new Date().toISOString().slice(0, 10);
@@ -311,7 +312,7 @@ export default function AgencyTracker() {
           <h1 className={PAGE.title}>Agency Tracker</h1>
           <p className={PAGE.subtitle}>Log and monitor agency staff costs, provider rates, and spend trends</p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <div className="flex gap-2">
             <button className={BTN.secondary} onClick={() => { setEditProvider(null); setShowProvModal(true); }}>
               + Provider
@@ -386,12 +387,12 @@ export default function AgencyTracker() {
                       <th scope="col" className={TABLE.th + ' text-right'}>Cost</th>
                       <th scope="col" className={TABLE.th}>Invoice</th>
                       <th scope="col" className={TABLE.th}>Status</th>
-                      {isAdmin && <th scope="col" className={TABLE.th}></th>}
+                      {canEdit && <th scope="col" className={TABLE.th}></th>}
                     </tr>
                   </thead>
                   <tbody>
                     {shifts.length === 0 ? (
-                      <tr><td colSpan={isAdmin ? 11 : 10} className={TABLE.empty}>No agency shifts logged for this period.</td></tr>
+                      <tr><td colSpan={canEdit ? 11 : 10} className={TABLE.empty}>No agency shifts logged for this period.</td></tr>
                     ) : shifts.map(sh => (
                       <tr key={sh.id} className={TABLE.tr}>
                         <td className={TABLE.td}>{sh.date}</td>
@@ -410,7 +411,7 @@ export default function AgencyTracker() {
                             {sh.reconciled ? 'Reconciled' : 'Pending'}
                           </span>
                         </td>
-                        {isAdmin && (
+                        {canEdit && (
                           <td className={TABLE.td}>
                             <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditShift(sh); setShowShiftModal(true); }}>
                               Edit
@@ -439,12 +440,12 @@ export default function AgencyTracker() {
                   <th scope="col" className={TABLE.th + ' text-right'}>Day Rate</th>
                   <th scope="col" className={TABLE.th + ' text-right'}>Night Rate</th>
                   <th scope="col" className={TABLE.th}>Status</th>
-                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
+                  {canEdit && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
                 {providers.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? 6 : 5} className={TABLE.empty}>No providers added yet.</td></tr>
+                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No providers added yet.</td></tr>
                 ) : providers.map(p => (
                   <tr key={p.id} className={TABLE.tr}>
                     <td className={TABLE.td + ' font-medium'}>{p.name}</td>
@@ -454,7 +455,7 @@ export default function AgencyTracker() {
                     <td className={TABLE.td}>
                       <span className={p.active ? BADGE.green : BADGE.gray}>{p.active ? 'Active' : 'Inactive'}</span>
                     </td>
-                    {isAdmin && (
+                    {canEdit && (
                       <td className={TABLE.td}>
                         <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditProvider(p); setShowProvModal(true); }}>
                           Edit

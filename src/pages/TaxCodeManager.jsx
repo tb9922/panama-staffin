@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
+import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
@@ -24,7 +25,8 @@ function fmt(n) {
 
 export default function TaxCodeManager() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
   const [codes, setCodes]       = useState([]);
@@ -126,7 +128,7 @@ export default function TaxCodeManager() {
             Missing records default to 1257L cumulative (Category A).
           </p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={openNew}>Add / Update Tax Code</button>
         )}
       </div>
@@ -159,13 +161,13 @@ export default function TaxCodeManager() {
               <th scope="col" className={TABLE.th}>Prev. Tax (YTD)</th>
               <th scope="col" className={TABLE.th}>Effective</th>
               <th scope="col" className={TABLE.th}>Source</th>
-              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
+              {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {codes.length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   No tax codes recorded yet. All staff will use 1257L cumulative (Category A).
                 </td>
               </tr>
@@ -200,7 +202,7 @@ export default function TaxCodeManager() {
                   <td className={`${TABLE.td} font-mono text-sm`}>{fmt(code.previous_tax)}</td>
                   <td className={TABLE.td}>{code.effective_from}</td>
                   <td className={TABLE.td}>{SOURCE_LABEL[code.source] || code.source}</td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(code)}>
                         Edit
@@ -220,7 +222,7 @@ export default function TaxCodeManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th scope="col" className={TABLE.th} colSpan={isAdmin ? 10 : 9}>
+                <th scope="col" className={TABLE.th} colSpan={canEdit ? 10 : 9}>
                   <span className="text-amber-700">Staff using default 1257L (no record on file)</span>
                 </th>
               </tr>
@@ -237,7 +239,7 @@ export default function TaxCodeManager() {
                   <td className={TABLE.td}><span className="text-gray-400">Cumulative</span></td>
                   <td className={TABLE.td}><span className="text-gray-400">A (default)</span></td>
                   <td className={TABLE.td} colSpan={5}><span className="text-gray-400">—</span></td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button
                         className={BTN.primary + ' ' + BTN.xs}

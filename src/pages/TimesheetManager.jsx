@@ -4,11 +4,11 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
   getTimesheets, upsertTimesheet, approveTimesheet, bulkApproveTimesheets,
-  getCurrentHome, getSchedulingData, getLoggedInUser,
-} from '../lib/api.js';
+  getCurrentHome, getSchedulingData, } from '../lib/api.js';
 import { getStaffForDay, formatDate, addDays } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -24,7 +24,8 @@ function todayStr() {
 export default function TimesheetManager() {
   const navigate = useNavigate();
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
   useEffect(() => {
@@ -246,7 +247,7 @@ export default function TimesheetManager() {
       </div>
 
       {/* Bulk Actions */}
-      {isAdmin && (
+      {canEdit && (
         <div className="flex gap-3 mb-4">
           <button className={BTN.secondary} onClick={handleConfirmAll} disabled={saving}>
             Confirm All as Scheduled
@@ -274,12 +275,12 @@ export default function TimesheetManager() {
                   <th scope="col" className={TABLE.th}>Saved</th>
                   <th scope="col" className={TABLE.th}>Payable Hrs</th>
                   <th scope="col" className={TABLE.th}>Status</th>
-                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
+                  {canEdit && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? 9 : 8} className={TABLE.empty}>No staff scheduled for this date.</td></tr>
+                  <tr><td colSpan={canEdit ? 9 : 8} className={TABLE.empty}>No staff scheduled for this date.</td></tr>
                 ) : rows.map(row => {
                   const { staff, entry } = row;
                   return (
@@ -315,7 +316,7 @@ export default function TimesheetManager() {
                           ? <span className={STATUS_BADGE[entry.status] || BADGE.gray}>{entry.status}</span>
                           : <span className="text-xs text-gray-400">not recorded</span>}
                       </td>
-                      {isAdmin && (
+                      {canEdit && (
                         <td className={TABLE.td}>
                           <div className="flex gap-2">
                             <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(row)}>

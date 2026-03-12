@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
-import { getCurrentHome, getSchedulingData, getLoggedInUser, logReportDownload } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, logReportDownload } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function getMonday(date) {
   const d = new Date(date);
@@ -33,7 +34,8 @@ export default function Reports() {
 }
 
 function ReportsInner({ data }) {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('reports');
   const [generating, setGenerating] = useState(null);
   const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));
   const [costMonth, setCostMonth] = useState(() => {
@@ -88,7 +90,7 @@ function ReportsInner({ data }) {
         </div>
       ),
     },
-    ...(isAdmin ? [{
+    ...(canEdit ? [{
       id: 'cost',
       title: 'Monthly Cost Report',
       description: 'Full P&L breakdown by day. Base pay, OT premium, agency, bank holiday costs. Budget comparison if set.',
@@ -116,7 +118,7 @@ function ReportsInner({ data }) {
         </div>
       ),
     },
-    ...(isAdmin ? [{
+    ...(canEdit ? [{
       id: 'staff',
       title: 'Staff Register',
       description: 'Complete staff list with roles, teams, skill points, hourly rates, and contract details.',
@@ -124,7 +126,7 @@ function ReportsInner({ data }) {
       color: 'purple',
       dateInput: null,
     }] : []),
-    ...(isAdmin ? [{
+    ...(canEdit ? [{
       id: 'boardpack',
       title: 'Board Pack',
       description: 'Executive summary for board meeting — CQC score, coverage, training, incidents, costs.',

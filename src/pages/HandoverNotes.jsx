@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
-import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getLoggedInUser, getIncidents } from '../lib/api.js';
+import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { useData } from '../contexts/DataContext.jsx';
 
 const SHIFTS = [
   { id: 'E', label: 'Early Shift' },
@@ -39,7 +40,8 @@ export default function HandoverNotes() {
   const [editId, setEditId]       = useState(null);
   const [saving, setSaving]       = useState(false);
 
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('scheduling');
   const slug = getCurrentHome();
   const todayStr = useLiveDate();
 
@@ -192,7 +194,7 @@ export default function HandoverNotes() {
                   <span className={`${BADGE.blue} text-xs`}>{shiftEntries.length}</span>
                 )}
               </div>
-              {isAdmin && (
+              {canEdit && (
                 <button onClick={() => openAdd(shift.id)} className={`${BTN.secondary} ${BTN.sm}`}>+ Add Entry</button>
               )}
             </div>
@@ -240,7 +242,7 @@ export default function HandoverNotes() {
                                     </button>
                                   )}
                                 </div>
-                                {isAdmin && (
+                                {canEdit && (
                                   <div className="flex gap-1 shrink-0">
                                     <button onClick={() => openEdit(entry)} className={`${BTN.ghost} ${BTN.sm} text-xs`}>Edit</button>
                                     <button onClick={() => handleDelete(entry.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">Del</button>

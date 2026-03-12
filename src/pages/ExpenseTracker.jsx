@@ -10,6 +10,7 @@ import {
   getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 export default function ExpenseTracker() {
   const [expenses, setExpenses] = useState([]);
@@ -24,7 +25,8 @@ export default function ExpenseTracker() {
   const [filterStatus, setFilterStatus] = useState('');
   const home = getCurrentHome();
   const user = getLoggedInUser();
-  const isAdmin = user?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -149,7 +151,7 @@ export default function ExpenseTracker() {
         <span className="text-sm text-gray-500">{total} expense{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-        {isAdmin && <button onClick={openCreate} className={BTN.primary}>Add Expense</button>}
+        {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Expense</button>}
       </div>
 
       <div className={CARD.flush}>
@@ -180,7 +182,7 @@ export default function ExpenseTracker() {
                   <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(exp.gross_amount)}</td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(exp.status, EXPENSE_STATUSES)]}>{getLabel(exp.status, EXPENSE_STATUSES)}</span></td>
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
-                    {isAdmin && exp.status === 'pending' && exp.created_by !== user?.username && (
+                    {canEdit && exp.status === 'pending' && exp.created_by !== user?.username && (
                       <button onClick={() => handleApprove(exp)} className={`${BTN.success} ${BTN.xs}`}>Approve</button>
                     )}
                   </td>
@@ -259,7 +261,7 @@ export default function ExpenseTracker() {
 
         <div className={MODAL.footer}>
           <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-          {isAdmin && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
+          {canEdit && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
         </div>
       </Modal>
     </div>

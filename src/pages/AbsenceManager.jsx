@@ -4,7 +4,7 @@ import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getLoggedInUser, getAbsenceSummary, getStaffAbsence,
+  getCurrentHome, getAbsenceSummary, getStaffAbsence,
   getHrRtwInterviews, createHrRtwInterview, updateHrRtwInterview,
   getHrOhReferrals, createHrOhReferral, updateHrOhReferral,
 } from '../lib/api.js';
@@ -13,6 +13,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'bradford', label: 'Bradford Scores' },
@@ -37,7 +38,8 @@ const emptyOh = () => ({
 const LIMIT = 50;
 
 export default function AbsenceManager() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   const [tab, setTab] = useState('bradford');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -216,8 +218,8 @@ export default function AbsenceManager() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && tab === 'rtw' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewRtw}>New RTW Interview</button>}
-          {isAdmin && tab === 'oh' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewOh}>New OH Referral</button>}
+          {canEdit && tab === 'rtw' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewRtw}>New RTW Interview</button>}
+          {canEdit && tab === 'oh' && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNewOh}>New OH Referral</button>}
         </div>
       </div>
 
@@ -337,7 +339,7 @@ export default function AbsenceManager() {
                   <td className={TABLE.td}>
                     <span className={BADGE[item.fit_for_work ? 'green' : 'red']}>{item.fit_for_work ? 'Yes' : 'No'}</span>
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditRtw(item)}>Edit</button>
                     </td>
@@ -380,7 +382,7 @@ export default function AbsenceManager() {
                   <td className={TABLE.td}>
                     <span className={BADGE[item.report_received ? 'green' : 'amber']}>{item.report_received ? 'Yes' : 'No'}</span>
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEditOh(item)}>Edit</button>
                     </td>

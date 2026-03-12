@@ -16,6 +16,7 @@ import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
   calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
 const CATEGORY_COLORS = {
@@ -102,7 +103,8 @@ export default function CQCEvidence() {
 }
 
 function CQCEvidenceInner({ data }) {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('compliance');
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
@@ -371,7 +373,7 @@ function CQCEvidenceInner({ data }) {
                                     {me.added_by && ` | by ${me.added_by}`}
                                   </div>
                                 </div>
-                                {isAdmin && <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
+                                {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
                                   className="text-xs text-red-400 hover:text-red-600 shrink-0 ml-2">Remove</button>}
                               </div>
                             ))}
@@ -381,7 +383,7 @@ function CQCEvidenceInner({ data }) {
 
                       {evidenceLoading ? (
                         <span className="text-xs text-gray-400">Loading evidence...</span>
-                      ) : isAdmin ? (
+                      ) : canEdit ? (
                         <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
                           + Add Evidence

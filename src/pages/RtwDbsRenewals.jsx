@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getHrRenewals, createHrRenewal, updateHrRenewal } from '../lib/api.js';
+import { getCurrentHome, getHrRenewals, createHrRenewal, updateHrRenewal } from '../lib/api.js';
 import { RENEWAL_CHECK_TYPES, RENEWAL_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 function checkTypeName(id) {
   return RENEWAL_CHECK_TYPES.find(t => t.id === id)?.name || id;
@@ -51,7 +52,8 @@ export default function RtwDbsRenewals() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
@@ -169,7 +171,7 @@ export default function RtwDbsRenewals() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Check</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Check</button>}
         </div>
       </div>
 
@@ -219,7 +221,7 @@ export default function RtwDbsRenewals() {
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadge(item.status, RENEWAL_STATUSES)]}>{statusName(item.status)}</span></td>
                     <td className={TABLE.td}>{item.checked_by || '—'}</td>
-                    {isAdmin && <td className={TABLE.td}>
+                    {canEdit && <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                     </td>}
                   </tr>

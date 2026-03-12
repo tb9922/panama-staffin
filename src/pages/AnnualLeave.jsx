@@ -5,11 +5,11 @@ import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
   getCurrentHome,
-  getLoggedInUser,
   getSchedulingData,
   bulkUpsertOverrides,
   deleteOverride,
 } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -26,7 +26,8 @@ function fmtDate(d) {
 }
 
 export default function AnnualLeave() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('scheduling');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -231,7 +232,7 @@ export default function AnnualLeave() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Book AL */}
-        {isAdmin && <div className={CARD.padded}>
+        {canEdit && <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Book Leave</h2>
           <div className="space-y-3">
             <div>
@@ -412,7 +413,7 @@ export default function AnnualLeave() {
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}</div>
                   </div>
-                  {isAdmin && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
+                  {canEdit && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
                 </div>
               ))}
             </div>

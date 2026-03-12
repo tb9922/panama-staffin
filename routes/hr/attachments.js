@@ -6,7 +6,7 @@ import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import { config } from '../../config.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
@@ -46,7 +46,7 @@ function fileFilter(req, file, cb) {
 const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 // GET /api/hr/attachments/:caseType/:caseId?home=X
-router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const parsed = caseTypeSchema.safeParse(req.params.caseType);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid case type' });
@@ -58,7 +58,7 @@ router.get('/attachments/:caseType/:caseId', requireAuth, requireAdmin, requireH
 });
 
 // POST /api/hr/attachments/:caseType/:caseId?home=X
-router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     // Validate caseType BEFORE multer writes any bytes to disk
     const caseTypeParsed = caseTypeSchema.safeParse(req.params.caseType);
@@ -98,7 +98,7 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireAdmin, require
 });
 
 // GET /api/hr/attachments/download/:id?home=X
-router.get('/attachments/download/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
@@ -121,7 +121,7 @@ router.get('/attachments/download/:id', requireAuth, requireAdmin, requireHomeAc
 });
 
 // DELETE /api/hr/attachments/:id?home=X
-router.delete('/attachments/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/attachments/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });

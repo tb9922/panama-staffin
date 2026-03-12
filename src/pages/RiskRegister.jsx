@@ -5,8 +5,7 @@ import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk, getLoggedInUser,
-} from '../lib/api.js';
+  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk, } from '../lib/api.js';
 import {
   getRiskScore, getRiskBand, getRiskStats,
   RISK_CATEGORIES, LIKELIHOOD_LABELS, IMPACT_LABELS,
@@ -14,6 +13,7 @@ import {
 } from '../lib/riskRegister.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'details', label: 'Risk Details' },
@@ -38,7 +38,8 @@ const HEATMAP_COLORS = {
 };
 
 export default function RiskRegister() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('governance');
   const [risks, setRisks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -230,7 +231,7 @@ export default function RiskRegister() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Risk</button>}
+          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Risk</button>}
         </div>
       </div>
 
@@ -367,7 +368,7 @@ export default function RiskRegister() {
                 const _residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
-                  <tr key={risk.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(risk))}>
+                  <tr key={risk.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(risk))}>
                     <td className={TABLE.td}>
                       <div className="font-medium text-gray-900">{risk.title}</div>
                       {risk.description && <div className="text-xs text-gray-400 truncate max-w-xs">{risk.description}</div>}
@@ -576,11 +577,11 @@ export default function RiskRegister() {
           </div>
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && isAdmin && (
+              {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {isAdmin && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
+              {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}
               </button>}
             </div>

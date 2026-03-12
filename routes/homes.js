@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
@@ -15,19 +15,32 @@ const configBodySchema = z.object({
   config: homeConfigSchema,
 }).strict();
 
-router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+// GET /api/homes — list homes the user can access, with per-home roleId
+router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
-    const homes = await homeService.listHomes();
-    const allowedIds = await userHomeRepo.findHomeSlugsForUser(req.user.username);
-    const allowedSet = new Set(allowedIds);
-    res.json(homes.filter(h => allowedSet.has(h.id)));
+    // Platform admins see all homes with home_manager access
+    if (req.user.is_platform_admin) {
+      const homes = await homeService.listHomes();
+      return res.json(homes.map(h => ({ ...h, roleId: 'home_manager', staffId: null })));
+    }
+
+    // Regular users: single joined query returns homes + role
+    const rows = await userHomeRepo.findHomesWithRolesForUser(req.user.username);
+    res.json(rows.map(r => ({
+      id: r.slug,
+      name: r.config?.home_name || r.name,
+      beds: r.config?.registered_beds,
+      type: r.config?.care_type,
+      roleId: r.role_id,
+      staffId: r.staff_id || null,
+    })));
   } catch (err) {
     next(err);
   }
 });
 
 // PUT /api/homes/config?home=X — update the config JSONB for a home
-router.put('/config', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/config', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const parsed = configBodySchema.safeParse(req.body);
     if (!parsed.success) {

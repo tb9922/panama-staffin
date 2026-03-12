@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { zodError } from '../../errors.js';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import * as auditRepo from '../../repositories/auditRepo.js';
@@ -15,7 +15,7 @@ const purgeBodySchema = z.object({
 
 const dateParamSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/admin/purge-expired', requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
   try {
     const parsed = purgeBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -31,7 +31,7 @@ router.post('/admin/purge-expired', requireAuth, requireAdmin, requireHomeAccess
   } catch (err) { next(err); }
 });
 
-router.get('/admin/audit-export', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/admin/audit-export', requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
     const from = dateParamSchema.safeParse(req.query.from).success ? req.query.from : '1970-01-01';
     const to = dateParamSchema.safeParse(req.query.to).success ? req.query.to : '9999-12-31';

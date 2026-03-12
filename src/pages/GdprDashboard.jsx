@@ -8,14 +8,14 @@ import {
   getRetentionSchedule, scanRetention,
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
-  getAccessLog, getCurrentHome, getLoggedInUser,
-} from '../lib/api.js';
+  getAccessLog, getCurrentHome, } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
   DP_COMPLAINT_CATEGORIES, DATA_CATEGORIES,
   calculateDeadline, daysUntilDeadline, isOverdue,
   calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
 } from '../lib/gdpr.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'overview',   label: 'Overview' },
@@ -28,7 +28,8 @@ const TABS = [
 ];
 
 export default function GdprDashboard() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('gdpr');
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -319,7 +320,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Requests</h2>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
             New Request
           </button>}
         </div>
@@ -346,7 +347,7 @@ export default function GdprDashboard() {
                       </td>
                       <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(r.status)]}>{r.status}</span></td>
                       <td className={TABLE.td}>
-                        {isAdmin && <div className="flex gap-1 flex-wrap">
+                        {canEdit && <div className="flex gap-1 flex-wrap">
                           {r.request_type === 'sar' && r.status !== 'completed' && (
                             <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleGatherData(r.id)}>Gather</button>
                           )}
@@ -377,7 +378,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Breaches</h2>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
             Report Breach
           </button>}
         </div>
@@ -401,7 +402,7 @@ export default function GdprDashboard() {
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(b.status)]}>{b.status}</span></td>
                     <td className={TABLE.td}>
-                      {isAdmin && <div className="flex gap-1 flex-wrap">
+                      {canEdit && <div className="flex gap-1 flex-wrap">
                         <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleAssessBreach(b.id)}>Assess</button>
                         {b.status === 'open' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'contained')}>Contain</button>}
                         {b.status === 'contained' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'resolved')}>Resolve</button>}
@@ -462,7 +463,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Consent Records</h2>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ subject_type: 'staff', legal_basis: 'consent' }); setShowModal('consent'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ subject_type: 'staff', legal_basis: 'consent' }); setShowModal('consent'); }}>
             Record Consent
           </button>}
         </div>
@@ -484,7 +485,7 @@ export default function GdprDashboard() {
                       {c.withdrawn ? <span className={BADGE.red}>Withdrawn {c.withdrawn.slice(0, 10)}</span> : <span className={BADGE.green}>Active</span>}
                     </td>
                     <td className={TABLE.td}>
-                      {isAdmin && !c.withdrawn && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleWithdrawConsent(c.id)}>Withdraw</button>}
+                      {canEdit && !c.withdrawn && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleWithdrawConsent(c.id)}>Withdraw</button>}
                     </td>
                   </tr>
                 ))}
@@ -501,7 +502,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Protection Complaints</h2>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
             Log Complaint
           </button>}
         </div>
@@ -522,7 +523,7 @@ export default function GdprDashboard() {
                     <td className={TABLE.td}>{c.ico_involved ? <span className={BADGE.red}>Yes</span> : <span className={BADGE.gray}>No</span>}</td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(c.status)]}>{c.status}</span></td>
                     <td className={TABLE.td}>
-                      {isAdmin && <div className="flex gap-1 flex-wrap">
+                      {canEdit && <div className="flex gap-1 flex-wrap">
                         {c.status === 'open' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('complaint', c.id, 'investigating')}>Investigate</button>}
                         {c.status === 'investigating' && <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleUpdateStatus('complaint', c.id, 'resolved')}>Resolve</button>}
                       </div>}

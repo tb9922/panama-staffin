@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import * as staffRepo from '../../repositories/staffRepo.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
@@ -45,7 +45,7 @@ router.use(rateLimit({
 }));
 
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
-router.get('/staff', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/staff', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const staffResult = await staffRepo.findByHome(req.home.id);
     res.json(staffResult.rows.map(s => ({ id: s.id, name: s.name, role: s.role, team: s.team, active: s.active })));
@@ -77,7 +77,7 @@ registerCaseRoutes(router, {
 // ── Grievance Actions ───────────────────────────────────────────────────────
 
 // GET /api/hr/cases/grievance/:id/actions?home=X
-router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/cases/grievance/:id/actions', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -86,7 +86,7 @@ router.get('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHom
 });
 
 // POST /api/hr/cases/grievance/:id/actions?home=X
-router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/cases/grievance/:id/actions', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -99,7 +99,7 @@ router.post('/cases/grievance/:id/actions', requireAuth, requireAdmin, requireHo
 });
 
 // PUT /api/hr/grievance-actions/:id?home=X
-router.put('/grievance-actions/:id', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/grievance-actions/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });

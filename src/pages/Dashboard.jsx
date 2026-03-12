@@ -6,9 +6,10 @@ import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function CoverageGauge({ period, cov }) {
   if (!cov) return null;
@@ -75,7 +76,8 @@ function DashboardInner({ schedData }) {
   const overrides = schedData.overrides;
   const training = schedData.training || {};
 
-  const isAdmin = useMemo(() => getLoggedInUser()?.role === 'admin', []);
+  const { canWrite } = useData();
+  const canEdit = canWrite('scheduling');
   const navigate = useNavigate();
   // Reactive today — updates at midnight so shift-handover coverage is never stale
   const [today, setToday] = useState(() => new Date());
@@ -155,7 +157,7 @@ function DashboardInner({ schedData }) {
 
     activeCareStaff.forEach((s, idx) => {
       const fatigue = checkFatigueRisk(s, today, overrides, config);
-      const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
+      const label = canEdit ? s.name : `Staff Member ${idx + 1}`;
       if (fatigue.exceeded) {
         list.push({ type: 'error', msg: `${label}: ${fatigue.consecutive} consecutive days (max ${config.max_consecutive_days})` });
       } else if (fatigue.atRisk) {
@@ -168,8 +170,8 @@ function DashboardInner({ schedData }) {
       if (s.hourly_rate == null) return;
       const { rate, label: rateLabel } = getMinimumWageRate(s.date_of_birth, config);
       if (s.hourly_rate < rate) {
-        const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
-        list.push({ type: 'error', msg: `${label}: £${isAdmin ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below ${rateLabel} £${rate.toFixed(2)}` });
+        const label = canEdit ? s.name : `Staff Member ${idx + 1}`;
+        list.push({ type: 'error', msg: `${label}: £${canEdit ? s.hourly_rate.toFixed(2) : '**.**'}/hr is below ${rateLabel} £${rate.toFixed(2)}` });
       }
     });
 
@@ -177,7 +179,7 @@ function DashboardInner({ schedData }) {
     activeCareStaff.forEach((s, idx) => {
       const acc = calculateAccrual(s, config, overrides, today);
       if (acc.remainingHours < 0) {
-        const label = isAdmin ? s.name : `Staff Member ${idx + 1}`;
+        const label = canEdit ? s.name : `Staff Member ${idx + 1}`;
         list.push({ type: 'warning', msg: `${label}: ${Math.abs(acc.remainingHours).toFixed(1)} AL hours over earned balance` });
       }
     });
@@ -201,7 +203,7 @@ function DashboardInner({ schedData }) {
     getFinanceAlertsForDashboard(financeAlerts).forEach(a => list.push(a));
 
     return list.slice(0, 24);
-  }, [cycleData, staff, overrides, config, hrData, financeAlerts, summary, isAdmin, today]);
+  }, [cycleData, staff, overrides, config, hrData, financeAlerts, summary, canEdit, today]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -271,7 +273,7 @@ function DashboardInner({ schedData }) {
         </div>
 
         {/* Cost Summary (admin only) */}
-        {isAdmin ? (
+        {canEdit ? (
         <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/costs')}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
           <div className="space-y-3">
@@ -385,7 +387,7 @@ function DashboardInner({ schedData }) {
         })()}
 
         {/* Action This Week — admin only, priority 3+ items needing attention */}
-        {isAdmin && summary?.weekActions?.length > 0 && (
+        {canEdit && summary?.weekActions?.length > 0 && (
           <div className={`${CARD.padded} lg:col-span-2`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Action This Week</h2>

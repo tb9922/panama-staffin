@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getHMRCLiabilities, markHMRCPaid, getCurrentHome, getLoggedInUser } from '../lib/api.js';
+import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -40,7 +41,8 @@ function currentTaxYear() {
 
 export default function HMRCDashboard() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [liabilities, setLiabilities] = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -179,13 +181,13 @@ export default function HMRCDashboard() {
               <th scope="col" className={TABLE.th}>Payment Due</th>
               <th scope="col" className={TABLE.th}>Status</th>
               <th scope="col" className={TABLE.th}>Paid Reference</th>
-              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
+              {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {liabilities.length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   No HMRC liabilities for {taxYear}/{String(taxYear + 1).slice(2)}.
                   Liabilities are created automatically when payroll runs are approved.
                 </td>
@@ -227,7 +229,7 @@ export default function HMRCDashboard() {
                     <span className="text-gray-400 text-xs">—</span>
                   )}
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className={TABLE.td}>
                     {l.status !== 'paid' ? (
                       <button
@@ -249,7 +251,7 @@ export default function HMRCDashboard() {
               <tr className="bg-gray-50 font-semibold">
                 <td className={TABLE.td} colSpan={5}>Totals</td>
                 <td className={`${TABLE.td} font-mono`}>{fmt(totalDue)}</td>
-                <td className={TABLE.td} colSpan={isAdmin ? 4 : 3}></td>
+                <td className={TABLE.td} colSpan={canEdit ? 4 : 3}></td>
               </tr>
             </tfoot>
           )}

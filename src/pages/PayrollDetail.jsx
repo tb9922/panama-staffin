@@ -5,8 +5,8 @@ import Modal from '../components/Modal.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
-  getSchedulingData, getLoggedInUser,
-} from '../lib/api.js';
+  getSchedulingData, } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -55,7 +55,8 @@ async function downloadWithAuth(url, filename) {
 export default function PayrollDetail() {
   const { runId } = useParams();
   const homeSlug  = getCurrentHome();
-  const isAdmin   = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
   const navigate  = useNavigate();
 
   const [schedData, setSchedData]         = useState(null);
@@ -183,9 +184,9 @@ export default function PayrollDetail() {
   }
 
   const nmwViolations = lines.filter(l => !l.nmw_compliant);
-  const canCalculate  = isAdmin && ['draft', 'calculated'].includes(run.status);
-  const canApprove    = isAdmin && run.status === 'calculated' && nmwViolations.length === 0;
-  const canExport     = isAdmin && ['approved', 'exported', 'locked'].includes(run.status);
+  const canCalculate  = canEdit && ['draft', 'calculated'].includes(run.status);
+  const canApprove    = canEdit && run.status === 'calculated' && nmwViolations.length === 0;
+  const canExport     = canEdit && ['approved', 'exported', 'locked'].includes(run.status);
   const isBusy        = action !== null;
 
   // Grand totals
@@ -328,7 +329,7 @@ export default function PayrollDetail() {
       {run.status === 'draft' && lines.length === 0 && (
         <div className={`${CARD.padded} text-center py-10`}>
           <p className="text-sm text-gray-500 mb-3">This run has not been calculated yet.</p>
-          {isAdmin && (
+          {canEdit && (
             <button className={BTN.primary} onClick={handleCalculate} disabled={isBusy}>
               {action === 'calculating' ? 'Calculating…' : 'Calculate Now'}
             </button>

@@ -1,11 +1,12 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { loadHomes, setCurrentHome } from '../lib/api.js';
 import { useAuth } from './AuthContext.jsx';
+import { hasModuleAccess, canWriteModule } from '../../shared/roles.js';
 
 const DataCtx = createContext(null);
 
 export function DataProvider({ children }) {
-  const { logout } = useAuth();
+  const { logout, isPlatformAdmin } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -48,10 +49,27 @@ export function DataProvider({ children }) {
     }
   }, [activeHome]);
 
+  // Derive current home's role from the homes array
+  const activeHomeObj = useMemo(() => homes.find(h => h.id === activeHome), [homes, activeHome]);
+  const homeRole = activeHomeObj?.roleId || null;
+  const staffId = activeHomeObj?.staffId || null;
+
+  // Module access helpers bound to current home's role (platform admins bypass)
+  const canRead = useCallback((moduleId) => {
+    if (isPlatformAdmin) return true;
+    return hasModuleAccess(homeRole, moduleId, 'read');
+  }, [homeRole, isPlatformAdmin]);
+
+  const canWrite = useCallback((moduleId) => {
+    if (isPlatformAdmin) return true;
+    return canWriteModule(homeRole, moduleId);
+  }, [homeRole, isPlatformAdmin]);
+
   return (
     <DataCtx.Provider value={{
       loading, error, homes, activeHome,
       switchHome, refreshHomes, setError, clearError,
+      homeRole, staffId, canRead, canWrite,
     }}>
       {children}
     </DataCtx.Provider>

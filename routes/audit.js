@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
@@ -40,7 +40,7 @@ const purgeSchema = z.object({
   days: z.coerce.number().int().min(30).max(3650).default(2555),
 });
 
-router.delete('/purge', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/purge', requireAuth, requireHomeAccess, requireModule('reports', 'write'), async (req, res, next) => {
   try {
     const parsed = purgeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

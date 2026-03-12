@@ -6,8 +6,7 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
   getCurrentHome, getWhistleblowingConcerns, createWhistleblowingConcern,
-  updateWhistleblowingConcern, deleteWhistleblowingConcern, getLoggedInUser,
-} from '../lib/api.js';
+  updateWhistleblowingConcern, deleteWhistleblowingConcern, } from '../lib/api.js';
 import {
   getWhistleblowingStats,
   CONCERN_CATEGORIES, CONCERN_SEVERITIES, CONCERN_STATUSES,
@@ -15,6 +14,7 @@ import {
 } from '../lib/whistleblowing.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'details', label: 'Concern Details' },
@@ -33,7 +33,8 @@ const EMPTY_FORM = {
 };
 
 export default function WhistleblowingTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('governance');
   const [concerns, setConcerns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -207,7 +208,7 @@ export default function WhistleblowingTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
+          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
         </div>
       </div>
 
@@ -275,7 +276,7 @@ export default function WhistleblowingTracker() {
                 const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
                 const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
                 return (
-                  <tr key={concern.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(concern))}>
+                  <tr key={concern.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(concern))}>
                     <td className={TABLE.td}>{concern.date_raised}</td>
                     <td className={TABLE.td}>{catDef?.name || concern.category}</td>
                     <td className={TABLE.td}>
@@ -450,11 +451,11 @@ export default function WhistleblowingTracker() {
           </div>
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && isAdmin && (
+              {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {isAdmin && (
+              {canEdit && (
                 <button onClick={handleSave} disabled={!form.date_raised || !form.category || !form.severity} className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

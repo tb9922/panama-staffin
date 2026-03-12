@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
@@ -46,7 +46,7 @@ const careCertUpdateSchema = z.object({
 });
 
 // GET /api/care-cert?home=X
-router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const [careCert, staffResult] = await Promise.all([
       careCertRepo.findByHome(req.home.id),
@@ -58,7 +58,7 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // POST /api/care-cert?home=X — start new CC for a staff member
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = careCertCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -82,7 +82,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // PUT /api/care-cert/:staffId?home=X — update CC record (standard, supervisor, status)
-router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
@@ -108,7 +108,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHome
 });
 
 // DELETE /api/care-cert/:staffId?home=X — remove from tracking
-router.delete('/:staffId', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });

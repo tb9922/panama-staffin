@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
-  getCurrentHome, getLoggedInUser,
-  getBeds, getBedSummary, getBedHistory,
+  getCurrentHome, getBeds, getBedSummary, getBedHistory,
   createBed, transitionBedStatus, revertBedTransition, moveBedResident,
   getFinanceResidents,
 } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGES = {
   available: 'green', reserved: 'blue', occupied: 'gray',
@@ -81,7 +81,8 @@ const EMPTY_BED_FORM = {
 };
 
 export default function BedManager() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
   const [beds, setBeds] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -290,7 +291,7 @@ export default function BedManager() {
     <div className={PAGE.container}>
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Beds &amp; Occupancy</h1>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={() => setShowAddModal(true)}>
             Add Bed
           </button>
@@ -338,7 +339,7 @@ export default function BedManager() {
       {beds.length === 0 ? (
         <div className={CARD.padded}>
           <p className="text-gray-500 text-center py-8">
-            No beds configured yet.{isAdmin ? ' Click "Add Bed" to get started.' : ''}
+            No beds configured yet.{canEdit ? ' Click "Add Bed" to get started.' : ''}
           </p>
         </div>
       ) : (
@@ -377,7 +378,7 @@ export default function BedManager() {
                         <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openHistory(bed)}>
                           History
                         </button>
-                        {isAdmin && (TRANSITIONS[bed.status] || []).map(target => (
+                        {canEdit && (TRANSITIONS[bed.status] || []).map(target => (
                           <button
                             key={target}
                             className={`${BTN.secondary} ${BTN.xs}`}
@@ -386,12 +387,12 @@ export default function BedManager() {
                             {getTransitionLabel(bed.status, target)}
                           </button>
                         ))}
-                        {isAdmin && bed.status === 'occupied' && (
+                        {canEdit && bed.status === 'occupied' && (
                           <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openMove(bed)}>
                             Move
                           </button>
                         )}
-                        {isAdmin && (
+                        {canEdit && (
                           <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openRevert(bed)}>
                             Revert
                           </button>

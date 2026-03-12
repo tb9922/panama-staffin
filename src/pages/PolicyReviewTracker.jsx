@@ -6,13 +6,14 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
-  getCurrentHome, getLoggedInUser, getPolicies, createPolicy, updatePolicy, deletePolicy,
+  getCurrentHome, getPolicies, createPolicy, updatePolicy, deletePolicy,
 } from '../lib/api.js';
 import {
   getPolicyStatus, getPolicyStats,
   POLICY_STATUSES,
 } from '../lib/policyReview.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_ORDER = { overdue: 0, due: 1, current: 2 };
 
@@ -31,7 +32,8 @@ const EMPTY_FORM = {
 };
 
 export default function PolicyReviewTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('governance');
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -266,7 +268,7 @@ export default function PolicyReviewTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
+          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
         </div>
       </div>
 
@@ -327,7 +329,7 @@ export default function PolicyReviewTracker() {
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);
                 return (
-                  <tr key={policy.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(policy))}>
+                  <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(policy))}>
                     <td className={TABLE.td}>{policy.policy_name}</td>
                     <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
                     <td className={TABLE.td}>{policy.version}</td>
@@ -439,14 +441,14 @@ export default function PolicyReviewTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {isAdmin && editingId && (
+              {canEdit && editingId && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
-              {isAdmin && editingId && (
+              {canEdit && editingId && (
                 <button onClick={handleMarkReviewed} className={BTN.success}>Mark as Reviewed</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {isAdmin && (
+              {canEdit && (
                 <button onClick={handleSave} disabled={!form.policy_name} className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

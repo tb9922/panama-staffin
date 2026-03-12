@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getPayrollRuns, createPayrollRun, getCurrentHome, getLoggedInUser } from '../lib/api.js';
+import { getPayrollRuns, createPayrollRun, getCurrentHome } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -29,7 +30,8 @@ const FREQ_LABEL = {
 
 export default function PayrollDashboard() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
   const navigate = useNavigate();
 
   const [runs, setRuns]         = useState([]);
@@ -95,7 +97,7 @@ export default function PayrollDashboard() {
           <h1 className={PAGE.title}>Payroll Runs</h1>
           <p className={PAGE.subtitle}>Gross pay calculation, approval, and export to Sage/Xero</p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={() => setShowCreate(true)}>+ New Payroll Run</button>
         )}
       </div>

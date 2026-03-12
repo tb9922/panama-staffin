@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getHrContracts, createHrContract, updateHrContract } from '../lib/api.js';
+import { getCurrentHome, getHrContracts, createHrContract, updateHrContract } from '../lib/api.js';
 import { CONTRACT_TYPES, CONTRACT_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const emptyForm = () => ({
   staff_id: '', contract_type: 'permanent', start_date: '', end_date: '',
@@ -33,7 +34,8 @@ export default function ContractManager() {
   const [filterType, setFilterType] = useState('');
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
 
   const LIMIT = 50;
 
@@ -147,7 +149,7 @@ export default function ContractManager() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Contract</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Contract</button>}
         </div>
       </div>
 
@@ -220,7 +222,7 @@ export default function ContractManager() {
                   </td>
                   <td className={TABLE.td}>{item.probation_end_date || '—'}</td>
                   <td className={TABLE.tdMono}>{item.hours_per_week ?? '—'}</td>
-                  {isAdmin && <td className={TABLE.td}>
+                  {canEdit && <td className={TABLE.td}>
                     <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                   </td>}
                 </tr>

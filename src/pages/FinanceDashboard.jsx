@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE, INPUT } from '../lib/design.js';
-import { getCurrentHome, getLoggedInUser, getFinanceDashboard, getFinanceAlerts } from '../lib/api.js';
+import { getCurrentHome, getFinanceDashboard, getFinanceAlerts } from '../lib/api.js';
 import { formatCurrency, getLabel, EXPENSE_CATEGORIES } from '../lib/finance.js';
 
 const ALERT_STYLES = {
@@ -10,7 +10,6 @@ const ALERT_STYLES = {
 };
 
 export default function FinanceDashboard() {
-  const _isAdmin = getLoggedInUser()?.role === 'admin';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);

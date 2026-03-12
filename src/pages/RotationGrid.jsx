@@ -11,13 +11,13 @@ import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 import {
   getCurrentHome,
-  getLoggedInUser,
   getSchedulingData,
   upsertOverride,
   deleteOverride,
   bulkUpsertOverrides,
   revertMonthOverrides,
 } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -80,7 +80,8 @@ function parseLocalDate(str) {
 }
 
 export default function RotationGrid() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('scheduling');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -488,7 +489,7 @@ export default function RotationGrid() {
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          {isAdmin && <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
+          {canEdit && <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
             className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>}
           <button onClick={exportCSV}
             className={`${BTN.secondary} ${BTN.xs}`}>Export CSV</button>
@@ -561,9 +562,9 @@ export default function RotationGrid() {
                     return (
                       <td key={i} className={`py-0.5 px-0.5 text-center ${isMonday ? 'border-l border-gray-200' : ''}`}>
                         <button
-                          onClick={() => isAdmin && openEditor(s.id, dateKey)}
-                          disabled={saving || !isAdmin}
-                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium ${isAdmin ? 'cursor-pointer hover:scale-105' : 'cursor-default'} transition-all ${
+                          onClick={() => canEdit && openEditor(s.id, dateKey)}
+                          disabled={saving || !canEdit}
+                          className={`inline-block w-full px-0.5 min-h-[24px] py-0.5 rounded text-[10px] font-medium ${canEdit ? 'cursor-pointer hover:scale-105' : 'cursor-default'} transition-all ${
                             SHIFT_COLORS[shift] || 'bg-gray-100 text-gray-400'
                           } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : ''} disabled:cursor-not-allowed`}
                           title={[
@@ -886,7 +887,7 @@ export default function RotationGrid() {
               <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>
                 Cancel
               </button>
-              {isAdmin && <div className="flex gap-2">
+              {canEdit && <div className="flex gap-2">
                 <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
                   disabled={saving}
                   className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}>

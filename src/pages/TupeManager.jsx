@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getHrTupe, createHrTupe, updateHrTupe } from '../lib/api.js';
+import { getCurrentHome, getHrTupe, createHrTupe, updateHrTupe } from '../lib/api.js';
 import { TUPE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TRANSFER_TYPES = [
   { id: 'incoming', name: 'Incoming' },
@@ -31,7 +32,8 @@ export default function TupeManager() {
   const [offset, setOffset] = useState(0);
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -131,7 +133,7 @@ export default function TupeManager() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Transfer</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Transfer</button>}
         </div>
       </div>
 
@@ -170,7 +172,7 @@ export default function TupeManager() {
                     </span>
                   </td>
                   <td className={TABLE.tdMono}>{item.staff_affected ?? '—'}</td>
-                  {isAdmin && <td className={TABLE.td}>
+                  {canEdit && <td className={TABLE.td}>
                     <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                   </td>}
                 </tr>

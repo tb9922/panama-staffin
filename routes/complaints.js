@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
@@ -79,7 +79,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 });
 
 // POST /api/complaints?home=X
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -90,7 +90,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // PUT /api/complaints/complaints/:id?home=X
-router.put('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -115,7 +115,7 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requi
 });
 
 // DELETE /api/complaints/complaints/:id?home=X
-router.delete('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -127,7 +127,7 @@ router.delete('/complaints/:id', writeRateLimiter, requireAuth, requireAdmin, re
 });
 
 // POST /api/complaints/surveys?home=X
-router.post('/surveys', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -138,7 +138,7 @@ router.post('/surveys', writeRateLimiter, requireAuth, requireAdmin, requireHome
 });
 
 // PUT /api/complaints/surveys/:id?home=X
-router.put('/surveys/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -162,7 +162,7 @@ router.put('/surveys/:id', writeRateLimiter, requireAuth, requireAdmin, requireH
 });
 
 // DELETE /api/complaints/surveys/:id?home=X
-router.delete('/surveys/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/surveys/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

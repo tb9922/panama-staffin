@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
+import { getCurrentHome, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
 import { FLEX_WORKING_STATUSES, FLEX_REFUSAL_REASONS, getStatusBadge } from '../lib/hr.js';
 import { parseDate } from '../lib/rotation.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const DECISION_OPTIONS = [
   { id: '', name: '— Not decided —' },
@@ -52,7 +53,8 @@ export default function FlexWorkingTracker() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -171,7 +173,7 @@ export default function FlexWorkingTracker() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Request</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Request</button>}
         </div>
       </div>
 
@@ -218,7 +220,7 @@ export default function FlexWorkingTracker() {
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadge(item.status, FLEX_WORKING_STATUSES)]}>{statusName(item.status)}</span></td>
                     <td className={TABLE.td}>{DECISION_OPTIONS.find(d => d.id === item.decision)?.name || item.decision || '—'}</td>
-                    {isAdmin && <td className={TABLE.td}>
+                    {canEdit && <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                     </td>}
                   </tr>
