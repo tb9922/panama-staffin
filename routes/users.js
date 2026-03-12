@@ -9,6 +9,8 @@ import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
+import * as authService from '../services/authService.js';
+import { ROLE_IDS, canAssignRole } from '../shared/roles.js';
 
 const router = Router();
 
@@ -38,6 +40,13 @@ const changePasswordSchema = z.object({
 
 const setHomesSchema = z.object({
   homeIds: z.array(z.number().int().positive()),
+});
+
+const setRolesSchema = z.object({
+  roles: z.array(z.object({
+    homeId: z.number().int().positive(),
+    roleId: z.enum(ROLE_IDS),
+  })),
 });
 
 const idSchema = z.coerce.number().int().positive();
@@ -196,6 +205,113 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requireAdmin, async (req
       userId: id.data, username: user.username, homeIds: parsed.data.homeIds,
     });
     res.json({ ok: true, homeIds: parsed.data.homeIds });
+  } catch (err) { next(err); }
+});
+
+// GET /api/users/:id/roles — get per-home role assignments for a user (admin only)
+router.get('/:id/roles', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = idSchema.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
+    const user = await userRepo.findById(id.data);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const roles = await userHomeRepo.findRolesForUser(user.username);
+    res.json({ roles });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/users/:id/roles — set per-home role assignments (admin only)
+// Replaces all role assignments. Homes not in the list are revoked.
+router.put('/:id/roles', writeRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = idSchema.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
+    const parsed = setRolesSchema.safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed);
+    const user = await userRepo.findById(id.data);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Cannot modify your own roles
+    if (user.username === req.user.username) {
+      return res.status(400).json({ error: 'Cannot modify your own role assignments' });
+    }
+
+    // Determine assigner's per-home roles for permission checks
+    const assignerRoles = await userHomeRepo.findRolesForUser(req.user.username);
+    const assignerRoleMap = new Map(assignerRoles.map(r => [r.home_id, r.role_id]));
+
+    // Validate each assignment
+    for (const { homeId, roleId } of parsed.data.roles) {
+      // Platform admin can assign any role to any home
+      if (req.user.is_platform_admin) continue;
+
+      const assignerRole = assignerRoleMap.get(homeId);
+      if (!assignerRole) {
+        return res.status(403).json({ error: `You do not have access to home ${homeId}` });
+      }
+      if (!canAssignRole(assignerRole, roleId)) {
+        return res.status(403).json({
+          error: roleId === 'home_manager'
+            ? 'Only platform admins can assign the Home Manager role'
+            : `Your role does not allow assigning ${roleId}`,
+        });
+      }
+    }
+
+    // Also validate assigner has access to any homes being revoked
+    const desiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
+    const currentRoles = await userHomeRepo.findRolesForUser(user.username);
+    if (!req.user.is_platform_admin) {
+      for (const cr of currentRoles) {
+        if (!desiredHomeIds.has(cr.home_id) && !assignerRoleMap.has(cr.home_id)) {
+          // Assigner doesn't have access to this home — preserve the existing role
+          parsed.data.roles.push({ homeId: cr.home_id, roleId: cr.role_id });
+        }
+      }
+    }
+
+    // Build old roles map for audit diff
+    const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
+
+    // Apply changes in a transaction
+    await withTransaction(async (client) => {
+      const finalHomeIds = new Set();
+      for (const { homeId, roleId } of parsed.data.roles) {
+        await userHomeRepo.assignRole(user.username, homeId, roleId, null, req.user.username, client);
+        // Also ensure legacy user_home_access stays in sync
+        await userHomeRepo.grantAccess(user.username, homeId, client);
+        finalHomeIds.add(homeId);
+      }
+      // Revoke roles for homes not in the list
+      for (const cr of currentRoles) {
+        if (!finalHomeIds.has(cr.home_id)) {
+          await userHomeRepo.removeRole(user.username, cr.home_id, client);
+          await userHomeRepo.revokeAccess(user.username, cr.home_id, client);
+        }
+      }
+    });
+
+    // Build audit diff
+    const changes = [];
+    for (const { homeId, roleId } of parsed.data.roles) {
+      const oldRole = oldRoleMap.get(homeId);
+      if (oldRole !== roleId) changes.push({ homeId, from: oldRole || null, to: roleId });
+    }
+    for (const cr of currentRoles) {
+      if (!desiredHomeIds.has(cr.home_id)) {
+        changes.push({ homeId: cr.home_id, from: cr.role_id, to: null });
+      }
+    }
+
+    if (changes.length > 0) {
+      await auditService.log('user_roles_update', '-', req.user.username, {
+        userId: id.data, username: user.username, changes,
+      });
+      // Force re-login so JWT reflects new permissions
+      await authService.revokeUser(user.username);
+    }
+
+    res.json({ ok: true, roles: parsed.data.roles });
   } catch (err) { next(err); }
 });
 

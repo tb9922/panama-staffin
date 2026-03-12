@@ -1417,6 +1417,16 @@ export async function listAllHomesForAccess() {
   return apiFetch(`${API_BASE}/users/all-homes`, { headers: authHeaders() });
 }
 
+export async function getUserRoles(id) {
+  return apiFetch(`${API_BASE}/users/${id}/roles`, { headers: authHeaders() });
+}
+
+export async function setUserRoles(id, roles) {
+  return apiFetch(`${API_BASE}/users/${id}/roles`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ roles }),
+  });
+}
+
 // ── Beds & Occupancy ────────────────────────────────────────────────────────
 
 export async function getBeds(homeSlug) {

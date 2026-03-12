@@ -1,10 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   listUsers, createUser, updateUser, resetUserPassword,
-  getUserHomes, setUserHomes, listAllHomesForAccess,
+  getUserRoles, setUserRoles, listAllHomesForAccess,
 } from '../lib/api.js';
+
+const ROLE_BADGE = {
+  home_manager: BADGE.purple,
+  deputy_manager: BADGE.blue,
+  training_lead: BADGE.green,
+  finance_officer: BADGE.amber,
+  hr_officer: BADGE.pink,
+  shift_coordinator: BADGE.orange,
+  viewer: BADGE.gray,
+  staff_member: BADGE.gray,
+};
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -12,6 +25,7 @@ function formatDate(iso) {
 }
 
 export default function UserManagement() {
+  const { isPlatformAdmin } = useAuth();
   const [users, setUsers] = useState([]);
   const [allHomes, setAllHomes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +36,7 @@ export default function UserManagement() {
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetPwUser, setResetPwUser] = useState(null);
-  const [homesUser, setHomesUser] = useState(null);
+  const [rolesUser, setRolesUser] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -73,7 +87,6 @@ export default function UserManagement() {
               <tr>
                 <th scope="col" className={TABLE.th}>Username</th>
                 <th scope="col" className={TABLE.th}>Display Name</th>
-                <th scope="col" className={TABLE.th}>Role</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Last Login</th>
                 <th scope="col" className={TABLE.th}>Created</th>
@@ -82,14 +95,14 @@ export default function UserManagement() {
             </thead>
             <tbody>
               {users.length === 0 ? (
-                <tr><td colSpan={7} className={TABLE.empty}>No users found</td></tr>
+                <tr><td colSpan={6} className={TABLE.empty}>No users found</td></tr>
               ) : users.map(u => (
                 <tr key={u.id} className={TABLE.tr}>
-                  <td className={`${TABLE.td} font-medium text-gray-900`}>{u.username}</td>
-                  <td className={TABLE.td}>{u.display_name || '—'}</td>
-                  <td className={TABLE.td}>
-                    <span className={u.role === 'admin' ? BADGE.purple : BADGE.blue}>{u.role}</span>
+                  <td className={`${TABLE.td} font-medium text-gray-900`}>
+                    {u.username}
+                    {u.is_platform_admin && <span className={`${BADGE.purple} ml-2`}>Platform Admin</span>}
                   </td>
+                  <td className={TABLE.td}>{u.display_name || '—'}</td>
                   <td className={TABLE.td}>
                     <span className={u.active ? BADGE.green : BADGE.red}>{u.active ? 'Active' : 'Inactive'}</span>
                   </td>
@@ -99,7 +112,7 @@ export default function UserManagement() {
                     <div className="flex items-center gap-1">
                       <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
                       <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
-                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setHomesUser(u)}>Homes</button>
+                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Roles</button>
                     </div>
                   </td>
                 </tr>
@@ -112,7 +125,7 @@ export default function UserManagement() {
       {addOpen && <AddUserModal onClose={() => setAddOpen(false)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
       {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
       {resetPwUser && <ResetPasswordModal user={resetPwUser} onClose={() => setResetPwUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
-      {homesUser && <HomeAccessModal user={homesUser} allHomes={allHomes} onClose={() => setHomesUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
+      {rolesUser && <HomeRolesModal user={rolesUser} allHomes={allHomes} isPlatformAdmin={isPlatformAdmin} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
     </div>
   );
 }
@@ -120,7 +133,7 @@ export default function UserManagement() {
 // ── Add User Modal ───────────────────────────────────────────────────────────
 
 function AddUserModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '', role: 'viewer' });
+  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '' });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
 
@@ -133,8 +146,8 @@ function AddUserModal({ onClose, onSuccess }) {
     if (form.password.length < 10) { setLocalError('Password must be at least 10 characters'); return; }
     setSaving(true);
     try {
-      await createUser({ username: form.username, password: form.password, role: form.role, displayName: form.displayName });
-      onSuccess(`User "${form.username}" created`);
+      await createUser({ username: form.username, password: form.password, role: 'viewer', displayName: form.displayName });
+      onSuccess(`User "${form.username}" created — assign roles via the Roles button`);
       onClose();
     } catch (err) {
       setLocalError(err.message);
@@ -157,13 +170,6 @@ function AddUserModal({ onClose, onSuccess }) {
             <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} placeholder="Optional" />
           </div>
           <div>
-            <label className={INPUT.label}>Role</label>
-            <select className={INPUT.select} value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div>
             <label className={INPUT.label}>Password</label>
             <input className={INPUT.base} type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={10} maxLength={200} />
             <p className="text-xs text-gray-400 mt-1">Minimum 10 characters</p>
@@ -173,6 +179,7 @@ function AddUserModal({ onClose, onSuccess }) {
             <input className={INPUT.base} type="password" value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} required />
           </div>
         </div>
+        <p className="text-xs text-gray-500 mt-3">After creating, use the Roles button to assign per-home roles.</p>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
           <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Creating...' : 'Create User'}</button>
@@ -185,7 +192,7 @@ function AddUserModal({ onClose, onSuccess }) {
 // ── Edit User Modal ──────────────────────────────────────────────────────────
 
 function EditUserModal({ user, onClose, onSuccess }) {
-  const [form, setForm] = useState({ displayName: user.display_name || '', role: user.role, active: user.active });
+  const [form, setForm] = useState({ displayName: user.display_name || '', active: user.active });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
 
@@ -196,7 +203,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
     setLocalError(null);
     setSaving(true);
     try {
-      await updateUser(user.id, { displayName: form.displayName, role: form.role, active: form.active });
+      await updateUser(user.id, { displayName: form.displayName, active: form.active });
       onSuccess(`User "${user.username}" updated`);
       onClose();
     } catch (err) {
@@ -214,13 +221,6 @@ function EditUserModal({ user, onClose, onSuccess }) {
           <div>
             <label className={INPUT.label}>Display Name</label>
             <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} autoFocus />
-          </div>
-          <div>
-            <label className={INPUT.label}>Role</label>
-            <select className={INPUT.select} value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
-            </select>
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="user-active" checked={form.active} onChange={e => set('active', e.target.checked)}
@@ -292,27 +292,33 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
   );
 }
 
-// ── Home Access Modal ────────────────────────────────────────────────────────
+// ── Home Roles Modal ─────────────────────────────────────────────────────────
 
-function HomeAccessModal({ user, allHomes, onClose, onSuccess }) {
-  const [selected, setSelected] = useState(new Set());
+// Roles that non-platform-admins (home managers) can assign
+const ASSIGNABLE_ROLES = ROLE_IDS.filter(r => r !== 'home_manager');
+
+function HomeRolesModal({ user, allHomes, isPlatformAdmin, onClose, onSuccess }) {
+  // Map of homeId → roleId (empty string = no access)
+  const [roleMap, setRoleMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
 
   useEffect(() => {
-    getUserHomes(user.id).then(res => {
-      setSelected(new Set(res.homeIds));
+    getUserRoles(user.id).then(res => {
+      const map = {};
+      for (const r of res.roles) map[r.home_id] = r.role_id;
+      setRoleMap(map);
     }).catch(err => {
       setLocalError(err.message);
     }).finally(() => setLoading(false));
   }, [user.id]);
 
-  function toggle(homeId) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(homeId)) next.delete(homeId);
-      else next.add(homeId);
+  function setRole(homeId, roleId) {
+    setRoleMap(prev => {
+      const next = { ...prev };
+      if (roleId) next[homeId] = roleId;
+      else delete next[homeId];
       return next;
     });
   }
@@ -321,8 +327,11 @@ function HomeAccessModal({ user, allHomes, onClose, onSuccess }) {
     setLocalError(null);
     setSaving(true);
     try {
-      await setUserHomes(user.id, [...selected]);
-      onSuccess(`Home access updated for "${user.username}"`);
+      const roles = Object.entries(roleMap)
+        .filter(([, roleId]) => roleId)
+        .map(([homeId, roleId]) => ({ homeId: Number(homeId), roleId }));
+      await setUserRoles(user.id, roles);
+      onSuccess(`Roles updated for "${user.username}"`);
       onClose();
     } catch (err) {
       setLocalError(err.message);
@@ -331,33 +340,53 @@ function HomeAccessModal({ user, allHomes, onClose, onSuccess }) {
     }
   }
 
+  const availableRoles = isPlatformAdmin ? ROLE_IDS : ASSIGNABLE_ROLES;
+
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Home Access — ${user.username}`}>
+    <Modal isOpen={true} onClose={onClose} title={`Roles — ${user.username}`} size="lg">
       {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
       {loading ? (
         <p className="text-gray-400 text-sm py-4 text-center">Loading...</p>
       ) : allHomes.length === 0 ? (
         <p className="text-gray-400 text-sm py-4 text-center">No homes configured</p>
       ) : (
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          {allHomes.map(h => (
-            <label key={h.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-              <input type="checkbox" checked={selected.has(h.id)} onChange={() => toggle(h.id)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              <span className="text-sm text-gray-700">{h.name}</span>
-            </label>
-          ))}
-        </div>
+        <>
+          <p className="text-xs text-gray-500 mb-3">
+            Assign a role per home. Set to "No Access" to revoke.
+            {!isPlatformAdmin && ' Only platform admins can assign the Home Manager role.'}
+          </p>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {allHomes.map(h => {
+              const currentRole = roleMap[h.id] || '';
+              return (
+                <div key={h.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{h.name}</span>
+                  <select
+                    className={`${INPUT.sm} w-48`}
+                    value={currentRole}
+                    onChange={e => setRole(h.id, e.target.value)}
+                  >
+                    <option value="">No Access</option>
+                    {availableRoles.map(rid => (
+                      <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
+                    ))}
+                  </select>
+                  {currentRole && (
+                    <span className={`${ROLE_BADGE[currentRole] || BADGE.gray} text-xs whitespace-nowrap`}>
+                      {getRoleLabel(currentRole)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-        <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-          onClick={() => setSelected(new Set(allHomes.map(h => h.id)))}>Select All</button>
-        <div className="flex gap-3">
-          <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading}>
-            {saving ? 'Saving...' : 'Save Access'}
-          </button>
-        </div>
+      <div className={MODAL.footer}>
+        <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
+        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || loading}>
+          {saving ? 'Saving...' : 'Save Roles'}
+        </button>
       </div>
     </Modal>
   );
