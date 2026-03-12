@@ -10,7 +10,9 @@
  *
  * Rules:
  *   - All /api/* routes must have requireAuth (unless explicitly whitelisted)
- *   - POST /api/data, GET /api/audit, GET /api/export must also have requireAdmin
+ *   - All non-public /api/* routes must have at least one authorization middleware:
+ *     requireAdmin, requirePlatformAdmin, requireHomeAccess, requireModule, or requireHomeManager
+ *   - Self-service routes (change-password) only need requireAuth (no authorization middleware)
  *   - /health is intentionally public (health check — no auth)
  *   - /api/login is intentionally public (auth endpoint itself — has rate limiter)
  */
@@ -26,120 +28,30 @@ const rootDir = path.join(__dirname, '..');
 const PUBLIC_ROUTES = new Set([
   'POST /api/login',
   'GET /health',
-  'GET *', // SPA fallback — serves static index.html in production
+  'GET /readiness',  // Kubernetes readiness probe — no auth
+  'GET *',           // SPA fallback — serves static index.html in production
 ]);
 
-// Routes that require requireAdmin in addition to requireAuth
-const ADMIN_ROUTES = new Set([
-  'POST /api/data',
-  'GET /api/audit',
-  'DELETE /api/audit/purge',
-  'GET /api/export',
-  // Webhooks — admin-only
-  'GET /api/webhooks',
-  'POST /api/webhooks',
-  'PUT /api/webhooks/:id',
-  'DELETE /api/webhooks/:id',
-  'GET /api/webhooks/:id/deliveries',
-  // Staff import — admin-only
-  'GET /api/import/staff/template',
-  'POST /api/import/staff',
-  'POST /api/handover',
-  'PUT /api/handover/:id',
-  'DELETE /api/handover/:id',
-  // HR — all routes admin-only (GDPR special category data)
-  'GET /api/hr/cases/disciplinary',
-  'POST /api/hr/cases/disciplinary',
-  'GET /api/hr/cases/disciplinary/:id',
-  'PUT /api/hr/cases/disciplinary/:id',
-  'GET /api/hr/cases/grievance',
-  'POST /api/hr/cases/grievance',
-  'GET /api/hr/cases/grievance/:id',
-  'PUT /api/hr/cases/grievance/:id',
-  'GET /api/hr/cases/grievance/:id/actions',
-  'POST /api/hr/cases/grievance/:id/actions',
-  'PUT /api/hr/grievance-actions/:id',
-  'GET /api/hr/cases/performance',
-  'POST /api/hr/cases/performance',
-  'GET /api/hr/cases/performance/:id',
-  'PUT /api/hr/cases/performance/:id',
-  'GET /api/hr/absence/summary',
-  'GET /api/hr/absence/staff/:staffId',
-  'GET /api/hr/rtw-interviews',
-  'POST /api/hr/rtw-interviews',
-  'PUT /api/hr/rtw-interviews/:id',
-  'GET /api/hr/oh-referrals',
-  'POST /api/hr/oh-referrals',
-  'PUT /api/hr/oh-referrals/:id',
-  'GET /api/hr/contracts',
-  'POST /api/hr/contracts',
-  'GET /api/hr/contracts/:id',
-  'PUT /api/hr/contracts/:id',
-  'GET /api/hr/family-leave',
-  'POST /api/hr/family-leave',
-  'GET /api/hr/family-leave/:id',
-  'PUT /api/hr/family-leave/:id',
-  'GET /api/hr/flexible-working',
-  'POST /api/hr/flexible-working',
-  'GET /api/hr/flexible-working/:id',
-  'PUT /api/hr/flexible-working/:id',
-  'GET /api/hr/edi',
-  'POST /api/hr/edi',
-  'GET /api/hr/edi/:id',
-  'PUT /api/hr/edi/:id',
-  'GET /api/hr/tupe',
-  'POST /api/hr/tupe',
-  'GET /api/hr/tupe/:id',
-  'PUT /api/hr/tupe/:id',
-  'GET /api/hr/renewals',
-  'POST /api/hr/renewals',
-  'GET /api/hr/renewals/:id',
-  'PUT /api/hr/renewals/:id',
-  'GET /api/hr/warnings',
-  'GET /api/hr/stats',
-  'GET /api/hr/case-notes/:caseType/:caseId',
-  'POST /api/hr/case-notes/:caseType/:caseId',
-  // File attachments & investigation meetings
-  'GET /api/hr/attachments/:caseType/:caseId',
-  'POST /api/hr/attachments/:caseType/:caseId',
-  'GET /api/hr/attachments/download/:id',
-  'DELETE /api/hr/attachments/:id',
-  'GET /api/hr/meetings/:caseType/:caseId',
-  'POST /api/hr/meetings/:caseType/:caseId',
-  'PUT /api/hr/meetings/:id',
-  // Payroll — admin-only mutation routes
-  'POST /api/payroll/rates',
-  'PUT /api/payroll/rates/:ruleId',
-  'DELETE /api/payroll/rates/:ruleId',
-  'POST /api/payroll/timesheets',
-  'POST /api/payroll/timesheets/:id/approve',
-  'POST /api/payroll/timesheets/:id/dispute',
-  'POST /api/payroll/timesheets/bulk-approve',
-  'POST /api/payroll/timesheets/batch-upsert',
-  'POST /api/payroll/timesheets/approve-range',
-  'POST /api/payroll/runs',
-  'POST /api/payroll/runs/:runId/calculate',
-  'POST /api/payroll/runs/:runId/approve',
-  'GET /api/payroll/runs/:runId/export',
-  'GET /api/payroll/runs/:runId/payslips/:staffId',
-  'GET /api/payroll/runs/:runId/payslips',
-  'GET /api/payroll/runs/:runId/summary-pdf',
-  'POST /api/payroll/agency/providers',
-  'PUT /api/payroll/agency/providers/:id',
-  'POST /api/payroll/agency/shifts',
-  'PUT /api/payroll/agency/shifts/:id',
-  'POST /api/payroll/tax-codes',
-  'POST /api/payroll/pensions',
-  'POST /api/payroll/sick-periods',
-  'PUT /api/payroll/sick-periods/:id',
-  'PUT /api/payroll/hmrc/:id/paid',
-  // Scheduling — override + day-note mutations are admin-only
-  'PUT /api/scheduling/overrides',
-  'DELETE /api/scheduling/overrides',
-  'POST /api/scheduling/overrides/bulk',
-  'DELETE /api/scheduling/overrides/month',
-  'PUT /api/scheduling/day-notes',
+// Routes that only need requireAuth (no authorization middleware needed)
+// These are self-service endpoints available to any authenticated user.
+const SELF_SERVICE_ROUTES = new Set([
+  'POST /api/login/logout',          // Any user can log out
+  'POST /api/users/change-password', // Any user can change own password
+  'GET /api/homes',                  // Returns only homes user has access to (filtered server-side)
+  'GET /api/bank-holidays',          // Public reference data — no home scoping needed
+  'GET /api/payroll/nmw',            // NMW rates — public reference data
+  'GET /api/payroll/pension-config', // Pension thresholds — public reference data
+  'GET /api/payroll/ssp-config',     // SSP rates — public reference data
 ]);
+
+// Authorization middleware patterns — any non-public route must have at least one
+const AUTH_Z_PATTERNS = [
+  'requireAdmin',
+  'requirePlatformAdmin',
+  'requireHomeAccess',
+  'requireModule',
+  'requireHomeManager',
+];
 
 // ── Step 1: parse server.js for app.use() mounts and import mappings ──────────
 
@@ -210,9 +122,9 @@ const results = [];
 
 for (const { key, middlewareStr, file } of allRoutes) {
   const hasRequireAuth = middlewareStr.includes('requireAuth');
-  const hasRequireAdmin = middlewareStr.includes('requireAdmin');
+  const hasAuthZ = AUTH_Z_PATTERNS.some(p => middlewareStr.includes(p));
   const isPublic = PUBLIC_ROUTES.has(key);
-  const needsAdmin = ADMIN_ROUTES.has(key);
+  const isSelfService = SELF_SERVICE_ROUTES.has(key);
 
   const issues = [];
 
@@ -220,14 +132,21 @@ for (const { key, middlewareStr, file } of allRoutes) {
     if (hasRequireAuth) issues.push('WARNING: public route unexpectedly has requireAuth');
   } else {
     if (!hasRequireAuth) { issues.push('FAIL: missing requireAuth'); pass = false; }
+    if (!isSelfService && !hasAuthZ) { issues.push('FAIL: missing authorization middleware'); pass = false; }
   }
 
-  if (needsAdmin && !hasRequireAdmin) { issues.push('FAIL: missing requireAdmin'); pass = false; }
-  if (needsAdmin && !hasRequireAuth)  { issues.push('FAIL: missing requireAuth (admin route)'); pass = false; }
-
-  const status = issues.length === 0
-    ? (isPublic ? 'PUBLIC (intentional)' : needsAdmin ? 'PASS (auth + admin)' : 'PASS (auth)')
-    : issues.join('; ');
+  let status;
+  if (issues.length > 0) {
+    status = issues.join('; ');
+  } else if (isPublic) {
+    status = 'PUBLIC (intentional)';
+  } else if (isSelfService) {
+    status = 'PASS (self-service)';
+  } else {
+    // Show which authorization is used
+    const authZUsed = AUTH_Z_PATTERNS.filter(p => middlewareStr.includes(p));
+    status = `PASS (${authZUsed.join(' + ')})`;
+  }
 
   results.push({ key, status, file });
 }
