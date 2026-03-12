@@ -43,6 +43,9 @@ router.post('/', loginLimiter, async (req, res, next) => {
       maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
     });
 
+    // Clear any stale CSRF cookie from old path (migration from path=/api to path=/)
+    res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
+
     // CSRF double-submit cookie — JS-readable so the frontend can send it back
     // as X-CSRF-Token header. SameSite=Strict prevents cross-site transmission.
     res.cookie('panama_csrf', randomBytes(32).toString('hex'), {

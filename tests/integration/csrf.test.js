@@ -84,13 +84,14 @@ describe('CSRF double-submit cookie', () => {
       .expect(200);
 
     const cookies = loginRes.headers['set-cookie'];
-    const csrfCookie = cookies.find(c => c.startsWith('panama_csrf='));
+    // Pick the real CSRF cookie (not the clearCookie for old path)
+    const csrfCookie = cookies.find(c => c.startsWith('panama_csrf=') && !c.includes('Expires=Thu, 01 Jan 1970'));
     const csrfToken = csrfCookie.split('=')[1].split(';')[0];
 
     // Use cookies for a mutating request
     const res = await request(app)
       .post('/api/login/logout')
-      .set('Cookie', cookies.map(c => c.split(';')[0]).join('; '))
+      .set('Cookie', cookies.filter(c => !c.includes('Expires=Thu, 01 Jan 1970')).map(c => c.split(';')[0]).join('; '))
       .set('X-CSRF-Token', csrfToken)
       .expect(200);
 
@@ -125,7 +126,7 @@ describe('CSRF double-submit cookie', () => {
 
     const res = await request(app)
       .post('/api/login/logout')
-      .set('Cookie', cookies.map(c => c.split(';')[0]).join('; '))
+      .set('Cookie', cookies.filter(c => !c.includes('Expires=Thu, 01 Jan 1970')).map(c => c.split(';')[0]).join('; '))
       .set('X-CSRF-Token', 'wrong-token-value')
       .expect(403);
 
@@ -167,12 +168,12 @@ describe('CSRF double-submit cookie', () => {
       .expect(200);
 
     const cookies = loginRes.headers['set-cookie'];
-    const csrfCookie = cookies.find(c => c.startsWith('panama_csrf='));
+    const csrfCookie = cookies.find(c => c.startsWith('panama_csrf=') && !c.includes('Expires=Thu, 01 Jan 1970'));
     const csrfToken = csrfCookie.split('=')[1].split(';')[0];
 
     const logoutRes = await request(app)
       .post('/api/login/logout')
-      .set('Cookie', cookies.map(c => c.split(';')[0]).join('; '))
+      .set('Cookie', cookies.filter(c => !c.includes('Expires=Thu, 01 Jan 1970')).map(c => c.split(';')[0]).join('; '))
       .set('X-CSRF-Token', csrfToken)
       .expect(200);
 
@@ -196,8 +197,8 @@ describe('CSRF double-submit cookie', () => {
       .send({ username: ADMIN_USER, password: ADMIN_PW })
       .expect(200);
 
-    const token1 = res1.headers['set-cookie'].find(c => c.startsWith('panama_csrf=')).split('=')[1].split(';')[0];
-    const token2 = res2.headers['set-cookie'].find(c => c.startsWith('panama_csrf=')).split('=')[1].split(';')[0];
+    const token1 = res1.headers['set-cookie'].find(c => c.startsWith('panama_csrf=') && !c.includes('Expires=Thu, 01 Jan 1970')).split('=')[1].split(';')[0];
+    const token2 = res2.headers['set-cookie'].find(c => c.startsWith('panama_csrf=') && !c.includes('Expires=Thu, 01 Jan 1970')).split('=')[1].split(';')[0];
 
     expect(token1).not.toBe(token2);
     expect(token1.length).toBe(64); // 32 bytes hex = 64 chars
