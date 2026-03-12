@@ -909,7 +909,7 @@ export function getDbsStatusList(data) {
 export function getFatigueSummary(data) {
   const activeStaff = (data.staff || []).filter(s => s.active !== false && isCareRole(s.role));
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   const atRisk = [];
   for (const s of activeStaff) {
     const result = checkFatigueRisk(s, today, data.overrides || {}, data.config);

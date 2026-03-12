@@ -89,7 +89,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
     const incidentTypes = req.home.config?.incident_types || [];
     const staff = staffResult.rows.filter(s => s.active !== false).map(s => ({ id: s.id, name: s.name, role: s.role }));
     // Strip GDPR-sensitive fields for non-admin viewers (safety handover summary preserved)
-    if (req.user.role !== 'admin') {
+    if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       incidents = incidents.map(inc => {
         const {
           investigation_lead: _a, investigation_review_date: _b, root_cause: _c,

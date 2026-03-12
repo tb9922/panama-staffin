@@ -64,7 +64,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
     const surveys = surveysResult.rows;
     const complaintCategories = req.home.config?.complaint_categories || [];
     // Strip GDPR-sensitive fields for non-admin viewers
-    if (req.user.role !== 'admin') {
+    if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       complaints = complaints.map(c => {
         const {
           raised_by_name: _a, investigator: _b, investigation_notes: _c,

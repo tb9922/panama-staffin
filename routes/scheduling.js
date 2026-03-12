@@ -146,7 +146,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
     let staffOut, onboardingOut;
-    if (req.user.role !== 'admin') {
+    if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
       onboardingOut = undefined;

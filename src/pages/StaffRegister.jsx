@@ -68,7 +68,7 @@ export default function StaffRegister() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  const nlwRate = config?.nlw_rate || 12.71;
+  const nlwRate = config?.nlw_rate || 12.21;
 
   const staff = useMemo(() => {
     let list = [...allStaff];

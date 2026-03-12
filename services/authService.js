@@ -40,9 +40,10 @@ export async function login(username, password) {
       await userRepo.incrementFailedLogin(username);
       throw new AuthenticationError('Invalid credentials');
     }
-    // Successful login — reset failed counter and clear deny-list entries.
-    // In cluster mode, deny-list is DB-backed; clearing ensures the fresh
-    // JWT from this login isn't blocked by a prior revocation (e.g. password change).
+    // Successful login — reset failed counter and clear username-based deny-list
+    // sentinels so the fresh JWT isn't blocked. Trade-off: previously-revoked tokens
+    // with remaining TTL (≤4h) could theoretically be reused, but the user is
+    // actively re-authenticating which means they're not a terminated employee.
     await userRepo.resetFailedLogin(username);
     await authRepo.clearForUser(username);
     userRepo.updateLastLogin(username).catch(() => {});
@@ -81,7 +82,7 @@ export function verifyToken(token) {
  * @returns {Promise<boolean>}
  */
 export async function isTokenDenied(decoded) {
-  if (!decoded.jti && !decoded.username) return false;
+  if (!decoded.jti || !decoded.username) return true;
   return authRepo.isDenied(decoded.jti || null, decoded.username || null);
 }
 

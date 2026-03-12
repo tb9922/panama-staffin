@@ -314,7 +314,7 @@ export default function AnnualLeave() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.sort((a, b) => a.name.localeCompare(b.name)).map(s => {
+                {[...filtered].sort((a, b) => a.name.localeCompare(b.name)).map(s => {
                   const acc = accruals.get(s.id) || {
                     annualEntitlementHours: 0, totalEntitlementHours: 0, accruedHours: 0, usedHours: 0,
                     remainingHours: 0, yearRemainingHours: 0, isProRata: false, carryoverHours: 0,

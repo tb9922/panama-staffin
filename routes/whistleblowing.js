@@ -44,7 +44,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
     const pg = paginationSchema.parse(req.query);
     const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     const concerns = concernsResult.rows;
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager';
     // Strip raised_by_role from anonymous concerns to prevent de-anonymisation
     // Strip investigation details for non-admin viewers (GDPR)
     const safe = concerns.map(c => {

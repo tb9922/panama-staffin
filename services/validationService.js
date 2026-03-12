@@ -217,7 +217,7 @@ function validateIncidents(data, warnings, todayStr) {
   for (const inc of data.incidents) {
     if (inc.cqc_notifiable && !inc.cqc_notified && inc.date) {
       const deadlineHours = inc.cqc_notification_deadline === 'immediate' ? 24 : 72;
-      const deadline = new Date(new Date(inc.date + 'T' + (inc.time || '00:00') + ':00').getTime() + deadlineHours * 3600000);
+      const deadline = new Date(new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z').getTime() + deadlineHours * 3600000);
       if (now > deadline) overdueCqc++;
     }
     if (inc.riddor_reportable && !inc.riddor_reported && inc.date) {
@@ -228,10 +228,10 @@ function validateIncidents(data, warnings, todayStr) {
       if (now > deadline) overdueRiddor++;
     }
     if ((inc.investigation_status === 'open' || inc.investigation_status === 'under_review') && inc.date) {
-      if (Math.floor((now - new Date(inc.date)) / 86400000) > 14) staleInvestigations++;
+      if (Math.floor((now - new Date(inc.date + 'T00:00:00Z')) / 86400000) > 14) staleInvestigations++;
     }
     if (inc.duty_of_candour_applies && !inc.candour_notification_date && inc.date) {
-      const deadline = new Date(new Date(inc.date + 'T00:00:00').getTime() + 14 * 86400000);
+      const deadline = new Date(new Date(inc.date + 'T00:00:00Z').getTime() + 14 * 86400000);
       if (now > deadline) overdueDoc++;
     }
     for (const action of (inc.corrective_actions || [])) {
@@ -254,11 +254,11 @@ function validateComplaints(data, warnings, todayStr) {
   for (const c of data.complaints) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
     if (!c.acknowledged_date && c.date) {
-      const ackDeadline = new Date(new Date(c.date + 'T00:00:00').getTime() + 2 * 86400000);
+      const ackDeadline = new Date(new Date(c.date + 'T00:00:00Z').getTime() + 2 * 86400000);
       if (now > ackDeadline) unacknowledged++;
     }
     const deadline = c.response_deadline || (c.date
-      ? new Date(new Date(c.date + 'T00:00:00').getTime() + responseDays * 86400000).toISOString().slice(0, 10)
+      ? new Date(new Date(c.date + 'T00:00:00Z').getTime() + responseDays * 86400000).toISOString().slice(0, 10)
       : null);
     if (deadline && todayStr > deadline) overdueResponse++;
   }
@@ -312,11 +312,11 @@ function validateWhistleblowing(data, warnings) {
   for (const c of data.whistleblowing_concerns) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
     if (!c.acknowledgement_date && c.date_raised) {
-      const deadline = new Date(new Date(c.date_raised + 'T00:00:00').getTime() + 3 * 86400000);
+      const deadline = new Date(new Date(c.date_raised + 'T00:00:00Z').getTime() + 3 * 86400000);
       if (now > deadline) unacknowledged++;
     }
     if (c.status === 'investigating' && c.investigation_start_date) {
-      const days = Math.floor((now - new Date(c.investigation_start_date + 'T00:00:00')) / 86400000);
+      const days = Math.floor((now - new Date(c.investigation_start_date + 'T00:00:00Z')) / 86400000);
       if (days > 30) longInvestigations++;
     }
   }
