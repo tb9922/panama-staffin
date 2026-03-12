@@ -120,7 +120,7 @@ export async function isDenied(jti, username) {
   if (jti) {
     const { rows } = await pool.query(
       `SELECT 1 FROM token_denylist
-       WHERE jti = $1 OR (username = $2 AND expires_at > NOW())
+       WHERE (jti = $1 AND expires_at > NOW()) OR (username = $2 AND expires_at > NOW())
        LIMIT 1`,
       [jti, username || '']
     );

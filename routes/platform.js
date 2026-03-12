@@ -159,6 +159,7 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
       const revokedUsers = await userHomeRepo.findUsernamesForHome(id.data);
 
       await homeRepo.softDelete(id.data, client);
+      await userHomeRepo.revokeAllRolesForHome(id.data, client);
       await userHomeRepo.revokeAllForHome(id.data, client);
       await auditService.log('home_delete', home.slug, req.user.username, {
         usersRevoked: revokedUsers,

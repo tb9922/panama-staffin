@@ -74,7 +74,7 @@ export function hasModuleAccess(roleId, moduleId, level = 'read') {
   if (!access || access === 'none') return false;
 
   if (level === 'own') return access === 'own' || access === 'read' || access === 'write';
-  if (level === 'read') return access === 'read' || access === 'write' || access === 'own';
+  if (level === 'read') return access === 'read' || access === 'write';
   if (level === 'write') return access === 'write';
   return false;
 }

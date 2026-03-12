@@ -94,7 +94,19 @@ export async function findHomesWithRolesForUser(username) {
      FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
      WHERE uhr.username = $1
-     ORDER BY h.name`,
+     UNION
+     SELECT h.slug, h.name, h.config,
+       CASE WHEN u.role = 'admin' THEN 'home_manager' ELSE 'viewer' END AS role_id,
+       NULL::text AS staff_id
+     FROM user_home_access uha
+     JOIN homes h ON h.id = uha.home_id AND h.deleted_at IS NULL
+     JOIN users u ON u.username = uha.username
+     WHERE uha.username = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM user_home_roles uhr2
+         WHERE uhr2.username = $1 AND uhr2.home_id = uha.home_id
+       )
+     ORDER BY name`,
     [username]
   );
   return rows;

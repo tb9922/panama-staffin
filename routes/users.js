@@ -259,19 +259,20 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireAdmin, async (req
     }
 
     // Also validate assigner has access to any homes being revoked
-    const desiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
     const currentRoles = await userHomeRepo.findRolesForUser(user.username);
     if (!req.user.is_platform_admin) {
       for (const cr of currentRoles) {
-        if (!desiredHomeIds.has(cr.home_id) && !assignerRoleMap.has(cr.home_id)) {
+        const inDesired = parsed.data.roles.some(r => r.homeId === cr.home_id);
+        if (!inDesired && !assignerRoleMap.has(cr.home_id)) {
           // Assigner doesn't have access to this home — preserve the existing role
           parsed.data.roles.push({ homeId: cr.home_id, roleId: cr.role_id });
         }
       }
     }
 
-    // Build old roles map for audit diff
+    // Build old roles map and final desired set (after preservation) for audit diff
     const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
+    const finalDesiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
 
     // Apply changes in a transaction
     await withTransaction(async (client) => {
@@ -291,14 +292,14 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireAdmin, async (req
       }
     });
 
-    // Build audit diff
+    // Build audit diff using final desired set (after preservation)
     const changes = [];
     for (const { homeId, roleId } of parsed.data.roles) {
       const oldRole = oldRoleMap.get(homeId);
       if (oldRole !== roleId) changes.push({ homeId, from: oldRole || null, to: roleId });
     }
     for (const cr of currentRoles) {
-      if (!desiredHomeIds.has(cr.home_id)) {
+      if (!finalDesiredHomeIds.has(cr.home_id)) {
         changes.push({ homeId: cr.home_id, from: cr.role_id, to: null });
       }
     }

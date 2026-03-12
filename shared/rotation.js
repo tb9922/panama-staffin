@@ -210,6 +210,7 @@ export function getStaffForDay(staff, date, overrides, config) {
       isOverride: shift !== scheduled,
       replaces_staff_id: actual.replaces_staff_id || null,
       override_hours: actual.override_hours ?? null,
+      al_hours: actual.al_hours ?? null,
     });
   }
 

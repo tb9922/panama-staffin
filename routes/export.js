@@ -11,8 +11,9 @@ router.get('/', requireAuth, requireHomeAccess, requireModule('reports', 'read')
   try {
     const homeSlug = req.home.slug;
 
-    // Assemble as admin — exports full dataset including GDPR special-category fields
-    const data = await homeService.assembleData(homeSlug, 'admin');
+    // Assemble with effective role so GDPR stripping applies correctly
+    const effectiveRole = req.homeRole === 'home_manager' ? 'admin' : 'viewer';
+    const data = await homeService.assembleData(homeSlug, effectiveRole);
 
     await auditService.log('data_export', homeSlug, req.user.username, null);
 
