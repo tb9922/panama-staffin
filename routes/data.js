@@ -72,7 +72,8 @@ const saveLimiter = rateLimit({
 
 router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
-    const data = await homeService.assembleData(req.home.slug, req.user.role);
+    const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
+    const data = await homeService.assembleData(req.home.slug, effectiveRole);
     res.json(data);
   } catch (err) {
     next(err);

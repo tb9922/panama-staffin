@@ -56,7 +56,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
       dolsRepo.findMcaByHome(req.home.id, { limit: pg.limit, offset: pg.offset }),
     ]);
     // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager';
     const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob: _dob, ...rest }) => rest);
     const mcaAssessments = mcaResult.rows;
     res.json({ dols, mcaAssessments, _total: dolsResult.total });

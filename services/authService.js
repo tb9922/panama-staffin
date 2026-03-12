@@ -82,7 +82,7 @@ export function verifyToken(token) {
  * @returns {Promise<boolean>}
  */
 export async function isTokenDenied(decoded) {
-  if (!decoded.jti && !decoded.username) return false;
+  if (!decoded.jti || !decoded.username) return true;
   return authRepo.isDenied(decoded.jti || null, decoded.username || null);
 }
 

@@ -88,6 +88,7 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
     const home = await withTransaction(async (client) => {
       const created = await homeRepo.create(slug, name, config, client);
       await userHomeRepo.grantAccess(req.user.username, created.id, client);
+      await userHomeRepo.assignRole(req.user.username, created.id, 'home_manager', null, 'system', client);
       await auditService.log('home_create', slug, req.user.username, { name });
       return created;
     });

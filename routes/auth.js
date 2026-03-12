@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import * as authService from '../services/authService.js';
 import * as auditService from '../services/auditService.js';
+import * as authRepo from '../repositories/authRepo.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -72,7 +73,11 @@ router.post('/', loginLimiter, async (req, res, next) => {
 
 // ── Logout (clear cookie) ───────────────────────────────────────────────────
 
-router.post('/logout', requireAuth, (req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
+  if (req.user.jti) {
+    const expiresAt = new Date(req.user.exp * 1000);
+    await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt).catch(() => {});
+  }
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
   res.json({ ok: true });

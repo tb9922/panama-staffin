@@ -94,7 +94,7 @@ export async function findHomesWithRolesForUser(username) {
      FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
      WHERE uhr.username = $1
-     UNION
+     UNION ALL
      SELECT h.slug, h.name, h.config,
        CASE WHEN u.role = 'admin' THEN 'home_manager' ELSE 'viewer' END AS role_id,
        NULL::text AS staff_id
@@ -159,7 +159,10 @@ export async function grantAllHomesRole(username) {
  */
 export async function hasAccess(username, homeId) {
   const { rows } = await pool.query(
-    'SELECT 1 FROM user_home_access WHERE username = $1 AND home_id = $2 LIMIT 1',
+    `SELECT 1 FROM user_home_roles WHERE username = $1 AND home_id = $2
+     UNION ALL
+     SELECT 1 FROM user_home_access WHERE username = $1 AND home_id = $2
+     LIMIT 1`,
     [username, homeId]
   );
   return rows.length > 0;
@@ -205,9 +208,17 @@ export async function findHomeIdsForUser(username, client) {
  */
 export async function findHomeSlugsForUser(username) {
   const { rows } = await pool.query(
-    `SELECT h.slug FROM user_home_access uha
+    `SELECT h.slug FROM user_home_roles uhr
+     JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
+     WHERE uhr.username = $1
+     UNION
+     SELECT h.slug FROM user_home_access uha
      JOIN homes h ON h.id = uha.home_id AND h.deleted_at IS NULL
-     WHERE uha.username = $1`,
+     WHERE uha.username = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM user_home_roles uhr2
+         WHERE uhr2.username = $1 AND uhr2.home_id = uha.home_id
+       )`,
     [username]
   );
   return rows.map(r => r.slug);

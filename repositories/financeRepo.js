@@ -208,7 +208,8 @@ export async function recalculateResidentBalance(residentId, homeId, client) {
     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
     RETURNING outstanding_balance
   `, [residentId, homeId]);
-  return rows[0]?.outstanding_balance ?? 0;
+  const bal = rows[0]?.outstanding_balance;
+  return bal != null ? parseFloat(bal) : 0;
 }
 
 export async function updateResidentPaymentInfo(residentId, homeId, paymentDate, paymentAmount, client) {
