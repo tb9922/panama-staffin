@@ -17,6 +17,7 @@ import {
   INCIDENT_CATEGORIES, isCqcNotificationOverdue, isRiddorOverdue,
 } from '../lib/incidents.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -44,7 +45,8 @@ const EMPTY_FORM = {
 };
 
 export default function IncidentTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('compliance');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [incidents, setIncidents] = useState([]);
@@ -294,7 +296,7 @@ export default function IncidentTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Incident</button>}
+          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Incident</button>}
         </div>
       </div>
 
@@ -377,7 +379,7 @@ export default function IncidentTracker() {
                 const cqcOverdue = isCqcNotificationOverdue(inc);
                 const riddorOverdue = isRiddorOverdue(inc);
                 return (
-                  <tr key={inc.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(inc))}>
+                  <tr key={inc.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(inc))}>
                     <td className={TABLE.td}>{inc.date}</td>
                     <td className={TABLE.td}>{inc.time || '-'}</td>
                     <td className={TABLE.td}>{typeDef?.name || inc.type}</td>
@@ -825,17 +827,17 @@ export default function IncidentTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {isAdmin && editingId && !isFrozen && (
+              {canEdit && editingId && !isFrozen && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
-              {isAdmin && editingId && !isFrozen && (form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed') && (
+              {canEdit && editingId && !isFrozen && (form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed') && (
                 <button onClick={handleFreeze} disabled={freezing} className={`${BTN.secondary} ${BTN.sm}`}>
                   {freezing ? 'Freezing...' : 'Freeze Record'}
                 </button>
               )}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Close</button>
-              {isAdmin && !isFrozen && (
+              {canEdit && !isFrozen && (
                 <button onClick={handleSave} disabled={!form.date || !form.type || !form.severity} className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

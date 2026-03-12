@@ -3,7 +3,8 @@ import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getLoggedInUser, getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -27,7 +28,8 @@ function getMonthDates(year, month) {
 }
 
 export default function CostTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,7 +53,7 @@ export default function CostTracker() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (!isAdmin) {
+  if (!canEdit) {
     return (
       <div className={PAGE.container}>
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>

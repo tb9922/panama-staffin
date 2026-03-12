@@ -59,7 +59,7 @@ npm run dev          # Starts both servers concurrently
 # UI:  http://localhost:5173   (Vite + React)
 ```
 
-Login: `admin/admin123` (edit) or `viewer/view123` (read-only)
+Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 
 ## Tech Stack
 
@@ -160,9 +160,55 @@ src/
     GdprDashboard.jsx  SAR, breach notification, erasure, consent, DP complaints
     HandoverNotes.jsx  Structured shift handover with priorities, acknowledgements
     AuditLog.jsx       Audit trail viewer + Excel export
+shared/
+  roles.js             RBAC role definitions — 8 roles, 10 modules, permission helpers (importable by server + client)
 homes/                 JSON data files per care home (gitignored)
 backups/               Auto-backups before each save, 20 per home (gitignored)
 ```
+
+## RBAC (Per-Home Role-Based Access Control)
+
+Each user has a **per-home role** assigned via `user_home_roles` table (migration 101). Roles are defined in `shared/roles.js` — NOT in the database.
+
+### 8 Predefined Roles
+
+| Role | Can Manage Users | Key Access |
+|------|-----------------|------------|
+| `home_manager` | Yes | All modules: write |
+| `deputy_manager` | No | All read, write on scheduling/staff/compliance/governance/reports |
+| `training_lead` | No | staff+compliance: write, scheduling/governance/reports: read |
+| `finance_officer` | No | finance+payroll: write, scheduling/reports: read |
+| `hr_officer` | No | hr+staff: write, scheduling/gdpr/reports: read |
+| `shift_coordinator` | No | scheduling: write, staff/reports: read |
+| `viewer` | No | scheduling/staff/reports: read only |
+| `staff_member` | No | scheduling/payroll: own (self-data only) |
+
+### 10 Modules
+
+`scheduling`, `staff`, `hr`, `compliance`, `governance`, `finance`, `payroll`, `gdpr`, `reports`, `config`
+
+### Middleware
+
+- `requireHomeAccess` resolves `req.homeRole` + `req.staffId` from `user_home_roles` (fallback to legacy `user_home_access`)
+- `requireModule(moduleId, level)` gates routes by module — replaces `requireAdmin` on all route files
+- `requireHomeManager` gates user management within a home
+- Platform admins (`req.user.is_platform_admin`) bypass all module checks
+
+### Frontend
+
+- `DataContext.jsx` exposes `canRead(module)`, `canWrite(module)`, `homeRole`, `staffId`
+- `AppLayout.jsx` filters sidebar sections by `canRead(section.module)`
+- `AppRoutes.jsx` wraps routes with `<RequireModule module="x">`
+- All 51 pages use `const canEdit = canWrite('module')` instead of `isAdmin`
+
+### Helper Functions (shared/roles.js)
+
+- `hasModuleAccess(roleId, moduleId, level)` — check if role has access at given level
+- `canWriteModule(roleId, moduleId)` — shorthand for write access
+- `getVisibleModules(roleId)` — modules with at least read access
+- `canAssignRole(assignerRoleId, targetRoleId)` — role assignment rules
+- `getRoleLabel(roleId)` — human-readable label
+- `isOwnDataOnly(roleId, moduleId)` — true for staff_member on scheduling/payroll
 
 ## Data Model
 
@@ -761,6 +807,9 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 - ~~Audit log export~~: AuditLog.jsx Excel export via `downloadXLSX()`, up to 10,000 entries
 - ~~Staff CSV import~~: template download, dry-run validation, transactional insert, duplicate detection
 - ~~Webhook outbound~~: HMAC-signed, delivery logging, payroll/incident/override events, encrypted secrets
+
+### In Progress
+- ~~Per-home RBAC~~: 8 roles, 10 modules, per-home role assignment (backend + frontend complete, User Management UI remaining)
 
 ### Remaining
 - In-app messaging: mandatory read receipts, inbox/chat between staff

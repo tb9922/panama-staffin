@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as webhookRepo from '../repositories/webhookRepo.js';
 import { zodError } from '../errors.js';
@@ -40,7 +40,7 @@ const webhookSchema = z.object({
 });
 
 // GET /api/webhooks?home=X — list webhooks
-router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'read'), async (req, res, next) => {
   try {
     const hooks = await webhookRepo.findByHome(req.home.id);
     res.json(hooks);
@@ -48,7 +48,7 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, a
 });
 
 // POST /api/webhooks?home=X — create webhook
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const parsed = webhookSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -58,7 +58,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // PUT /api/webhooks/:id?home=X — update webhook
-router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });
@@ -71,7 +71,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
 });
 
 // DELETE /api/webhooks/:id?home=X — remove webhook
-router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });
@@ -82,7 +82,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAc
 });
 
 // GET /api/webhooks/:id/deliveries?home=X — recent delivery log
-router.get('/:id/deliveries', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/:id/deliveries', readRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'read'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });

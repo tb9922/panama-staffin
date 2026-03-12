@@ -1,4 +1,4 @@
-import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { diffFields } from '../../lib/hrFieldMappers.js';
@@ -17,7 +17,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
   const prefix = auditPrefix || type;
 
   // GET list
-  router.get(path, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+  router.get(path, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
     try {
       const f = {};
       for (const [queryParam, filterKey] of Object.entries(filters || {})) {
@@ -31,7 +31,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
   });
 
   // POST create
-  router.post(path, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+  router.post(path, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
     try {
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
@@ -44,7 +44,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
 
   // GET by ID
   if (hasGetById) {
-    router.get(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+    router.get(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
       try {
         const parsed = idSchema.safeParse(req.params.id);
         if (!parsed.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -56,7 +56,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
   }
 
   // PUT update — with optimistic locking + field-diff audit
-  router.put(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+  router.put(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
     try {
       const idParsed = idSchema.safeParse(req.params.id);
       if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });
@@ -80,7 +80,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
 
   // DELETE soft-delete
   if (table) {
-    router.delete(`${path}/:id`, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+    router.delete(`${path}/:id`, requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
       try {
         const idParsed = idSchema.safeParse(req.params.id);
         if (!idParsed.success) return res.status(400).json({ error: 'Invalid case ID' });

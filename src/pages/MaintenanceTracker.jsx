@@ -10,8 +10,9 @@ import {
   getMaintenanceStatus, MAINTENANCE_STATUSES, FREQUENCY_OPTIONS, DEFAULT_MAINTENANCE_CATEGORIES,
 } from '../lib/maintenance.js';
 import {
-  getCurrentHome, getLoggedInUser, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
+  getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
 } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const EMPTY_FORM = {
   category: '', category_name: '', description: '', frequency: 'annual',
@@ -21,7 +22,8 @@ const EMPTY_FORM = {
 };
 
 export default function MaintenanceTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('governance');
   const [checks, setChecks] = useState([]);
   const [maintenanceCategories, setMaintenanceCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,7 +175,7 @@ export default function MaintenanceTracker() {
         <h1 className={PAGE.title}>Maintenance & Environment</h1>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
+          {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
 
@@ -249,7 +251,7 @@ export default function MaintenanceTracker() {
                   </td>
                   <td className={TABLE.td}>{m.certificate_ref || '--'}</td>
                   <td className={TABLE.td}>
-                    {isAdmin && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                    {canEdit && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                   </td>
                 </tr>
               ))}
@@ -363,10 +365,10 @@ export default function MaintenanceTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              {isAdmin && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              {isAdmin && <button onClick={handleSave} className={BTN.primary}>Save</button>}
+              {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
     </div>

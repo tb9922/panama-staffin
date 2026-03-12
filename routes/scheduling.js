@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool, withTransaction } from '../db.js';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
@@ -181,7 +181,7 @@ const overrideBodySchema = z.object({
   al_hours: z.number().min(0).max(24).optional(),
 });
 
-router.put('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -242,7 +242,7 @@ const overrideDeleteSchema = z.object({
   staffId: z.string().min(1).max(40),
 });
 
-router.delete('/overrides', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = overrideDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -269,7 +269,7 @@ const bulkBodySchema = z.object({
   })).min(1).max(500),
 });
 
-router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = bulkBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -334,7 +334,7 @@ const monthDeleteSchema = z.object({
   toDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-router.delete('/overrides/month', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = monthDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -357,7 +357,7 @@ const dayNoteSchema = z.object({
   note: z.string().max(5000),
 });
 
-router.put('/day-notes', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/day-notes', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = dayNoteSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

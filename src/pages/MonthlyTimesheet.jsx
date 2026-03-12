@@ -6,10 +6,10 @@ import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
   upsertTimesheet, approveTimesheet, disputeTimesheet,
-  getSchedulingData, getLoggedInUser,
-} from '../lib/api.js';
+  getSchedulingData, } from '../lib/api.js';
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -48,7 +48,8 @@ export default function MonthlyTimesheet() {
   const { staffId: urlStaffId } = useParams();
   const navigate = useNavigate();
   const homeSlug = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
   useEffect(() => {
@@ -414,7 +415,7 @@ export default function MonthlyTimesheet() {
   }
 
   function rowActions(row) {
-    if (!isAdmin) return null;
+    if (!canEdit) return null;
     const e = row.entry;
 
     // Locked — no actions
@@ -556,7 +557,7 @@ export default function MonthlyTimesheet() {
       {error && <p className="text-red-600 text-sm mb-4" role="alert">{error}</p>}
 
       {/* Action buttons */}
-      {isAdmin && (
+      {canEdit && (
         <div className="flex gap-3 mb-4 print:hidden">
           <button
             className={BTN.secondary + ' ' + BTN.sm}
@@ -593,7 +594,7 @@ export default function MonthlyTimesheet() {
                 <th scope="col" className={TABLE.th + ' text-right'}>Payable Hrs</th>
                 <th scope="col" className={TABLE.th + ' text-right'}>Variance</th>
                 <th scope="col" className={TABLE.th}>Status</th>
-                {isAdmin && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
+                {canEdit && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -627,7 +628,7 @@ export default function MonthlyTimesheet() {
                       <span className="text-xs text-red-500 ml-1" title={row.entry.dispute_reason}>!</span>
                     )}
                   </td>
-                  {isAdmin && <td className={TABLE.td + ' print:hidden'}>{rowActions(row)}</td>}
+                  {canEdit && <td className={TABLE.td + ' print:hidden'}>{rowActions(row)}</td>}
                 </tr>
               ))}
               {/* Totals row */}
@@ -645,7 +646,7 @@ export default function MonthlyTimesheet() {
                 <td className={TABLE.td}>
                   <span className="text-xs text-gray-500">{stats.approvedCount}/{stats.workingDays}</span>
                 </td>
-                {isAdmin && <td className={TABLE.td + ' print:hidden'}></td>}
+                {canEdit && <td className={TABLE.td + ' print:hidden'}></td>}
               </tr>
             </tbody>
           </table>

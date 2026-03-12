@@ -2,14 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
 import {
-  getCurrentHome, getLoggedInUser,
-  getResidentsWithBeds, getBeds,
+  getCurrentHome, getResidentsWithBeds, getBeds,
 } from '../lib/api.js';
 import ResidentSummaryBar from '../components/residents/ResidentSummaryBar.jsx';
 import ResidentTable from '../components/residents/ResidentTable.jsx';
 import ResidentAdmitModal from '../components/residents/ResidentAdmitModal.jsx';
 import ResidentEditModal from '../components/residents/ResidentEditModal.jsx';
 import ResidentDischargeModal from '../components/residents/ResidentDischargeModal.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 export default function Residents() {
   const [residents, setResidents] = useState([]);
@@ -27,7 +27,8 @@ export default function Residents() {
   const [toast, setToast] = useState(null);
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
 
   const load = useCallback(async () => {
     if (!home) return;
@@ -96,7 +97,7 @@ export default function Residents() {
           <h1 className={PAGE.title}>Residents</h1>
           <p className="text-sm text-gray-500">Resident register and bed assignments</p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={() => setShowAdmit(true)}>Admit Resident</button>
         )}
       </div>
@@ -153,7 +154,7 @@ export default function Residents() {
       ) : (
         <ResidentTable
           residents={residents}
-          isAdmin={isAdmin}
+          canEdit={canEdit}
           onEdit={setEditResident}
           onDischarge={setDischargeResident}
           onAdmit={() => setShowAdmit(true)}
@@ -175,7 +176,7 @@ export default function Residents() {
         <ResidentEditModal
           home={home}
           resident={editResident}
-          isAdmin={isAdmin}
+          canEdit={canEdit}
           onClose={() => setEditResident(null)}
           onSaved={load}
         />

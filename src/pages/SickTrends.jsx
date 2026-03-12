@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
-import { getLoggedInUser, getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -32,7 +33,8 @@ function getDatesInRange(start, end) {
 }
 
 export default function SickTrends() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('staff');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -53,10 +55,10 @@ export default function SickTrends() {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading sick trend data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
-  return <SickTrendsInner schedData={schedData} isAdmin={isAdmin} />;
+  return <SickTrendsInner schedData={schedData} canEdit={canEdit} />;
 }
 
-function SickTrendsInner({ schedData, isAdmin }) {
+function SickTrendsInner({ schedData, canEdit }) {
   const config = schedData.config;
   const MONTHS_BACK = 6;
   const months = useMemo(() => getMonthRange(MONTHS_BACK), []);
@@ -67,11 +69,11 @@ function SickTrendsInner({ schedData, isAdmin }) {
   // Anonymise staff names for non-admin viewers
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const staffLabel = useMemo(() => {
-    if (isAdmin) return (s) => s.name;
+    if (canEdit) return (s) => s.name;
     const map = new Map();
     activeStaff.forEach((s, i) => map.set(s.id, `Staff Member ${i + 1}`));
     return (s) => map.get(s.id) || `Staff Member`;
-  }, [isAdmin, activeStaff]);
+  }, [canEdit, activeStaff]);
 
   // Calculate sick days per staff per month — includes exact dates
   const sickData = useMemo(() => {
@@ -185,7 +187,7 @@ function SickTrendsInner({ schedData, isAdmin }) {
             ]);
             const logHeaders = ['Date', 'Day', 'Staff', 'Team', 'Role', 'Reason'];
             const logRows = sickLog.map(e => [
-              e.date, e.dayOfWeek, isAdmin ? e.staffName : staffLabel({ id: e.staffId }), e.team, e.role, e.reason || '',
+              e.date, e.dayOfWeek, canEdit ? e.staffName : staffLabel({ id: e.staffId }), e.team, e.role, e.reason || '',
             ]);
             downloadXLSX(`sick_trends_${config.home_name}`, [
               { name: 'Monthly Summary', headers: summaryHeaders, rows: summaryRows },
@@ -397,7 +399,7 @@ function SickTrendsInner({ schedData, isAdmin }) {
                 <tr key={`${entry.date}-${entry.staffId}`} className={TABLE.tr}>
                   <td className={TABLE.tdMono}>{parseDate(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.dayOfWeek}</td>
-                  <td className={`${TABLE.td} font-medium`}>{isAdmin ? entry.staffName : (staffLabel({ id: entry.staffId }))}</td>
+                  <td className={`${TABLE.td} font-medium`}>{canEdit ? entry.staffName : (staffLabel({ id: entry.staffId }))}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.team}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.role}</td>
                   <td className={`${TABLE.td} text-xs text-gray-500`}>{entry.reason || '—'}</td>

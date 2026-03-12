@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
+import { getCurrentHome, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const BUCKETS = [
   { id: 'all', label: 'All', key: null },
@@ -15,7 +16,8 @@ const BUCKETS = [
 ];
 
 export default function ReceivablesManager() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -251,7 +253,7 @@ export default function ReceivablesManager() {
 
         <div className={MODAL.footer}>
           <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
-          {isAdmin && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
+          {canEdit && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
         </div>
       </Modal>
     </div>

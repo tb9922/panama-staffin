@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getLoggedInUser, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
+import { getCurrentHome, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
 import { EDI_RECORD_TYPES, EDI_STATUSES, HARASSMENT_CATEGORIES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 function recordTypeName(id) {
   return EDI_RECORD_TYPES.find(t => t.id === id)?.name || id;
@@ -47,7 +48,8 @@ export default function EdiTracker() {
   const [filterStaff, setFilterStaff] = useState('');
 
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -170,7 +172,7 @@ export default function EdiTracker() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Record</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Record</button>}
         </div>
       </div>
 
@@ -212,7 +214,7 @@ export default function EdiTracker() {
                       : (item.category || '—')}
                   </td>
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(item.status, EDI_STATUSES)]}>{statusName(item.status)}</span></td>
-                  {isAdmin && <td className={TABLE.td}>
+                  {canEdit && <td className={TABLE.td}>
                     <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
                   </td>}
                 </tr>

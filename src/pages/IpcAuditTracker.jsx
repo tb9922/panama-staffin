@@ -9,10 +9,10 @@ import {
   DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
 } from '../lib/ipc.js';
 import {
-  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, getLoggedInUser,
-} from '../lib/api.js';
+  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -32,7 +32,8 @@ const EMPTY_FORM = {
 };
 
 export default function IpcAuditTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('compliance');
   const [audits, setAudits] = useState([]);
   const [auditTypes, setAuditTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,7 +205,7 @@ export default function IpcAuditTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
+          {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
         </div>
       </div>
 
@@ -267,7 +268,7 @@ export default function IpcAuditTracker() {
                 const actionsTotal = (audit.corrective_actions || []).length;
                 const hasOutbreak = audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed');
                 return (
-                  <tr key={audit.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(audit))}>
+                  <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(audit))}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
                     <td className={TABLE.td}>{typeDef?.name || audit.audit_type}</td>
                     <td className={TABLE.td}>{audit.auditor || '-'}</td>
@@ -478,11 +479,11 @@ export default function IpcAuditTracker() {
 
         {/* Footer */}
         <div className={MODAL.footer}>
-          {editingId && isAdmin && (
+          {editingId && canEdit && (
             <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-          {isAdmin && (
+          {canEdit && (
             <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
               {editingId ? 'Update' : 'Save'}
             </button>

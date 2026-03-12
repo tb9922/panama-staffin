@@ -10,8 +10,9 @@ import { downloadXLSX } from '../lib/excel.js';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getLoggedInUser, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
+import { getCurrentHome, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE_MAP = {
   not_started: BADGE.gray,
@@ -29,7 +30,8 @@ const STD_BADGE_MAP = {
 
 export default function CareCertificateTracker() {
   const homeSlug = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('staff');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -275,7 +277,7 @@ export default function CareCertificateTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
-          {isAdmin && <button onClick={openStartModal} className={BTN.primary} disabled={eligibleStaff.length === 0}>Start New</button>}
+          {canEdit && <button onClick={openStartModal} className={BTN.primary} disabled={eligibleStaff.length === 0}>Start New</button>}
         </div>
       </div>
 
@@ -347,7 +349,7 @@ export default function CareCertificateTracker() {
                 const badgeClass = STATUS_BADGE_MAP[result.status] || BADGE.gray;
                 const statusLabel = CC_STATUSES[result.status]?.label || result.status;
                 return (
-                  <tr key={s.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openDetailModal(s.id))}>
+                  <tr key={s.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openDetailModal(s.id))}>
                     <td className={`${TABLE.td} font-medium`}>{s.name}</td>
                     <td className={TABLE.td}>{s.role}</td>
                     <td className={TABLE.tdMono}>{record?.start_date || '-'}</td>
@@ -360,7 +362,7 @@ export default function CareCertificateTracker() {
                       </span>
                     </td>
                     <td className={TABLE.td}>
-                      {isAdmin && <button onClick={e => { e.stopPropagation(); openDetailModal(s.id); }} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                      {canEdit && <button onClick={e => { e.stopPropagation(); openDetailModal(s.id); }} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                     </td>
                   </tr>
                 );
@@ -538,10 +540,10 @@ export default function CareCertificateTracker() {
 
             {/* Footer */}
             <div className="flex justify-between mt-6 pt-4 border-t border-gray-100">
-              {isAdmin && <button onClick={handleRemoveStaff} disabled={saving} className={`${BTN.danger} ${BTN.sm}`}>Remove from Tracking</button>}
+              {canEdit && <button onClick={handleRemoveStaff} disabled={saving} className={`${BTN.danger} ${BTN.sm}`}>Remove from Tracking</button>}
               <div className="flex gap-2">
                 <button onClick={() => { setShowModal(false); setPendingUpdates(null); setError(null); }} className={BTN.secondary}>Cancel</button>
-                {isAdmin && (
+                {canEdit && (
                   <button onClick={handleSaveChanges} disabled={saving} className={BTN.primary}>
                     {saving ? 'Saving...' : 'Save Changes'}
                   </button>

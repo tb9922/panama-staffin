@@ -14,6 +14,7 @@ import {
   getCurrentHome, getComplaints, createComplaint, updateComplaint, deleteComplaint,
   createComplaintSurvey, updateComplaintSurvey, deleteComplaintSurvey, getLoggedInUser,
 } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -42,7 +43,8 @@ const EMPTY_SURVEY = {
 const COMPLAINT_CONFIG = { complaint_response_days: 28 };
 
 export default function ComplaintsTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('compliance');
   const [complaints, setComplaints] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [complaintCategories, setComplaintCategories] = useState([]);
@@ -269,10 +271,10 @@ export default function ComplaintsTracker() {
           {viewMode === 'complaints' ? (
             <>
               <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-              {isAdmin && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>}
+              {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Log Complaint</button>}
             </>
           ) : (
-            isAdmin && <button onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
+            canEdit && <button onClick={openAddSurvey} className={`${BTN.primary} ${BTN.sm}`}>Add Survey</button>
           )}
         </div>
       </div>
@@ -358,7 +360,7 @@ export default function ComplaintsTracker() {
                           {c.response_deadline || '--'}
                         </td>
                         <td className={TABLE.td}>
-                          {isAdmin && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                          {canEdit && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                         </td>
                       </tr>
                     );
@@ -402,7 +404,7 @@ export default function ComplaintsTracker() {
                         ) : '--'}
                       </td>
                       <td className={TABLE.td}>
-                        {isAdmin && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                        {canEdit && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
                       </td>
                     </tr>
                   ))}
@@ -556,10 +558,10 @@ export default function ComplaintsTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              {isAdmin && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              {isAdmin && <button onClick={handleSave} className={BTN.primary}>Save</button>}
+              {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
 
@@ -626,10 +628,10 @@ export default function ComplaintsTracker() {
               </div>
             </div>
             <div className={MODAL.footer}>
-              {isAdmin && editingSurveyId && <button onClick={handleDeleteSurvey} className={BTN.danger}>Delete</button>}
+              {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} className={BTN.danger}>Delete</button>}
               <div className="flex-1" />
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
-              {isAdmin && <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>}
+              {canEdit && <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
     </div>

@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -64,7 +64,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 });
 
 // POST /api/dols?home=X — create DoLS record
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -75,7 +75,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 });
 
 // PUT /api/dols/:id?home=X — update DoLS record
-router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -95,7 +95,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcces
 });
 
 // DELETE /api/dols/:id?home=X — soft delete DoLS record
-router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -107,7 +107,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAc
 });
 
 // POST /api/dols/mca?home=X — create MCA assessment
-router.post('/mca', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = mcaBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -118,7 +118,7 @@ router.post('/mca', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcce
 });
 
 // PUT /api/dols/mca/:id?home=X — update MCA assessment
-router.put('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -138,7 +138,7 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeA
 });
 
 // DELETE /api/dols/mca/:id?home=X — soft delete MCA assessment
-router.delete('/mca/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

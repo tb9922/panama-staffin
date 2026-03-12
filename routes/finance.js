@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as financeService from '../services/financeService.js';
 import * as auditService from '../services/auditService.js';
@@ -159,7 +159,7 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
 // Residents with bed assignments — used by standalone Residents page
-router.get('/residents/with-beds', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/residents/with-beds', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const filters = {};
     if (req.query.status) filters.status = safeStr(req.query.status);
@@ -170,7 +170,7 @@ router.get('/residents/with-beds', readRateLimiter, requireAuth, requireAdmin, r
   } catch (err) { next(err); }
 });
 
-router.get('/residents', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/residents', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
@@ -180,7 +180,7 @@ router.get('/residents', readRateLimiter, requireAuth, requireAdmin, requireHome
   } catch (err) { next(err); }
 });
 
-router.post('/residents', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/residents', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = residentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -190,7 +190,7 @@ router.post('/residents', writeRateLimiter, requireAuth, requireAdmin, requireHo
   } catch (err) { next(err); }
 });
 
-router.get('/residents/:id', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/residents/:id', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
@@ -200,7 +200,7 @@ router.get('/residents/:id', readRateLimiter, requireAuth, requireAdmin, require
   } catch (err) { next(err); }
 });
 
-router.put('/residents/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/residents/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
@@ -218,7 +218,7 @@ router.put('/residents/:id', writeRateLimiter, requireAuth, requireAdmin, requir
   } catch (err) { next(err); }
 });
 
-router.delete('/residents/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/residents/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
@@ -232,7 +232,7 @@ router.delete('/residents/:id', writeRateLimiter, requireAuth, requireAdmin, req
   }
 });
 
-router.get('/residents/:id/fee-history', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/residents/:id/fee-history', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid resident ID' });
@@ -242,7 +242,7 @@ router.get('/residents/:id/fee-history', readRateLimiter, requireAuth, requireAd
 
 // ── Invoice Routes ────────────────────────────────────────────────────────────
 
-router.get('/invoices', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/invoices', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
@@ -255,7 +255,7 @@ router.get('/invoices', readRateLimiter, requireAuth, requireAdmin, requireHomeA
   } catch (err) { next(err); }
 });
 
-router.post('/invoices', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/invoices', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = invoiceBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -268,7 +268,7 @@ router.post('/invoices', writeRateLimiter, requireAuth, requireAdmin, requireHom
   }
 });
 
-router.get('/invoices/:id', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/invoices/:id', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -278,7 +278,7 @@ router.get('/invoices/:id', readRateLimiter, requireAuth, requireAdmin, requireH
   } catch (err) { next(err); }
 });
 
-router.put('/invoices/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/invoices/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -299,7 +299,7 @@ router.put('/invoices/:id', writeRateLimiter, requireAuth, requireAdmin, require
   }
 });
 
-router.delete('/invoices/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/invoices/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -313,7 +313,7 @@ router.delete('/invoices/:id', writeRateLimiter, requireAuth, requireAdmin, requ
   }
 });
 
-router.post('/invoices/:id/payment', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/invoices/:id/payment', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -330,7 +330,7 @@ router.post('/invoices/:id/payment', writeRateLimiter, requireAuth, requireAdmin
 
 // ── Expense Routes ────────────────────────────────────────────────────────────
 
-router.get('/expenses', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/expenses', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
@@ -342,7 +342,7 @@ router.get('/expenses', readRateLimiter, requireAuth, requireAdmin, requireHomeA
   } catch (err) { next(err); }
 });
 
-router.post('/expenses', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/expenses', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = expenseBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -352,7 +352,7 @@ router.post('/expenses', writeRateLimiter, requireAuth, requireAdmin, requireHom
   } catch (err) { next(err); }
 });
 
-router.get('/expenses/:id', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/expenses/:id', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
@@ -362,7 +362,7 @@ router.get('/expenses/:id', readRateLimiter, requireAuth, requireAdmin, requireH
   } catch (err) { next(err); }
 });
 
-router.put('/expenses/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/expenses/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
@@ -380,7 +380,7 @@ router.put('/expenses/:id', writeRateLimiter, requireAuth, requireAdmin, require
   } catch (err) { next(err); }
 });
 
-router.delete('/expenses/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/expenses/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
@@ -394,7 +394,7 @@ router.delete('/expenses/:id', writeRateLimiter, requireAuth, requireAdmin, requ
   }
 });
 
-router.put('/expenses/:id/approve', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/expenses/:id/approve', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
@@ -407,7 +407,7 @@ router.put('/expenses/:id/approve', writeRateLimiter, requireAuth, requireAdmin,
   }
 });
 
-router.put('/expenses/:id/reject', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/expenses/:id/reject', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid expense ID' });
@@ -423,7 +423,7 @@ router.put('/expenses/:id/reject', writeRateLimiter, requireAuth, requireAdmin, 
 
 // ── Chase Log ────────────────────────────────────────────────────────────────
 
-router.get('/invoices/:id/chases', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/invoices/:id/chases', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -431,7 +431,7 @@ router.get('/invoices/:id/chases', readRateLimiter, requireAuth, requireAdmin, r
   } catch (err) { next(err); }
 });
 
-router.post('/invoices/:id/chases', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/invoices/:id/chases', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
@@ -448,7 +448,7 @@ router.post('/invoices/:id/chases', writeRateLimiter, requireAuth, requireAdmin,
 
 // ── Receivables Detail ───────────────────────────────────────────────────────
 
-router.get('/receivables', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/receivables', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     res.json(await financeService.getReceivablesDetail(req.home.id));
   } catch (err) { next(err); }
@@ -456,7 +456,7 @@ router.get('/receivables', readRateLimiter, requireAuth, requireAdmin, requireHo
 
 // ── Payment Schedule ─────────────────────────────────────────────────────────
 
-router.get('/payment-schedules', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/payment-schedules', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const filters = { limit: pg.limit, offset: pg.offset };
@@ -465,7 +465,7 @@ router.get('/payment-schedules', readRateLimiter, requireAuth, requireAdmin, req
   } catch (err) { next(err); }
 });
 
-router.post('/payment-schedules', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/payment-schedules', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = paymentScheduleBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -475,7 +475,7 @@ router.post('/payment-schedules', writeRateLimiter, requireAuth, requireAdmin, r
   } catch (err) { next(err); }
 });
 
-router.put('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/payment-schedules/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
@@ -493,7 +493,7 @@ router.put('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAdmin
   } catch (err) { next(err); }
 });
 
-router.post('/payment-schedules/:id/process', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/payment-schedules/:id/process', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
@@ -506,7 +506,7 @@ router.post('/payment-schedules/:id/process', writeRateLimiter, requireAuth, req
   }
 });
 
-router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
@@ -519,7 +519,7 @@ router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireAd
 
 // ── Dashboard & Alerts ────────────────────────────────────────────────────────
 
-router.get('/dashboard', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/dashboard', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const now = new Date();
     const from = safeDate(req.query.from) || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
@@ -529,7 +529,7 @@ router.get('/dashboard', readRateLimiter, requireAuth, requireAdmin, requireHome
   } catch (err) { next(err); }
 });
 
-router.get('/alerts', readRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/alerts', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     res.json(await financeService.getFinanceAlerts(req.home.id));
   } catch (err) { next(err); }

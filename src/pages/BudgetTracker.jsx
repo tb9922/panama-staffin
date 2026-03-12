@@ -4,7 +4,8 @@ import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, getSchedulingData, saveConfig, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -45,7 +46,8 @@ export default function BudgetTracker() {
 }
 
 function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditingBudget, budgetInput, setBudgetInput, agencyCapInput, setAgencyCapInput }) {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('finance');
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -175,7 +177,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           <p className="text-sm text-gray-500">12-month rolling view — staffing cost tracking</p>
         </div>
         <div className="flex gap-2">
-          {isAdmin && <button onClick={() => {
+          {canEdit && <button onClick={() => {
             setEditingBudget('default');
             setBudgetInput(String(defaultBudget || ''));
             setAgencyCapInput(String(defaultAgencyCap || ''));
@@ -346,7 +348,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                 <th scope="col" className={`${TABLE.th} text-right`}>Agency £</th>
                 <th scope="col" className={`${TABLE.th} text-right`}>BH £</th>
                 <th scope="col" className={`${TABLE.th} text-center`}>Status</th>
-                {isAdmin && <th scope="col" className={`${TABLE.th} text-center print:hidden`}>Budget</th>}
+                {canEdit && <th scope="col" className={`${TABLE.th} text-center print:hidden`}>Budget</th>}
               </tr>
             </thead>
             <tbody>
@@ -381,7 +383,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                       </span>
                     ) : <span className="text-gray-300">-</span>}
                   </td>
-                  {isAdmin && <td className={`${TABLE.td} text-center print:hidden`}>
+                  {canEdit && <td className={`${TABLE.td} text-center print:hidden`}>
                     <button onClick={() => {
                       setEditingBudget(m.key);
                       setBudgetInput(String(m.budget || defaultBudget || ''));
@@ -399,7 +401,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                   £{Math.round(Math.abs(monthData.reduce((s, m) => s + m.variance, 0))).toLocaleString()}
                 </td>
                 <td className={TABLE.td} colSpan={6}></td>
-                {isAdmin && <td className={`${TABLE.td} print:hidden`}></td>}
+                {canEdit && <td className={`${TABLE.td} print:hidden`}></td>}
               </tr>
             </tfoot>
           </table>

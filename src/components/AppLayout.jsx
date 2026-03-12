@@ -5,12 +5,13 @@ import { BTN, INPUT, MODAL } from '../lib/design.js';
 import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { getRoleLabel } from '../../shared/roles.js';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
 
 export default function AppLayout() {
-  const { user, isViewer, isPlatformAdmin, logout } = useAuth();
-  const { loading, error, homes, activeHome, switchHome, clearError } = useData();
+  const { user, isPlatformAdmin, logout } = useAuth();
+  const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
@@ -100,7 +101,7 @@ export default function AppLayout() {
 
         <nav className="flex-1 py-1.5 px-2 overflow-y-auto space-y-0.5">
           {/* Top-level items */}
-          {NAV_TOP.map(item => (
+          {NAV_TOP.filter(item => !item.module || canRead(item.module)).map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -125,7 +126,13 @@ export default function AppLayout() {
           ))}
 
           {/* Grouped sections */}
-          {NAV_SECTIONS.filter(s => (!s.adminOnly || !isViewer) && (!s.platformAdminOnly || isPlatformAdmin)).map(section => {
+          {NAV_SECTIONS.filter(s => {
+            if (s.platformAdminOnly) return isPlatformAdmin;
+            if (s.module) return canRead(s.module);
+            // System section: show if any child item's module is accessible
+            if (s.items) return s.items.some(item => !item.module || canRead(item.module));
+            return true;
+          }).map(section => {
             const isOpen = expandedSections[section.id];
             return (
               <div key={section.id}>
@@ -151,7 +158,11 @@ export default function AppLayout() {
                 </button>
                 {isOpen && sidebarOpen && (
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
-                    {section.items.filter(item => (!item.adminOnly || !isViewer) && (!item.platformAdminOnly || isPlatformAdmin)).map(item => (
+                    {section.items.filter(item => {
+                      if (item.platformAdminOnly) return isPlatformAdmin;
+                      if (item.module) return canRead(item.module);
+                      return true;
+                    }).map(item => (
                       <NavLink
                         key={item.path}
                         to={item.path}
@@ -182,7 +193,7 @@ export default function AppLayout() {
           <div className="p-3 border-t border-gray-800">
             <div className="flex items-center justify-between">
               <div className="text-[10px] text-gray-500 leading-relaxed">
-                <span className="text-gray-300 font-medium">{user.displayName || user.username}</span> ({user.role})<br />
+                <span className="text-gray-300 font-medium">{user.displayName || user.username}</span> ({isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role})<br />
                 {homes.find(h => h.id === activeHome)?.name}
               </div>
               <div className="flex flex-col items-end gap-0.5">
@@ -198,12 +209,12 @@ export default function AppLayout() {
 
       {/* Main Content */}
       <main id="main-content" className="flex-1 overflow-auto">
-        {isViewer && (
+        {homeRole && homeRole !== 'home_manager' && !isPlatformAdmin && (
           <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 text-xs text-blue-700 flex items-center gap-2 print:hidden">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Read-only mode — log in as admin to make changes
+            {getRoleLabel(homeRole)} — some features may be read-only or hidden
           </div>
         )}
         {error && (

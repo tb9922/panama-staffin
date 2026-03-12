@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
+import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
   eligible_enrolled:       BADGE.green,
@@ -50,7 +51,8 @@ function fmtPct(n) {
 
 export default function PensionManager() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData]   = useState(null);
   const [enrolments, setEnrolments] = useState([]);
@@ -165,7 +167,7 @@ export default function PensionManager() {
             Manage pension enrolment status, track opt-outs, and review upcoming re-enrolment dates.
           </p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={() => openNew()}>Add / Update Enrolment</button>
         )}
       </div>
@@ -227,13 +229,13 @@ export default function PensionManager() {
               <th scope="col" className={TABLE.th}>EE Rate</th>
               <th scope="col" className={TABLE.th}>ER Rate</th>
               <th scope="col" className={TABLE.th}>Notes</th>
-              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
+              {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {enrolments.length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 9 : 8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={canEdit ? 9 : 8} className="px-4 py-8 text-center text-gray-400 text-sm">
                   No enrolment records. Add records for each staff member after assessing eligibility.
                 </td>
               </tr>
@@ -276,7 +278,7 @@ export default function PensionManager() {
                   <td className={TABLE.td}>
                     <span className="text-xs text-gray-500 truncate max-w-[120px] block">{enr.notes || '—'}</span>
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(enr)}>
                         Edit
@@ -296,7 +298,7 @@ export default function PensionManager() {
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
-                <th scope="col" className={TABLE.th} colSpan={isAdmin ? 9 : 8}>
+                <th scope="col" className={TABLE.th} colSpan={canEdit ? 9 : 8}>
                   <span className="text-amber-700">Staff awaiting pension assessment</span>
                 </th>
               </tr>
@@ -308,10 +310,10 @@ export default function PensionManager() {
                     <div className="font-medium text-gray-900">{s.name}</div>
                     <div className="text-xs text-gray-400">{s.role}</div>
                   </td>
-                  <td className={TABLE.td} colSpan={isAdmin ? 7 : 7}>
+                  <td className={TABLE.td} colSpan={canEdit ? 7 : 7}>
                     <span className="text-amber-700 text-xs">No enrolment status recorded</span>
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button
                         className={BTN.primary + ' ' + BTN.xs}

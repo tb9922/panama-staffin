@@ -4,7 +4,7 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
 import {
-  getCurrentHome, getLoggedInUser, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
+  getCurrentHome, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
 } from '../lib/api.js';
 import {
@@ -19,6 +19,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const MODAL_TABS = [
   { id: 'details', label: 'Details' },
@@ -49,7 +50,8 @@ export default function DisciplinaryTracker() {
   const [jsonErrors, setJsonErrors] = useState({});
   useDirtyGuard(showModal);
   const home = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('hr');
   const editReqRef = useRef(0);
   useEffect(() => setOffset(0), [filterStaff, filterStatus]);
 
@@ -186,7 +188,7 @@ export default function DisciplinaryTracker() {
         </div>
         <div className="flex gap-2">
           <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleExport}>Export Excel</button>
-          {isAdmin && <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>}
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>}
         </div>
       </div>
 
@@ -221,7 +223,7 @@ export default function DisciplinaryTracker() {
             <tbody>
               {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No disciplinary cases</td></tr>}
               {cases.map(c => (
-                <tr key={c.id} className={`${TABLE.tr}${isAdmin ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEdit(c))}>
+                <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(c))}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
                   <td className={TABLE.td}>{c.date_raised}</td>
                   <td className={TABLE.td}>{DISCIPLINARY_CATEGORIES.find(cat => cat.id === c.category)?.name || c.category}</td>

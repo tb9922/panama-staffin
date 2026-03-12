@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
@@ -79,7 +79,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   }
 });
 
-router.post('/', requireAuth, requireAdmin, requireHomeAccess, saveLimiter, async (req, res, next) => {
+router.post('/', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), saveLimiter, async (req, res, next) => {
   try {
     const parsed = dataBodySchema.safeParse(req.body);
     if (!parsed.success) {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { readRateLimiter } from '../lib/rateLimiter.js';
@@ -7,7 +7,7 @@ import { readRateLimiter } from '../lib/rateLimiter.js';
 const router = Router();
 router.use(readRateLimiter);
 
-router.get('/', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/', requireAuth, requireHomeAccess, requireModule('reports', 'read'), async (req, res, next) => {
   try {
     const homeSlug = req.home.slug;
 

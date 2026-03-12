@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { idSchema, caseTypeSchema, caseNoteBodySchema } from './schemas.js';
@@ -7,7 +7,7 @@ import { idSchema, caseTypeSchema, caseNoteBodySchema } from './schemas.js';
 const router = Router();
 
 // GET /api/hr/case-notes/:caseType/:caseId?home=X
-router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.get('/case-notes/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
   try {
     const caseTypeP = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });
@@ -18,7 +18,7 @@ router.get('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, requireHo
 });
 
 // POST /api/hr/case-notes/:caseType/:caseId?home=X
-router.post('/case-notes/:caseType/:caseId', requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/case-notes/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
   try {
     const caseTypeP = caseTypeSchema.safeParse(req.params.caseType);
     if (!caseTypeP.success) return res.status(400).json({ error: 'Invalid case type' });

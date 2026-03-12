@@ -1,7 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
-import { hasAccess } from '../repositories/userHomeRepo.js';
+import { hasAccess, getHomeRole } from '../repositories/userHomeRepo.js';
+import { hasModuleAccess, ROLES } from '../shared/roles.js';
 import { z } from 'zod';
 
 const homeSlugSchema = z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/i, 'Invalid home slug');
@@ -60,7 +61,7 @@ export function requirePlatformAdmin(req, res, next) {
 
 /**
  * Middleware: resolve home from ?home= query param, verify user has access.
- * Sets req.home to the home row on success.
+ * Sets req.home, req.homeRole, and req.staffId.
  * Must be used AFTER requireAuth (needs req.user).
  */
 export async function requireHomeAccess(req, res, next) {
@@ -72,10 +73,47 @@ export async function requireHomeAccess(req, res, next) {
   if (!home) {
     return res.status(404).json({ error: 'Home not found' });
   }
-  const allowed = await hasAccess(req.user.username, home.id);
-  if (!allowed) {
+
+  // Resolve per-home role (with fallback to legacy user_home_access)
+  const assignment = await getHomeRole(req.user.username, home.id);
+  if (!assignment) {
     return res.status(403).json({ error: 'You do not have access to this home' });
   }
+
   req.home = home;
+  req.homeRole = assignment.role_id;
+  req.staffId = assignment.staff_id || null;
+  next();
+}
+
+/**
+ * Module permission check — replaces requireAdmin for most routes.
+ * Usage: requireModule('payroll', 'write')
+ * Must be used AFTER requireHomeAccess (needs req.homeRole).
+ * @param {string} moduleId — one of MODULES
+ * @param {string} level — 'read' | 'write'
+ */
+export function requireModule(moduleId, level = 'read') {
+  return (req, res, next) => {
+    // Platform admins bypass module checks
+    if (req.user.is_platform_admin) return next();
+
+    if (!hasModuleAccess(req.homeRole, moduleId, level)) {
+      return res.status(403).json({ error: `Insufficient permissions for ${moduleId}` });
+    }
+    next();
+  };
+}
+
+/**
+ * Home manager check — for user management within a home.
+ * Must be used AFTER requireHomeAccess (needs req.homeRole).
+ */
+export function requireHomeManager(req, res, next) {
+  if (req.user.is_platform_admin) return next();
+  const role = ROLES[req.homeRole];
+  if (!role?.canManageUsers) {
+    return res.status(403).json({ error: 'Home Manager role required' });
+  }
   next();
 }

@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as bedService from '../services/bedService.js';
 import { STATUSES, ROOM_TYPES } from '../lib/beds.js';
@@ -95,11 +95,11 @@ router.get('/:bedId/history', readRateLimiter, requireAuth, requireHomeAccess, a
 });
 
 // ── Write endpoints ─────────────────────────────────────────────────────────
-// Admin only — all mutations require requireAdmin.
+// Write access — all mutations require requireModule('finance', 'write').
 
 // POST /api/beds/setup?home=slug — bulk create beds
 // MUST be defined before /:bedId to avoid "setup" matching as a bedId
-router.post('/setup', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/setup', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = setupBedsSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -109,7 +109,7 @@ router.post('/setup', writeRateLimiter, requireAuth, requireAdmin, requireHomeAc
 });
 
 // POST /api/beds?home=slug — create single bed
-router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = createBedSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -120,7 +120,7 @@ router.post('/', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess,
 
 // PUT /api/beds/move?home=slug — move resident between beds
 // MUST be defined before /:bedId to avoid "move" matching as a bedId
-router.put('/move', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/move', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const parsed = moveSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -130,7 +130,7 @@ router.put('/move', writeRateLimiter, requireAuth, requireAdmin, requireHomeAcce
 });
 
 // PUT /api/beds/:bedId/status?home=slug — transition bed status
-router.put('/:bedId/status', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:bedId/status', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.bedId);
     if (!idParsed.success) return zodError(res, idParsed);
@@ -147,7 +147,7 @@ router.put('/:bedId/status', writeRateLimiter, requireAuth, requireAdmin, requir
 });
 
 // PUT /api/beds/:bedId/revert?home=slug — revert last transition
-router.put('/:bedId/revert', writeRateLimiter, requireAuth, requireAdmin, requireHomeAccess, async (req, res, next) => {
+router.put('/:bedId/revert', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.bedId);
     if (!idParsed.success) return zodError(res, idParsed);

@@ -3,9 +3,9 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
-  getCurrentHome, getLoggedInUser,
-} from '../lib/api.js';
+  getCurrentHome, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { useData } from '../contexts/DataContext.jsx';
 
 const APPLIES_TO_LABELS = {
   night:        'Night Shifts',
@@ -29,7 +29,8 @@ const EMPTY_RULE = {
 
 export default function PayRatesConfig() {
   const homeSlug = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [rules, setRules] = useState([]);
   const [nmwRates, setNmwRates] = useState([]);
@@ -131,7 +132,7 @@ export default function PayRatesConfig() {
           <h1 className={PAGE.title}>Pay Rate Rules</h1>
           <p className={PAGE.subtitle}>Enhancement rules applied on top of each staff member's base hourly rate</p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={openAdd}>+ Add Rule</button>
         )}
       </div>
@@ -158,12 +159,12 @@ export default function PayRatesConfig() {
                   <th scope="col" className={TABLE.th}>Rate Type</th>
                   <th scope="col" className={TABLE.th}>Amount</th>
                   <th scope="col" className={TABLE.th}>Effective From</th>
-                  {isAdmin && <th scope="col" className={TABLE.th}></th>}
+                  {canEdit && <th scope="col" className={TABLE.th}></th>}
                 </tr>
               </thead>
               <tbody>
                 {rules.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? 6 : 5} className={TABLE.empty}>No active rules. Click + Add Rule to create one.</td></tr>
+                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No active rules. Click + Add Rule to create one.</td></tr>
                 ) : rules.map(rule => (
                   <tr key={rule.id} className={TABLE.tr}>
                     <td className={`${TABLE.td} font-medium`}>{rule.name}</td>
@@ -173,7 +174,7 @@ export default function PayRatesConfig() {
                     <td className={TABLE.td + ' text-gray-500 text-xs'}>{RATE_TYPE_LABELS[rule.rate_type]}</td>
                     <td className={`${TABLE.td} font-mono font-semibold`}>{formatAmount(rule)}</td>
                     <td className={TABLE.td + ' text-gray-500'}>{rule.effective_from}</td>
-                    {isAdmin && (
+                    {canEdit && (
                       <td className={TABLE.td}>
                         <div className="flex gap-2">
                           <button className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(rule)}>Edit</button>

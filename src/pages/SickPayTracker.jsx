@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData, getLoggedInUser } from '../lib/api.js';
+import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
@@ -29,7 +30,8 @@ function needsFitNote(period) {
 
 export default function SickPayTracker() {
   const homeSlug = getCurrentHome();
-  const isAdmin  = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
   const [periods, setPeriods]     = useState([]);
@@ -143,7 +145,7 @@ export default function SickPayTracker() {
             Track sick periods, SSP eligibility, waiting days, and fit note requirements.
           </p>
         </div>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={() => { setCreateForm(EMPTY_CREATE); setShowCreate(true); }}>
             Record Sick Period
           </button>
@@ -218,13 +220,13 @@ export default function SickPayTracker() {
               <th scope="col" className={TABLE.th}>SSP Weeks Paid</th>
               <th scope="col" className={TABLE.th}>Fit Note</th>
               <th scope="col" className={TABLE.th}>Status</th>
-              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
+              {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {displayedPeriods.length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   No sick periods recorded{staffFilter ? ' for this staff member' : ''}.
                 </td>
               </tr>
@@ -264,7 +266,7 @@ export default function SickPayTracker() {
                       {isOpen ? 'Open' : 'Closed'}
                     </span>
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className={TABLE.td}>
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openUpdateModal(period)}>
                         Update

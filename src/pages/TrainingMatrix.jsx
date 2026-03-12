@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCurrentHome, getTrainingData, getLoggedInUser } from '../lib/api.js';
+import { getCurrentHome, getTrainingData } from '../lib/api.js';
 import { PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -7,6 +7,7 @@ import TrainingGrid from '../components/training/TrainingGrid.jsx';
 import SupervisionPanel from '../components/training/SupervisionPanel.jsx';
 import AppraisalPanel from '../components/training/AppraisalPanel.jsx';
 import FireDrillPanel from '../components/training/FireDrillPanel.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
   { id: 'training', label: 'Training' },
@@ -17,7 +18,8 @@ const TABS = [
 
 export default function TrainingMatrix() {
   const homeSlug = getCurrentHome();
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('staff');
   const [tab, setTab] = useState('training');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           config={{ training_types: state.trainingTypes }}
           onReload={() => setRefreshKey(k => k + 1)}
-          readOnly={!isAdmin}
+          readOnly={!canEdit}
         />
       )}
       {tab === 'supervisions' && (
@@ -78,7 +80,7 @@ export default function TrainingMatrix() {
           homeSlug={homeSlug}
           config={state.config || {}}
           onReload={() => setRefreshKey(k => k + 1)}
-          readOnly={!isAdmin}
+          readOnly={!canEdit}
         />
       )}
       {tab === 'appraisals' && (
@@ -87,7 +89,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
-          readOnly={!isAdmin}
+          readOnly={!canEdit}
         />
       )}
       {tab === 'fire_drills' && (
@@ -96,7 +98,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           onReload={() => setRefreshKey(k => k + 1)}
-          readOnly={!isAdmin}
+          readOnly={!canEdit}
         />
       )}
     </div>

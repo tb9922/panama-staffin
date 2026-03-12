@@ -6,13 +6,13 @@ import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getDols, createDols, updateDols, deleteDols,
-  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment, getLoggedInUser,
-} from '../lib/api.js';
+  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment, } from '../lib/api.js';
 import {
   getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
 } from '../lib/dols.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const EMPTY_DOLS_FORM = {
   resident_name: '', dob: '', room_number: '',
@@ -31,7 +31,8 @@ const EMPTY_MCA_FORM = {
 };
 
 export default function DolsTracker() {
-  const isAdmin = getLoggedInUser()?.role === 'admin';
+  const { canWrite } = useData();
+  const canEdit = canWrite('compliance');
   const [dols, setDols] = useState([]);
   const [mcaAssessments, setMcaAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -216,7 +217,7 @@ export default function DolsTracker() {
       const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
       return [
         dol.resident_name,
-        ...(isAdmin ? [dol.dob || ''] : []),
+        ...(canEdit ? [dol.dob || ''] : []),
         dol.room_number || '',
         typeDef?.name || dol.application_type, dol.application_date,
         dol.authorised ? 'Yes' : 'No', dol.authorisation_date || '',
@@ -241,7 +242,7 @@ export default function DolsTracker() {
     downloadXLSX(`DoLS_MCA_Register_${today}`, [
       {
         name: 'DoLS-LPS',
-        headers: ['Resident', ...(isAdmin ? ['DOB'] : []), 'Room', 'Type', 'Applied', 'Authorised',
+        headers: ['Resident', ...(canEdit ? ['DOB'] : []), 'Room', 'Type', 'Applied', 'Authorised',
           'Auth Date', 'Expiry', 'Status', 'Auth Number', 'Authority',
           'Restrictions', 'Reviewed', 'Next Review', 'Notes'],
         rows: dolsRows,
@@ -284,7 +285,7 @@ export default function DolsTracker() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {isAdmin && <button onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
+          {canEdit && <button onClick={viewMode === 'dols' ? openAddDols : openAddMca} className={BTN.primary}>
             + {viewMode === 'dols' ? 'New DoLS/LPS' : 'New MCA'}
           </button>}
         </div>
@@ -368,7 +369,7 @@ export default function DolsTracker() {
                     const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
                     const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={dol.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEditDols(dol))}>
+                      <tr key={dol.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEditDols(dol))}>
                         <td className={TABLE.td}>{dol.resident_name}</td>
                         <td className={TABLE.td}><span className={typeBadge(dol.application_type)}>{typeDef?.name || dol.application_type}</span></td>
                         <td className={TABLE.td}>{dol.application_date}</td>
@@ -411,7 +412,7 @@ export default function DolsTracker() {
                     const st = getMcaStatus(mca, today);
                     const statusDef = MCA_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={mca.id} className={`${TABLE.tr} ${isAdmin ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => isAdmin && openEditMca(mca))}>
+                      <tr key={mca.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEditMca(mca))}>
                         <td className={TABLE.td}>{mca.resident_name}</td>
                         <td className={TABLE.td}>{mca.assessment_date}</td>
                         <td className={TABLE.td}>{mca.assessor || '-'}</td>
@@ -444,7 +445,7 @@ export default function DolsTracker() {
                   <input type="text" className={INPUT.base} value={form.resident_name}
                     onChange={e => setForm({ ...form, resident_name: e.target.value })} />
                 </div>
-                {isAdmin && <div>
+                {canEdit && <div>
                   <label className={INPUT.label}>Date of Birth</label>
                   <input type="date" className={INPUT.base} value={form.dob}
                     onChange={e => setForm({ ...form, dob: e.target.value })} />
@@ -554,11 +555,11 @@ export default function DolsTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && isAdmin && (
+              {editingId && canEdit && (
                 <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {isAdmin && (
+              {canEdit && (
                 <button onClick={handleSaveDols}
                   disabled={!form.resident_name || !form.application_date}
                   className={BTN.primary}>
@@ -631,11 +632,11 @@ export default function DolsTracker() {
 
             {/* Footer */}
             <div className={MODAL.footer}>
-              {editingId && isAdmin && (
+              {editingId && canEdit && (
                 <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-              {isAdmin && (
+              {canEdit && (
                 <button onClick={handleSaveMca}
                   disabled={!form.resident_name || !form.assessment_date}
                   className={BTN.primary}>
