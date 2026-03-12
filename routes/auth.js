@@ -49,7 +49,7 @@ router.post('/', loginLimiter, async (req, res, next) => {
       httpOnly: false,
       secure: config.nodeEnv === 'production',
       sameSite: 'strict',
-      path: '/api',
+      path: '/',
       maxAge: 4 * 60 * 60 * 1000,
     });
 
@@ -71,7 +71,7 @@ router.post('/', loginLimiter, async (req, res, next) => {
 
 router.post('/logout', requireAuth, (req, res) => {
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
-  res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
+  res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
   res.json({ ok: true });
 });
 
