@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
-import { hasAccess, getHomeRole } from '../repositories/userHomeRepo.js';
+import { getHomeRole } from '../repositories/userHomeRepo.js';
 import { hasModuleAccess, ROLES } from '../shared/roles.js';
 import { z } from 'zod';
 

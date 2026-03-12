@@ -97,7 +97,7 @@ All endpoints require JWT authentication via `Authorization: Bearer <token>`.
 
 | Group | Prefix | Description |
 |-------|--------|-------------|
-| Auth | `/api/auth` | Login, token refresh |
+| Auth | `/api/login` | Login, logout, token revocation |
 | Homes | `/api/homes` | Home CRUD, multi-home management |
 | Staff | `/api/homes/:slug/staff` | Staff register, roles, rates |
 | Scheduling | `/api/homes/:slug/scheduling` | Overrides, daily status, rotation |

@@ -140,11 +140,11 @@ describe('Template Download — GET /staff/template', () => {
     expect(body).toBe('name,role,team,pref,skill,hourly_rate,start_date,contract_hours,wtr_opt_out');
   });
 
-  it('requires admin (viewer → 403)', async () => {
+  it('viewer can download template (scheduling:read)', async () => {
     await request(app)
       .get(`${BASE}/staff/template?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
-      .expect(403);
+      .expect(200);
   });
 
   it('requires auth (no token → 401)', async () => {
@@ -312,11 +312,11 @@ describe('Auth & RBAC', () => {
       .expect(401);
   });
 
-  it('viewer cannot download template (403)', async () => {
+  it('viewer can download template (scheduling:read)', async () => {
     await request(app)
       .get(`${BASE}/staff/template?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
-      .expect(403);
+      .expect(200);
   });
 });
 
