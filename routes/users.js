@@ -326,7 +326,19 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       return res.status(400).json({ error: 'Cannot modify your own role assignments' });
     }
 
+    // Also validate assigner has access to any homes being revoked
     const currentRoles = await userHomeRepo.findRolesForUser(user.username);
+    if (!req.user.is_platform_admin) {
+      for (const cr of currentRoles) {
+        const inDesired = parsed.data.roles.some(r => r.homeId === cr.home_id);
+        if (!inDesired && !assignerRoleMap.has(cr.home_id)) {
+          // Assigner doesn't have access to this home — preserve the existing role
+          parsed.data.roles.push({ homeId: cr.home_id, roleId: cr.role_id });
+        }
+      }
+    }
+
+    // Build old roles map and final desired set (after preservation) for audit diff
     const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
     const finalDesiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
 
@@ -345,6 +357,7 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       }
     });
 
+    // Build audit diff using final desired set (after preservation)
     const changes = [];
     for (const { homeId, roleId } of parsed.data.roles) {
       const oldRole = oldRoleMap.get(homeId);

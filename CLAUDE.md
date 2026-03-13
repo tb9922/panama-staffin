@@ -48,6 +48,18 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 18. ~~Payroll reads outside transaction~~ — FIXED: `staffRepo.findByHome`/`overrideRepo.findByHome` accept `client` param
 19. ~~GDPR erasure misses shift_overrides.reason~~ — FIXED: clears reason (can contain health data)
 20. ~~financeRepo invoice lines skip tenant filter~~ — FIXED: `home_id` always required
+21. ~~`hasAccess()` only checks legacy table~~ — FIXED: UNION ALL across user_home_roles + user_home_access
+22. ~~`findHomeSlugsForUser()` only checks legacy table~~ — FIXED: rewritten with UNION + NOT EXISTS fallback
+23. ~~PII stripping uses JWT role instead of per-home role~~ — FIXED: 7 routes use req.homeRole (home_manager/deputy_manager)
+24. ~~Platform home creation missing RBAC role assignment~~ — FIXED: assignRole() called alongside grantAccess()
+25. ~~Logout doesn't deny-list JWT token~~ — FIXED: addToDenyList() on logout
+26. ~~validationService.js UTC/local time bugs (7 lines)~~ — FIXED: all date parses use 'Z' suffix
+27. ~~cqc.js getFatigueSummary uses local midnight~~ — FIXED: setUTCHours(0,0,0,0)
+28. ~~financeRepo NUMERIC balance returned as string~~ — FIXED: parseFloat() wrapper
+29. ~~AnnualLeave.jsx sort mutates memoized array~~ — FIXED: spread before sort
+30. ~~StaffRegister.jsx NLW fallback 12.71~~ — FIXED: corrected to 12.21
+31. ~~isTokenDenied returns false for malformed tokens~~ — FIXED: && changed to || (deny if jti OR username missing)
+32. ~~findHomesWithRolesForUser UNION inefficiency~~ — FIXED: UNION ALL (NOT EXISTS already dedupes)
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
@@ -67,7 +79,7 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 2,309+ tests across 127 files (56 backend + 71 frontend)
+- **Testing**: Vitest — 1,649+ tests across 58 files (unit + integration), all passing
 
 ## Architecture
 
