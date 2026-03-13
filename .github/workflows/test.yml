@@ -57,6 +57,7 @@ jobs:
           JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
           ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
 
       - name: Run unit tests
         run: npm test
@@ -69,6 +70,7 @@ jobs:
           JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
           ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
 
       - name: Run frontend component tests
         run: npm run test:frontend
@@ -84,6 +86,7 @@ jobs:
           JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
           ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
 
   # ── Auto-deploy to production on push to main ────────────────────────────────
   # Requires three GitHub repository secrets:

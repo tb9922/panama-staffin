@@ -10,6 +10,13 @@ const CATEGORY_MAP = {
   '/api/export':     ['staff', 'scheduling', 'overrides'],
   '/api/gdpr':       ['gdpr', 'personal_data'],
   '/api/dashboard':  ['compliance', 'staffing'],
+  '/api/hr':         ['hr', 'employment'],
+  '/api/finance':    ['finance', 'billing'],
+  '/api/incidents':  ['clinical', 'safety'],
+  '/api/complaints': ['clinical', 'feedback'],
+  '/api/training':   ['staff', 'compliance'],
+  '/api/dols':       ['clinical', 'dols'],
+  '/api/webhooks':   ['system', 'integration'],
 };
 
 function classifyCategories(endpoint) {
@@ -24,8 +31,8 @@ function classifyCategories(endpoint) {
  * INSERTs on res.finish — never blocks the API response.
  * Failed writes are logged as warnings, not thrown.
  *
- * home_id is not resolved here (would require a DB lookup per request).
- * The access_log is global — admin-only via the GDPR dashboard.
+ * home_id is resolved from req.home (set by requireHomeAccess in the route handler).
+ * Since res.finish fires after the route completes, req.home is available without extra DB lookups.
  */
 export function accessLog(req, res, next) {
   res.on('finish', () => {
@@ -37,12 +44,13 @@ export function accessLog(req, res, next) {
 
     pool.query(
       `INSERT INTO access_log (user_name, user_role, method, endpoint, home_id, data_categories, ip_address, status_code)
-       VALUES ($1, $2, $3, $4, NULL, $5, $6::inet, $7)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7::inet, $8)`,
       [
         req.user?.username || null,
         req.user?.role || null,
         req.method,
         req.url.split('?')[0], // Strip query params (may contain PII)
+        req.home?.id || null,
         categories,
         ip,
         res.statusCode,

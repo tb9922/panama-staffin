@@ -6,8 +6,11 @@
 #   ./scripts/backup-db.sh                    # backup with defaults
 #   BACKUP_DIR=/mnt/nas ./scripts/backup-db.sh  # custom backup directory
 #
-# Cron (daily at 2am):
-#   0 2 * * * /var/www/panama/scripts/backup-db.sh >> /var/log/panama-backup.log 2>&1
+# Cron (daily at 2am — fast, no restore verification):
+#   0 2 * * * /var/www/panama-staffing/scripts/backup-db.sh >> /var/log/panama-backup.log 2>&1
+#
+# Cron (weekly Sunday 3am — with full restore verification):
+#   0 3 * * 0 VERIFY_AFTER_BACKUP=true /var/www/panama-staffing/scripts/backup-db.sh >> /var/log/panama-backup.log 2>&1
 #
 # Requires: pg_dump, gzip
 # Optional: aws CLI (for S3 offsite), or rclone, or scp to NAS
@@ -26,6 +29,7 @@ FILENAME="panama_${TIMESTAMP}.sql.gz"
 # Database connection — reads from environment or defaults
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
+# WARNING: Defaults to panama_dev — set DB_NAME=panama_prod in production crontab
 DB_NAME="${DB_NAME:-panama_dev}"
 DB_USER="${DB_USER:-panama}"
 
@@ -65,6 +69,19 @@ if [ "${LINES}" -lt 100 ]; then
 fi
 echo "[$(date --iso-8601=seconds)] Verified: ${LINES} lines"
 
+# ── Checksum ────────────────────────────────────────────────────────────────
+
+sha256sum "${BACKUP_DIR}/${FILENAME}" > "${BACKUP_DIR}/${FILENAME}.sha256"
+echo "[$(date --iso-8601=seconds)] Checksum: ${BACKUP_DIR}/${FILENAME}.sha256"
+
+# ── Full restore verification (optional) ────────────────────────────────────
+
+if [ "${VERIFY_AFTER_BACKUP:-false}" = "true" ] && [ -f "./scripts/verify-backup.sh" ]; then
+  echo "[$(date --iso-8601=seconds)] Running restore verification..."
+  BACKUP_FILE="${BACKUP_DIR}/${FILENAME}" ./scripts/verify-backup.sh
+  echo "[$(date --iso-8601=seconds)] Restore verification passed"
+fi
+
 # ── Offsite upload (uncomment one) ────────────────────────────────────────────
 
 # AWS S3:
@@ -78,7 +95,7 @@ echo "[$(date --iso-8601=seconds)] Verified: ${LINES} lines"
 
 # ── Retention — prune old local backups ───────────────────────────────────────
 
-DELETED=$(find "${BACKUP_DIR}" -name "panama_*.sql.gz" -mtime "+${RETENTION_DAYS}" -delete -print | wc -l)
+DELETED=$(find "${BACKUP_DIR}" \( -name "panama_*.sql.gz" -o -name "panama_*.sql.gz.sha256" \) -mtime "+${RETENTION_DAYS}" -delete -print | wc -l)
 if [ "${DELETED}" -gt 0 ]; then
   echo "[$(date --iso-8601=seconds)] Pruned ${DELETED} backups older than ${RETENTION_DAYS} days"
 fi
