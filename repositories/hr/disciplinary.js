@@ -76,7 +76,7 @@ export async function createDisciplinary(homeId, data, client) {
     `INSERT INTO hr_disciplinary_cases
        (home_id, staff_id, date_raised, raised_by, source, source_ref, category,
         allegation_summary, allegation_detail, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.date_raised, data.raised_by,
      data.source ?? 'other', data.source_ref || null, data.category,
      data.allegation_summary, data.allegation_detail || null,
@@ -123,7 +123,7 @@ export async function updateDisciplinary(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_disciplinary_cases SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_disciplinary_cases SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

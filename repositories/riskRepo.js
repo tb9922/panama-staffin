@@ -118,7 +118,7 @@ export async function upsert(homeId, data) {
        title=$3,description=$4,category=$5,owner=$6,likelihood=$7,impact=$8,inherent_risk=$9,
        controls=$10,residual_likelihood=$11,residual_impact=$12,residual_risk=$13,actions=$14,
        last_reviewed=$15,next_review=$16,status=$17,updated_at=$18,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       id, homeId, data.title || null, data.description || null, data.category || null,
       data.owner || null, data.likelihood ?? null, data.impact ?? null, data.inherent_risk ?? null,
@@ -146,7 +146,7 @@ export async function update(id, homeId, data, version) {
   const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   let sql = `UPDATE risk_register SET ${setClause}, updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

@@ -71,7 +71,7 @@ export async function createEntry(homeId, entry, author) {
   const { rows } = await pool.query(
     `INSERT INTO handover_entries (home_id, entry_date, shift, category, priority, content, incident_id, author)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [homeId, entry.entry_date, entry.shift, entry.category, entry.priority, entry.content, entry.incident_id || null, author]
   );
   return shapeRow(rows[0]);
@@ -89,7 +89,7 @@ export async function updateEntry(id, homeId, updates) {
     `UPDATE handover_entries
      SET content = $3, priority = $4, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [id, homeId, updates.content, updates.priority]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
@@ -106,7 +106,7 @@ export async function acknowledgeEntry(id, homeId, username) {
     `UPDATE handover_entries
      SET acknowledged_by = $3, acknowledged_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [id, homeId, username]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

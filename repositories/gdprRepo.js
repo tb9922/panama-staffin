@@ -104,7 +104,7 @@ export async function createRequest(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO data_requests
        (home_id, request_type, subject_type, subject_id, subject_name, date_received, deadline, identity_verified, status, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${DATA_REQUEST_COLS}`,
     [homeId, data.request_type, data.subject_type, data.subject_id, data.subject_name || null,
      data.date_received, data.deadline, data.identity_verified ?? false, data.status ?? 'received', data.notes || null]
   );
@@ -128,7 +128,7 @@ export async function updateRequest(id, homeId, data, client, version) {
   fields.push('version = version + 1');
   let sql = `UPDATE data_requests SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${DATA_REQUEST_COLS}`;
   const { rows, rowCount } = await conn.query(sql, values);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRequest(rows[0]) : null;
@@ -191,7 +191,7 @@ export async function createBreach(homeId, data, client) {
        (home_id, title, description, discovered_date, data_categories,
         individuals_affected, severity, risk_to_rights, ico_notifiable,
         ico_notification_deadline, containment_actions, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${DATA_BREACH_COLS}`,
     [homeId, data.title, data.description || null, data.discovered_date,
      data.data_categories || [], data.individuals_affected ?? 0,
      data.severity ?? 'low', data.risk_to_rights ?? 'unlikely',
@@ -222,7 +222,7 @@ export async function updateBreach(id, homeId, data, client, version) {
   fields.push('version = version + 1');
   let sql = `UPDATE data_breaches SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${DATA_BREACH_COLS}`;
   const { rows, rowCount } = await conn.query(sql, values);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeBreach(rows[0]) : null;
@@ -299,7 +299,7 @@ export async function createConsent(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO consent_records
        (home_id, subject_type, subject_id, subject_name, purpose, legal_basis, given, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${CONSENT_COLS}`,
     [homeId, data.subject_type, data.subject_id, data.subject_name || null,
      data.purpose, data.legal_basis, data.given || null, data.notes || null]
   );
@@ -327,7 +327,7 @@ export async function updateConsent(id, homeId, data, client, version) {
 
   let sql = `UPDATE consent_records SET ${setClauses.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${CONSENT_COLS}`;
   const { rows, rowCount } = await conn.query(sql, values);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeConsent(rows[0]) : null;
@@ -382,7 +382,7 @@ export async function createDPComplaint(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO dp_complaints
        (home_id, date_received, complainant_name, category, description, severity, ico_involved, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${DP_COMPLAINT_COLS}`,
     [homeId, data.date_received, data.complainant_name || null, data.category,
      data.description, data.severity ?? 'low', data.ico_involved ?? false, data.status ?? 'open']
   );
@@ -406,7 +406,7 @@ export async function updateDPComplaint(id, homeId, data, client, version) {
   fields.push('version = version + 1');
   let sql = `UPDATE dp_complaints SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { values.push(version); sql += ` AND version = $${values.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${DP_COMPLAINT_COLS}`;
   const { rows, rowCount } = await conn.query(sql, values);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeDPComplaint(rows[0]) : null;

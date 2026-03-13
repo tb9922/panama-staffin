@@ -78,7 +78,7 @@ export async function create(homeId, data, client) {
          (home_id, room_number, room_name, room_type, floor, status,
           resident_id, notes, created_by, updated_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
-       RETURNING *`,
+       RETURNING ${BED_COLS}`,
       [homeId, data.room_number, data.room_name || null,
        data.room_type || 'single', data.floor || null,
        data.status ?? 'available', data.resident_id || null,
@@ -116,7 +116,7 @@ export async function updateStatus(bedId, homeId, statusData, client) {
        notes = COALESCE($10, notes),
        updated_by = $11
      WHERE id = $1 AND home_id = $2
-     RETURNING *`,
+     RETURNING ${BED_COLS}`,
     [bedId, homeId,
      statusData.status || null,
      statusData.resident_id ?? null,

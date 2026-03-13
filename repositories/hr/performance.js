@@ -66,7 +66,7 @@ export async function createPerformance(homeId, data, client) {
     `INSERT INTO hr_performance_cases
        (home_id, staff_id, type, date_raised, raised_by, concern_summary,
         concern_detail, performance_area, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.type, data.date_raised, data.raised_by,
      data.concern_summary, data.concern_detail || null, data.performance_area,
      data.status ?? 'open', data.created_by]
@@ -104,7 +104,7 @@ export async function updatePerformance(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_performance_cases SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_performance_cases SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

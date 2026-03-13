@@ -49,7 +49,7 @@ export async function createEdi(homeId, data, client) {
        (home_id, record_type, staff_id, complaint_date, harassment_category,
         third_party, third_party_type, respondent_type, respondent_staff_id, respondent_name,
         handling_route, condition_description, adjustments, description, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING ${COLS}`,
     [homeId, data.record_type, data.staff_id || null, data.complaint_date || null,
      data.harassment_category || null, data.third_party ?? false,
      data.third_party_type || null, data.respondent_type || null,
@@ -85,7 +85,7 @@ export async function updateEdi(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_edi_records SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_edi_records SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

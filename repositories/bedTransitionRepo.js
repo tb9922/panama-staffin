@@ -31,7 +31,7 @@ export async function recordTransition(homeId, data, client) {
      INSERT INTO bed_transitions
        (home_id, bed_id, from_status, to_status, resident_id, changed_by, reason)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
-     RETURNING *`,
+     RETURNING ${TRANSITION_COLS}`,
     [homeId, data.bedId, data.fromStatus || null, data.toStatus,
      data.residentId || null, data.changedBy || null, data.reason || null]
   );

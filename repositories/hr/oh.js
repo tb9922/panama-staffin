@@ -43,7 +43,7 @@ export async function createOhReferral(homeId, data, client) {
     `INSERT INTO hr_oh_referrals
        (home_id, staff_id, referral_date, referred_by, reason, questions_for_oh,
         employee_consent_obtained, consent_date, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.referral_date, data.referred_by,
      data.reason, JSON.stringify(data.questions_for_oh || []),
      data.employee_consent_obtained ?? false, data.consent_date || null,
@@ -75,7 +75,7 @@ export async function updateOhReferral(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_oh_referrals SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_oh_referrals SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

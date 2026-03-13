@@ -83,7 +83,7 @@ export async function upsertTaxCode(homeId, data, client) {
        source            = EXCLUDED.source,
        notes             = EXCLUDED.notes,
        updated_at        = NOW()
-     RETURNING *`,
+     RETURNING ${TAX_CODE_COLS}`,
     [
       homeId, data.staff_id, data.tax_code || '1257L',
       data.basis ?? 'cumulative', data.ni_category ?? 'A',
@@ -226,7 +226,7 @@ export async function upsertYTD(homeId, staffId, taxYear, increments, client) {
        ssp_amount       = payroll_ytd.ssp_amount       + EXCLUDED.ssp_amount,
        net_pay          = payroll_ytd.net_pay          + EXCLUDED.net_pay,
        updated_at       = NOW()
-     RETURNING *`,
+     RETURNING ${YTD_COLS}`,
     [
       homeId, staffId, taxYear,
       gross_pay, taxable_pay, tax_deducted,

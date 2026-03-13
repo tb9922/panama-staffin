@@ -72,7 +72,7 @@ export async function create(homeId, rule, client) {
   const { rows } = await conn.query(
     `INSERT INTO pay_rate_rules (home_id, name, rate_type, amount, applies_to, priority, effective_from)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
-     RETURNING *`,
+     RETURNING ${RULE_COLS}`,
     [homeId, rule.name, rule.rate_type, rule.amount, rule.applies_to,
      rule.priority ?? 0, rule.effective_from ?? new Date().toISOString().slice(0, 10)],
   );
@@ -100,7 +100,7 @@ export async function update(ruleId, homeId, updates, client) {
     const { rows } = await conn.query(
       `INSERT INTO pay_rate_rules (home_id, name, rate_type, amount, applies_to, priority, effective_from)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING *`,
+       RETURNING ${RULE_COLS}`,
       [homeId, updates.name, updates.rate_type, updates.amount, updates.applies_to,
        updates.priority ?? 0, today],
     );

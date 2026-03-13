@@ -40,7 +40,7 @@ export async function createProvider(homeId, provider, client) {
   const { rows } = await conn.query(
     `INSERT INTO agency_providers (home_id, name, contact, rate_day, rate_night)
      VALUES ($1,$2,$3,$4,$5)
-     RETURNING *`,
+     RETURNING ${PROVIDER_COLS}`,
     [homeId, provider.name, provider.contact || null, provider.rate_day ?? null, provider.rate_night ?? null],
   );
   return shapeProvider(rows[0]);
@@ -52,7 +52,7 @@ export async function updateProvider(id, homeId, updates, client) {
     `UPDATE agency_providers
      SET name = $1, contact = $2, rate_day = $3, rate_night = $4, active = $5
      WHERE id = $6 AND home_id = $7
-     RETURNING *`,
+     RETURNING ${PROVIDER_COLS}`,
     [updates.name, updates.contact || null, updates.rate_day ?? null, updates.rate_night ?? null,
      updates.active ?? true, id, homeId],
   );
@@ -103,7 +103,7 @@ export async function createShift(homeId, shift, client) {
        (home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost,
         worker_name, invoice_ref, reconciled, role_covered)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     RETURNING *`,
+     RETURNING ${SHIFT_COLS}`,
     [
       homeId, shift.agency_id, shift.date, shift.shift_code,
       shift.hours, shift.hourly_rate, shift.total_cost,

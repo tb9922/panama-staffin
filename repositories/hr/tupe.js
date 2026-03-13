@@ -52,7 +52,7 @@ export async function createTupe(homeId, data, client) {
     `INSERT INTO hr_tupe_transfers
        (home_id, transfer_type, transfer_date, signed_date, transferor_name, transferee_name,
         employees, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
     [homeId, data.transfer_type, data.transfer_date, data.signed_date || null,
      data.transferor_name, data.transferee_name,
      JSON.stringify(data.employees || []), data.status ?? 'planned',
@@ -84,7 +84,7 @@ export async function updateTupe(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_tupe_transfers SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_tupe_transfers SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

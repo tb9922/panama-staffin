@@ -117,7 +117,7 @@ export async function upsert(homeId, data) {
        last_reviewed=$7,next_review_due=$8,review_frequency_months=$9,
        status=$10,reviewed_by=$11,approved_by=$12,changes=$13,notes=$14,
        updated_at=$15,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       id, homeId, data.policy_name || null, data.policy_ref || null,
       data.category || null, data.doc_version || null,
@@ -146,7 +146,7 @@ export async function update(id, homeId, data, version) {
   const setClause = mapped.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   let sql = `UPDATE policy_reviews SET ${setClause}, updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

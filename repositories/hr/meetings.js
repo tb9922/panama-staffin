@@ -38,7 +38,7 @@ export async function createMeeting(homeId, caseType, caseId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO hr_investigation_meetings (home_id, case_type, case_id, meeting_date, meeting_time, meeting_type, location, attendees, summary, key_points, outcome, recorded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING ${COLS}`,
     [homeId, caseType, caseId, data.meeting_date, data.meeting_time || null, data.meeting_type ?? 'interview', data.location || null,
      JSON.stringify(data.attendees || []), data.summary || null, data.key_points || null, data.outcome || null, data.recorded_by]
   );
@@ -64,7 +64,7 @@ export async function updateMeeting(id, homeId, data, client, version) {
   n += 2;
   if (version != null) { vals.push(version); where += ` AND version = $${n}`; n++; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_investigation_meetings SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_investigation_meetings SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     vals
   );
   if (rowCount === 0 && version != null) return null;

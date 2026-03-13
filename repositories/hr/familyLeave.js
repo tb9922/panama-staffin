@@ -79,7 +79,7 @@ export async function createFamilyLeave(homeId, data, client) {
     `INSERT INTO hr_family_leave
        (home_id, staff_id, type, request_date, leave_start_date, leave_end_date,
         expected_return_date, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.type, data.request_date || null,
      data.leave_start_date || null, data.leave_end_date || null,
      data.expected_return_date || null, data.status ?? 'requested',
@@ -118,7 +118,7 @@ export async function updateFamilyLeave(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_family_leave SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_family_leave SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

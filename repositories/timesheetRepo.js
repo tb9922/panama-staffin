@@ -103,7 +103,7 @@ export async function upsert(homeId, entry, client) {
                                  ELSE EXCLUDED.status END,
        notes              = EXCLUDED.notes,
        updated_at         = NOW()
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       homeId, entry.staff_id, entry.date,
       entry.scheduled_start || null, entry.scheduled_end || null,
@@ -124,7 +124,7 @@ export async function approve(id, homeId, approvedBy, client) {
     `UPDATE timesheet_entries
      SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_at = NOW()
      WHERE id = $2 AND home_id = $3 AND status NOT IN ('locked')
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [approvedBy, id, homeId],
   );
   return rows.length > 0 ? shapeRow(rows[0]) : null;
@@ -161,7 +161,7 @@ export async function dispute(id, homeId, reason, client) {
     `UPDATE timesheet_entries
      SET status = 'disputed', dispute_reason = $1, updated_at = NOW()
      WHERE id = $2 AND home_id = $3 AND status NOT IN ('locked')
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [reason, id, homeId],
   );
   return rows.length > 0 ? shapeRow(rows[0]) : null;
@@ -210,7 +210,7 @@ export async function bulkUpsert(homeId, entries, client) {
                                    ELSE EXCLUDED.status END,
          notes              = EXCLUDED.notes,
          updated_at         = NOW()
-       RETURNING *`,
+       RETURNING ${COLS}`,
       [
         homeId, entry.staff_id, entry.date,
         entry.scheduled_start || null, entry.scheduled_end || null,

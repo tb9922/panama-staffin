@@ -115,7 +115,7 @@ export async function upsert(homeId, data) {
        category=$3,description=$4,frequency=$5,last_completed=$6,next_due=$7,
        completed_by=$8,contractor=$9,items_checked=$10,items_passed=$11,items_failed=$12,
        certificate_ref=$13,certificate_expiry=$14,notes=$15,updated_at=$16,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       id, homeId, data.category || null, data.description || null, data.frequency || null,
       data.last_completed || null, data.next_due || null, data.completed_by || null,
@@ -141,7 +141,7 @@ export async function update(id, homeId, data, version) {
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   let sql = `UPDATE maintenance SET ${setClause}, updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

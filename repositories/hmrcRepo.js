@@ -52,7 +52,7 @@ export async function upsertLiability(homeId, taxYear, taxMonth, data, client) {
        period_start                = LEAST(hmrc_liabilities.period_start, EXCLUDED.period_start),
        period_end                  = GREATEST(hmrc_liabilities.period_end, EXCLUDED.period_end),
        updated_at                  = NOW()
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       homeId, taxYear, taxMonth,
       data.period_start, data.period_end,
@@ -71,7 +71,7 @@ export async function markPaid(id, homeId, paidDate, paidReference, client) {
     `UPDATE hmrc_liabilities
      SET status = 'paid', paid_date = $3, paid_reference = $4, updated_at = NOW()
      WHERE id = $1 AND home_id = $2
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [id, homeId, paidDate, paidReference || null]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

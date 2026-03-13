@@ -50,7 +50,7 @@ export async function createFlexWorking(homeId, data, client) {
     `INSERT INTO hr_flexible_working
        (home_id, staff_id, request_date, effective_date_requested, current_pattern,
         requested_change, reason, employee_assessment_of_impact, decision_deadline, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.request_date, data.effective_date_requested || null,
      data.current_pattern || null, data.requested_change, data.reason || null,
      data.employee_assessment_of_impact || null, data.decision_deadline,
@@ -80,7 +80,7 @@ export async function updateFlexWorking(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_flexible_working SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_flexible_working SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

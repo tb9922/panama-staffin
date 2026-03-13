@@ -97,7 +97,7 @@ export async function upsert(homeId, data) {
      ON CONFLICT (home_id, id) DO UPDATE SET
        quality_statement=$3,type=$4,title=$5,description=$6,
        date_from=$7,date_to=$8,added_by=$9,added_at=$10,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${EVIDENCE_COLS}`,
     [
       id, homeId, data.quality_statement || null, data.type || null,
       data.title || null, data.description || null,
@@ -122,7 +122,7 @@ export async function update(id, homeId, data, version) {
   const params = [id, homeId, ...values];
   let sql = `UPDATE cqc_evidence SET ${setClause}, version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${EVIDENCE_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
