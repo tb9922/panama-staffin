@@ -39,7 +39,7 @@ async function cleanup() {
   for (const hid of homeIds) {
     await pool.query(`DELETE FROM staff WHERE home_id = $1`, [hid]).catch(() => {});
   }
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM audit_log WHERE home_slug LIKE '${PREFIX}-%' OR home_slug LIKE 'platform_test_%'`).catch(() => {});
@@ -84,7 +84,7 @@ beforeAll(async () => {
 
   // Grant access to seed home
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2), ($3, $2), ($4, $2)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup'), ($3, $2, 'home_manager', 'test-setup'), ($4, $2, 'viewer', 'test-setup')`,
     [PLATFORM_ADMIN_USER, seedHomeId, REGULAR_ADMIN_USER, VIEWER_USER]
   );
 
@@ -253,12 +253,13 @@ describe('POST /homes — create a home', () => {
     }).expect(403);
   });
 
-  it('grants creating user access to new home', async () => {
+  it('assigns home_manager role to creating user', async () => {
     const { rows } = await pool.query(
-      `SELECT 1 FROM user_home_access WHERE username = $1 AND home_id = $2`,
+      `SELECT role_id FROM user_home_roles WHERE username = $1 AND home_id = $2`,
       [PLATFORM_ADMIN_USER, createdHomeId]
     );
     expect(rows.length).toBe(1);
+    expect(rows[0].role_id).toBe('home_manager');
   });
 });
 
@@ -383,9 +384,9 @@ describe('DELETE /homes/:id — soft-delete a home', () => {
     });
     const revokeHomeId = createRes.body.id;
 
-    // Grant regular admin access
+    // Grant regular admin a role at this home
     await pool.query(
-      `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup')`,
       [REGULAR_ADMIN_USER, revokeHomeId]
     );
 
@@ -394,7 +395,7 @@ describe('DELETE /homes/:id — soft-delete a home', () => {
 
     // Verify access was revoked
     const { rows } = await pool.query(
-      `SELECT 1 FROM user_home_access WHERE home_id = $1`,
+      `SELECT 1 FROM user_home_roles WHERE home_id = $1`,
       [revokeHomeId]
     );
     expect(rows.length).toBe(0);

@@ -27,7 +27,7 @@ let homeAId, homeBId;
 beforeAll(async () => {
   // Clean up from previous runs
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'auth-test-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
+
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'auth-test-%'`);
@@ -58,16 +58,6 @@ beforeAll(async () => {
   adminUserId = au.id;
   viewerUserId = vu.id;
 
-  // Grant admin access to both homes, viewer to home A only
-  await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2), ($1, $3)`,
-    [ADMIN_USER, homeAId, homeBId]
-  );
-  await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
-    [VIEWER_USER, homeAId]
-  );
-
   // Assign RBAC roles — admin as home_manager at both homes, viewer as viewer at home A
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
@@ -88,7 +78,7 @@ beforeAll(async () => {
     [lockHash]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ('auth-test-lockout', $1)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ('auth-test-lockout', $1, 'viewer', 'test-setup')`,
     [homeAId]
   );
 }, 15000);
@@ -98,7 +88,7 @@ afterAll(async () => {
     `UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username LIKE 'auth-test-%'`
   ).catch(() => {});
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'auth-test-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
+
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE 'auth-test-%'`);
@@ -479,7 +469,6 @@ describe('User management (CRUD)', () => {
   afterAll(async () => {
     if (createdUserId) {
       await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-newuser'`);
-      await pool.query(`DELETE FROM user_home_access WHERE username = 'auth-test-newuser'`);
       await pool.query(`DELETE FROM users WHERE id = $1`, [createdUserId]);
     }
   });
@@ -576,7 +565,7 @@ describe('Token revocation', () => {
       [hash]
     );
     await pool.query(
-      `INSERT INTO user_home_access (username, home_id) VALUES ('auth-test-revokee', $1)`,
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ('auth-test-revokee', $1, 'viewer', 'test-setup')`,
       [homeAId]
     );
 
@@ -609,7 +598,7 @@ describe('Token revocation', () => {
 
     // Clean up
     await pool.query(`DELETE FROM token_denylist WHERE username = 'auth-test-revokee'`);
-    await pool.query(`DELETE FROM user_home_access WHERE username = 'auth-test-revokee'`);
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-revokee'`);
     await pool.query(`DELETE FROM users WHERE id = $1`, [u.id]);
   });
 

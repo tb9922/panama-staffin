@@ -192,7 +192,7 @@ export async function listAllWithStats(includeDeleted = false) {
   const { rows } = await pool.query(
     `SELECT h.id, h.slug, h.name, h.config, h.deleted_at, h.updated_at,
        (SELECT COUNT(*)::int FROM staff s WHERE s.home_id = h.id AND s.deleted_at IS NULL) AS staff_count,
-       (SELECT COUNT(*)::int FROM user_home_access uha WHERE uha.home_id = h.id) AS user_count
+       (SELECT COUNT(DISTINCT username)::int FROM user_home_roles uhr WHERE uhr.home_id = h.id) AS user_count
      FROM homes h ${filter}
      ORDER BY h.name`
   );

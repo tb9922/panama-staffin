@@ -40,7 +40,7 @@ export async function ensureSeedUsers() {
       'system'
     );
     if (envUser.role === 'admin') {
-      await userHomeRepo.grantAllHomes(envUser.username);
+      await userHomeRepo.grantAllHomesRole(envUser.username);
     }
     seeded++;
     logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
@@ -62,7 +62,7 @@ export async function createUser(username, password, role, displayName, createdB
   const user = await userRepo.create(username, hash, role, displayName, createdBy, client);
 
   if (role === 'admin') {
-    await userHomeRepo.grantAllHomes(username);
+    await userHomeRepo.grantAllHomesRole(username);
   }
 
   return user;
@@ -102,7 +102,7 @@ export async function updateUser(id, fields, actorUsername) {
     await authService.revokeUser(target.username);
     // If upgraded to admin, grant all homes
     if (fields.role === 'admin' && fields.role !== target.role) {
-      await userHomeRepo.grantAllHomes(target.username);
+      await userHomeRepo.grantAllHomesRole(target.username);
     }
   }
 

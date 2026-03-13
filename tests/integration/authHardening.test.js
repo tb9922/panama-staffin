@@ -26,7 +26,7 @@ let lockoutUserId;
 beforeAll(async () => {
   // Clean up
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${TEST_PREFIX}-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${TEST_PREFIX}-%'`);
+
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${TEST_PREFIX}-%'`);
@@ -44,10 +44,6 @@ beforeAll(async () => {
     [ADMIN_USER, adminHash]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
-    [ADMIN_USER, home.id]
-  );
-  await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [ADMIN_USER, home.id]
@@ -62,10 +58,6 @@ beforeAll(async () => {
   );
   lockoutUserId = lu.id;
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
-    [LOCKOUT_USER, home.id]
-  );
-  await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'viewer', 'test-setup')`,
     [LOCKOUT_USER, home.id]
@@ -78,7 +70,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${TEST_PREFIX}-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${TEST_PREFIX}-%'`);
+
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${TEST_PREFIX}-%'`);

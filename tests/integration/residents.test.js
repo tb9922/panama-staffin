@@ -30,7 +30,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM beds WHERE home_id IN ${homeIds}`).catch(() => {});
   await pool.query(`DELETE FROM finance_fee_changes WHERE home_id IN ${homeIds}`).catch(() => {});
   await pool.query(`DELETE FROM finance_residents WHERE home_id IN ${homeIds}`).catch(() => {});
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
 
@@ -60,11 +60,11 @@ beforeAll(async () => {
 
   // Grant home access
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2), ($1, $3)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
     [ADMIN_USER, homeA, homeB]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'viewer', 'test-setup')`,
     [VIEWER_USER, homeA]
   );
 
@@ -152,7 +152,7 @@ afterAll(async () => {
   for (const tbl of ['bed_transitions', 'beds', 'finance_fee_changes', 'finance_residents']) {
     await pool.query(`DELETE FROM ${tbl} WHERE home_id IN ($1, $2)`, [homeA, homeB]).catch(() => {});
   }
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);

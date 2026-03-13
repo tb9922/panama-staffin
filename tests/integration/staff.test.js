@@ -29,7 +29,7 @@ beforeAll(async () => {
   // Clean up from previous runs
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`);
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
@@ -64,11 +64,11 @@ beforeAll(async () => {
 
   // Grant access: admin → both homes, viewer → home A only
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2), ($1, $3)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
     [ADMIN_USER, homeAId, homeBId]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'viewer', 'test-setup')`,
     [VIEWER_USER, homeAId]
   );
 
@@ -89,7 +89,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`);
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
