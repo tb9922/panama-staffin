@@ -1,5 +1,7 @@
 import { pool } from '../db.js';
 
+const TRANSITION_COLS = 'id, home_id, bed_id, from_status, to_status, resident_id, changed_by, changed_at, reason';
+
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 const f = v => v != null ? parseFloat(v) : null;
 
@@ -40,7 +42,7 @@ export async function getTransitionsByBed(bedId, homeId, { limit = 50 } = {}, cl
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedTransitionRepo – getTransitionsByBed */
-     SELECT * FROM bed_transitions
+     SELECT ${TRANSITION_COLS} FROM bed_transitions
      WHERE bed_id = $1 AND home_id = $2
      ORDER BY changed_at DESC
      LIMIT $3`,
@@ -53,7 +55,7 @@ export async function getLatestTransition(bedId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedTransitionRepo – getLatestTransition */
-     SELECT * FROM bed_transitions
+     SELECT ${TRANSITION_COLS} FROM bed_transitions
      WHERE bed_id = $1 AND home_id = $2
      ORDER BY changed_at DESC
      LIMIT 1`,

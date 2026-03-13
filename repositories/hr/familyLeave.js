@@ -1,5 +1,22 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id, type,
+  request_date, expected_due_date, actual_birth_date,
+  mat_b1_received, mat_b1_date, paternity_week_choice, paternity_start_date,
+  spl_total_weeks, spl_notice_received_date, spl_partner_employer, spl_booking_notices,
+  matching_date, placement_date,
+  upl_child_name, upl_child_dob, upl_weeks_requested, upl_weeks_used_total,
+  bereavement_date, bereavement_relationship,
+  leave_start_date, leave_end_date, expected_return_date, actual_return_date,
+  statutory_pay_type, statutory_pay_start_date,
+  enhanced_pay, enhanced_pay_weeks, enhanced_pay_rate,
+  risk_assessment_date, risk_assessment_by, risks_identified, adjustments_made,
+  risk_assessment_review_date,
+  kit_days, split_days,
+  return_confirmed, return_pattern, flexible_working_request_linked,
+  protected_period_start, protected_period_end,
+  status, notes, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeFamilyLeave = createShaper({
   fields: [
     'id', 'home_id', 'staff_id', 'type',
@@ -42,7 +59,7 @@ const shapeFamilyLeave = createShaper({
 
 export async function findFamilyLeave(homeId, { staffId, type } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_family_leave WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_family_leave WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (type) { params.push(type); sql += ` AND type = $${params.length}`; }
@@ -52,7 +69,7 @@ export async function findFamilyLeave(homeId, { staffId, type } = {}, client, pa
 export async function findFamilyLeaveById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_family_leave WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_family_leave WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeFamilyLeave(rows[0]);
 }
 

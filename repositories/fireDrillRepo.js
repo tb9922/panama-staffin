@@ -1,5 +1,7 @@
 import { pool, toDateStr } from '../db.js';
 
+const DRILL_COLS = 'id, home_id, date, time, scenario, evacuation_time_seconds, staff_present, residents_evacuated, issues, corrective_actions, conducted_by, notes, created_at, updated_at, deleted_at';
+
 function shapeRow(row) {
   return {
     id:                      row.id,
@@ -23,7 +25,7 @@ function shapeRow(row) {
  */
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT * FROM fire_drills WHERE home_id = $1 AND deleted_at IS NULL ORDER BY date DESC`,
+    `SELECT ${DRILL_COLS} FROM fire_drills WHERE home_id = $1 AND deleted_at IS NULL ORDER BY date DESC`,
     [homeId]
   );
   return rows.map(shapeRow);

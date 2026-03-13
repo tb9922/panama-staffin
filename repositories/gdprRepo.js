@@ -3,6 +3,20 @@ import { pool } from '../db.js';
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 
+// ── Column lists ─────────────────────────────────────────────────────────────
+
+const ACCESS_LOG_COLS = 'id, ts, user_name, user_role, method, endpoint, home_id, data_categories, ip_address, status_code';
+
+const DATA_REQUEST_COLS = 'id, home_id, request_type, subject_type, subject_id, subject_name, date_received, deadline, identity_verified, status, notes, completed_date, completed_by, version, created_at, updated_at';
+
+const DATA_BREACH_COLS = 'id, home_id, title, description, discovered_date, data_categories, individuals_affected, severity, risk_to_rights, ico_notifiable, ico_notification_deadline, ico_notified, ico_notified_date, ico_reference, containment_actions, root_cause, preventive_measures, status, version, created_at, updated_at';
+
+const RETENTION_COLS = 'id, data_category, retention_period, retention_days, retention_basis, legal_basis, applies_to_table, special_category, notes';
+
+const CONSENT_COLS = 'id, home_id, subject_type, subject_id, subject_name, purpose, legal_basis, given, withdrawn, notes, version, created_at, updated_at';
+
+const DP_COMPLAINT_COLS = 'id, home_id, date_received, complainant_name, category, description, severity, ico_involved, ico_reference, status, resolution, resolution_date, version, created_at, updated_at';
+
 // ── Access Log ───────────────────────────────────────────────────────────────
 
 function shapeAccessLog(row) {
@@ -25,7 +39,7 @@ function shapeAccessLog(row) {
 export async function getAccessLog({ limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM access_log ORDER BY ts DESC LIMIT $1 OFFSET $2`,
+    `SELECT ${ACCESS_LOG_COLS} FROM access_log ORDER BY ts DESC LIMIT $1 OFFSET $2`,
     [limit, offset]
   );
   return rows.map(shapeAccessLog);
@@ -66,7 +80,7 @@ function shapeRequest(row) {
 export async function findRequests(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM data_requests
+    `SELECT ${DATA_REQUEST_COLS}, COUNT(*) OVER() AS _total FROM data_requests
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY date_received DESC
      LIMIT $2 OFFSET $3`,
@@ -79,7 +93,7 @@ export async function findRequests(homeId, { limit = 100, offset = 0 } = {}, cli
 export async function findRequestById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_requests WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${DATA_REQUEST_COLS} FROM data_requests WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRequest(rows[0]) : null;
@@ -151,7 +165,7 @@ function shapeBreach(row) {
 export async function findBreaches(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM data_breaches
+    `SELECT ${DATA_BREACH_COLS}, COUNT(*) OVER() AS _total FROM data_breaches
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY discovered_date DESC
      LIMIT $2 OFFSET $3`,
@@ -164,7 +178,7 @@ export async function findBreaches(homeId, { limit = 100, offset = 0 } = {}, cli
 export async function findBreachById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM data_breaches WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${DATA_BREACH_COLS} FROM data_breaches WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeBreach(rows[0]) : null;
@@ -233,7 +247,7 @@ function shapeRetention(row) {
 export async function getRetentionSchedule(client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM retention_schedule ORDER BY data_category`
+    `SELECT ${RETENTION_COLS} FROM retention_schedule ORDER BY data_category`
   );
   return rows.map(shapeRetention);
 }
@@ -261,7 +275,7 @@ function shapeConsent(row) {
 export async function findConsent(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM consent_records
+    `SELECT ${CONSENT_COLS}, COUNT(*) OVER() AS _total FROM consent_records
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY created_at DESC
      LIMIT $2 OFFSET $3`,
@@ -274,7 +288,7 @@ export async function findConsent(homeId, { limit = 100, offset = 0 } = {}, clie
 export async function findConsentById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM consent_records WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${CONSENT_COLS} FROM consent_records WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeConsent(rows[0]) : null;
@@ -344,7 +358,7 @@ function shapeDPComplaint(row) {
 export async function findDPComplaints(homeId, { limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM dp_complaints
+    `SELECT ${DP_COMPLAINT_COLS}, COUNT(*) OVER() AS _total FROM dp_complaints
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY date_received DESC
      LIMIT $2 OFFSET $3`,
@@ -357,7 +371,7 @@ export async function findDPComplaints(homeId, { limit = 100, offset = 0 } = {},
 export async function findDPComplaintById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM dp_complaints WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    `SELECT ${DP_COMPLAINT_COLS} FROM dp_complaints WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeDPComplaint(rows[0]) : null;

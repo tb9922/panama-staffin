@@ -1,5 +1,12 @@
 import { pool, withTransaction } from '../db.js';
 
+const COLS = `id, home_id, staff_id, date,
+  scheduled_start, scheduled_end, actual_start, actual_end,
+  snapped_start, snapped_end, snap_applied, snap_minutes_saved,
+  break_minutes, payable_hours, status,
+  approved_by, approved_at, dispute_reason, notes,
+  created_at, updated_at`;
+
 function shapeRow(row) {
   const toDateStr = (v) => v
     ? (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10))
@@ -34,7 +41,7 @@ function shapeRow(row) {
 /** All timesheet entries for a home on a specific date. */
 export async function findByHomeAndDate(homeId, date) {
   const { rows } = await pool.query(
-    `SELECT * FROM timesheet_entries WHERE home_id = $1 AND date = $2 ORDER BY staff_id`,
+    `SELECT ${COLS} FROM timesheet_entries WHERE home_id = $1 AND date = $2 ORDER BY staff_id`,
     [homeId, date],
   );
   return rows.map(shapeRow);
@@ -44,7 +51,7 @@ export async function findByHomeAndDate(homeId, date) {
 export async function findByStaffDate(homeId, staffId, date, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
+    `SELECT ${COLS} FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
     [homeId, staffId, date],
   );
   return rows.length > 0 ? shapeRow(rows[0]) : null;
@@ -65,7 +72,7 @@ export async function findByHomePeriod(homeId, start, end, status, staffId, clie
     staffClause = ` AND staff_id = $${params.length}`;
   }
   const { rows } = await conn.query(
-    `SELECT * FROM timesheet_entries
+    `SELECT ${COLS} FROM timesheet_entries
      WHERE home_id = $1 AND date >= $2 AND date <= $3${statusClause}${staffClause}
      ORDER BY date, staff_id`,
     params,

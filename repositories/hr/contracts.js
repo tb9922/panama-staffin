@@ -1,5 +1,19 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id,
+  statement_issued, statement_issued_date, contract_type, contract_start_date, contract_end_date,
+  job_title, job_description_ref, reporting_to, place_of_work,
+  hours_per_week, working_pattern, hourly_rate, pay_frequency, annual_leave_days,
+  notice_period_employer, notice_period_employee,
+  probation_period_months, probation_start_date, probation_end_date,
+  probation_reviews, probation_outcome, probation_extension_date, probation_extension_reason,
+  probation_confirmed_date, probation_confirmation_letter_sent,
+  variations,
+  termination_type, termination_date, termination_reason, notice_given_date,
+  notice_given_by, last_working_day, garden_leave, pilon,
+  exit_interview_date, exit_interview_notes, references_agreed,
+  status, notes, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeContract = createShaper({
   fields: [
     'id', 'home_id', 'staff_id',
@@ -28,7 +42,7 @@ const shapeContract = createShaper({
 
 export async function findContracts(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_contracts WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_contracts WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
@@ -38,7 +52,7 @@ export async function findContracts(homeId, { staffId, status } = {}, client, pa
 export async function findContractById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_contracts WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_contracts WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeContract(rows[0]);
 }
 

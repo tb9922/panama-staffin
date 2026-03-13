@@ -1,5 +1,20 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id, type, date_raised, raised_by,
+  concern_summary, concern_detail, performance_area,
+  informal_discussion_date, informal_discussion_notes, informal_targets,
+  informal_review_date, informal_outcome,
+  pip_start_date, pip_end_date, pip_objectives, pip_overall_outcome, pip_extended_to,
+  hearing_status, hearing_date, hearing_time, hearing_location,
+  hearing_chair, hearing_letter_sent_date, hearing_companion_name, hearing_companion_role,
+  hearing_notes,
+  outcome, outcome_date, outcome_reason, outcome_letter_sent_date, warning_expiry_date,
+  redeployment_offered, redeployment_role, redeployment_accepted,
+  appeal_status, appeal_received_date, appeal_deadline, appeal_grounds,
+  appeal_hearing_date, appeal_outcome, appeal_outcome_date, appeal_outcome_reason,
+  status, closed_date,
+  created_by, created_at, updated_at, deleted_at, version`;
+
 const shapePerf = createShaper({
   fields: [
     'id', 'home_id', 'staff_id', 'type', 'date_raised', 'raised_by',
@@ -30,7 +45,7 @@ const shapePerf = createShaper({
 
 export async function findPerformance(homeId, { staffId, status, type } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_performance_cases WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_performance_cases WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
@@ -41,7 +56,7 @@ export async function findPerformance(homeId, { staffId, status, type } = {}, cl
 export async function findPerformanceById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_performance_cases WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_performance_cases WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapePerf(rows[0]);
 }
 

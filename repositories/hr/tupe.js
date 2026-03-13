@@ -1,5 +1,14 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, transfer_type, transfer_date, signed_date,
+  transferor_name, transferee_name, employees,
+  consultation_start_date, consultation_end_date,
+  measures_letter_date, measures_description,
+  employee_reps_consulted, rep_names,
+  eli_received_date, eli_complete, eli_items,
+  dd_notes, outstanding_claims, outstanding_tribunal_claims,
+  status, notes, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeTupe = createShaper({
   fields: [
     'id', 'home_id', 'transfer_type', 'transfer_date', 'signed_date',
@@ -25,7 +34,7 @@ const shapeTupe = createShaper({
 
 export async function findTupe(homeId, client, pag) {
   const conn = client || pool;
-  const sql = 'SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL';
+  const sql = `SELECT ${COLS} FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   return paginate(conn, sql, params, 'transfer_date DESC', shapeTupe, pag);
 }
@@ -33,7 +42,7 @@ export async function findTupe(homeId, client, pag) {
 export async function findTupeById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_tupe_transfers WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_tupe_transfers WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeTupe(rows[0]);
 }
 

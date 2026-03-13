@@ -1,5 +1,10 @@
 import { pool, createShaper } from './shared.js';
 
+const COLS = `id, home_id, case_type, case_id,
+  meeting_date, meeting_time, meeting_type, location, attendees,
+  summary, key_points, outcome, recorded_by,
+  created_at, updated_at, version`;
+
 const shapeMeeting = createShaper({
   fields: [
     'id', 'home_id', 'case_type', 'case_id',
@@ -14,7 +19,7 @@ const shapeMeeting = createShaper({
 export async function findMeetings(caseType, caseId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_investigation_meetings WHERE case_type = $1 AND case_id = $2 AND home_id = $3 ORDER BY meeting_date DESC, created_at DESC',
+    `SELECT ${COLS} FROM hr_investigation_meetings WHERE case_type = $1 AND case_id = $2 AND home_id = $3 ORDER BY meeting_date DESC, created_at DESC`,
     [caseType, caseId, homeId]
   );
   return rows.map(shapeMeeting);
@@ -23,7 +28,7 @@ export async function findMeetings(caseType, caseId, homeId, client) {
 export async function findMeetingById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2',
+    `SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2`,
     [id, homeId]
   );
   return rows[0] ? shapeMeeting(rows[0]) : null;
@@ -51,7 +56,7 @@ export async function updateMeeting(id, homeId, data, client, version) {
   if (data.attendees !== undefined) { fields.push(`attendees = $${n}`); vals.push(JSON.stringify(data.attendees)); n++; }
   fields.push('version = version + 1');
   if (fields.length === 1) {
-    const { rows } = await conn.query('SELECT * FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2', [id, homeId]);
+    const { rows } = await conn.query(`SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2`, [id, homeId]);
     return shapeMeeting(rows[0]);
   }
   vals.push(id, homeId);

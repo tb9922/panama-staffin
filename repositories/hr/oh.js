@@ -1,5 +1,12 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id,
+  referral_date, referred_by, reason, questions_for_oh,
+  employee_consent_obtained, consent_date, oh_provider, appointment_date,
+  report_received_date, report_summary, fit_for_role, adjustments_recommended,
+  estimated_return_date, disability_likely, follow_up_date, adjustments_implemented,
+  notes, status, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeOh = createShaper({
   fields: [
     'id', 'home_id', 'staff_id',
@@ -17,13 +24,13 @@ const shapeOh = createShaper({
 export async function findOhReferralById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_oh_referrals WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_oh_referrals WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeOh(rows[0]);
 }
 
 export async function findOhReferrals(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_oh_referrals WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }

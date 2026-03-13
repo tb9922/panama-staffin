@@ -1,5 +1,14 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id,
+  request_date, effective_date_requested, current_pattern, requested_change,
+  reason, employee_assessment_of_impact, decision_deadline, meeting_date, meeting_notes,
+  decision, decision_date, decision_by, refusal_reason, refusal_explanation,
+  approved_pattern, approved_effective_date, trial_period, trial_period_end,
+  contract_variation_id,
+  appeal_date, appeal_grounds, appeal_outcome, appeal_outcome_date,
+  status, notes, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeFlex = createShaper({
   fields: [
     'id', 'home_id', 'staff_id',
@@ -21,7 +30,7 @@ const shapeFlex = createShaper({
 
 export async function findFlexWorking(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_flexible_working WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_flexible_working WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
@@ -31,7 +40,7 @@ export async function findFlexWorking(homeId, { staffId, status } = {}, client, 
 export async function findFlexWorkingById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_flexible_working WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_flexible_working WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeFlex(rows[0]);
 }
 
