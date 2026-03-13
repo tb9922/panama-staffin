@@ -9,13 +9,13 @@
 - [ ] `npm run audit:routes` — exit 0
 - [ ] New migrations reviewed (if any)
 - [ ] CLAUDE.md updated (if schema/API/test counts changed)
-- [ ] Backup confirmed: `scripts/backup.sh` ran successfully within last hour
+- [ ] Backup confirmed: `scripts/backup-db.sh` ran successfully within last hour
 - [ ] No open critical/blocking issues
 
 ## Deploy
 
 ```bash
-cd /opt/panama-staffing
+cd /var/www/panama
 git pull origin main
 npm ci --omit=dev
 npm run build

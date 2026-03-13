@@ -123,6 +123,8 @@ crontab -e
 
 Set up an external uptime monitor (UptimeRobot, Better Uptime) to ping `https://panama.yourdomain.com/health` every 5 minutes. Alert via SMS/email on failure.
 
+The app also exposes `/readiness` which returns 503 during graceful shutdown — useful if placing behind a load balancer that supports readiness probes.
+
 ---
 
 ## Deploying Updates
@@ -142,7 +144,7 @@ node scripts/migrate.js
 # Rebuild frontend (if frontend changes)
 npm run build
 
-# Restart application (zero-downtime with PM2)
+# Restart application (rolling restart in cluster mode — near-zero downtime)
 pm2 restart panama
 ```
 
@@ -185,7 +187,7 @@ node -e "require('bcryptjs').hash('your-password', 12).then(console.log)"
 
 After deployment, verify:
 
-- [ ] `https://panama.yourdomain.com/health` returns `{"status":"ok","db":"ok"}`
+- [ ] `https://panama.yourdomain.com/health` response contains `status: "ok"` and `db: "ok"` (also returns `queryMs`, `migrationVersion`, pool stats)
 - [ ] Login works with admin credentials
 - [ ] Data loads for existing home
 - [ ] `pm2 status` shows `online`
