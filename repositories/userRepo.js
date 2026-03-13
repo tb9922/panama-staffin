@@ -25,8 +25,43 @@ export async function listAll() {
   return rows;
 }
 
-export async function create(username, passwordHash, role, displayName, createdBy) {
+export async function findByHome(homeId) {
   const { rows } = await pool.query(
+    `SELECT u.id, u.username, u.display_name, u.active, u.is_platform_admin,
+            uhr.role_id, uhr.staff_id, uhr.granted_by, uhr.granted_at
+     FROM users u
+     JOIN user_home_roles uhr ON uhr.username = u.username AND uhr.home_id = $1
+     ORDER BY
+       CASE uhr.role_id
+         WHEN 'home_manager' THEN 1
+         WHEN 'deputy_manager' THEN 2
+         WHEN 'training_lead' THEN 3
+         WHEN 'finance_officer' THEN 4
+         WHEN 'hr_officer' THEN 5
+         WHEN 'shift_coordinator' THEN 6
+         WHEN 'viewer' THEN 7
+         WHEN 'staff_member' THEN 8
+       END, u.display_name`,
+    [homeId]
+  );
+  return rows;
+}
+
+export async function findByIdAtHome(id, homeId) {
+  const { rows } = await pool.query(
+    `SELECT u.id, u.username, u.display_name, u.active, u.is_platform_admin,
+            uhr.role_id, uhr.staff_id
+     FROM users u
+     JOIN user_home_roles uhr ON uhr.username = u.username AND uhr.home_id = $2
+     WHERE u.id = $1`,
+    [id, homeId]
+  );
+  return rows[0] || null;
+}
+
+export async function create(username, passwordHash, role, displayName, createdBy, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `INSERT INTO users (username, password_hash, role, display_name, created_by)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING ${SAFE_COLUMNS}`,
@@ -78,8 +113,9 @@ export async function countActiveAdmins() {
   return rows[0].count;
 }
 
-export async function existsByUsername(username) {
-  const { rows } = await pool.query(
+export async function existsByUsername(username, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     'SELECT 1 FROM users WHERE username = $1 LIMIT 1',
     [username]
   );

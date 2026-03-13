@@ -28,7 +28,7 @@ psql -c "SELECT username, locked_until FROM users WHERE locked_until > NOW();"
 | DB connection failure | Check PostgreSQL: `pg_isready -h localhost` |
 | JWT_SECRET changed/missing | Verify `.env` has correct `JWT_SECRET` (min 32 chars). Restart server. |
 | Mass lockout (brute force) | Unlock users: `UPDATE users SET locked_until = NULL, failed_login_count = 0;` |
-| Token deny list corrupted | Restart server (deny list is in-memory, rebuilds from DB on start) |
+| Token deny list issue | Deny list is DB-backed (`token_denylist` table). Check: `SELECT COUNT(*) FROM token_denylist;` In-memory cache syncs on startup. If tokens aren't being denied, check DB connectivity first. Restart server to resync cache. |
 
 **Escalation:** If DB is unreachable after restart, check disk space (`df -h`) and PostgreSQL logs (`journalctl -u postgresql`).
 
@@ -81,7 +81,7 @@ df -h /var/lib/postgresql
 4. Restart: `pm2 restart panama`
 5. Verify: `curl -s http://localhost:3001/health | jq .`
 
-**If a migration was applied:** Migrations are forward-only. You must write a new corrective migration rather than rolling back the schema change.
+**If a migration was applied:** For emergency rollback of a specific migration, see [ROLLBACK.md](ROLLBACK.md) (manual DOWN SQL). For non-emergency fixes, write a new corrective migration (forward-only).
 
 ---
 

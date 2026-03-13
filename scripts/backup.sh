@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# LEGACY: This script uses pg_dump custom format (.dump).
+# Prefer scripts/backup-db.sh which uses plain SQL + gzip (.sql.gz)
+# and is referenced by DEPLOYMENT.md, ROLLBACK.md, and verify-backup.sh.
+#
 # Panama Staffing — PostgreSQL backup script
 #
 # Usage:
