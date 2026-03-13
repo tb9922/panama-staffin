@@ -51,15 +51,15 @@ export async function ensureSeedUsers() {
   }
 }
 
-export async function createUser(username, password, role, displayName, createdBy) {
+export async function createUser(username, password, role, displayName, createdBy, client) {
   const pwError = validatePassword(password);
   if (pwError) throw new Error(pwError);
 
-  const exists = await userRepo.existsByUsername(username);
+  const exists = await userRepo.existsByUsername(username, client);
   if (exists) throw new Error('Username already exists');
 
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const user = await userRepo.create(username, hash, role, displayName, createdBy);
+  const user = await userRepo.create(username, hash, role, displayName, createdBy, client);
 
   if (role === 'admin') {
     await userHomeRepo.grantAllHomes(username);

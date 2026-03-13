@@ -1371,28 +1371,28 @@ export async function upsertDayNote(homeSlug, date, note) {
 
 // ── User Management API ──────────────────────────────────────────────────────
 
-export async function listUsers() {
-  return apiFetch(`${API_BASE}/users`, { headers: authHeaders() });
+export async function listUsersForHome(homeSlug) {
+  return apiFetch(`${API_BASE}/users?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
-export async function createUser(data) {
-  return apiFetch(`${API_BASE}/users`, {
+export async function createUser(homeSlug, data) {
+  return apiFetch(`${API_BASE}/users?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
 
-export async function getUser(id) {
-  return apiFetch(`${API_BASE}/users/${id}`, { headers: authHeaders() });
+export async function getUser(homeSlug, id) {
+  return apiFetch(`${API_BASE}/users/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
-export async function updateUser(id, data) {
-  return apiFetch(`${API_BASE}/users/${id}`, {
+export async function updateUser(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/users/${id}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
 
-export async function resetUserPassword(id, newPassword) {
-  return apiFetch(`${API_BASE}/users/${id}/reset-password`, {
+export async function resetUserPassword(homeSlug, id, newPassword) {
+  return apiFetch(`${API_BASE}/users/${id}/reset-password?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ newPassword }),
   });
 }
@@ -1417,12 +1417,22 @@ export async function listAllHomesForAccess() {
   return apiFetch(`${API_BASE}/users/all-homes`, { headers: authHeaders() });
 }
 
-export async function getUserRoles(id) {
-  return apiFetch(`${API_BASE}/users/${id}/roles`, { headers: authHeaders() });
+export async function getUserHomeRole(homeSlug, id) {
+  return apiFetch(`${API_BASE}/users/${id}/roles?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
-export async function setUserRoles(id, roles) {
-  return apiFetch(`${API_BASE}/users/${id}/roles`, {
+export async function setUserHomeRole(homeSlug, id, roleId) {
+  return apiFetch(`${API_BASE}/users/${id}/roles?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ roleId }),
+  });
+}
+
+export async function getUserAllRoles(id) {
+  return apiFetch(`${API_BASE}/users/all-roles/${id}`, { headers: authHeaders() });
+}
+
+export async function setUserRolesBulk(id, roles) {
+  return apiFetch(`${API_BASE}/users/${id}/roles-bulk`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify({ roles }),
   });
 }

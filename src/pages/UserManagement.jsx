@@ -4,8 +4,8 @@ import Modal from '../components/Modal.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
-  listUsers, createUser, updateUser, resetUserPassword,
-  getUserRoles, setUserRoles, listAllHomesForAccess,
+  getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
+  getUserHomeRole, setUserHomeRole, listAllHomesForAccess, getUserAllRoles, setUserRolesBulk,
 } from '../lib/api.js';
 
 const ROLE_BADGE = {
@@ -19,18 +19,27 @@ const ROLE_BADGE = {
   staff_member: BADGE.gray,
 };
 
+const ROLE_GROUPS = [
+  { key: 'home_manager', label: 'Home Manager', roles: ['home_manager'] },
+  { key: 'deputy_manager', label: 'Deputy Manager', roles: ['deputy_manager'] },
+  { key: 'officers', label: 'Officers', roles: ['training_lead', 'finance_officer', 'hr_officer'] },
+  { key: 'coordinators', label: 'Shift Coordinators', roles: ['shift_coordinator'] },
+  { key: 'viewers', label: 'Viewers', roles: ['viewer'] },
+  { key: 'staff', label: 'Staff', roles: ['staff_member'] },
+];
+
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return '\u2014';
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
   const [users, setUsers] = useState([]);
-  const [allHomes, setAllHomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const homeSlug = getCurrentHome();
 
   // Modal state
   const [addOpen, setAddOpen] = useState(false);
@@ -39,16 +48,16 @@ export default function UserManagement() {
   const [rolesUser, setRolesUser] = useState(null);
 
   const refresh = useCallback(async () => {
+    if (!homeSlug) return;
     try {
-      const [u, h] = await Promise.all([listUsers(), listAllHomesForAccess()]);
+      const u = await listUsersForHome(homeSlug);
       setUsers(u);
-      setAllHomes(h);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -58,6 +67,12 @@ export default function UserManagement() {
     const t = setTimeout(() => setSuccess(null), 4000);
     return () => clearTimeout(t);
   }, [success]);
+
+  // Group users by role hierarchy
+  const grouped = ROLE_GROUPS.map(g => ({
+    ...g,
+    users: users.filter(u => g.roles.includes(u.role_id)),
+  })).filter(g => g.users.length > 0);
 
   if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading users...</p></div>;
 
@@ -80,64 +95,88 @@ export default function UserManagement() {
         </div>
       )}
 
-      <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Username</th>
-                <th scope="col" className={TABLE.th}>Display Name</th>
-                <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Last Login</th>
-                <th scope="col" className={TABLE.th}>Created</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr><td colSpan={6} className={TABLE.empty}>No users found</td></tr>
-              ) : users.map(u => (
-                <tr key={u.id} className={TABLE.tr}>
-                  <td className={`${TABLE.td} font-medium text-gray-900`}>
-                    {u.username}
-                    {u.is_platform_admin && <span className={`${BADGE.purple} ml-2`}>Platform Admin</span>}
-                  </td>
-                  <td className={TABLE.td}>{u.display_name || '—'}</td>
-                  <td className={TABLE.td}>
-                    <span className={u.active ? BADGE.green : BADGE.red}>{u.active ? 'Active' : 'Inactive'}</span>
-                  </td>
-                  <td className={TABLE.td}>{formatDate(u.last_login_at)}</td>
-                  <td className={TABLE.td}>{formatDate(u.created_at)}</td>
-                  <td className={TABLE.td}>
-                    <div className="flex items-center gap-1">
-                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
-                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
-                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Roles</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {users.length === 0 ? (
+        <div className={CARD.padded}>
+          <p className="text-gray-400 text-sm text-center py-8">No users assigned to this home. Use Add User to create one.</p>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map(group => (
+            <div key={group.key} className={CARD.flush}>
+              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-700">
+                  {group.label}
+                  <span className="ml-2 text-xs font-normal text-gray-400">({group.users.length})</span>
+                </h2>
+              </div>
+              <div className={TABLE.wrapper}>
+                <table className={TABLE.table}>
+                  <thead className={TABLE.thead}>
+                    <tr>
+                      <th scope="col" className={TABLE.th}>Username</th>
+                      <th scope="col" className={TABLE.th}>Display Name</th>
+                      <th scope="col" className={TABLE.th}>Role</th>
+                      <th scope="col" className={TABLE.th}>Status</th>
+                      <th scope="col" className={TABLE.th}>Granted By</th>
+                      <th scope="col" className={TABLE.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.users.map(u => (
+                      <tr key={u.id} className={TABLE.tr}>
+                        <td className={`${TABLE.td} font-medium text-gray-900`}>
+                          {u.username}
+                          {u.is_platform_admin && <span className={`${BADGE.purple} ml-2`}>Platform Admin</span>}
+                        </td>
+                        <td className={TABLE.td}>{u.display_name || '\u2014'}</td>
+                        <td className={TABLE.td}>
+                          <span className={ROLE_BADGE[u.role_id] || BADGE.gray}>{getRoleLabel(u.role_id)}</span>
+                          {u.staff_id && <span className="ml-1 text-xs text-gray-400">({u.staff_id})</span>}
+                        </td>
+                        <td className={TABLE.td}>
+                          <span className={u.active ? BADGE.green : BADGE.red}>{u.active ? 'Active' : 'Inactive'}</span>
+                        </td>
+                        <td className={TABLE.td}>{u.granted_by || '\u2014'}</td>
+                        <td className={TABLE.td}>
+                          <div className="flex items-center gap-1">
+                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
+                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
+                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Role</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {addOpen && <AddUserModal onClose={() => setAddOpen(false)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
-      {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
-      {resetPwUser && <ResetPasswordModal user={resetPwUser} onClose={() => setResetPwUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
-      {rolesUser && <HomeRolesModal user={rolesUser} allHomes={allHomes} isPlatformAdmin={isPlatformAdmin} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
+      {addOpen && <AddUserModal homeSlug={homeSlug} onClose={() => setAddOpen(false)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
+      {editUser && <EditUserModal user={editUser} homeSlug={homeSlug} onClose={() => setEditUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
+      {resetPwUser && <ResetPasswordModal user={resetPwUser} homeSlug={homeSlug} onClose={() => setResetPwUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
+      {rolesUser && (
+        isPlatformAdmin
+          ? <PlatformRolesModal user={rolesUser} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />
+          : <HomeRoleModal user={rolesUser} homeSlug={homeSlug} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />
+      )}
     </div>
   );
 }
 
 // ── Add User Modal ───────────────────────────────────────────────────────────
 
-function AddUserModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '' });
+function AddUserModal({ homeSlug, onClose, onSuccess }) {
+  const { isPlatformAdmin } = useAuth();
+  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '', homeRoleId: '' });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
 
   function set(key, val) { setForm(prev => ({ ...prev, [key]: val })); }
+
+  const availableRoles = isPlatformAdmin ? ROLE_IDS : ROLE_IDS.filter(r => r !== 'home_manager');
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -146,8 +185,15 @@ function AddUserModal({ onClose, onSuccess }) {
     if (form.password.length < 10) { setLocalError('Password must be at least 10 characters'); return; }
     setSaving(true);
     try {
-      await createUser({ username: form.username, password: form.password, role: 'viewer', displayName: form.displayName });
-      onSuccess(`User "${form.username}" created — assign roles via the Roles button`);
+      const data = {
+        username: form.username,
+        password: form.password,
+        role: 'viewer',
+        displayName: form.displayName,
+      };
+      if (form.homeRoleId) data.homeRoleId = form.homeRoleId;
+      await createUser(homeSlug, data);
+      onSuccess(`User "${form.username}" created and assigned to this home`);
       onClose();
     } catch (err) {
       setLocalError(err.message);
@@ -170,6 +216,15 @@ function AddUserModal({ onClose, onSuccess }) {
             <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} placeholder="Optional" />
           </div>
           <div>
+            <label className={INPUT.label}>Role at This Home</label>
+            <select className={INPUT.select} value={form.homeRoleId} onChange={e => set('homeRoleId', e.target.value)}>
+              <option value="">Select role...</option>
+              {availableRoles.map(rid => (
+                <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className={INPUT.label}>Password</label>
             <input className={INPUT.base} type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={10} maxLength={200} />
             <p className="text-xs text-gray-400 mt-1">Minimum 10 characters</p>
@@ -179,7 +234,6 @@ function AddUserModal({ onClose, onSuccess }) {
             <input className={INPUT.base} type="password" value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} required />
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-3">After creating, use the Roles button to assign per-home roles.</p>
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
           <button type="submit" className={BTN.primary} disabled={saving}>{saving ? 'Creating...' : 'Create User'}</button>
@@ -191,7 +245,7 @@ function AddUserModal({ onClose, onSuccess }) {
 
 // ── Edit User Modal ──────────────────────────────────────────────────────────
 
-function EditUserModal({ user, onClose, onSuccess }) {
+function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
   const [form, setForm] = useState({ displayName: user.display_name || '', active: user.active });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
@@ -203,7 +257,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
     setLocalError(null);
     setSaving(true);
     try {
-      await updateUser(user.id, { displayName: form.displayName, active: form.active });
+      await updateUser(homeSlug, user.id, { displayName: form.displayName, active: form.active });
       onSuccess(`User "${user.username}" updated`);
       onClose();
     } catch (err) {
@@ -214,7 +268,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Edit User — ${user.username}`}>
+    <Modal isOpen={true} onClose={onClose} title={`Edit User \u2014 ${user.username}`}>
       <form onSubmit={handleSubmit}>
         {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
         <div className="space-y-3">
@@ -244,7 +298,7 @@ function EditUserModal({ user, onClose, onSuccess }) {
 
 // ── Reset Password Modal ─────────────────────────────────────────────────────
 
-function ResetPasswordModal({ user, onClose, onSuccess }) {
+function ResetPasswordModal({ user, homeSlug, onClose, onSuccess }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
@@ -257,8 +311,8 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
     if (password.length < 10) { setLocalError('Password must be at least 10 characters'); return; }
     setSaving(true);
     try {
-      await resetUserPassword(user.id, password);
-      onSuccess(`Password reset for "${user.username}" — all sessions revoked`);
+      await resetUserPassword(homeSlug, user.id, password);
+      onSuccess(`Password reset for "${user.username}" \u2014 all sessions revoked`);
       onClose();
     } catch (err) {
       setLocalError(err.message);
@@ -268,7 +322,7 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Reset Password — ${user.username}`} size="sm">
+    <Modal isOpen={true} onClose={onClose} title={`Reset Password \u2014 ${user.username}`} size="sm">
       <form onSubmit={handleSubmit}>
         {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
         <p className="text-xs text-gray-500 mb-3">This will revoke all active sessions for this user.</p>
@@ -292,32 +346,77 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
   );
 }
 
-// ── Home Roles Modal ─────────────────────────────────────────────────────────
+// ── Home Role Modal (per-home, for home managers) ────────────────────────────
 
-// Roles that non-platform-admins (home managers) can assign
 const ASSIGNABLE_ROLES = ROLE_IDS.filter(r => r !== 'home_manager');
 
-function HomeRolesModal({ user, allHomes, isPlatformAdmin, onClose, onSuccess }) {
-  // Map of homeId → roleId (empty string = no access)
+function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
+  const [roleId, setRoleId] = useState(user.role_id || '');
+  const [saving, setSaving] = useState(false);
+  const [localError, setLocalError] = useState(null);
+
+  async function handleSave() {
+    if (!roleId) { setLocalError('Please select a role'); return; }
+    setLocalError(null);
+    setSaving(true);
+    try {
+      await setUserHomeRole(homeSlug, user.id, roleId);
+      onSuccess(`Role updated for "${user.username}"`);
+      onClose();
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Role \u2014 ${user.username}`} size="sm">
+      {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+      <p className="text-xs text-gray-500 mb-3">Set the role for this user at the current home.</p>
+      <select className={INPUT.select} value={roleId} onChange={e => setRoleId(e.target.value)}>
+        <option value="">Select role...</option>
+        {ASSIGNABLE_ROLES.map(rid => (
+          <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
+        ))}
+      </select>
+      <div className={MODAL.footer}>
+        <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
+        <button type="button" className={BTN.primary} onClick={handleSave} disabled={saving || !roleId}>
+          {saving ? 'Saving...' : 'Save Role'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Platform Roles Modal (multi-home, for platform admins) ───────────────────
+
+function PlatformRolesModal({ user, onClose, onSuccess }) {
   const [roleMap, setRoleMap] = useState({});
+  const [allHomes, setAllHomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
 
   useEffect(() => {
-    getUserRoles(user.id).then(res => {
+    Promise.all([
+      listAllHomesForAccess(),
+      getUserAllRoles(user.id),
+    ]).then(([homes, rolesData]) => {
+      setAllHomes(homes);
       const map = {};
-      for (const r of res.roles) map[r.home_id] = r.role_id;
+      for (const r of (rolesData.roles || [])) map[r.home_id] = r.role_id;
       setRoleMap(map);
     }).catch(err => {
       setLocalError(err.message);
     }).finally(() => setLoading(false));
   }, [user.id]);
 
-  function setRole(homeId, roleId) {
+  function setRole(homeId, rid) {
     setRoleMap(prev => {
       const next = { ...prev };
-      if (roleId) next[homeId] = roleId;
+      if (rid) next[homeId] = rid;
       else delete next[homeId];
       return next;
     });
@@ -328,9 +427,9 @@ function HomeRolesModal({ user, allHomes, isPlatformAdmin, onClose, onSuccess })
     setSaving(true);
     try {
       const roles = Object.entries(roleMap)
-        .filter(([, roleId]) => roleId)
-        .map(([homeId, roleId]) => ({ homeId: Number(homeId), roleId }));
-      await setUserRoles(user.id, roles);
+        .filter(([, rid]) => rid)
+        .map(([homeId, rid]) => ({ homeId: Number(homeId), roleId: rid }));
+      await setUserRolesBulk(user.id, roles);
       onSuccess(`Roles updated for "${user.username}"`);
       onClose();
     } catch (err) {
@@ -340,10 +439,8 @@ function HomeRolesModal({ user, allHomes, isPlatformAdmin, onClose, onSuccess })
     }
   }
 
-  const availableRoles = isPlatformAdmin ? ROLE_IDS : ASSIGNABLE_ROLES;
-
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Roles — ${user.username}`} size="lg">
+    <Modal isOpen={true} onClose={onClose} title={`Roles \u2014 ${user.username}`} size="lg">
       {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
       {loading ? (
         <p className="text-gray-400 text-sm py-4 text-center">Loading...</p>
@@ -353,21 +450,20 @@ function HomeRolesModal({ user, allHomes, isPlatformAdmin, onClose, onSuccess })
         <>
           <p className="text-xs text-gray-500 mb-3">
             Assign a role per home. Set to "No Access" to revoke.
-            {!isPlatformAdmin && ' Only platform admins can assign the Home Manager role.'}
           </p>
           <div className="space-y-2 max-h-80 overflow-y-auto">
-            {allHomes.map(h => {
-              const currentRole = roleMap[h.id] || '';
+            {allHomes.map(home => {
+              const currentRole = roleMap[home.id] || '';
               return (
-                <div key={h.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{h.name}</span>
+                <div key={home.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{home.name}</span>
                   <select
                     className={`${INPUT.sm} w-48`}
                     value={currentRole}
-                    onChange={e => setRole(h.id, e.target.value)}
+                    onChange={e => setRole(home.id, e.target.value)}
                   >
                     <option value="">No Access</option>
-                    {availableRoles.map(rid => (
+                    {ROLE_IDS.map(rid => (
                       <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
                     ))}
                   </select>

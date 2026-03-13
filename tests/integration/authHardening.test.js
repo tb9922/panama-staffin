@@ -25,6 +25,7 @@ let lockoutUserId;
 
 beforeAll(async () => {
   // Clean up
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${TEST_PREFIX}-%'`);
@@ -35,15 +36,20 @@ beforeAll(async () => {
     `INSERT INTO homes (slug, name, config) VALUES ('${TEST_PREFIX}-home', 'Lockout Test Home', '{}') RETURNING id`
   );
 
-  // Create admin user
+  // Create admin user (platform admin + home_manager)
   const adminHash = await bcrypt.hash(ADMIN_PW, 10);
   await pool.query(
-    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
-     VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup')`,
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+     VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup', true)`,
     [ADMIN_USER, adminHash]
   );
   await pool.query(
     `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+    [ADMIN_USER, home.id]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [ADMIN_USER, home.id]
   );
 
@@ -59,6 +65,11 @@ beforeAll(async () => {
     `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
     [LOCKOUT_USER, home.id]
   );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'viewer', 'test-setup')`,
+    [LOCKOUT_USER, home.id]
+  );
 
   // Login as admin
   const res = await request(app).post('/api/login').send({ username: ADMIN_USER, password: ADMIN_PW });
@@ -66,6 +77,7 @@ beforeAll(async () => {
 }, 15000);
 
 afterAll(async () => {
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${TEST_PREFIX}-%'`);
@@ -169,11 +181,12 @@ describe('Role change revokes tokens', () => {
     expect(loginRes.status).toBe(200);
     const viewerToken = loginRes.body.token;
 
-    // Admin changes lockout user's role
+    // Admin changes lockout user's role at this home
     await request(app)
-      .put(`/api/users/${lockoutUserId}`)
+      .put(`/api/users/${lockoutUserId}/roles`)
+      .query({ home: `${TEST_PREFIX}-home` })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ role: 'admin' });
+      .send({ roleId: 'deputy_manager' });
 
     // Old token should now be denied
     const checkRes = await request(app)
@@ -183,8 +196,9 @@ describe('Role change revokes tokens', () => {
 
     // Change role back to viewer for cleanup
     await request(app)
-      .put(`/api/users/${lockoutUserId}`)
+      .put(`/api/users/${lockoutUserId}/roles`)
+      .query({ home: `${TEST_PREFIX}-home` })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ role: 'viewer' });
+      .send({ roleId: 'viewer' });
   }, 15000);
 });

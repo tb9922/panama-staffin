@@ -26,6 +26,7 @@ let homeAId, homeBId;
 
 beforeAll(async () => {
   // Clean up from previous runs
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE 'auth-test-%'`);
@@ -41,12 +42,12 @@ beforeAll(async () => {
   homeAId = ha.id;
   homeBId = hb.id;
 
-  // Create test users
+  // Create test users — admin is platform admin + home_manager at home A
   const adminHash = await bcrypt.hash(ADMIN_PW, 4);
   const viewerHash = await bcrypt.hash(VIEWER_PW, 4);
   const { rows: [au] } = await pool.query(
-    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
-     VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup') RETURNING id`,
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+     VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup', true) RETURNING id`,
     [ADMIN_USER, adminHash]
   );
   const { rows: [vu] } = await pool.query(
@@ -67,6 +68,18 @@ beforeAll(async () => {
     [VIEWER_USER, homeAId]
   );
 
+  // Assign RBAC roles — admin as home_manager at both homes, viewer as viewer at home A
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
+    [ADMIN_USER, homeAId, homeBId]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'viewer', 'test-setup')`,
+    [VIEWER_USER, homeAId]
+  );
+
   // Create lockout user
   const lockHash = await bcrypt.hash('LockoutTest!2025', 4);
   await pool.query(
@@ -84,6 +97,7 @@ afterAll(async () => {
   await pool.query(
     `UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username LIKE 'auth-test-%'`
   ).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE 'auth-test-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE 'auth-test-%'`);
@@ -198,12 +212,14 @@ describe('JWT middleware', () => {
   it('rejects request with no Authorization header', async () => {
     await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .expect(401);
   });
 
   it('rejects request with invalid token', async () => {
     await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', 'Bearer garbage.token.here')
       .expect(401);
   });
@@ -211,6 +227,7 @@ describe('JWT middleware', () => {
   it('rejects request with expired token format', async () => {
     await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6InRlc3QiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjF9.invalid')
       .expect(401);
   });
@@ -218,6 +235,7 @@ describe('JWT middleware', () => {
   it('rejects request with non-Bearer auth', async () => {
     await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Basic ${adminToken}`)
       .expect(401);
   });
@@ -225,6 +243,7 @@ describe('JWT middleware', () => {
   it('accepts valid token', async () => {
     await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
   });
@@ -233,20 +252,24 @@ describe('JWT middleware', () => {
 // ── Role-based access ────────────────────────────────────────────────────────
 
 describe('Role-based access control', () => {
-  it('admin can access admin-only routes', async () => {
-    await request(app)
-      .get('/api/users')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
-  });
-
-  it('viewer cannot access admin-only routes', async () => {
+  it('home_manager can access user management for their home', async () => {
     const res = await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('viewer cannot access user management', async () => {
+    const res = await request(app)
+      .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${viewerToken}`)
       .expect(403);
 
-    expect(res.body.error).toMatch(/admin/i);
+    expect(res.body.error).toMatch(/manager/i);
   });
 
   it('viewer can access own password change', async () => {
@@ -316,16 +339,17 @@ describe('Per-home access control', () => {
   });
 });
 
-// ── User CRUD ────────────────────────────────────────────────────────────────
+// ── User CRUD (per-home scoped) ──────────────────────────────────────────────
 
 describe('User management (CRUD)', () => {
   let createdUserId;
 
-  it('admin can create a new user', async () => {
+  it('home_manager can create a new user at their home', async () => {
     const res = await request(app)
       .post('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'auth-test-newuser', password: 'NewUser!2025xx', role: 'viewer', displayName: 'New User' })
+      .send({ username: 'auth-test-newuser', password: 'NewUser!2025xx', role: 'viewer', displayName: 'New User', homeRoleId: 'staff_member' })
       .expect(201);
 
     expect(res.body.username).toBe('auth-test-newuser');
@@ -336,6 +360,7 @@ describe('User management (CRUD)', () => {
   it('rejects duplicate username', async () => {
     await request(app)
       .post('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ username: 'auth-test-newuser', password: 'AnotherPw!2025', role: 'admin' })
       .expect(409);
@@ -344,14 +369,16 @@ describe('User management (CRUD)', () => {
   it('rejects short password', async () => {
     await request(app)
       .post('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ username: 'auth-test-shortpw', password: 'short', role: 'viewer' })
       .expect(400);
   });
 
-  it('admin can list all users', async () => {
+  it('home_manager can list users at their home', async () => {
     const res = await request(app)
       .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
@@ -361,28 +388,31 @@ describe('User management (CRUD)', () => {
     expect(usernames).toContain('auth-test-newuser');
   });
 
-  it('admin can get single user', async () => {
+  it('home_manager can get single user at their home', async () => {
     const res = await request(app)
       .get(`/api/users/${createdUserId}`)
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
     expect(res.body.username).toBe('auth-test-newuser');
   });
 
-  it('admin can update user role', async () => {
+  it('home_manager can update user at their home', async () => {
     const res = await request(app)
       .put(`/api/users/${createdUserId}`)
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ role: 'admin' })
+      .send({ displayName: 'Updated Name' })
       .expect(200);
 
-    expect(res.body.role).toBe('admin');
+    expect(res.body.display_name).toBe('Updated Name');
   });
 
-  it('admin can deactivate user', async () => {
+  it('home_manager can deactivate user at their home', async () => {
     const res = await request(app)
       .put(`/api/users/${createdUserId}`)
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ active: false })
       .expect(200);
@@ -390,9 +420,10 @@ describe('User management (CRUD)', () => {
     expect(res.body.active).toBe(false);
   });
 
-  it('returns 404 for nonexistent user', async () => {
+  it('returns 404 for user not at this home', async () => {
     await request(app)
       .get('/api/users/999999')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(404);
   });
@@ -400,13 +431,55 @@ describe('User management (CRUD)', () => {
   it('viewer cannot create users', async () => {
     await request(app)
       .post('/api/users')
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${viewerToken}`)
       .send({ username: 'auth-test-forbidden', password: 'Forbidden!2025', role: 'viewer' })
       .expect(403);
   });
 
+  it('cannot see user from home B when querying home A', async () => {
+    // Create a user only at home B
+    const hash = await bcrypt.hash('HomeBUser!2025x', 4);
+    const { rows: [hbu] } = await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, created_by)
+       VALUES ('auth-test-homeb-only', $1, 'viewer', true, 'test-setup') RETURNING id`,
+      [hash]
+    );
+    await pool.query(
+      `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+       VALUES ('auth-test-homeb-only', $1, 'staff_member', 'test-setup')`,
+      [homeBId]
+    );
+
+    // Should not appear in home A's user list
+    const res = await request(app)
+      .get('/api/users')
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const usernames = res.body.map(u => u.username);
+    expect(usernames).not.toContain('auth-test-homeb-only');
+
+    // Should appear in home B's user list
+    const resB = await request(app)
+      .get('/api/users')
+      .query({ home: 'auth-test-home-b' })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const usernamesB = resB.body.map(u => u.username);
+    expect(usernamesB).toContain('auth-test-homeb-only');
+
+    // Cleanup
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-homeb-only'`);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [hbu.id]);
+  });
+
   afterAll(async () => {
     if (createdUserId) {
+      await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-newuser'`);
+      await pool.query(`DELETE FROM user_home_access WHERE username = 'auth-test-newuser'`);
       await pool.query(`DELETE FROM users WHERE id = $1`, [createdUserId]);
     }
   });
@@ -458,11 +531,12 @@ describe('Password management', () => {
     expect(res.body.error).toMatch(/incorrect/i);
   });
 
-  it('admin can reset another user password', async () => {
+  it('home_manager can reset another user password', async () => {
     const resetPw = 'ResetViewer!2025';
 
     await request(app)
       .post(`/api/users/${viewerUserId}/reset-password`)
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ newPassword: resetPw })
       .expect(200);
@@ -477,6 +551,7 @@ describe('Password management', () => {
     // Reset back to original
     await request(app)
       .post(`/api/users/${viewerUserId}/reset-password`)
+      .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ newPassword: VIEWER_PW })
       .expect(200);
@@ -547,10 +622,10 @@ describe('Token revocation', () => {
   });
 });
 
-// ── Home access management ───────────────────────────────────────────────────
+// ── Home access management (platform admin only) ────────────────────────────
 
 describe('User home access management', () => {
-  it('admin can view user home access', async () => {
+  it('platform admin can view user home access', async () => {
     const res = await request(app)
       .get(`/api/users/${viewerUserId}/homes`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -560,7 +635,7 @@ describe('User home access management', () => {
     expect(res.body.homeIds).not.toContain(homeBId);
   });
 
-  it('admin can grant home access', async () => {
+  it('platform admin can grant home access', async () => {
     await request(app)
       .put(`/api/users/${viewerUserId}/homes`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -582,7 +657,7 @@ describe('User home access management', () => {
       .expect(200);
   });
 
-  it('admin cannot modify own home access', async () => {
+  it('platform admin cannot modify own home access', async () => {
     const res = await request(app)
       .put(`/api/users/${adminUserId}/homes`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -592,7 +667,7 @@ describe('User home access management', () => {
     expect(res.body.error).toMatch(/own/i);
   });
 
-  it('admin can list all homes', async () => {
+  it('platform admin can list all homes', async () => {
     const res = await request(app)
       .get('/api/users/all-homes')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -602,5 +677,12 @@ describe('User home access management', () => {
     const slugs = res.body.map(h => h.slug);
     expect(slugs).toContain('auth-test-home-a');
     expect(slugs).toContain('auth-test-home-b');
+  });
+
+  it('viewer cannot list all homes (platform admin only)', async () => {
+    await request(app)
+      .get('/api/users/all-homes')
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .expect(403);
   });
 });
