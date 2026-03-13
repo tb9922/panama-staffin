@@ -74,7 +74,7 @@ export async function requireHomeAccess(req, res, next) {
     return res.status(404).json({ error: 'Home not found' });
   }
 
-  // Resolve per-home role (with fallback to legacy user_home_access)
+  // Resolve per-home role from user_home_roles
   const assignment = await getHomeRole(req.user.username, home.id);
   if (!assignment) {
     return res.status(403).json({ error: 'You do not have access to this home' });

@@ -2,8 +2,7 @@
  * Integration tests for per-home role-based access control (RBAC).
  *
  * Covers: requireModule middleware, requireHomeManager middleware,
- * GET /api/homes roleId response, role-based route gating,
- * backward-compat fallback from user_home_access.
+ * GET /api/homes roleId response, role-based route gating.
  *
  * Requires: PostgreSQL running with migrations applied.
  */
@@ -20,16 +19,14 @@ const PREFIX = 'rbac-test';
 const MANAGER_USER = `${PREFIX}-manager`;
 const VIEWER_USER = `${PREFIX}-viewer`;
 const FINANCE_USER = `${PREFIX}-finance`;
-const LEGACY_USER = `${PREFIX}-legacy`;
 const PW = 'TestRbac!2025x';
 
-let managerToken, viewerToken, financeToken, legacyToken;
+let managerToken, viewerToken, financeToken;
 let homeId, homeSlug;
 
 beforeAll(async () => {
   // Clean up from previous runs (order matters for FK constraints)
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug = '${PREFIX}-home'`);
@@ -49,7 +46,6 @@ beforeAll(async () => {
     [MANAGER_USER, 'admin'],
     [VIEWER_USER, 'viewer'],
     [FINANCE_USER, 'viewer'],
-    [LEGACY_USER, 'admin'],
   ]) {
     await pool.query(
       `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
@@ -67,19 +63,11 @@ beforeAll(async () => {
     [MANAGER_USER, VIEWER_USER, FINANCE_USER, homeId]
   );
 
-  // Legacy user: only in user_home_access (no user_home_roles row)
-  // Should get role via backward-compat fallback
-  await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
-    [LEGACY_USER, homeId]
-  );
-
   // Login all users and capture tokens
   for (const [username, tokenSetter] of [
     [MANAGER_USER, (t) => { managerToken = t; }],
     [VIEWER_USER, (t) => { viewerToken = t; }],
     [FINANCE_USER, (t) => { financeToken = t; }],
-    [LEGACY_USER, (t) => { legacyToken = t; }],
   ]) {
     const res = await request(app)
       .post('/api/login')
@@ -90,7 +78,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug = '${PREFIX}-home'`);
@@ -126,17 +113,26 @@ describe('GET /api/homes — roleId per home', () => {
     expect(home.roleId).toBe('finance_officer');
   });
 
-  it('legacy user gets backward-compat role from users.role', async () => {
-    const res = await authGet('/api/homes', legacyToken).expect(200);
+  it('user without role at home does not see it in homes list', async () => {
+    // Create a user with no role at our test home
+    const noRoleHash = await bcrypt.hash(PW, 4);
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+       VALUES ('${PREFIX}-norole', $1, 'viewer', true, 'No Role', 'test-setup')
+       ON CONFLICT (username) DO NOTHING`,
+      [noRoleHash]
+    );
+    const loginRes = await request(app)
+      .post('/api/login')
+      .send({ username: `${PREFIX}-norole`, password: PW });
+    const noRoleToken = loginRes.body.token;
+
+    const res = await authGet('/api/homes', noRoleToken).expect(200);
     const home = res.body.find(h => h.id === homeSlug);
-    // Legacy admin user → fallback maps to home_manager
-    // Note: findHomesWithRolesForUser only queries user_home_roles,
-    // so legacy user won't appear there. Test that the endpoint handles it.
-    // The legacy user has no user_home_roles row, so they won't appear in the joined query.
-    // This is expected — they'll need to be migrated.
-    // For now, verify they at least get an empty list (not a crash).
-    // The backward-compat fallback is in requireHomeAccess, not in the homes list.
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(home).toBeUndefined();
+
+    // Cleanup
+    await pool.query(`DELETE FROM users WHERE username = '${PREFIX}-norole'`);
   });
 });
 
@@ -176,10 +172,25 @@ describe('requireHomeAccess — resolves homeRole', () => {
     await pool.query(`DELETE FROM users WHERE username = '${PREFIX}-noaccess'`);
   });
 
-  it('legacy user gets access via backward-compat fallback', async () => {
-    const res = await authGet(`/api/data?home=${homeSlug}`, legacyToken);
-    // Should NOT be 403 — fallback should resolve role from user_home_access
-    expect(res.status).not.toBe(403);
+  it('user without role gets 403', async () => {
+    // Create a user with no role assignment
+    const noRoleHash = await bcrypt.hash(PW, 4);
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+       VALUES ('${PREFIX}-norole2', $1, 'admin', true, 'No Role', 'test-setup')
+       ON CONFLICT (username) DO NOTHING`,
+      [noRoleHash]
+    );
+    const loginRes = await request(app)
+      .post('/api/login')
+      .send({ username: `${PREFIX}-norole2`, password: PW });
+    const noRoleToken = loginRes.body.token;
+
+    const res = await authGet(`/api/data?home=${homeSlug}`, noRoleToken);
+    expect(res.status).toBe(403);
+
+    // Cleanup
+    await pool.query(`DELETE FROM users WHERE username = '${PREFIX}-norole2'`);
   });
 });
 
@@ -228,7 +239,7 @@ describe('role assignment boundaries', () => {
     expect(byUser[MANAGER_USER]).toBe('home_manager');
     expect(byUser[VIEWER_USER]).toBe('viewer');
     expect(byUser[FINANCE_USER]).toBe('finance_officer');
-    // Legacy user should NOT be in user_home_roles
-    expect(byUser[LEGACY_USER]).toBeUndefined();
+    // Only users with explicit role assignments should be present
+    expect(Object.keys(byUser).length).toBe(3);
   });
 });

@@ -51,6 +51,7 @@ import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
 import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
 import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from './repositories/webhookRepo.js';
+import { processRetries as processWebhookRetries } from './services/webhookService.js';
 
 const app = express();
 
@@ -250,6 +251,11 @@ const server = isMainModule ? app.listen(config.port, async () => {
     setInterval(
       () => purgeWebhookDeliveries(90).catch(err => logger.warn({ err: err?.message }, 'webhook delivery purge failed')),
       24 * 60 * 60 * 1000
+    ).unref();
+    // Process webhook retries every 30 seconds
+    setInterval(
+      () => processWebhookRetries().catch(err => logger.warn({ err: err?.message }, 'webhook retry processing failed')),
+      30_000
     ).unref();
     logger.info('Background jobs registered (instance 0)');
   }

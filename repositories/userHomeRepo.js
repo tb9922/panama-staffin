@@ -1,34 +1,19 @@
 import { pool } from '../db.js';
 
-// ── Role-based access (new: user_home_roles table) ────────────────────
+// ── Role-based access (user_home_roles table) ─────────────────────────
 
 /**
- * Get a user's role assignment for a home from user_home_roles.
- * Falls back to user_home_access + users.role for backward compatibility
- * during the migration transition.
+ * Get a user's role assignment for a home.
  * @param {string} username
  * @param {number} homeId
  * @returns {Promise<{role_id: string, staff_id: string|null}|null>}
  */
 export async function getHomeRole(username, homeId) {
-  // Try new table first
   const { rows } = await pool.query(
     'SELECT role_id, staff_id FROM user_home_roles WHERE username = $1 AND home_id = $2 LIMIT 1',
     [username, homeId]
   );
-  if (rows.length > 0) return rows[0];
-
-  // Fallback: check legacy user_home_access + infer role from users.role
-  const { rows: legacy } = await pool.query(
-    `SELECT u.role FROM user_home_access uha
-     JOIN users u ON u.username = uha.username
-     WHERE uha.username = $1 AND uha.home_id = $2 LIMIT 1`,
-    [username, homeId]
-  );
-  if (legacy.length > 0) {
-    return { role_id: legacy[0].role === 'admin' ? 'home_manager' : 'viewer', staff_id: null };
-  }
-  return null;
+  return rows[0] || null;
 }
 
 /**
@@ -94,19 +79,7 @@ export async function findHomesWithRolesForUser(username) {
      FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
      WHERE uhr.username = $1
-     UNION ALL
-     SELECT h.slug, h.name, h.config,
-       CASE WHEN u.role = 'admin' THEN 'home_manager' ELSE 'viewer' END AS role_id,
-       NULL::text AS staff_id
-     FROM user_home_access uha
-     JOIN homes h ON h.id = uha.home_id AND h.deleted_at IS NULL
-     JOIN users u ON u.username = uha.username
-     WHERE uha.username = $1
-       AND NOT EXISTS (
-         SELECT 1 FROM user_home_roles uhr2
-         WHERE uhr2.username = $1 AND uhr2.home_id = uha.home_id
-       )
-     ORDER BY name`,
+     ORDER BY h.name`,
     [username]
   );
   return rows;
@@ -151,52 +124,29 @@ export async function grantAllHomesRole(username) {
   );
 }
 
-// ── Legacy access (user_home_access table — kept for backward compat) ──
+// ── Access queries (all via user_home_roles) ────────────────────────────
 
 /**
  * Check if a user has access to a specific home.
- * Returns true if the user has an explicit grant for this home.
+ * Returns true if the user has a role assignment for this home.
  */
 export async function hasAccess(username, homeId) {
   const { rows } = await pool.query(
-    `SELECT 1 FROM user_home_roles WHERE username = $1 AND home_id = $2
-     UNION ALL
-     SELECT 1 FROM user_home_access WHERE username = $1 AND home_id = $2
-     LIMIT 1`,
+    'SELECT 1 FROM user_home_roles WHERE username = $1 AND home_id = $2 LIMIT 1',
     [username, homeId]
   );
   return rows.length > 0;
 }
 
 /**
- * Grant a user access to a home. Idempotent (ON CONFLICT DO NOTHING).
- */
-export async function grantAccess(username, homeId, client) {
-  const conn = client || pool;
-  await conn.query(
-    'INSERT INTO user_home_access (username, home_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-    [username, homeId]
-  );
-}
-
-/**
- * Revoke a user's access to a home.
- */
-export async function revokeAccess(username, homeId, client) {
-  const conn = client || pool;
-  await conn.query(
-    'DELETE FROM user_home_access WHERE username = $1 AND home_id = $2',
-    [username, homeId]
-  );
-}
-
-/**
  * Get all home IDs a user can access.
+ * @param {string} username
+ * @param {object} [client] — optional transaction client
  */
 export async function findHomeIdsForUser(username, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT home_id FROM user_home_access WHERE username = $1',
+    'SELECT home_id FROM user_home_roles WHERE username = $1',
     [username]
   );
   return rows.map(r => r.home_id);
@@ -204,58 +154,24 @@ export async function findHomeIdsForUser(username, client) {
 
 /**
  * Get all home slugs a user can access.
- * Used by the homes list endpoint where listAll() returns slug-based IDs.
  */
 export async function findHomeSlugsForUser(username) {
   const { rows } = await pool.query(
     `SELECT h.slug FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
-     WHERE uhr.username = $1
-     UNION
-     SELECT h.slug FROM user_home_access uha
-     JOIN homes h ON h.id = uha.home_id AND h.deleted_at IS NULL
-     WHERE uha.username = $1
-       AND NOT EXISTS (
-         SELECT 1 FROM user_home_roles uhr2
-         WHERE uhr2.username = $1 AND uhr2.home_id = uha.home_id
-       )`,
+     WHERE uhr.username = $1`,
     [username]
   );
   return rows.map(r => r.slug);
 }
 
 /**
- * Grant a user access to all existing homes.
- * Used when seeding a new admin or during initial setup.
- */
-export async function grantAllHomes(username) {
-  await pool.query(
-    `INSERT INTO user_home_access (username, home_id)
-       SELECT $1, id FROM homes WHERE deleted_at IS NULL FOR SHARE
-       ON CONFLICT DO NOTHING`,
-    [username]
-  );
-}
-
-/**
- * Revoke all user access to a specific home.
- * Used when soft-deleting a home. Accepts transaction client.
- */
-export async function revokeAllForHome(homeId, client) {
-  const conn = client || pool;
-  await conn.query(
-    'DELETE FROM user_home_access WHERE home_id = $1',
-    [homeId]
-  );
-}
-
-/**
- * Get all usernames with access to a home.
+ * Get all usernames with a role at a home.
  * Used to capture affected users in audit before revoking.
  */
 export async function findUsernamesForHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT username FROM user_home_access WHERE home_id = $1',
+    'SELECT username FROM user_home_roles WHERE home_id = $1',
     [homeId]
   );
   return rows.map(r => r.username);

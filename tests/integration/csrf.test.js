@@ -25,7 +25,7 @@ let bearerToken;
 
 beforeAll(async () => {
   // Clean up previous test data
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
 
@@ -42,7 +42,7 @@ beforeAll(async () => {
     [ADMIN_USER, hash]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup')`,
     [ADMIN_USER, homeId]
   );
 
@@ -55,7 +55,7 @@ beforeAll(async () => {
 }, 15000);
 
 afterAll(async () => {
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
 });

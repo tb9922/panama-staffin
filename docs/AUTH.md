@@ -89,7 +89,8 @@ The login response includes the JWT in the response body for API clients. Use th
 
 ## Token Deny List
 
-- Revoked tokens are stored in an in-memory deny list
+- Revoked tokens are stored in a DB-backed `token_denylist` table with an in-memory cache
+- Revocations survive server restarts — the DB is the source of truth; cache is reloaded on startup
 - Checked on every authenticated request via `isTokenDenied(decoded)`
 - **Pruning:** Expired entries removed hourly via `setInterval`
 - **Admin revocation:** `POST /api/login/revoke { username }` adds all tokens for that user to the deny list

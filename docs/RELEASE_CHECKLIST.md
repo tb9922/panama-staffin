@@ -15,7 +15,7 @@
 ## Deploy
 
 ```bash
-cd /var/www/panama
+cd /var/www/panama-staffing
 git pull origin main
 npm ci --omit=dev
 npm run build

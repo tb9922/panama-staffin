@@ -41,7 +41,7 @@ async function cleanup() {
     await pool.query(`DELETE FROM data_requests WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM staff WHERE home_id = $1`, [hid]).catch(() => {});
   }
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`).catch(() => {});
   await pool.query(`DELETE FROM audit_log WHERE home_slug LIKE '${PREFIX}-%'`).catch(() => {});
@@ -80,11 +80,11 @@ beforeAll(async () => {
   );
 
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2), ($1, $3)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
     [ADMIN_USER, homeAId, homeBId]
   );
   await pool.query(
-    `INSERT INTO user_home_access (username, home_id) VALUES ($1, $2)`,
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by) VALUES ($1, $2, 'viewer', 'test-setup')`,
     [VIEWER_USER, homeAId]
   );
 

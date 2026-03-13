@@ -87,7 +87,6 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
 
     const home = await withTransaction(async (client) => {
       const created = await homeRepo.create(slug, name, config, client);
-      await userHomeRepo.grantAccess(req.user.username, created.id, client);
       await userHomeRepo.assignRole(req.user.username, created.id, 'home_manager', null, 'system', client);
       await auditService.log('home_create', slug, req.user.username, { name });
       return created;
@@ -161,7 +160,6 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
 
       await homeRepo.softDelete(id.data, client);
       await userHomeRepo.revokeAllRolesForHome(id.data, client);
-      await userHomeRepo.revokeAllForHome(id.data, client);
       await auditService.log('home_delete', home.slug, req.user.username, {
         usersRevoked: revokedUsers,
       });

@@ -124,10 +124,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
 
     const user = await withTransaction(async (client) => {
       const created = await userService.createUser(username, password, role, displayName, req.user.username, client);
-      await userHomeRepo.grantAccess(username, req.home.id, client);
-      if (homeRoleId) {
-        await userHomeRepo.assignRole(username, req.home.id, homeRoleId, null, req.user.username, client);
-      }
+      // Assign role at this home (defaults to viewer if no specific role requested)
+      const effectiveRole = homeRoleId || (role === 'admin' ? 'home_manager' : 'viewer');
+      await userHomeRepo.assignRole(username, req.home.id, effectiveRole, null, req.user.username, client);
       return created;
     });
 
@@ -228,16 +227,19 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
       return res.status(400).json({ error: 'Cannot modify your own home access' });
     }
 
-    // Get current home IDs, then diff to grant/revoke — all in one transaction
+    // Get current home IDs, then diff to assign/remove — all in one transaction
     await withTransaction(async (client) => {
       const currentIds = new Set(await userHomeRepo.findHomeIdsForUser(user.username, client));
       const desiredIds = new Set(parsed.data.homeIds);
 
       for (const hid of desiredIds) {
-        if (!currentIds.has(hid)) await userHomeRepo.grantAccess(user.username, hid, client);
+        if (!currentIds.has(hid)) {
+          // Default to viewer role — use roles-bulk endpoint to set specific roles
+          await userHomeRepo.assignRole(user.username, hid, 'viewer', null, req.user.username, client);
+        }
       }
       for (const hid of currentIds) {
-        if (!desiredIds.has(hid)) await userHomeRepo.revokeAccess(user.username, hid, client);
+        if (!desiredIds.has(hid)) await userHomeRepo.removeRole(user.username, hid, client);
       }
     });
 
@@ -293,10 +295,7 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const oldRoles = await userHomeRepo.findRolesForUser(user.username);
     const oldHomeRole = oldRoles.find(r => r.home_id === req.home.id);
 
-    await withTransaction(async (client) => {
-      await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username, client);
-      await userHomeRepo.grantAccess(user.username, req.home.id, client);
-    });
+    await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username);
 
     const changed = !oldHomeRole || oldHomeRole.role_id !== parsed.data.roleId;
     if (changed) {
@@ -336,13 +335,11 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       const finalHomeIds = new Set();
       for (const { homeId, roleId } of parsed.data.roles) {
         await userHomeRepo.assignRole(user.username, homeId, roleId, null, req.user.username, client);
-        await userHomeRepo.grantAccess(user.username, homeId, client);
         finalHomeIds.add(homeId);
       }
       for (const cr of currentRoles) {
         if (!finalHomeIds.has(cr.home_id)) {
           await userHomeRepo.removeRole(user.username, cr.home_id, client);
-          await userHomeRepo.revokeAccess(user.username, cr.home_id, client);
         }
       }
     });

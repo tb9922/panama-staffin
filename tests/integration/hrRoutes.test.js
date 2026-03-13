@@ -1,7 +1,7 @@
 /**
  * Integration tests for HR route-layer fixes:
  *  - Route file parses without syntax errors (catches stray braces, bad imports)
- *  - Per-home authorization (user_home_access table)
+ *  - Per-home authorization (user_home_roles table)
  *  - ORDER BY whitelist in paginate
  *  - Bradford Factor queries go through repo layer (no direct pool.query in service)
  *
@@ -15,17 +15,29 @@ let testHomeId;
 
 beforeAll(async () => {
   // Clean up leftover test data
-  await pool.query(`DELETE FROM homes WHERE slug = 'hr-route-test'`);
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'test-route-%'`);
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'test-route-%'`);
+  await pool.query(`DELETE FROM users WHERE username LIKE 'test-route-%'`);
+  await pool.query(`DELETE FROM homes WHERE slug LIKE 'hr-route-test%'`);
 
   const { rows: [h] } = await pool.query(
     `INSERT INTO homes (slug, name) VALUES ('hr-route-test', 'HR Route Test Home') RETURNING id`
   );
   testHomeId = h.id;
+
+  // Create test users (user_home_roles has FK on username)
+  const testUsers = ['test-route-admin', 'test-route-multi', 'test-route-all', 'test-route-u1'];
+  for (const u of testUsers) {
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, display_name, created_by)
+       VALUES ($1, 'not-a-real-hash', 'viewer', $1, 'test-setup')`,
+      [u]
+    );
+  }
 });
 
 afterAll(async () => {
-  await pool.query(`DELETE FROM user_home_access WHERE username LIKE 'test-route-%'`);
+  await pool.query(`DELETE FROM user_home_roles WHERE username LIKE 'test-route-%'`);
+  await pool.query(`DELETE FROM users WHERE username LIKE 'test-route-%'`);
   if (testHomeId) await pool.query('DELETE FROM homes WHERE id = $1', [testHomeId]);
 });
 
@@ -40,7 +52,7 @@ describe('routes/hr.js module', () => {
   });
 });
 
-// ── Per-home authorization (user_home_access) ──────────────────────────────
+// ── Per-home authorization (user_home_roles) ────────────────────────────────
 
 describe('userHomeRepo: per-home authorization', () => {
   let userHomeRepo;
@@ -49,26 +61,26 @@ describe('userHomeRepo: per-home authorization', () => {
     userHomeRepo = await import('../../repositories/userHomeRepo.js');
   });
 
-  it('denies access when no grant exists', async () => {
+  it('denies access when no role exists', async () => {
     const allowed = await userHomeRepo.hasAccess('test-route-nobody', testHomeId);
     expect(allowed).toBe(false);
   });
 
-  it('grants access and then confirms it', async () => {
-    await userHomeRepo.grantAccess('test-route-admin', testHomeId);
+  it('assignRole grants access', async () => {
+    await userHomeRepo.assignRole('test-route-admin', testHomeId, 'home_manager', null, 'test-setup');
     const allowed = await userHomeRepo.hasAccess('test-route-admin', testHomeId);
     expect(allowed).toBe(true);
   });
 
-  it('grantAccess is idempotent', async () => {
-    // Should not throw on duplicate
-    await userHomeRepo.grantAccess('test-route-admin', testHomeId);
+  it('assignRole is idempotent (upserts)', async () => {
+    await userHomeRepo.assignRole('test-route-admin', testHomeId, 'viewer', null, 'test-setup');
     const allowed = await userHomeRepo.hasAccess('test-route-admin', testHomeId);
     expect(allowed).toBe(true);
+    const role = await userHomeRepo.getHomeRole('test-route-admin', testHomeId);
+    expect(role.role_id).toBe('viewer');
   });
 
   it('denies access to a different home', async () => {
-    // Create a second home
     const { rows: [h2] } = await pool.query(
       `INSERT INTO homes (slug, name) VALUES ('hr-route-test-2', 'HR Route Test Home 2') RETURNING id`
     );
@@ -80,26 +92,31 @@ describe('userHomeRepo: per-home authorization', () => {
     }
   });
 
-  it('revokeAccess removes the grant', async () => {
-    await userHomeRepo.revokeAccess('test-route-admin', testHomeId);
+  it('removeRole revokes access', async () => {
+    await userHomeRepo.removeRole('test-route-admin', testHomeId);
     const allowed = await userHomeRepo.hasAccess('test-route-admin', testHomeId);
     expect(allowed).toBe(false);
   });
 
   it('findHomeIdsForUser returns correct list', async () => {
-    await userHomeRepo.grantAccess('test-route-multi', testHomeId);
+    await userHomeRepo.assignRole('test-route-multi', testHomeId, 'viewer', null, 'test-setup');
     const ids = await userHomeRepo.findHomeIdsForUser('test-route-multi');
     expect(ids).toContain(testHomeId);
-    // Cleanup
-    await userHomeRepo.revokeAccess('test-route-multi', testHomeId);
+    await userHomeRepo.removeRole('test-route-multi', testHomeId);
   });
 
-  it('grantAllHomes grants access to every home', async () => {
-    await userHomeRepo.grantAllHomes('test-route-all');
+  it('grantAllHomesRole grants access to every home', async () => {
+    await userHomeRepo.grantAllHomesRole('test-route-all');
     const ids = await userHomeRepo.findHomeIdsForUser('test-route-all');
     expect(ids).toContain(testHomeId);
-    // Cleanup
-    await pool.query(`DELETE FROM user_home_access WHERE username = 'test-route-all'`);
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'test-route-all'`);
+  });
+
+  it('findUsernamesForHome returns users with roles', async () => {
+    await userHomeRepo.assignRole('test-route-u1', testHomeId, 'viewer', null, 'test-setup');
+    const usernames = await userHomeRepo.findUsernamesForHome(testHomeId);
+    expect(usernames).toContain('test-route-u1');
+    await userHomeRepo.removeRole('test-route-u1', testHomeId);
   });
 });
 

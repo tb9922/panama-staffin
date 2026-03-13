@@ -48,7 +48,7 @@ curl -fsSL https://get.docker.com | sh
 usermod -aG docker deploy
 
 # Start database
-cd /var/www/panama
+cd /var/www/panama-staffing
 docker compose up -d
 
 # Wait for health check, then migrate
@@ -60,8 +60,8 @@ node scripts/migrate.js
 
 ```bash
 # Clone
-git clone git@github.com:tb9922/panama-staffin.git /var/www/panama
-cd /var/www/panama
+git clone git@github.com:tb9922/panama-staffin.git /var/www/panama-staffing
+cd /var/www/panama-staffing
 
 # Dependencies
 npm ci --omit=dev
@@ -116,7 +116,7 @@ chmod +x scripts/backup-db.sh scripts/restore-db.sh
 
 # Schedule daily at 2am
 crontab -e
-# Add: 0 2 * * * /var/www/panama/scripts/backup-db.sh >> /var/log/panama-backup.log 2>&1
+# Add: 0 2 * * * /var/www/panama-staffing/scripts/backup-db.sh >> /var/log/panama-backup.log 2>&1
 ```
 
 ### 8. Monitoring
@@ -130,7 +130,7 @@ The app also exposes `/readiness` which returns 503 during graceful shutdown —
 ## Deploying Updates
 
 ```bash
-cd /var/www/panama
+cd /var/www/panama-staffing
 
 # Pull latest code
 git pull origin main
@@ -151,7 +151,7 @@ pm2 restart panama
 ### Quick Deploy (one-liner)
 
 ```bash
-cd /var/www/panama && git pull && npm ci --omit=dev && node scripts/migrate.js && npm run build && pm2 restart panama
+cd /var/www/panama-staffing && git pull && npm ci --omit=dev && node scripts/migrate.js && npm run build && pm2 restart panama
 ```
 
 ---
@@ -161,15 +161,15 @@ cd /var/www/panama && git pull && npm ci --omit=dev && node scripts/migrate.js &
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `JWT_SECRET` | Yes | 64-char hex string for JWT signing |
-| `ADMIN_PASSWORD_HASH` | Yes | bcrypt hash (cost 12) |
-| `VIEWER_PASSWORD_HASH` | Yes | bcrypt hash (cost 12) |
+| `ADMIN_PASSWORD_HASH` | No | bcrypt hash (cost 12) — optional legacy seed account |
+| `VIEWER_PASSWORD_HASH` | No | bcrypt hash (cost 12) — optional legacy seed account |
 | `DB_PASSWORD` | Yes | PostgreSQL password |
 | `DB_HOST` | No | Default: localhost |
 | `DB_PORT` | No | Default: 5432 |
 | `DB_NAME` | No | Default: panama_dev |
 | `DB_USER` | No | Default: panama |
 | `PORT` | No | Default: 3001 |
-| `ALLOWED_ORIGIN` | No | Default: http://localhost:5173 |
+| `ALLOWED_ORIGIN` | Yes | CORS origin (e.g. https://panama.yourdomain.com) |
 | `NODE_ENV` | No | Set to "production" via PM2 |
 
 Generate secrets:
