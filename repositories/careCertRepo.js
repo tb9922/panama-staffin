@@ -94,7 +94,7 @@ export async function upsertStaff(homeId, staffId, record) {
        start_date=EXCLUDED.start_date, expected_completion=EXCLUDED.expected_completion, supervisor=EXCLUDED.supervisor,
        status=EXCLUDED.status, completion_date=EXCLUDED.completion_date, standards=EXCLUDED.standards, updated_at=NOW(),
        deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${CERT_COLS}`,
     [homeId, staffId,
      record.start_date || null, record.expected_completion || null,
      record.supervisor || null, record.status || null,

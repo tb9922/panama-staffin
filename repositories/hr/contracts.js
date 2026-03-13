@@ -65,7 +65,7 @@ export async function createContract(homeId, data, client) {
         hours_per_week, working_pattern, hourly_rate, pay_frequency, annual_leave_days,
         notice_period_employer, notice_period_employee,
         probation_period_months, probation_start_date, probation_end_date, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.statement_issued ?? false,
      data.statement_issued_date || null, data.contract_type,
      data.contract_start_date, data.contract_end_date || null,
@@ -108,7 +108,7 @@ export async function updateContract(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_contracts SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_contracts SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

@@ -114,7 +114,7 @@ export async function upsert(homeId, data) {
        type=$3,date=$4,title=$5,total_sent=$6,responses=$7,
        overall_satisfaction=$8,area_scores=$9,key_feedback=$10,
        actions=$11,conducted_by=$12,reported_at=$13
-     RETURNING *`,
+     RETURNING ${SURVEY_COLS}`,
     [
       id, homeId, data.type || null, data.date || null, data.title || null,
       data.total_sent ?? null, data.responses ?? null, data.overall_satisfaction ?? null,
@@ -147,7 +147,7 @@ export async function update(id, homeId, data, version) {
   let sql = `UPDATE complaint_surveys SET ${setClause}, version = version + 1, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${SURVEY_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

@@ -20,7 +20,7 @@ export async function createCaseNote(homeId, caseType, caseId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO hr_case_notes (home_id, case_type, case_id, note_type, content, author)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING ${COLS}`,
     [homeId, caseType, caseId, data.note_type ?? 'note', data.content, data.author]
   );
   return shapeNote(rows[0]);

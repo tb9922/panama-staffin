@@ -127,7 +127,7 @@ export async function upsert(homeId, data) {
        reporter_protected=$16,protection_details=$17,
        follow_up_date=$18,follow_up_completed=$19,resolution_date=$20,
        lessons_learned=$21,reported_at=$22,updated_at=$23,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${COLS}`,
     [
       id, homeId, data.date_raised || null, data.raised_by_role || null,
       data.anonymous ?? false,
@@ -163,7 +163,7 @@ export async function update(id, homeId, data, version) {
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   let sql = `UPDATE whistleblowing_concerns SET ${setClause}, updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

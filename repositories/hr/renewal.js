@@ -50,7 +50,7 @@ export async function createRenewal(homeId, data, client) {
         dbs_update_service_registered, dbs_update_service_last_checked, dbs_barred_list_check,
         rtw_document_type, rtw_check_date, rtw_document_expiry, rtw_next_check_due,
         status, checked_by, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.check_type,
      data.dbs_certificate_number || null, data.dbs_disclosure_level || null,
      data.dbs_check_date || null, data.dbs_next_renewal_due || null,
@@ -82,7 +82,7 @@ export async function updateRenewal(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_rtw_dbs_renewals SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_rtw_dbs_renewals SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

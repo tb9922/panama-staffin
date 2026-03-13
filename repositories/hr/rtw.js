@@ -51,7 +51,7 @@ export async function createRtwInterview(homeId, data, client) {
         underlying_condition, oh_referral_recommended, notes,
         fit_note_received, fit_note_date, fit_note_type, fit_note_adjustments,
         bradford_score_after, trigger_reached, action_taken, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.absence_start_date, data.absence_end_date || null,
      data.absence_days ?? null, data.absence_reason || null,
      data.rtw_date, data.rtw_conducted_by, data.fit_to_return ?? true,
@@ -86,7 +86,7 @@ export async function updateRtwInterview(id, homeId, data, client, version) {
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(
-    `UPDATE hr_rtw_interviews SET ${fields.join(', ')} ${where} RETURNING *`,
+    `UPDATE hr_rtw_interviews SET ${fields.join(', ')} ${where} RETURNING ${COLS}`,
     params
   );
   if (rowCount === 0 && version != null) return null;

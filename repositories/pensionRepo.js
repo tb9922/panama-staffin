@@ -86,7 +86,7 @@ export async function upsertEnrolment(homeId, data, client) {
        reassessment_date = EXCLUDED.reassessment_date,
        notes             = EXCLUDED.notes,
        updated_at        = NOW()
-     RETURNING *`,
+     RETURNING ${ENROLMENT_COLS}`,
     [
       homeId, data.staff_id, data.status ?? 'pending_assessment',
       data.enrolled_date || null, data.opted_out_date || null,
@@ -135,7 +135,7 @@ export async function insertContribution(homeId, data, client) {
     `INSERT INTO pension_contributions
        (home_id, payroll_line_id, staff_id, qualifying_pay, employee_amount, employer_amount)
      VALUES ($1,$2,$3,$4,$5,$6)
-     RETURNING *`,
+     RETURNING ${CONTRIBUTION_COLS}`,
     [
       homeId, data.payroll_line_id, data.staff_id,
       data.qualifying_pay, data.employee_amount, data.employer_amount,

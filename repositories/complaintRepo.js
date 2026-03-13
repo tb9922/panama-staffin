@@ -134,7 +134,7 @@ export async function upsert(homeId, data) {
        investigation_notes=$13,resolution=$14,resolution_date=$15,outcome_shared=$16,
        root_cause=$17,improvements=$18,lessons_learned=$19,reported_by=$20,
        reported_at=$21,updated_at=$22,deleted_at=NULL
-     RETURNING *`,
+     RETURNING ${COMPLAINT_COLS}`,
     [
       id, homeId, data.date || null, data.raised_by || null, data.raised_by_name || null,
       data.category || null, data.title || null, data.description || null,
@@ -168,7 +168,7 @@ export async function update(id, homeId, data, version) {
   let sql = `UPDATE complaints SET ${setClause}, version = version + 1, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${COMPLAINT_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;

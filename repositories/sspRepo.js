@@ -96,7 +96,7 @@ export async function createSickPeriod(homeId, data, client) {
         waiting_days_served, ssp_weeks_paid, fit_note_received, fit_note_date,
         linked_to_period_id, notes)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     RETURNING *`,
+     RETURNING ${SICK_PERIOD_COLS}`,
     [
       homeId, data.staff_id, data.start_date, data.end_date || null,
       data.qualifying_days_per_week || 5,
@@ -123,7 +123,7 @@ export async function updateSickPeriod(id, homeId, data, client) {
   if (fields.length === 0) return null;
   fields.push('updated_at = NOW()');
   const { rows } = await conn.query(
-    `UPDATE sick_periods SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
+    `UPDATE sick_periods SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING ${SICK_PERIOD_COLS}`,
     values
   );
   return rows[0] ? shapePeriod(rows[0]) : null;

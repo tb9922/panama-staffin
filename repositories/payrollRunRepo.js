@@ -99,7 +99,7 @@ export async function create(homeId, run, client) {
   const { rows } = await conn.query(
     `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, notes)
      VALUES ($1,$2,$3,$4,$5)
-     RETURNING *`,
+     RETURNING ${RUN_COLS}`,
     [homeId, run.period_start, run.period_end, run.pay_frequency, run.notes || null],
   );
   return shapeRun(rows[0]);
@@ -125,7 +125,7 @@ export async function updateStatus(runId, homeId, status, extra, client, version
   }
   let sql = `UPDATE payroll_runs SET ${sets.join(', ')} WHERE id = $2 AND home_id = $3`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${RUN_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows.length > 0 ? shapeRun(rows[0]) : null;
@@ -140,7 +140,7 @@ export async function updateTotals(runId, homeId, totals, client, version) {
          version = version + 1
      WHERE id = $5 AND home_id = $6`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
-  sql += ' RETURNING *';
+  sql += ` RETURNING ${RUN_COLS}`;
   const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows.length > 0 ? shapeRun(rows[0]) : null;
@@ -230,7 +230,7 @@ export async function findLinesByRun(runId, homeId, client) {
 export async function createLine(runId, staffId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `INSERT INTO payroll_lines (payroll_run_id, staff_id) VALUES ($1,$2) RETURNING *`,
+    `INSERT INTO payroll_lines (payroll_run_id, staff_id) VALUES ($1,$2) RETURNING ${LINE_COLS}`,
     [runId, staffId],
   );
   return shapeLine(rows[0]);
@@ -251,7 +251,7 @@ export async function updateLine(lineId, homeId, data, client) {
        nmw_compliant = $18, nmw_lowest_rate = $19, notes = $20
      WHERE id = $21
        AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $22)
-     RETURNING *`,
+     RETURNING ${LINE_COLS}`,
     [
       data.base_hours, data.base_pay,
       data.night_hours, data.night_enhancement,
@@ -292,7 +292,7 @@ export async function updateLineDeductions(lineId, homeId, data, client) {
        net_pay              = $14
      WHERE id = $15
        AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $16)
-     RETURNING *`,
+     RETURNING ${LINE_COLS}`,
     [
       data.holiday_days ?? 0,
       data.holiday_pay ?? 0,
@@ -352,7 +352,7 @@ export async function createLineShift(lineId, shift, client) {
        (payroll_line_id, date, shift_code, hours, base_rate, base_amount,
         enhancements_json, total_amount, effective_hourly_rate)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     RETURNING *`,
+     RETURNING ${LINE_SHIFT_COLS}`,
     [
       lineId, shift.date, shift.shift_code, shift.hours,
       shift.base_rate, shift.base_amount,
