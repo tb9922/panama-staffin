@@ -97,12 +97,14 @@ export async function remove(id, homeId) {
   return rowCount > 0;
 }
 
-export async function logDelivery(webhookId, event, payload, statusCode, responseMs, error) {
-  await pool.query(
-    `INSERT INTO webhook_deliveries (webhook_id, event, payload, status_code, response_ms, error)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [webhookId, event, payload, statusCode, responseMs, error]
+export async function logDelivery(webhookId, event, payload, statusCode, responseMs, error, status = 'delivered') {
+  const { rows } = await pool.query(
+    `INSERT INTO webhook_deliveries (webhook_id, event, payload, status_code, response_ms, error, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id`,
+    [webhookId, event, payload, statusCode, responseMs, error, status]
   );
+  return rows[0]?.id;
 }
 
 export async function purgeDeliveriesOlderThan(days, client) {
@@ -114,16 +116,67 @@ export async function purgeDeliveriesOlderThan(days, client) {
   return rowCount;
 }
 
-export async function getRecentDeliveries(webhookId, homeId, limit = 50) {
+export async function getRecentDeliveries(webhookId, homeId, { limit = 50, status = null } = {}) {
+  const params = [webhookId, homeId];
+  let statusFilter = '';
+  if (status) {
+    params.push(status);
+    statusFilter = ` AND wd.status = $${params.length}`;
+  }
+  params.push(limit);
   const { rows } = await pool.query(
     `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.status_code,
-            wd.response_ms, wd.error, wd.delivered_at
+            wd.response_ms, wd.error, wd.delivered_at,
+            wd.retry_count, wd.next_retry_at, wd.status
      FROM webhook_deliveries wd
      JOIN webhooks w ON w.id = wd.webhook_id
-     WHERE wd.webhook_id = $1 AND w.home_id = $2
+     WHERE wd.webhook_id = $1 AND w.home_id = $2${statusFilter}
      ORDER BY wd.delivered_at DESC
-     LIMIT $3`,
-    [webhookId, homeId, limit]
+     LIMIT $${params.length}`,
+    params
   );
   return rows;
+}
+
+export async function findPendingRetries(limit = 20) {
+  const { rows } = await pool.query(
+    `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+            w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
+            w.home_id, w.active
+     FROM webhook_deliveries wd
+     JOIN webhooks w ON w.id = wd.webhook_id
+     WHERE wd.status = 'pending_retry' AND wd.next_retry_at <= NOW()
+     ORDER BY wd.next_retry_at ASC
+     LIMIT $1`,
+    [limit]
+  );
+  return rows.map(row => ({
+    ...row,
+    secret: resolveSecret(row),
+  }));
+}
+
+export async function updateDeliveryForRetry(id, retryCount, nextRetryAt) {
+  await pool.query(
+    `UPDATE webhook_deliveries
+     SET retry_count = $2, next_retry_at = $3, status = 'pending_retry'
+     WHERE id = $1`,
+    [id, retryCount, nextRetryAt]
+  );
+}
+
+export async function markDeliverySucceeded(id, statusCode, responseMs) {
+  await pool.query(
+    `UPDATE webhook_deliveries
+     SET status = 'delivered', status_code = $2, response_ms = $3, error = NULL, next_retry_at = NULL
+     WHERE id = $1`,
+    [id, statusCode, responseMs]
+  );
+}
+
+export async function markDeliveryFailed(id) {
+  await pool.query(
+    `UPDATE webhook_deliveries SET status = 'failed', next_retry_at = NULL WHERE id = $1`,
+    [id]
+  );
 }

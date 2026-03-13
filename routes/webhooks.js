@@ -88,7 +88,8 @@ router.get('/:id/deliveries', readRateLimiter, requireAuth, requireHomeAccess, r
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });
     const hook = await webhookRepo.findById(id, req.home.id);
     if (!hook) return res.status(404).json({ error: 'Webhook not found' });
-    const deliveries = await webhookRepo.getRecentDeliveries(id, req.home.id);
+    const status = ['delivered', 'pending_retry', 'failed'].includes(req.query.status) ? req.query.status : null;
+    const deliveries = await webhookRepo.getRecentDeliveries(id, req.home.id, { status });
     res.json(deliveries);
   } catch (err) { next(err); }
 });
