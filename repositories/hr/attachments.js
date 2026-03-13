@@ -1,5 +1,7 @@
 import { pool, createShaper } from './shared.js';
 
+const COLS = 'id, home_id, case_type, case_id, original_name, stored_name, mime_type, size_bytes, description, uploaded_by, created_at';
+
 const shapeAttachment = createShaper({
   fields: [
     'id', 'home_id', 'case_type', 'case_id', 'original_name', 'stored_name',
@@ -11,7 +13,7 @@ const shapeAttachment = createShaper({
 export async function findAttachments(caseType, caseId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_file_attachments WHERE case_type = $1 AND case_id = $2 AND home_id = $3 AND deleted_at IS NULL ORDER BY created_at DESC',
+    `SELECT ${COLS} FROM hr_file_attachments WHERE case_type = $1 AND case_id = $2 AND home_id = $3 AND deleted_at IS NULL ORDER BY created_at DESC`,
     [caseType, caseId, homeId]
   );
   return rows.map(shapeAttachment);
@@ -20,7 +22,7 @@ export async function findAttachments(caseType, caseId, homeId, client) {
 export async function findAttachmentById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_file_attachments WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${COLS} FROM hr_file_attachments WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return shapeAttachment(rows[0]);

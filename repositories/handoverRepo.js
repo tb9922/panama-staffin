@@ -1,5 +1,7 @@
 import { pool } from '../db.js';
 
+const COLS = 'id, home_id, entry_date, shift, category, priority, content, incident_id, author, created_at, updated_at, acknowledged_by, acknowledged_at';
+
 function shapeRow(row) {
   return {
     id: row.id,
@@ -26,7 +28,7 @@ function shapeRow(row) {
  */
 export async function findByHomeAndDate(homeId, date, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM handover_entries
+    `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date = $2 AND deleted_at IS NULL
      ORDER BY
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
@@ -47,7 +49,7 @@ export async function findByHomeAndDate(homeId, date, { limit = 100, offset = 0 
  */
 export async function findByHomeAndDateRange(homeId, fromDate, toDate, { limit = 500, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM handover_entries
+    `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date BETWEEN $2 AND $3 AND deleted_at IS NULL
      ORDER BY entry_date,
        CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,

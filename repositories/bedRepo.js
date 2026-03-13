@@ -1,6 +1,8 @@
 import { pool } from '../db.js';
 import { ConflictError } from '../errors.js';
 
+const BED_COLS = 'id, home_id, room_number, room_name, room_type, floor, status, resident_id, status_since, hold_expires, reserved_until, booked_from, booked_until, notes, created_by, updated_by, created_at, updated_at';
+
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
 
@@ -36,7 +38,7 @@ export async function findByHome(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findByHome */
-     SELECT * FROM beds
+     SELECT ${BED_COLS} FROM beds
      WHERE home_id = $1
      ORDER BY room_number ASC
      LIMIT 200`,
@@ -49,7 +51,7 @@ export async function findById(bedId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findById */
-     SELECT * FROM beds
+     SELECT ${BED_COLS} FROM beds
      WHERE id = $1 AND home_id = $2`,
     [bedId, homeId]
   );
@@ -59,7 +61,7 @@ export async function findById(bedId, homeId, client) {
 export async function findByIdForUpdate(bedId, homeId, client) {
   const { rows } = await client.query(
     `/* bedRepo – findByIdForUpdate */
-     SELECT * FROM beds
+     SELECT ${BED_COLS} FROM beds
      WHERE id = $1 AND home_id = $2
      FOR UPDATE`,
     [bedId, homeId]
@@ -168,7 +170,7 @@ export async function findExpiringHolds(homeId, withinDays = 7, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findExpiringHolds */
-     SELECT * FROM beds
+     SELECT ${BED_COLS} FROM beds
      WHERE home_id = $1 AND status = 'hospital_hold'
        AND hold_expires IS NOT NULL
        AND hold_expires <= (CURRENT_DATE + make_interval(days => $2))
@@ -182,7 +184,11 @@ export async function findStaleOccupants(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findStaleOccupants */
-     SELECT b.* FROM beds b
+     SELECT b.id, b.home_id, b.room_number, b.room_name, b.room_type, b.floor,
+            b.status, b.resident_id, b.status_since, b.hold_expires, b.reserved_until,
+            b.booked_from, b.booked_until, b.notes, b.created_by, b.updated_by,
+            b.created_at, b.updated_at
+     FROM beds b
      INNER JOIN finance_residents fr ON fr.id = b.resident_id
      WHERE b.home_id = $1 AND fr.home_id = $1 AND b.status = 'occupied'
        AND fr.status IN ('discharged', 'deceased')`,
@@ -195,7 +201,7 @@ export async function findByResidentId(residentId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findByResidentId */
-     SELECT * FROM beds
+     SELECT ${BED_COLS} FROM beds
      WHERE resident_id = $1 AND home_id = $2 AND status = 'occupied'`,
     [residentId, homeId]
   );

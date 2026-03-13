@@ -2,6 +2,8 @@ import { pool } from '../db.js';
 
 const ts = v => v instanceof Date ? v.toISOString() : v;
 
+const COLS = 'id, home_id, date_raised, raised_by_role, anonymous, category, description, severity, status, acknowledgement_date, investigator, investigation_start_date, findings, outcome, outcome_details, reporter_protected, protection_details, follow_up_date, follow_up_completed, resolution_date, lessons_learned, reported_at, updated_at, version';
+
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -19,7 +21,7 @@ function shapeRow(row) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM whistleblowing_concerns
+    `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM whistleblowing_concerns
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY date_raised DESC NULLS LAST LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
@@ -98,7 +100,7 @@ import { randomUUID } from 'crypto';
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM whistleblowing_concerns WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${COLS} FROM whistleblowing_concerns WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

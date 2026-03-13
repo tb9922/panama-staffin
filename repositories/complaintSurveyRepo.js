@@ -1,5 +1,7 @@
 import { pool } from '../db.js';
 
+const SURVEY_COLS = 'id, home_id, version, type, date, title, total_sent, responses, overall_satisfaction, area_scores, key_feedback, actions, conducted_by, reported_at, created_at, deleted_at';
+
 const ts = v => v instanceof Date ? v.toISOString() : v;
 const pf = v => v != null ? parseFloat(v) : v;
 
@@ -21,7 +23,7 @@ function paginate(rows, shapeFn) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM complaint_surveys
+    `SELECT ${SURVEY_COLS}, COUNT(*) OVER() AS _total FROM complaint_surveys
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY date DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
@@ -94,7 +96,7 @@ import { randomUUID } from 'crypto';
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM complaint_surveys WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${SURVEY_COLS} FROM complaint_surveys WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

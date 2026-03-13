@@ -2,6 +2,15 @@ import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
+const SSP_CONFIG_COLS = 'id, effective_from, weekly_rate, waiting_days, lel_weekly, max_weeks';
+
+const SICK_PERIOD_COLS = `id, home_id, staff_id, start_date, end_date,
+  qualifying_days_per_week, waiting_days_served, ssp_weeks_paid,
+  fit_note_received, fit_note_date, linked_to_period_id, notes,
+  created_at, updated_at`;
+
+const ENHANCED_SICK_COLS = 'id, home_id, full_pay_weeks, half_pay_weeks, notes, updated_at';
+
 // ─── SSP Config ───────────────────────────────────────────────────────────────
 
 /**
@@ -11,7 +20,7 @@ function f(v) { return v != null ? parseFloat(v) : null; }
 export async function getAllSSPConfigs(client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM ssp_config ORDER BY effective_from'
+    `SELECT ${SSP_CONFIG_COLS} FROM ssp_config ORDER BY effective_from`
   );
   return rows.map(r => ({
     effective_from: toDateStr(r.effective_from),
@@ -31,7 +40,7 @@ export async function getAllSSPConfigs(client) {
 export async function getActiveSickPeriod(homeId, staffId, fromDate, toDate, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM sick_periods
+    `SELECT ${SICK_PERIOD_COLS} FROM sick_periods
      WHERE home_id = $1 AND staff_id = $2
        AND start_date <= $3
        AND (end_date IS NULL OR end_date >= $4)
@@ -50,7 +59,7 @@ export async function getActiveSickPeriodsBatch(homeId, staffIds, fromDate, toDa
   if (!staffIds.length) return new Map();
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM sick_periods
+    `SELECT ${SICK_PERIOD_COLS} FROM sick_periods
      WHERE home_id = $1 AND staff_id = ANY($2)
        AND start_date <= $3
        AND (end_date IS NULL OR end_date >= $4)
@@ -71,7 +80,7 @@ export async function listSickPeriods(homeId, staffId, client) {
   const params = staffId ? [homeId, staffId] : [homeId];
   const filter = staffId ? 'AND staff_id = $2' : '';
   const { rows } = await conn.query(
-    `SELECT * FROM sick_periods
+    `SELECT ${SICK_PERIOD_COLS} FROM sick_periods
      WHERE home_id = $1 ${filter}
      ORDER BY start_date DESC`,
     params
@@ -128,7 +137,7 @@ export async function updateSickPeriod(id, homeId, data, client) {
 export async function findRecentClosedPeriod(homeId, staffId, startDate, daysGap, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM sick_periods
+    `SELECT ${SICK_PERIOD_COLS} FROM sick_periods
      WHERE home_id = $1 AND staff_id = $2
        AND end_date IS NOT NULL
        AND end_date >= $3::date - INTERVAL '1 day' * $4
@@ -144,7 +153,7 @@ export async function findRecentClosedPeriod(homeId, staffId, startDate, daysGap
 export async function getEnhancedSickConfig(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM enhanced_sick_config WHERE home_id = $1',
+    `SELECT ${ENHANCED_SICK_COLS} FROM enhanced_sick_config WHERE home_id = $1`,
     [homeId]
   );
   return rows[0]

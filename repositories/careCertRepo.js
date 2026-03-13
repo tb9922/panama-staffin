@@ -1,5 +1,7 @@
 import { pool, toDateStr } from '../db.js';
 
+const CERT_COLS = 'home_id, staff_id, start_date, expected_completion, supervisor, status, completion_date, standards, created_at, updated_at, deleted_at';
+
 function shapeRow(row) {
   const shaped = {};
   for (const col of ['start_date', 'expected_completion', 'completion_date']) {
@@ -15,7 +17,7 @@ function shapeRow(row) {
 
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM care_certificates WHERE home_id = $1 AND deleted_at IS NULL',
+    `SELECT ${CERT_COLS} FROM care_certificates WHERE home_id = $1 AND deleted_at IS NULL`,
     [homeId]
   );
   // Shape to: { "staffId": { start_date, expected_completion, supervisor, status, completion_date, standards } }

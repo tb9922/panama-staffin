@@ -2,6 +2,8 @@ import { pool } from '../db.js';
 
 const ts = v => v instanceof Date ? v.toISOString() : v;
 
+const COLS = 'id, home_id, category, description, frequency, last_completed, next_due, completed_by, contractor, items_checked, items_passed, items_failed, certificate_ref, certificate_expiry, notes, updated_at, version';
+
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -16,7 +18,7 @@ function shapeRow(row) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM maintenance
+    `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM maintenance
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY category LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
@@ -94,7 +96,7 @@ import { randomUUID } from 'crypto';
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM maintenance WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${COLS} FROM maintenance WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

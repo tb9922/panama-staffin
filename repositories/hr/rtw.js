@@ -1,5 +1,13 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id,
+  absence_start_date, absence_end_date, absence_days, absence_reason,
+  rtw_date, rtw_conducted_by, fit_to_return, adjustments_needed,
+  adjustments_detail, underlying_condition, oh_referral_recommended, follow_up_date, notes,
+  fit_note_received, fit_note_date, fit_note_type, fit_note_adjustments, fit_note_review_date,
+  bradford_score_after, trigger_reached, action_taken, linked_case_id,
+  created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeRtw = createShaper({
   fields: [
     'id', 'home_id', 'staff_id',
@@ -22,13 +30,13 @@ const shapeRtw = createShaper({
 export async function findRtwInterviewById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_rtw_interviews WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_rtw_interviews WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeRtw(rows[0]);
 }
 
 export async function findRtwInterviews(homeId, { staffId } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_rtw_interviews WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   return paginate(conn, sql, params, 'rtw_date DESC', shapeRtw, pag);

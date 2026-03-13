@@ -35,7 +35,9 @@ pool.on('error', (err) => {
 
 // Set per-connection statement timeout so no query runs forever
 pool.on('connect', (client) => {
-  client.query('SET statement_timeout = 30000').catch(() => {});
+  client.query('SET statement_timeout = 30000').catch((err) => {
+    logger.warn({ error: err.message }, 'Failed to set statement_timeout on new connection');
+  });
 });
 
 // Periodic pool stats — warn when clients are waiting for connections
@@ -58,7 +60,9 @@ export async function withTransaction(fn) {
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    await client.query('ROLLBACK').catch((rollbackErr) => {
+      logger.warn({ error: rollbackErr.message }, 'ROLLBACK failed during error recovery');
+    });
     throw err;
   } finally {
     client.release();

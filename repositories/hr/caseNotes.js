@@ -1,5 +1,7 @@
 import { pool, createShaper } from './shared.js';
 
+const COLS = 'id, home_id, case_type, case_id, note_type, content, author, created_at';
+
 const shapeNote = createShaper({
   fields: ['id', 'home_id', 'case_type', 'case_id', 'note_type', 'content', 'author', 'created_at'],
   timestamps: ['created_at'],
@@ -8,7 +10,7 @@ const shapeNote = createShaper({
 export async function findCaseNotes(homeId, caseType, caseId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_case_notes WHERE home_id = $1 AND case_type = $2 AND case_id = $3 ORDER BY created_at DESC',
+    `SELECT ${COLS} FROM hr_case_notes WHERE home_id = $1 AND case_type = $2 AND case_id = $3 ORDER BY created_at DESC`,
     [homeId, caseType, caseId]
   );
   return rows.map(shapeNote);

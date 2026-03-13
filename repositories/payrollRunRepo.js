@@ -2,6 +2,25 @@ import { pool } from '../db.js';
 
 // ── payroll_runs ──────────────────────────────────────────────────────────────
 
+const RUN_COLS = `id, home_id, period_start, period_end, pay_frequency, status,
+  total_gross, total_enhancements, total_sleep_ins, staff_count,
+  calculated_at, approved_by, approved_at, exported_at, export_format,
+  ytd_applied, notes, version, created_at, updated_at`;
+
+const LINE_COLS = `id, payroll_run_id, staff_id,
+  base_hours, base_pay, night_hours, night_enhancement,
+  weekend_hours, weekend_enhancement, bank_holiday_hours, bank_holiday_enhancement,
+  overtime_hours, overtime_enhancement, sleep_in_count, sleep_in_pay,
+  on_call_hours, on_call_enhancement, total_hours, total_enhancements, gross_pay,
+  nmw_compliant, nmw_lowest_rate, tax_code, student_loan_plan, notes,
+  holiday_days, holiday_pay, holiday_daily_rate,
+  ssp_days, ssp_amount, enhanced_sick_amount,
+  pension_employee, pension_employer, tax_deducted,
+  employee_ni, employer_ni, student_loan, other_deductions, net_pay`;
+
+const LINE_SHIFT_COLS = `id, payroll_line_id, date, shift_code, hours,
+  base_rate, base_amount, enhancements_json, total_amount, effective_hourly_rate`;
+
 function shapeRun(row) {
   const toDate = (v) => v
     ? (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10))
@@ -34,7 +53,7 @@ function shapeRun(row) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total
+    `SELECT ${RUN_COLS}, COUNT(*) OVER() AS _total
      FROM payroll_runs WHERE home_id = $1
      ORDER BY period_start DESC
      LIMIT $2 OFFSET $3`,
@@ -47,7 +66,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 export async function findById(runId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM payroll_runs WHERE id = $1 AND home_id = $2`,
+    `SELECT ${RUN_COLS} FROM payroll_runs WHERE id = $1 AND home_id = $2`,
     [runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
@@ -57,7 +76,7 @@ export async function findById(runId, homeId, client) {
 export async function findByIdForUpdate(runId, homeId, client) {
   if (!client) throw new Error('findByIdForUpdate requires a transaction client');
   const { rows } = await client.query(
-    `SELECT * FROM payroll_runs WHERE id = $1 AND home_id = $2 FOR UPDATE`,
+    `SELECT ${RUN_COLS} FROM payroll_runs WHERE id = $1 AND home_id = $2 FOR UPDATE`,
     [runId, homeId],
   );
   return rows.length > 0 ? shapeRun(rows[0]) : null;
@@ -199,7 +218,7 @@ function shapeLine(row) {
 export async function findLinesByRun(runId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT pl.* FROM payroll_lines pl
+    `SELECT ${LINE_COLS.split(',').map(c => `pl.${c.trim()}`).join(', ')} FROM payroll_lines pl
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pl.payroll_run_id = $1 AND pr.home_id = $2
      ORDER BY pl.staff_id`,
@@ -346,7 +365,7 @@ export async function createLineShift(lineId, shift, client) {
 
 export async function findShiftsByLine(lineId, homeId) {
   const { rows } = await pool.query(
-    `SELECT pls.* FROM payroll_line_shifts pls
+    `SELECT ${LINE_SHIFT_COLS.split(',').map(c => `pls.${c.trim()}`).join(', ')} FROM payroll_line_shifts pls
      JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pls.payroll_line_id = $1 AND pr.home_id = $2
@@ -359,7 +378,7 @@ export async function findShiftsByLine(lineId, homeId) {
 /** Find all shift detail rows for a full run (used for payslip generation). */
 export async function findShiftsByRun(runId, homeId) {
   const { rows } = await pool.query(
-    `SELECT pls.*, pl.staff_id
+    `SELECT ${LINE_SHIFT_COLS.split(',').map(c => `pls.${c.trim()}`).join(', ')}, pl.staff_id
      FROM payroll_line_shifts pls
      JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id

@@ -1,5 +1,11 @@
 import { pool, toDateStr } from '../db.js';
 
+const COLS = `id, home_id, tax_year, tax_month, period_start, period_end,
+  total_paye, total_employee_ni, total_employer_ni,
+  employment_allowance_offset, total_due, payment_due_date,
+  status, paid_date, paid_reference,
+  created_at, updated_at`;
+
 function f(v) { return v != null ? parseFloat(v) : null; }
 
 function shapeRow(row) {
@@ -73,7 +79,7 @@ export async function markPaid(id, homeId, paidDate, paidReference, client) {
 
 export async function listLiabilities(homeId, taxYear) {
   const { rows } = await pool.query(
-    `SELECT * FROM hmrc_liabilities
+    `SELECT ${COLS} FROM hmrc_liabilities
      WHERE home_id = $1 AND tax_year = $2
      ORDER BY tax_month`,
     [homeId, taxYear]

@@ -1,5 +1,14 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, record_type, staff_id,
+  complaint_date, harassment_category, third_party, third_party_type,
+  respondent_type, respondent_staff_id, respondent_name,
+  handling_route, linked_case_id, reasonable_steps_evidence,
+  condition_description, adjustments, oh_referral_id,
+  access_to_work_applied, access_to_work_reference, access_to_work_amount,
+  description, status, outcome, notes,
+  created_at, updated_at, deleted_at, version`;
+
 const shapeEdi = createShaper({
   fields: [
     'id', 'home_id', 'record_type', 'staff_id',
@@ -19,7 +28,7 @@ const shapeEdi = createShaper({
 
 export async function findEdi(homeId, { recordType, staffId } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_edi_records WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_edi_records WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (recordType) { params.push(recordType); sql += ` AND record_type = $${params.length}`; }
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
@@ -29,7 +38,7 @@ export async function findEdi(homeId, { recordType, staffId } = {}, client, pag)
 export async function findEdiById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_edi_records WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_edi_records WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeEdi(rows[0]);
 }
 

@@ -1,5 +1,22 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id, date_raised, raised_by_method,
+  category, protected_characteristic, subject_summary, subject_detail, desired_outcome,
+  acknowledged_date, acknowledge_deadline, acknowledged_by,
+  investigation_status, investigation_officer, investigation_start_date, investigation_notes,
+  witnesses, evidence_items, investigation_completed_date, investigation_findings,
+  hearing_status, hearing_date, hearing_time, hearing_location,
+  hearing_chair, hearing_letter_sent_date, hearing_companion_name, hearing_companion_role,
+  hearing_notes, employee_statement_at_hearing,
+  outcome, outcome_date, outcome_reason, outcome_letter_sent_date,
+  mediation_offered, mediation_accepted, mediator_name,
+  appeal_status, appeal_received_date, appeal_deadline, appeal_grounds,
+  appeal_hearing_date, appeal_hearing_chair,
+  appeal_outcome, appeal_outcome_date, appeal_outcome_reason, appeal_outcome_letter_sent_date,
+  linked_disciplinary_id, triggers_disciplinary,
+  status, confidential, closed_date, closed_reason,
+  created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeGrv = createShaper({
   fields: [
     'id', 'home_id', 'staff_id', 'date_raised', 'raised_by_method',
@@ -32,7 +49,7 @@ const shapeGrv = createShaper({
 
 export async function findGrievance(homeId, { staffId, status } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_grievance_cases WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
@@ -42,7 +59,7 @@ export async function findGrievance(homeId, { staffId, status } = {}, client, pa
 export async function findGrievanceById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_grievance_cases WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_grievance_cases WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeGrv(rows[0]);
 }
 
@@ -105,6 +122,8 @@ export async function updateGrievance(id, homeId, data, client, version) {
 
 // ── Grievance Actions ───────────────────────────────────────────────────────
 
+const ACTION_COLS = 'id, home_id, grievance_id, description, responsible, due_date, completed_date, status, created_at';
+
 const shapeGrvAction = createShaper({
   fields: ['id', 'home_id', 'grievance_id', 'description', 'responsible', 'due_date', 'completed_date', 'status', 'created_at'],
   dates: ['due_date', 'completed_date'],
@@ -114,7 +133,7 @@ const shapeGrvAction = createShaper({
 export async function findGrievanceActions(grievanceId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_grievance_actions WHERE grievance_id = $1 AND home_id = $2 ORDER BY created_at',
+    `SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE grievance_id = $1 AND home_id = $2 ORDER BY created_at`,
     [grievanceId, homeId]);
   return rows.map(shapeGrvAction);
 }
@@ -138,7 +157,7 @@ export async function updateGrievanceAction(id, homeId, data, client) {
   for (const key of settable) {
     if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
-  if (fields.length === 0) return shapeGrvAction((await conn.query('SELECT * FROM hr_grievance_actions WHERE id = $1 AND home_id = $2', [id, homeId])).rows[0]);
+  if (fields.length === 0) return shapeGrvAction((await conn.query(`SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE id = $1 AND home_id = $2`, [id, homeId])).rows[0]);
   const { rows } = await conn.query(
     `UPDATE hr_grievance_actions SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING *`,
     params

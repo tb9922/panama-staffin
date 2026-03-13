@@ -1,5 +1,11 @@
 import { pool, createShaper, paginate } from './shared.js';
 
+const COLS = `id, home_id, staff_id, check_type,
+  dbs_certificate_number, dbs_disclosure_level, dbs_check_date, dbs_next_renewal_due,
+  dbs_update_service_registered, dbs_update_service_last_checked, dbs_barred_list_check,
+  rtw_document_type, rtw_check_date, rtw_document_expiry, rtw_next_check_due,
+  status, checked_by, notes, created_by, created_at, updated_at, deleted_at, version`;
+
 const shapeRenewal = createShaper({
   fields: [
     'id', 'home_id', 'staff_id', 'check_type',
@@ -20,7 +26,7 @@ const shapeRenewal = createShaper({
 
 export async function findRenewals(homeId, { staffId, checkType, status } = {}, client, pag) {
   const conn = client || pool;
-  let sql = 'SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND deleted_at IS NULL';
+  let sql = `SELECT ${COLS} FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND deleted_at IS NULL`;
   const params = [homeId];
   if (staffId) { params.push(staffId); sql += ` AND staff_id = $${params.length}`; }
   if (checkType) { params.push(checkType); sql += ` AND check_type = $${params.length}`; }
@@ -31,7 +37,7 @@ export async function findRenewals(homeId, { staffId, checkType, status } = {}, 
 export async function findRenewalById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM hr_rtw_dbs_renewals WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL', [id, homeId]);
+    `SELECT ${COLS} FROM hr_rtw_dbs_renewals WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
   return shapeRenewal(rows[0]);
 }
 

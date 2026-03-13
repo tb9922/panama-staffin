@@ -2,6 +2,11 @@ import { pool, withTransaction } from '../db.js';
 
 // ── pay_rate_rules ────────────────────────────────────────────────────────────
 
+const RULE_COLS = `id, home_id, name, rate_type, amount, applies_to, priority,
+  effective_from, effective_to, created_at, updated_at`;
+
+const NMW_COLS = 'id, effective_from, age_bracket, hourly_rate';
+
 function shapeRule(row) {
   return {
     id: row.id,
@@ -27,7 +32,7 @@ function shapeRule(row) {
 /** Returns all currently active rules for a home (effective_to IS NULL). */
 export async function findActiveByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT * FROM pay_rate_rules
+    `SELECT ${RULE_COLS} FROM pay_rate_rules
      WHERE home_id = $1 AND effective_to IS NULL
      ORDER BY applies_to, priority`,
     [homeId],
@@ -42,7 +47,7 @@ export async function findActiveByHome(homeId) {
 export async function findForPeriod(homeId, periodStart, periodEnd, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM pay_rate_rules
+    `SELECT ${RULE_COLS} FROM pay_rate_rules
      WHERE home_id = $1
        AND effective_from <= $2
        AND (effective_to IS NULL OR effective_to >= $3)
@@ -136,7 +141,7 @@ function shapeNmw(row) {
 export async function getAllNmwRates(client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM nmw_rates ORDER BY age_bracket, effective_from DESC`,
+    `SELECT ${NMW_COLS} FROM nmw_rates ORDER BY age_bracket, effective_from DESC`,
   );
   return rows.map(shapeNmw);
 }

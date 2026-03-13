@@ -1,5 +1,7 @@
 import { pool } from '../db.js';
 
+const EVIDENCE_COLS = 'id, home_id, version, quality_statement, type, title, description, date_from, date_to, added_by, added_at, created_at, deleted_at';
+
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -16,7 +18,7 @@ function paginate(rows, shapeFn) {
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total FROM cqc_evidence
+    `SELECT ${EVIDENCE_COLS}, COUNT(*) OVER() AS _total FROM cqc_evidence
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY added_at DESC NULLS LAST
      LIMIT $2 OFFSET $3`,
@@ -78,7 +80,7 @@ import { randomUUID } from 'crypto';
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM cqc_evidence WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
+    `SELECT ${EVIDENCE_COLS} FROM cqc_evidence WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;

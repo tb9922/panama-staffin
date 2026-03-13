@@ -1,5 +1,9 @@
 import { pool } from '../db.js';
 
+// ── Column lists ────────────────────────────────────────────────────────────
+const PROVIDER_COLS = 'id, home_id, name, contact, rate_day, rate_night, active, created_at';
+const SHIFT_COLS = 'id, home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, worker_name, invoice_ref, reconciled, role_covered, created_at';
+
 // ── agency_providers ──────────────────────────────────────────────────────────
 
 function shapeProvider(row) {
@@ -17,7 +21,7 @@ function shapeProvider(row) {
 
 export async function findProvidersByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT * FROM agency_providers WHERE home_id = $1 ORDER BY name`,
+    `SELECT ${PROVIDER_COLS} FROM agency_providers WHERE home_id = $1 ORDER BY name`,
     [homeId],
   );
   return rows.map(shapeProvider);
@@ -25,7 +29,7 @@ export async function findProvidersByHome(homeId) {
 
 export async function findProviderById(id, homeId) {
   const { rows } = await pool.query(
-    `SELECT * FROM agency_providers WHERE id = $1 AND home_id = $2`,
+    `SELECT ${PROVIDER_COLS} FROM agency_providers WHERE id = $1 AND home_id = $2`,
     [id, homeId],
   );
   return rows.length > 0 ? shapeProvider(rows[0]) : null;
@@ -79,7 +83,10 @@ function shapeShift(row) {
 
 export async function findShiftsByHomePeriod(homeId, start, end) {
   const { rows } = await pool.query(
-    `SELECT s.*, p.name AS agency_name
+    `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
+            s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
+            s.reconciled, s.role_covered, s.created_at,
+            p.name AS agency_name
      FROM agency_shifts s
      JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
      WHERE s.home_id = $1 AND s.date >= $2 AND s.date <= $3
@@ -111,7 +118,10 @@ export async function createShift(homeId, shift, client) {
 export async function findShiftById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT s.*, p.name AS agency_name
+    `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
+            s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
+            s.reconciled, s.role_covered, s.created_at,
+            p.name AS agency_name
      FROM agency_shifts s
      JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
      WHERE s.id = $1 AND s.home_id = $2`,

@@ -2,6 +2,23 @@ import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
+const TAX_CODE_COLS = `id, home_id, staff_id, tax_code, basis, ni_category,
+  effective_from, previous_pay, previous_tax, student_loan_plan,
+  source, notes, created_at, updated_at`;
+
+const TAX_BAND_COLS = 'id, country, tax_year, band_name, lower_limit, upper_limit, rate';
+
+const NI_THRESHOLD_COLS = 'id, tax_year, threshold_name, weekly_amount, monthly_amount, annual_amount';
+
+const NI_RATE_COLS = 'id, tax_year, ni_category, rate_type, rate';
+
+const STUDENT_LOAN_COLS = 'id, tax_year, plan, annual_threshold, rate';
+
+const YTD_COLS = `id, home_id, staff_id, tax_year,
+  gross_pay, taxable_pay, tax_deducted, employee_ni, employer_ni,
+  student_loan, pension_employee, pension_employer,
+  holiday_pay, ssp_amount, net_pay, updated_at`;
+
 // ─── Tax Codes ────────────────────────────────────────────────────────────────
 
 /**
@@ -11,7 +28,7 @@ function f(v) { return v != null ? parseFloat(v) : null; }
 export async function getTaxCodeForStaff(homeId, staffId, asOfDate, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM tax_codes
+    `SELECT ${TAX_CODE_COLS} FROM tax_codes
      WHERE home_id = $1 AND staff_id = $2 AND effective_from <= $3
      ORDER BY effective_from DESC
      LIMIT 1`,
@@ -28,7 +45,7 @@ export async function getTaxCodeBatch(homeId, staffIds, asOfDate, client) {
   if (!staffIds.length) return new Map();
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT DISTINCT ON (staff_id) *
+    `SELECT DISTINCT ON (staff_id) ${TAX_CODE_COLS}
      FROM tax_codes
      WHERE home_id = $1 AND staff_id = ANY($2) AND effective_from <= $3
      ORDER BY staff_id, effective_from DESC`,
@@ -39,8 +56,8 @@ export async function getTaxCodeBatch(homeId, staffIds, asOfDate, client) {
 
 export async function listTaxCodesByHome(homeId) {
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (staff_id)
-       tc.*
+    `SELECT DISTINCT ON (tc.staff_id)
+       ${TAX_CODE_COLS.split(',').map(c => `tc.${c.trim()}`).join(', ')}
      FROM tax_codes tc
      WHERE tc.home_id = $1
      ORDER BY tc.staff_id, tc.effective_from DESC`,
@@ -106,7 +123,7 @@ function shapeCode(row) {
 export async function getTaxBands(country, taxYear, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM tax_bands
+    `SELECT ${TAX_BAND_COLS} FROM tax_bands
      WHERE country = $1 AND tax_year = $2
      ORDER BY lower_limit`,
     [country, taxYear]
@@ -124,7 +141,7 @@ export async function getTaxBands(country, taxYear, client) {
 export async function getNIThresholds(taxYear, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM ni_thresholds WHERE tax_year = $1',
+    `SELECT ${NI_THRESHOLD_COLS} FROM ni_thresholds WHERE tax_year = $1`,
     [taxYear]
   );
   return rows.map(r => ({
@@ -138,7 +155,7 @@ export async function getNIThresholds(taxYear, client) {
 export async function getNIRates(taxYear, niCategory, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM ni_rates WHERE tax_year = $1 AND ni_category = $2',
+    `SELECT ${NI_RATE_COLS} FROM ni_rates WHERE tax_year = $1 AND ni_category = $2`,
     [taxYear, niCategory]
   );
   return rows.map(r => ({
@@ -152,7 +169,7 @@ export async function getNIRates(taxYear, niCategory, client) {
 export async function getStudentLoanThresholds(taxYear, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM student_loan_thresholds WHERE tax_year = $1',
+    `SELECT ${STUDENT_LOAN_COLS} FROM student_loan_thresholds WHERE tax_year = $1`,
     [taxYear]
   );
   return rows.map(r => ({
@@ -171,7 +188,7 @@ export async function getStudentLoanThresholds(taxYear, client) {
 export async function getYTD(homeId, staffId, taxYear, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM payroll_ytd
+    `SELECT ${YTD_COLS} FROM payroll_ytd
      WHERE home_id = $1 AND staff_id = $2 AND tax_year = $3`,
     [homeId, staffId, taxYear]
   );
@@ -229,7 +246,7 @@ export async function getYTDBatch(homeId, staffIds, taxYear, client) {
   if (!staffIds.length) return new Map();
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM payroll_ytd
+    `SELECT ${YTD_COLS} FROM payroll_ytd
      WHERE home_id = $1 AND staff_id = ANY($2) AND tax_year = $3`,
     [homeId, staffIds, taxYear]
   );

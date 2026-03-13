@@ -2,6 +2,16 @@ import { pool, toDateStr } from '../db.js';
 
 function f(v) { return v != null ? parseFloat(v) : null; }
 
+const CONFIG_COLS = `id, effective_from, lower_qualifying_weekly, upper_qualifying_weekly,
+  trigger_annual, employee_rate, employer_rate, state_pension_age`;
+
+const ENROLMENT_COLS = `id, home_id, staff_id, status,
+  enrolled_date, opted_out_date, postponed_until, reassessment_date,
+  notes, updated_at`;
+
+const CONTRIBUTION_COLS = `id, home_id, payroll_line_id, staff_id,
+  qualifying_pay, employee_amount, employer_amount`;
+
 // ─── Pension Config ───────────────────────────────────────────────────────────
 
 /**
@@ -10,7 +20,7 @@ function f(v) { return v != null ? parseFloat(v) : null; }
 export async function getPensionConfig(payDate, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT * FROM pension_config
+    `SELECT ${CONFIG_COLS} FROM pension_config
      WHERE effective_from <= $1
      ORDER BY effective_from DESC
      LIMIT 1`,
@@ -37,7 +47,7 @@ function shapeConfig(row) {
 export async function getEnrolment(homeId, staffId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2',
+    `SELECT ${ENROLMENT_COLS} FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`,
     [homeId, staffId]
   );
   return rows[0] ? shapeEnrolment(rows[0]) : null;
@@ -47,7 +57,7 @@ export async function getEnrolmentBatch(homeId, staffIds, client) {
   if (!staffIds.length) return new Map();
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = ANY($2)',
+    `SELECT ${ENROLMENT_COLS} FROM pension_enrolments WHERE home_id = $1 AND staff_id = ANY($2)`,
     [homeId, staffIds]
   );
   return new Map(rows.map(r => [r.staff_id, shapeEnrolment(r)]));
@@ -55,7 +65,7 @@ export async function getEnrolmentBatch(homeId, staffIds, client) {
 
 export async function listEnrolmentsByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT * FROM pension_enrolments WHERE home_id = $1 ORDER BY staff_id',
+    `SELECT ${ENROLMENT_COLS} FROM pension_enrolments WHERE home_id = $1 ORDER BY staff_id`,
     [homeId]
   );
   return rows.map(shapeEnrolment);
@@ -137,7 +147,7 @@ export async function insertContribution(homeId, data, client) {
 export async function getContributionsByRun(homeId, runId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT pc.*
+    `SELECT ${CONTRIBUTION_COLS.split(',').map(c => `pc.${c.trim()}`).join(', ')}
      FROM pension_contributions pc
      JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
