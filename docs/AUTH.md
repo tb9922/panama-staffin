@@ -61,7 +61,7 @@ The login response includes the JWT in the response body for API clients. Use th
 }
 ```
 
-- `role`: `"admin"` (read/write) or `"viewer"` (read-only)
+- `role`: `"admin"` or `"viewer"` — legacy global role. Actual permissions are determined by per-home role (see below)
 - `is_platform_admin`: `true` for users who can manage homes and users across the platform
 - `jti`: Unique token ID used for deny-list revocation
 - Token expires after 4 hours
@@ -103,11 +103,15 @@ The login response includes the JWT in the response body for API clients. Use th
 | `requireAuth` | Validates JWT, checks deny list, enforces CSRF | 401/403 |
 | `requireAdmin` | Checks `role === 'admin'` | 403 |
 | `requirePlatformAdmin` | Checks `role === 'admin'` AND `is_platform_admin === true` | 403 |
-| `requireHomeAccess` | Validates `?home=` param, checks user has access to that home, resolves `req.homeRole` + `req.staffId` | 400/403/404 |
-| `requireModule(moduleId, level)` | Per-home RBAC module gating — checks user's home role has access to module at given level ('read' or 'write'). Replaces `requireAdmin` on most routes | 403 |
-| `requireHomeManager` | Gates user management — requires a role where `canManageUsers === true` (currently only `home_manager`) | 403 |
+| `requireHomeAccess` | Validates `?home=` param, resolves per-home role from `user_home_roles` into `req.homeRole` and `req.staffId` | 400/403/404 |
+| `requireModule(moduleId, level)` | Checks per-home role has access to module at given level (`read` or `write`) | 403 |
+| `requireHomeManager` | Checks `req.homeRole === 'home_manager'` (user management within a home) | 403 |
 
-All middleware is defined in `middleware/auth.js`. `requireHomeAccess` must be used after `requireAuth` (it needs `req.user`). Platform admins (`is_platform_admin === true`) bypass all module checks.
+All middleware is defined in `middleware/auth.js`. `requireHomeAccess` must be used after `requireAuth` (it needs `req.user`). `requireModule` must be used after `requireHomeAccess` (it needs `req.homeRole`).
+
+## Per-Home RBAC
+
+Each user has a **per-home role** assigned via the `user_home_roles` table. Roles are defined in `shared/roles.js` (8 roles, 10 modules). The JWT `role` field is a legacy global role — actual permissions are resolved per-home by `requireHomeAccess`. Platform admins (`is_platform_admin`) bypass all module checks.
 
 ## Security Properties
 

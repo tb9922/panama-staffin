@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { readRateLimiter } from '../lib/rateLimiter.js';
 import { requireAuth, requireHomeAccess } from '../middleware/auth.js';
+import { readRateLimiter } from '../lib/rateLimiter.js';
 import * as dashboardService from '../services/dashboardService.js';
 
 const router = Router();

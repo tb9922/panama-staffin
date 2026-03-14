@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
-import { perUserKey } from '../lib/rateLimiter.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
@@ -63,16 +62,7 @@ function detectCriticalErrors(body) {
 
 const router = Router();
 
-const saveLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  keyGenerator: perUserKey,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many save requests — try again in 15 minutes' },
-});
-
-router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
   try {
     const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
     const data = await homeService.assembleData(req.home.slug, effectiveRole);
@@ -82,7 +72,7 @@ router.get('/', requireAuth, requireHomeAccess, async (req, res, next) => {
   }
 });
 
-router.post('/', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), saveLimiter, async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = dataBodySchema.safeParse(req.body);
     if (!parsed.success) {
