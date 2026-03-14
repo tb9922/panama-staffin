@@ -33,6 +33,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
         hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
         onboarding, careCertificates, complaints, incidentAddenda,
+        payrollYtd, hrMeetings, hrAttachments,
       ] = await Promise.all([
         conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -110,6 +111,24 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               `SELECT * FROM incident_addenda WHERE home_id = $1 AND author = $2 ORDER BY created_at ASC`,
               [homeId, staffName])
           : { rows: [] },
+        // Payroll year-to-date accumulations
+        conn.query(`SELECT * FROM payroll_ytd WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        // HR investigation meetings (linked via case tables)
+        conn.query(
+          `SELECT m.* FROM hr_investigation_meetings m
+           WHERE m.home_id = $1 AND (
+             (m.case_type = 'disciplinary' AND m.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (m.case_type = 'grievance' AND m.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (m.case_type = 'performance' AND m.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
+           )`, [homeId, subjectId]),
+        // HR file attachments (linked via case tables)
+        conn.query(
+          `SELECT a.* FROM hr_file_attachments a
+           WHERE a.home_id = $1 AND (
+             (a.case_type = 'disciplinary' AND a.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
+           )`, [homeId, subjectId]),
       ]);
 
       return {
@@ -151,6 +170,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           care_certificates: careCertificates.rows,
           complaints: complaints.rows,
           incident_addenda: incidentAddenda.rows,
+          payroll_ytd: payrollYtd.rows,
+          hr_investigation_meetings: hrMeetings.rows,
+          hr_file_attachments: hrAttachments.rows,
         },
       };
     }
@@ -400,6 +422,26 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
     await client.query(
       `UPDATE shift_overrides SET reason = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+
+    // Redact audit_log entries containing this staff member's name in details.
+    // audit_log.details is TEXT (not JSONB) — replace name references.
+    if (originalName) {
+      await client.query(
+        `UPDATE audit_log SET details = REPLACE(details, $1, $2)
+         WHERE details LIKE '%' || $1 || '%'`,
+        [originalName, anon]
+      );
+    }
+
+    // Clear webhook delivery payloads that may reference this staff member.
+    // payload is JSONB — cast to TEXT for LIKE matching.
+    await client.query(
+      `UPDATE webhook_deliveries SET payload = '"[REDACTED]"'::jsonb
+       FROM webhooks w
+       WHERE w.id = webhook_deliveries.webhook_id AND w.home_id = $1
+         AND webhook_deliveries.payload::text LIKE '%' || $2 || '%'`,
       [homeId, staffId]
     );
 

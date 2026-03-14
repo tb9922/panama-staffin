@@ -53,7 +53,7 @@ const surveyUpdateSchema = surveyBodySchema.partial().extend({
 });
 
 // GET /api/complaints?home=X
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [complaintsResult, surveysResult] = await Promise.all([

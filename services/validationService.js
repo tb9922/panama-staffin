@@ -355,7 +355,7 @@ function validateCareCertificate(data, warnings) {
   for (const cc of Object.values(data.care_certificate)) {
     if (cc.status === 'completed') continue;
     if (cc.start_date) {
-      const weeks = Math.floor((now - new Date(cc.start_date + 'T00:00:00')) / (7 * 86400000));
+      const weeks = Math.floor((now - new Date(cc.start_date + 'T00:00:00Z')) / (7 * 86400000));
       if (weeks > 12) overdue++;
     }
   }

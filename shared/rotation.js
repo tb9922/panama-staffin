@@ -47,13 +47,13 @@ export const SHIFT_COLORS = {
   'BH-N': 'bg-pink-100 text-pink-700 border border-pink-200',
 };
 
-// Date utilities — use local-time getters so both local-midnight and UTC-midnight
-// Date objects resolve to the correct calendar day in UK timezones (GMT/BST).
+// Date utilities — all use UTC to avoid timezone-dependent results.
+// parseDate creates UTC midnight, addDays uses setUTCDate, formatDate uses getUTC*.
 export function formatDate(date) {
   const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -73,8 +73,8 @@ export function getCycleDay(date, cycleStartDate) {
   const d = new Date(date);
   const start = new Date(cycleStartDate);
   // Use UTC to avoid DST off-by-one (BST spring-forward shifts midnight local → 23:00 UTC)
-  const dUTC = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
-  const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const diffDays = Math.round((dUTC - startUTC) / (1000 * 60 * 60 * 24));
   return ((diffDays % 14) + 14) % 14;
 }

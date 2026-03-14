@@ -551,7 +551,7 @@ export async function getExpensesByCategory(homeId, from, to, client) {
      FROM finance_expenses
      WHERE home_id = $1 AND deleted_at IS NULL
        AND expense_date >= $2 AND expense_date <= $3
-       AND status != 'void'
+       AND status NOT IN ('void', 'rejected')
      GROUP BY category ORDER BY total DESC`,
     [homeId, from, to]);
   return rows.map(r => ({ category: r.category, total: f(r.total), count: r.count }));
