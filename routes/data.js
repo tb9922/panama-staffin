@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { perUserKey } from '../lib/rateLimiter.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
@@ -65,6 +66,7 @@ const router = Router();
 const saveLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
+  keyGenerator: perUserKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many save requests — try again in 15 minutes' },

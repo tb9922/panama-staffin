@@ -83,7 +83,7 @@ The login response includes the JWT in the response body for API clients. Use th
 
 ## Rate Limiting
 
-- **Login endpoint:** 10 attempts per 15-minute window per IP
+- **Login endpoint:** 30 attempts per 15-minute window per IP+username (per-user keying prevents one user's failures from blocking others at the same care home)
 - **Disabled in test environment** (set to 1000 to avoid test interference)
 - Returns `429 Too Many Requests` with message: "Too many login attempts — try again in 15 minutes"
 
@@ -103,9 +103,11 @@ The login response includes the JWT in the response body for API clients. Use th
 | `requireAuth` | Validates JWT, checks deny list, enforces CSRF | 401/403 |
 | `requireAdmin` | Checks `role === 'admin'` | 403 |
 | `requirePlatformAdmin` | Checks `role === 'admin'` AND `is_platform_admin === true` | 403 |
-| `requireHomeAccess` | Validates `?home=` param, checks user has access to that home | 400/403/404 |
+| `requireHomeAccess` | Validates `?home=` param, checks user has access to that home, resolves `req.homeRole` + `req.staffId` | 400/403/404 |
+| `requireModule(moduleId, level)` | Per-home RBAC module gating — checks user's home role has access to module at given level ('read' or 'write'). Replaces `requireAdmin` on most routes | 403 |
+| `requireHomeManager` | Gates user management — requires a role where `canManageUsers === true` (currently only `home_manager`) | 403 |
 
-All middleware is defined in `middleware/auth.js`. `requireHomeAccess` must be used after `requireAuth` (it needs `req.user`).
+All middleware is defined in `middleware/auth.js`. `requireHomeAccess` must be used after `requireAuth` (it needs `req.user`). Platform admins (`is_platform_admin === true`) bypass all module checks.
 
 ## Security Properties
 
