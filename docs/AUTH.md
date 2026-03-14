@@ -83,7 +83,7 @@ The login response includes the JWT in the response body for API clients. Use th
 
 ## Rate Limiting
 
-- **Login endpoint:** 10 attempts per 15-minute window per IP
+- **Login endpoint:** 30 attempts per 15-minute window per IP+username (per-user keying prevents one user's failures from blocking others at the same care home)
 - **Disabled in test environment** (set to 1000 to avoid test interference)
 - Returns `429 Too Many Requests` with message: "Too many login attempts — try again in 15 minutes"
 
