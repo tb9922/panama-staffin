@@ -59,9 +59,9 @@ const MOCK_ENROLMENTS = [
   {
     staff_id: 'S001',
     status: 'eligible_enrolled',
-    enrolment_date: '2024-01-01',
+    enrolled_date: '2024-01-01',
     opt_out_date: null,
-    re_enrolment_date: null,
+    re_enrolled_date: null,
     contribution_override_employee: null,
     contribution_override_employer: null,
     notes: '',
@@ -69,9 +69,9 @@ const MOCK_ENROLMENTS = [
   {
     staff_id: 'S002',
     status: 'opted_out',
-    enrolment_date: '2024-01-01',
+    enrolled_date: '2024-01-01',
     opt_out_date: '2024-06-01',
-    re_enrolment_date: '2027-06-01',
+    re_enrolled_date: '2027-06-01',
     contribution_override_employee: null,
     contribution_override_employer: null,
     notes: 'Opted out by written notice',

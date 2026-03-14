@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import { config } from '../config.js';
 import * as authService from '../services/authService.js';
@@ -12,7 +12,14 @@ const router = Router();
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: config.nodeEnv === 'test' ? 1000 : 10,
+  // 30 per IP+username prevents whole-home lockout (care homes share one IP).
+  // Pre-auth: key by IP + submitted username so one user's typos don't block others.
+  max: config.nodeEnv === 'test' ? 1000 : 30,
+  keyGenerator: (req) => {
+    const ip = ipKeyGenerator(req);
+    const username = req.body?.username || '';
+    return `login:${ip}:${username}`;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts — try again in 15 minutes' },

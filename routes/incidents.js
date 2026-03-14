@@ -78,7 +78,7 @@ const incidentUpdateSchema = incidentBodySchema.partial().extend({
 });
 
 // GET /api/incidents?home=X
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const [incidentsResult, staffResult] = await Promise.all([
@@ -116,8 +116,11 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
-    await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident?.id });
-    if (incident?.id) dispatchEvent(req.home.id, 'incident.created', { incidentId: incident.id, severity: parsed.data.severity, type: parsed.data.type });
+    if (!incident) {
+      return res.status(409).json({ error: 'Incident is frozen and cannot be modified' });
+    }
+    await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident.id });
+    dispatchEvent(req.home.id, 'incident.created', { incidentId: incident.id, severity: parsed.data.severity, type: parsed.data.type });
     res.status(201).json(incident);
   } catch (err) { next(err); }
 });
@@ -172,7 +175,7 @@ router.post('/:id/freeze', writeRateLimiter, requireAuth, requireHomeAccess, req
 });
 
 // GET /api/incidents/:id/addenda?home=X
-router.get('/:id/addenda', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/:id/addenda', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const idParsed = incidentIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid incident ID' });

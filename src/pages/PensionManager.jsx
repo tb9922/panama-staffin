@@ -34,7 +34,7 @@ const STATUSES = [
 
 const EMPTY_FORM = {
   staff_id: '', status: 'pending_assessment',
-  enrolment_date: '', opt_out_date: '', re_enrolment_date: '',
+  enrolled_date: '', opt_out_date: '', re_enrolled_date: '',
   contribution_override_employee: '', contribution_override_employer: '',
   notes: '',
 };
@@ -116,9 +116,9 @@ export default function PensionManager() {
     setForm({
       staff_id:                       enr.staff_id,
       status:                         enr.status,
-      enrolment_date:                 enr.enrolment_date || '',
+      enrolled_date:                 enr.enrolled_date || '',
       opt_out_date:                   enr.opt_out_date || '',
-      re_enrolment_date:              enr.re_enrolment_date || '',
+      re_enrolled_date:              enr.re_enrolled_date || '',
       contribution_override_employee: enr.contribution_override_employee != null
         ? String(enr.contribution_override_employee * 100) : '',
       contribution_override_employer: enr.contribution_override_employer != null
@@ -142,9 +142,9 @@ export default function PensionManager() {
           ? parseFloat(form.contribution_override_employee) / 100 : null,
         contribution_override_employer: form.contribution_override_employer !== ''
           ? parseFloat(form.contribution_override_employer) / 100 : null,
-        enrolment_date:    form.enrolment_date    || null,
+        enrolled_date:    form.enrolled_date    || null,
         opt_out_date:      form.opt_out_date      || null,
-        re_enrolment_date: form.re_enrolment_date || null,
+        re_enrolled_date: form.re_enrolled_date || null,
       });
       setShowModal(false);
       await load();
@@ -242,8 +242,8 @@ export default function PensionManager() {
             )}
             {enrolments.map(enr => {
               const staff = staffMap[enr.staff_id];
-              const reEnrolmentWarning = enr.re_enrolment_date &&
-                new Date(enr.re_enrolment_date) <= new Date(Date.now() + 30 * 86400 * 1000);
+              const reEnrolmentWarning = enr.re_enrolled_date &&
+                new Date(enr.re_enrolled_date) <= new Date(Date.now() + 30 * 86400 * 1000);
               const eeRate = enr.contribution_override_employee != null
                 ? fmtPct(enr.contribution_override_employee)
                 : config ? fmtPct(config.employee_rate) : '—';
@@ -261,12 +261,12 @@ export default function PensionManager() {
                       {STATUS_LABEL[enr.status] || enr.status}
                     </span>
                   </td>
-                  <td className={TABLE.td}>{enr.enrolment_date || <span className="text-gray-400">—</span>}</td>
+                  <td className={TABLE.td}>{enr.enrolled_date || <span className="text-gray-400">—</span>}</td>
                   <td className={TABLE.td}>{enr.opt_out_date || <span className="text-gray-400">—</span>}</td>
                   <td className={TABLE.td}>
-                    {enr.re_enrolment_date ? (
+                    {enr.re_enrolled_date ? (
                       <span className={reEnrolmentWarning ? 'text-amber-700 font-medium' : ''}>
-                        {enr.re_enrolment_date}
+                        {enr.re_enrolled_date}
                         {reEnrolmentWarning && ' ⚠'}
                       </span>
                     ) : (
@@ -380,8 +380,8 @@ export default function PensionManager() {
             <div>
               <label className={INPUT.label}>Enrolment Date</label>
               <input type="date" className={INPUT.base}
-                value={form.enrolment_date}
-                onChange={e => field('enrolment_date', e.target.value)} />
+                value={form.enrolled_date}
+                onChange={e => field('enrolled_date', e.target.value)} />
             </div>
             <div>
               <label className={INPUT.label}>Opt-Out Date</label>
@@ -394,8 +394,8 @@ export default function PensionManager() {
           <div>
             <label className={INPUT.label}>Re-enrolment Date</label>
             <input type="date" className={INPUT.base}
-              value={form.re_enrolment_date}
-              onChange={e => field('re_enrolment_date', e.target.value)} />
+              value={form.re_enrolled_date}
+              onChange={e => field('re_enrolled_date', e.target.value)} />
             <p className="text-xs text-gray-400 mt-1">Typically 3 years after opt-out date.</p>
           </div>
 
