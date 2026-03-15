@@ -91,6 +91,16 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Seed E2E test data
+        run: node scripts/seed-e2e.js
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
