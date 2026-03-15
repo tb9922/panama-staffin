@@ -12,19 +12,26 @@ function sanitizeCell(value) {
  * @param {Array<{name: string, headers: string[], rows: any[][]}>} sheets
  */
 export async function downloadXLSX(filename, sheets) {
-  const ExcelJS = (await import('exceljs')).default;
-  const wb = new ExcelJS.Workbook();
-  sheets.forEach(({ name, headers, rows }) => {
-    const ws = wb.addWorksheet(name.slice(0, 31)); // Excel sheet name max 31 chars
-    ws.addRow(headers.map(sanitizeCell));
-    rows.forEach(row => ws.addRow(row.map(sanitizeCell)));
-  });
-  const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
+  try {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    sheets.forEach(({ name, headers, rows }) => {
+      const ws = wb.addWorksheet(name.slice(0, 31)); // Excel sheet name max 31 chars
+      ws.addRow(headers.map(sanitizeCell));
+      rows.forEach(row => ws.addRow(row.map(sanitizeCell)));
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (err) {
+    console.error('Excel export failed:', err);
+    alert('Export failed. Please try again.');
+    return false;
+  }
 }

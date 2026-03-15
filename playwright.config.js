@@ -23,7 +23,16 @@ export default defineConfig({
         storageState: '.playwright/admin-state.json',
       },
       dependencies: ['setup'],
-      testIgnore: ['auth.setup.js'],
+      testIgnore: ['auth.setup.js', 'viewer.spec.js'],
+    },
+    {
+      name: 'viewer',
+      use: {
+        browserName: 'chromium',
+        storageState: '.playwright/viewer-state.json',
+      },
+      dependencies: ['setup'],
+      testMatch: 'viewer.spec.js',
     },
   ],
 
