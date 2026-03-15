@@ -167,6 +167,7 @@ export function getIncidentStats(incidents, config, fromDate, toDate) {
 
     if (inc.cqc_notifiable && inc.cqc_notified && inc.cqc_notified_date && inc.date) {
       const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+      // cqc_notified_date is DATE (no time) — assumes midnight, which is conservative (underreports hours)
       const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
       const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
       totalResponseHours += hours;
@@ -249,6 +250,7 @@ export function calculateIncidentResponseTime(incidents, fromDate, toDate) {
     respondedCount++;
 
     const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+    // cqc_notified_date is DATE (no time) — assumes midnight, conservative estimate
     const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
     totalHours += hours;
@@ -277,6 +279,7 @@ export function calculateCqcNotificationsPct(incidents, fromDate, toDate) {
     if (!inc.cqc_notified || !inc.cqc_notified_date) continue;
     respondedCount++;
     const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
+    // cqc_notified_date is DATE (no time) — assumes midnight, conservative estimate
     const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = (notifiedTime - incTime) / (1000 * 60 * 60);
     const deadline = getCqcNotificationDeadline(inc);

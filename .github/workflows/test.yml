@@ -91,6 +91,24 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: panama_test
+          DB_USER: panama
+          DB_PASSWORD: test_password
+          DB_SSL: 'false'
+          JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ALLOWED_ORIGIN: http://localhost:5173
+
   # ── Auto-deploy to production on push to main ────────────────────────────────
   # Requires three GitHub repository secrets:
   #   SERVER_HOST  — IP or hostname of your production server
