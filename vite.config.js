@@ -11,5 +11,36 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3001'
     }
-  }
+  },
+  test: {
+    testTimeout: 15000,
+    projects: [
+      {
+        test: {
+          name: 'lib',
+          environment: 'node',
+          include: [
+            'src/lib/__tests__/**/*.test.js',
+            'tests/**/*.test.js',
+          ],
+          setupFiles: ['src/test/setup.js'],
+        },
+      },
+      {
+        plugins: [react()],
+        test: {
+          name: 'pages',
+          environment: 'jsdom',
+          globals: true,
+          include: ['src/pages/__tests__/**/*.test.jsx'],
+          setupFiles: ['src/test/setup.js'],
+        },
+      },
+    ],
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/**/*.js'],
+      exclude: ['src/lib/design.js', 'src/lib/bankHolidays.js'],
+    },
+  },
 })

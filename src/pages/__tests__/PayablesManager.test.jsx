@@ -59,7 +59,7 @@ function renderViewer(data) {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   setupMocks(data);
   return renderWithProviders(<PayablesManager />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

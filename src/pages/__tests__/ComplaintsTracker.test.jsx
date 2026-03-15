@@ -99,7 +99,7 @@ function renderAdmin() {
 function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   return renderWithProviders(<ComplaintsTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

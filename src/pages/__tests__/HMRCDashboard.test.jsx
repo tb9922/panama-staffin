@@ -121,7 +121,7 @@ describe('HMRCDashboard', () => {
   it('viewer does not see "Mark Paid" button', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     setupMocks();
-    renderWithProviders(<HMRCDashboard />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<HMRCDashboard />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() =>
       expect(screen.getByText('April')).toBeInTheDocument()
     );

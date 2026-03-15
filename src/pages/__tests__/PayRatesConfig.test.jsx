@@ -117,7 +117,7 @@ describe('PayRatesConfig', () => {
   it('viewer does not see "+ Add Rule", "Edit", or "Remove" buttons', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     setupMocks();
-    renderWithProviders(<PayRatesConfig />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<PayRatesConfig />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() =>
       expect(screen.getByText('Night Enhancement')).toBeInTheDocument()
     );

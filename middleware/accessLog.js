@@ -31,8 +31,10 @@ function classifyCategories(endpoint) {
  * INSERTs on res.finish — never blocks the API response.
  * Failed writes are logged as warnings, not thrown.
  *
- * home_id is resolved from req.home (set by requireHomeAccess in the route handler).
- * Since res.finish fires after the route completes, req.home is available without extra DB lookups.
+ * home_id from req.home (set by requireHomeAccess in route handlers).
+ * NULL for home-agnostic routes (audit, platform, users, bank-holidays) — by design.
+ * res.finish fires AFTER route handlers complete, so req.home is always available
+ * for routes that call requireHomeAccess.
  */
 export function accessLog(req, res, next) {
   res.on('finish', () => {

@@ -88,7 +88,7 @@ export async function isTokenDenied(decoded) {
 
 /**
  * Revoke all tokens for a username. Used when terminating staff access.
- * Adds to both DB (persistence across restarts) and in-memory Set (fast checks).
+ * Writes to DB — checked per authenticated request (cluster-safe, ~0.1ms PK lookup).
  * @param {string} username
  */
 export async function revokeUser(username) {

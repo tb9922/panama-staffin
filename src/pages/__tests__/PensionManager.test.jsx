@@ -96,7 +96,7 @@ function renderViewer(enrolments) {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   setupMocks(enrolments);
   return renderWithProviders(<PensionManager />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

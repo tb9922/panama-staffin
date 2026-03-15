@@ -107,7 +107,7 @@ function renderAdmin() {
 function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   return renderWithProviders(<DolsTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

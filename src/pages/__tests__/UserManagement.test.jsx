@@ -10,12 +10,14 @@ vi.mock('../../lib/api.js', async () => {
     ...actual,
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
-    listUsers: vi.fn(),
+    listUsersForHome: vi.fn(),
     createUser: vi.fn(),
     updateUser: vi.fn(),
     resetUserPassword: vi.fn(),
-    getUserHomes: vi.fn(),
-    setUserHomes: vi.fn(),
+    getUserHomeRole: vi.fn(),
+    setUserHomeRole: vi.fn(),
+    getUserAllRoles: vi.fn(),
+    setUserRolesBulk: vi.fn(),
     listAllHomesForAccess: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
@@ -30,7 +32,7 @@ const MOCK_USERS = [
     id: 1,
     username: 'admin',
     display_name: 'Admin User',
-    role: 'admin',
+    role_id: 'home_manager',
     active: true,
     last_login_at: '2026-03-08T09:00:00Z',
     created_at: '2025-01-01T00:00:00Z',
@@ -39,7 +41,7 @@ const MOCK_USERS = [
     id: 2,
     username: 'viewer1',
     display_name: 'Viewer One',
-    role: 'viewer',
+    role_id: 'viewer',
     active: true,
     last_login_at: null,
     created_at: '2025-06-01T00:00:00Z',
@@ -48,7 +50,7 @@ const MOCK_USERS = [
     id: 3,
     username: 'olduser',
     display_name: null,
-    role: 'viewer',
+    role_id: 'viewer',
     active: false,
     last_login_at: null,
     created_at: '2024-01-01T00:00:00Z',
@@ -60,13 +62,13 @@ const MOCK_HOMES = [{ id: 1, name: 'Test Care Home' }];
 describe('UserManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.listUsers.mockResolvedValue(MOCK_USERS);
+    api.listUsersForHome.mockResolvedValue(MOCK_USERS);
     api.listAllHomesForAccess.mockResolvedValue(MOCK_HOMES);
-    api.getUserHomes.mockResolvedValue({ homeIds: [1] });
+    api.getUserHomeRole.mockResolvedValue({ role: 'home_manager' });
   });
 
   it('shows loading state initially', () => {
-    api.listUsers.mockReturnValue(new Promise(() => {}));
+    api.listUsersForHome.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<UserManagement />);
     expect(screen.getByText(/loading users/i)).toBeInTheDocument();
   });
@@ -78,17 +80,16 @@ describe('UserManagement', () => {
 
   it('displays users in the table', async () => {
     renderWithProviders(<UserManagement />);
-    // 'admin' appears as username cell and as role badge — use getAllByText
-    await waitFor(() => expect(screen.getAllByText('admin').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText('admin')).toBeInTheDocument());
     expect(screen.getByText('viewer1')).toBeInTheDocument();
     expect(screen.getByText('olduser')).toBeInTheDocument();
   });
 
   it('shows role badges for users', async () => {
     renderWithProviders(<UserManagement />);
-    await waitFor(() => expect(screen.getAllByText('admin').length).toBeGreaterThan(0));
-    // viewer role badge appears for viewer1 and olduser
-    expect(screen.getAllByText('viewer').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText('Home Manager').length).toBeGreaterThanOrEqual(1));
+    // Viewer role badge appears for viewer1 and olduser
+    expect(screen.getAllByText('Viewer').length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows active/inactive status badges', async () => {
@@ -115,7 +116,7 @@ describe('UserManagement', () => {
   });
 
   it('shows error message on API failure', async () => {
-    api.listUsers.mockRejectedValue(new Error('Auth required'));
+    api.listUsersForHome.mockRejectedValue(new Error('Auth required'));
     renderWithProviders(<UserManagement />);
     await waitFor(() => expect(screen.getByText('Auth required')).toBeInTheDocument());
   });

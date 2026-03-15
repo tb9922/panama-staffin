@@ -117,7 +117,7 @@ describe('ExpenseTracker', () => {
   it('viewer does not see "Add Expense" button', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     setupMocks();
-    renderWithProviders(<ExpenseTracker />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<ExpenseTracker />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() =>
       expect(screen.getByText('Expenses')).toBeInTheDocument()
     );

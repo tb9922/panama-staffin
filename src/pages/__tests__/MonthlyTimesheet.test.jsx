@@ -119,7 +119,7 @@ function renderViewer(entries) {
   setupMocks(entries);
   return renderWithProviders(<MonthlyTimesheet />, {
     route: '/payroll/monthly-timesheet/S001',
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

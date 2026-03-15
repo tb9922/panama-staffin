@@ -44,8 +44,8 @@ import * as api from '../../lib/api.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function renderDashboard(userOverride = { username: 'admin', role: 'admin' }) {
-  return renderWithProviders(<Dashboard />, { user: userOverride });
+function renderDashboard(userOverride = { username: 'admin', role: 'admin' }, opts = {}) {
+  return renderWithProviders(<Dashboard />, { user: userOverride, ...opts });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ describe('Dashboard', () => {
   // 9. Viewer sees restricted Cost Summary
   it('viewer sees "Admin access required" in place of cost figures', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderDashboard({ username: 'viewer', role: 'viewer' });
+    renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
       expect(screen.getByText('Cost Summary')).toBeInTheDocument()
@@ -288,7 +288,7 @@ describe('Dashboard', () => {
         { type: 'error', module: 'incidents', message: 'CQC overdue', link: '/incidents', priority: 5 },
       ],
     });
-    renderDashboard({ username: 'viewer', role: 'viewer' });
+    renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
       expect(screen.getByText('Alerts')).toBeInTheDocument()
