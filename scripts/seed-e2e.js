@@ -15,60 +15,56 @@ const pool = new Pool({
   ssl: process.env.DB_SSL === 'false' ? false : undefined,
 });
 
+const CONFIG = {
+  home_name: 'E2E Test Home',
+  registered_beds: 30,
+  care_type: 'residential',
+  cycle_start_date: '2025-01-06',
+  shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+  minimum_staffing: {
+    early: { heads: 3, skill_points: 3 },
+    late: { heads: 3, skill_points: 3 },
+    night: { heads: 2, skill_points: 2 },
+  },
+  agency_rate_day: 25, agency_rate_night: 30,
+  ot_premium: 15, bh_premium_multiplier: 1.5,
+  max_consecutive_days: 6, max_al_same_day: 2,
+  al_entitlement_days: 28,
+  leave_year_start: '04-01',
+  al_carryover_max: 8,
+  nlw_rate: 12.21,
+  bank_holidays: [],
+};
+
 async function seed() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Create a test home
-    await client.query(`
-      INSERT INTO homes (slug, name) VALUES ('e2e-test-home', 'E2E Test Home')
-      ON CONFLICT (slug) DO NOTHING
-    `);
+    // Upsert home with config (homes.slug has UNIQUE constraint)
+    const { rows } = await client.query(`
+      INSERT INTO homes (slug, name, config)
+      VALUES ('e2e-test-home', 'E2E Test Home', $1::jsonb)
+      ON CONFLICT (slug) DO UPDATE SET config = $1::jsonb
+      RETURNING id
+    `, [JSON.stringify(CONFIG)]);
+    const homeId = rows[0].id;
 
-    // Create home config
-    await client.query(`
-      INSERT INTO home_config (home_id, config)
-      SELECT id, $1::jsonb FROM homes WHERE slug = 'e2e-test-home'
-      ON CONFLICT (home_id) DO UPDATE SET config = EXCLUDED.config
-    `, [JSON.stringify({
-      home_name: 'E2E Test Home',
-      registered_beds: 30,
-      care_type: 'residential',
-      cycle_start_date: '2025-01-06',
-      shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
-      minimum_staffing: {
-        early: { heads: 3, skill_points: 3 },
-        late: { heads: 3, skill_points: 3 },
-        night: { heads: 2, skill_points: 2 },
-      },
-      agency_rate_day: 25, agency_rate_night: 30,
-      ot_premium: 15, bh_premium_multiplier: 1.5,
-      max_consecutive_days: 6, max_al_same_day: 2,
-      al_entitlement_days: 28,
-      leave_year_start: '04-01',
-      al_carryover_max: 8,
-      nlw_rate: 12.21,
-      bank_holidays: [],
-    })]);
-
-    // Create two test staff members
-    const homeId = (await client.query(`SELECT id FROM homes WHERE slug = 'e2e-test-home'`)).rows[0].id;
-
+    // Upsert two staff members (PK is (home_id, id))
     await client.query(`
       INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, start_date, contract_hours)
       VALUES
         ('S001', $1, 'Alice Smith', 'Senior Carer', 'Day A', 'E', 3, 14.50, true, '2024-01-15', 37.5),
         ('S002', $1, 'Bob Jones', 'Carer', 'Day B', 'L', 2, 12.50, true, '2024-06-01', 37.5)
-      ON CONFLICT (id, home_id) DO NOTHING
+      ON CONFLICT (home_id, id) DO NOTHING
     `, [homeId]);
 
-    // Grant admin access to the test home
+    // Grant access — user_home_access uses (username, home_id) unique constraint
     await client.query(`
-      INSERT INTO user_home_access (username, home_slug)
-      VALUES ('admin', 'e2e-test-home'), ('viewer', 'e2e-test-home')
-      ON CONFLICT DO NOTHING
-    `);
+      INSERT INTO user_home_access (username, home_id)
+      VALUES ('admin', $1), ('viewer', $1)
+      ON CONFLICT (username, home_id) DO NOTHING
+    `, [homeId]);
 
     await client.query('COMMIT');
     console.log('E2E seed data created successfully');
