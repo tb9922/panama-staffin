@@ -1,9 +1,10 @@
 /**
  * Seed the database with minimal test data for E2E tests.
- * Creates one home with config + two staff members — enough for
+ * Creates users, one home with config + two staff — enough for
  * Dashboard, Roster, Staff, and Finance pages to render.
  */
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -41,6 +42,16 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
+    // Create test users in the users table (DB-backed auth)
+    const adminHash = await bcrypt.hash('admin123', 12);
+    const viewerHash = await bcrypt.hash('view123', 12);
+
+    await client.query(`
+      INSERT INTO users (username, password_hash, role, display_name)
+      VALUES ('admin', $1, 'admin', 'Admin'), ('viewer', $2, 'viewer', 'Viewer')
+      ON CONFLICT (username) DO NOTHING
+    `, [adminHash, viewerHash]);
+
     // Upsert home with config (homes.slug has UNIQUE constraint)
     const { rows } = await client.query(`
       INSERT INTO homes (slug, name, config)
@@ -59,10 +70,10 @@ async function seed() {
       ON CONFLICT (home_id, id) DO NOTHING
     `, [homeId]);
 
-    // Grant access — user_home_access uses (username, home_id) unique constraint
+    // Grant roles via user_home_roles (replaces dropped user_home_access)
     await client.query(`
-      INSERT INTO user_home_access (username, home_id)
-      VALUES ('admin', $1), ('viewer', $1)
+      INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+      VALUES ('admin', $1, 'home_manager', 'seed-e2e'), ('viewer', $1, 'viewer', 'seed-e2e')
       ON CONFLICT (username, home_id) DO NOTHING
     `, [homeId]);
 
