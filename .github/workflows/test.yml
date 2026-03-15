@@ -105,8 +105,8 @@ jobs:
           DB_PASSWORD: test_password
           DB_SSL: 'false'
           JWT_SECRET: ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-          ADMIN_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
-          VIEWER_PASSWORD_HASH: $2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx
+          ADMIN_PASSWORD_HASH: $2b$12$eZneW/Dpc9DPfyKDaj2TMea7V4.0PK9EmMYXZ/35m5JkIBKKdZd/m
+          VIEWER_PASSWORD_HASH: $2b$12$Fqm4wyinj2K9eafKdNoP.OBwyUl14dGqkOWK.XzqW/2JcuF8qmqs6
           ALLOWED_ORIGIN: http://localhost:5173
 
   # ── Auto-deploy to production on push to main ────────────────────────────────
