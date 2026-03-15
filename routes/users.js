@@ -1,7 +1,7 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requirePlatformAdmin, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
+import { requireAuth, requirePlatformAdmin, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
 import { writeRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as userService from '../services/userService.js';

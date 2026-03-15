@@ -5,7 +5,7 @@ import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
-  getUserHomeRole, setUserHomeRole, listAllHomesForAccess, getUserAllRoles, setUserRolesBulk,
+  setUserHomeRole, listAllHomesForAccess, getUserAllRoles, setUserRolesBulk,
 } from '../lib/api.js';
 
 const ROLE_BADGE = {
@@ -28,10 +28,7 @@ const ROLE_GROUPS = [
   { key: 'staff', label: 'Staff', roles: ['staff_member'] },
 ];
 
-function formatDate(iso) {
-  if (!iso) return '\u2014';
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
-}
+
 
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
