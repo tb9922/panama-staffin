@@ -52,11 +52,11 @@ async function seed() {
       ON CONFLICT (username) DO NOTHING
     `, [adminHash, viewerHash]);
 
-    // Upsert home with config (homes.slug has UNIQUE constraint)
+    // Upsert home with config (partial unique index: homes_slug_active WHERE deleted_at IS NULL)
     const { rows } = await client.query(`
       INSERT INTO homes (slug, name, config)
       VALUES ('e2e-test-home', 'E2E Test Home', $1::jsonb)
-      ON CONFLICT (slug) DO UPDATE SET config = $1::jsonb
+      ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE SET config = $1::jsonb
       RETURNING id
     `, [JSON.stringify(CONFIG)]);
     const homeId = rows[0].id;
