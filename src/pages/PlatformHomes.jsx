@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   listPlatformHomes, createPlatformHome, updatePlatformHome, deletePlatformHome,
 } from '../lib/api.js';
@@ -28,6 +29,7 @@ export default function PlatformHomes() {
   const [addOpen, setAddOpen] = useState(false);
   const [editHome, setEditHome] = useState(null);
   const [deleteHome, setDeleteHome] = useState(null);
+  useDirtyGuard(addOpen || !!editHome || !!deleteHome);
 
   const refresh = useCallback(async () => {
     try {

@@ -5,6 +5,7 @@ import { getCurrentHome, getReceivablesDetail, getInvoiceChases, createInvoiceCh
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const BUCKETS = [
   { id: 'all', label: 'All', key: null },
@@ -27,6 +28,7 @@ export default function ReceivablesManager() {
   const [showChaseModal, setShowChaseModal] = useState(false);
   const [chaseForm, setChaseForm] = useState({});
   const home = getCurrentHome();
+  useDirtyGuard(!!showChaseModal);
 
   const load = useCallback(async () => {
     if (!home) return;

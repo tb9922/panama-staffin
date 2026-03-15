@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -51,6 +52,7 @@ export default function HMRCDashboard() {
   const [taxYear, setTaxYear]         = useState(currentTaxYear());
   const [showPaidModal, setShowPaidModal] = useState(null); // liability object
   const [paidForm, setPaidForm]       = useState({ paid_date: '', paid_reference: '' });
+  useDirtyGuard(!!showPaidModal);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

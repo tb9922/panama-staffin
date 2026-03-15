@@ -18,6 +18,7 @@ import {
   revertMonthOverrides,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -94,6 +95,8 @@ export default function RotationGrid() {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   const homeSlug = getCurrentHome();
+  useDirtyGuard(!!editing || !!bulkModal);
+
   const loadData = useCallback(async () => {
     if (!homeSlug) return;
     setLoading(true);

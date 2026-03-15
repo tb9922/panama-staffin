@@ -23,6 +23,7 @@ import {
   updateStaffMember,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
@@ -60,6 +61,7 @@ export default function DailyStatus() {
 
   const noteTimerRef = useRef(null);
   const savingRef = useRef(false);
+  useDirtyGuard(!!modal);
 
   const closeModal = useCallback(() => {
     setModal(null);

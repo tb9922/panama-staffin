@@ -5,6 +5,7 @@ import Modal from '../components/Modal.jsx';
 import { getPayrollRuns, createPayrollRun, getCurrentHome } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -40,6 +41,7 @@ export default function PayrollDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm]         = useState({ period_start: '', period_end: '', pay_frequency: 'monthly', notes: '' });
   const [creating, setCreating] = useState(false);
+  useDirtyGuard(showCreate);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

@@ -12,6 +12,7 @@ import {
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const TABS = [
   { id: 'residents', label: 'Residents' },
@@ -53,6 +54,7 @@ function ResidentsTab({ home, canEdit }) {
   const [form, setForm] = useState({});
   const [modalTab, setModalTab] = useState('profile');
   const [feeHistory, setFeeHistory] = useState([]);
+  useDirtyGuard(!!showModal);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterFunding, setFilterFunding] = useState('');
 
@@ -325,6 +327,7 @@ function InvoicesTab({ home, canEdit }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPayer, setFilterPayer] = useState('');
   const [residents, setResidents] = useState([]);
+  useDirtyGuard(!!showModal);
 
   // Payment sub-form
   const [payForm, setPayForm] = useState({ amount: '', payment_method: 'bacs', payment_reference: '' });

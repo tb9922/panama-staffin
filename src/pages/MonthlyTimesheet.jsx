@@ -10,6 +10,7 @@ import {
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -78,6 +79,7 @@ export default function MonthlyTimesheet() {
   // Dispute modal state
   const [disputeModal, setDisputeModal] = useState(null); // { entry }
   const [disputeReason, setDisputeReason] = useState('');
+  useDirtyGuard(!!editModal || !!disputeModal);
 
   // Snap config from schedData
   const snapConfig = useMemo(() => ({

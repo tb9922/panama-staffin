@@ -10,6 +10,7 @@ import ResidentAdmitModal from '../components/residents/ResidentAdmitModal.jsx';
 import ResidentEditModal from '../components/residents/ResidentEditModal.jsx';
 import ResidentDischargeModal from '../components/residents/ResidentDischargeModal.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function Residents() {
   const [residents, setResidents] = useState([]);
@@ -29,6 +30,7 @@ export default function Residents() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  useDirtyGuard(showAdmit || !!editResident || !!dischargeResident);
 
   const load = useCallback(async () => {
     if (!home) return;
