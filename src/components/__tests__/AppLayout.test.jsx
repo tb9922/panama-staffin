@@ -68,6 +68,10 @@ function mockData(overrides = {}) {
     activeHome: 'home-1',
     switchHome: vi.fn(),
     clearError: vi.fn(),
+    canRead: () => true,
+    canWrite: () => true,
+    homeRole: 'home_manager',
+    staffId: null,
     ...overrides,
   });
 }
@@ -129,7 +133,7 @@ describe('AppLayout', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false });
     renderLayout();
     expect(screen.getByText('Admin User')).toBeInTheDocument();
-    expect(screen.getByText(/\(admin\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Home Manager/)).toBeInTheDocument();
   });
 
   it('shows username when displayName is absent', () => {
@@ -157,12 +161,16 @@ describe('AppLayout', () => {
   // 7. Viewer does NOT see admin-only sections (HR, Finance)
   it('viewer user does not see the HR & People nav section', () => {
     mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
+    const viewerCanRead = (mod) => ['scheduling', 'staff', 'reports'].includes(mod);
+    mockData({ canRead: viewerCanRead, canWrite: () => false, homeRole: 'viewer' });
     renderLayout({ username: 'viewer', role: 'viewer' });
     expect(screen.queryByText('HR & People')).not.toBeInTheDocument();
   });
 
   it('viewer user does not see the Finance nav section', () => {
     mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
+    const viewerCanRead = (mod) => ['scheduling', 'staff', 'reports'].includes(mod);
+    mockData({ canRead: viewerCanRead, canWrite: () => false, homeRole: 'viewer' });
     renderLayout({ username: 'viewer', role: 'viewer' });
     expect(screen.queryByText('Finance')).not.toBeInTheDocument();
   });
@@ -183,14 +191,15 @@ describe('AppLayout', () => {
   // 9. Viewer sees read-only mode banner
   it('shows read-only mode banner for viewer role', () => {
     mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
+    mockData({ homeRole: 'viewer', canRead: () => true, canWrite: () => false });
     renderLayout({ username: 'viewer', role: 'viewer' });
-    expect(screen.getByText(/Read-only mode/)).toBeInTheDocument();
+    expect(screen.getByText(/read-only or hidden/)).toBeInTheDocument();
   });
 
   it('does not show read-only banner for admin role', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false });
     renderLayout();
-    expect(screen.queryByText(/Read-only mode/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/read-only or hidden/)).not.toBeInTheDocument();
   });
 
   // 10. Coverage alert banner is rendered

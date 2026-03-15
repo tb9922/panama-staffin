@@ -36,6 +36,17 @@ export default defineConfig({
           setupFiles: ['src/test/setup.js'],
         },
       },
+      {
+        plugins: [react()],
+        test: {
+          name: 'contexts',
+          environment: 'jsdom',
+          globals: true,
+          include: [
+            'src/contexts/__tests__/**/*.test.{js,jsx}',
+          ],
+        },
+      },
     ],
     coverage: {
       provider: 'v8',
