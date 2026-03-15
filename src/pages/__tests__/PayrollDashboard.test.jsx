@@ -100,7 +100,7 @@ describe('PayrollDashboard', () => {
 
   it('hides New Payroll Run button for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderWithProviders(<PayrollDashboard />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<PayrollDashboard />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /new payroll run/i })).not.toBeInTheDocument();
   });

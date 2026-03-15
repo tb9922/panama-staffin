@@ -16,6 +16,7 @@ import {
   calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const TABS = [
   { id: 'overview',   label: 'Overview' },
@@ -52,6 +53,7 @@ export default function GdprDashboard() {
   const [erasureInput, setErasureInput] = useState('');
 
   const home = getCurrentHome();
+  useDirtyGuard(showModal !== null || !!erasureConfirm);
 
   const load = useCallback(async () => {
     if (!home) return;

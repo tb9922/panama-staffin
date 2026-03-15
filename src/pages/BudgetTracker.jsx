@@ -6,6 +6,7 @@ import Modal from '../components/Modal.jsx';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -24,6 +25,7 @@ export default function BudgetTracker() {
   const [editingBudget, setEditingBudget] = useState(null);
   const [budgetInput, setBudgetInput] = useState('');
   const [agencyCapInput, setAgencyCapInput] = useState('');
+  useDirtyGuard(editingBudget !== null);
 
   useEffect(() => {
     const homeSlug = getCurrentHome();

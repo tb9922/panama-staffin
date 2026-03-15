@@ -128,7 +128,7 @@ describe('BedManager', () => {
 
   it('hides Add Bed button for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderWithProviders(<BedManager />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<BedManager />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('101')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /add bed/i })).not.toBeInTheDocument();
   });

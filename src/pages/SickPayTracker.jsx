@@ -4,6 +4,7 @@ import Modal from '../components/Modal.jsx';
 import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
@@ -44,6 +45,7 @@ export default function SickPayTracker() {
   const [createForm, setCreateForm] = useState(EMPTY_CREATE);
   const [updateForm, setUpdateForm] = useState(EMPTY_UPDATE);
   const [staffFilter, setStaffFilter] = useState('');
+  useDirtyGuard(showCreate || !!showUpdate);
 
   useEffect(() => {
     const h = getCurrentHome();

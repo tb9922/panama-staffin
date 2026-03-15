@@ -79,7 +79,7 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 1,672+ tests across 60 files (unit + integration), all passing
+- **Testing**: Vitest — 2,269+ tests across 117 files (unit + integration + page), all passing
 
 ## Architecture
 

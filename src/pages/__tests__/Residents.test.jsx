@@ -67,7 +67,7 @@ function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   setupMocks();
   return renderWithProviders(<Residents />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

@@ -106,7 +106,7 @@ describe('HandoverNotes', () => {
 
   it('hides Add Entry buttons for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderWithProviders(<HandoverNotes />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<HandoverNotes />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Early Shift')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /add entry/i })).not.toBeInTheDocument();
   });

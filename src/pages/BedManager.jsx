@@ -7,6 +7,7 @@ import {
   getFinanceResidents,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const STATUS_BADGES = {
   available: 'green', reserved: 'blue', occupied: 'gray',
@@ -108,6 +109,7 @@ export default function BedManager() {
   // Residents for picker
   const [residents, setResidents] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  useDirtyGuard(!!showAddModal || !!showTransitionModal || !!showMoveModal || !!showRevertModal);
 
   const load = useCallback(async () => {
     try {

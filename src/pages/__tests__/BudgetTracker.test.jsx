@@ -75,7 +75,7 @@ function renderViewer(schedData) {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   setupMocks(schedData);
   return renderWithProviders(<BudgetTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

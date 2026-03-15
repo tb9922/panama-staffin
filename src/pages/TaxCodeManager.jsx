@@ -4,6 +4,7 @@ import Modal from '../components/Modal.jsx';
 import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
@@ -36,6 +37,7 @@ export default function TaxCodeManager() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm]         = useState(emptyForm());
   const [editStaffId, setEditStaffId] = useState(null); // null = new, else = editing
+  useDirtyGuard(!!showModal);
 
   useEffect(() => {
     const h = getCurrentHome();

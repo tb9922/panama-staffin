@@ -141,7 +141,7 @@ function renderViewer(runData) {
   setupMocks(runData);
   return renderWithProviders(<PayrollDetail />, {
     route: '/payroll/run-1',
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

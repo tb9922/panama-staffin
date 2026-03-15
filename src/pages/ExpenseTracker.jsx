@@ -11,6 +11,7 @@ import {
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function ExpenseTracker() {
   const [expenses, setExpenses] = useState([]);
@@ -27,6 +28,7 @@ export default function ExpenseTracker() {
   const user = getLoggedInUser();
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  useDirtyGuard(!!showModal);
 
   const load = useCallback(async () => {
     if (!home) return;

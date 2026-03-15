@@ -96,7 +96,7 @@ function renderAdmin() {
 function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   return renderWithProviders(<WhistleblowingTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

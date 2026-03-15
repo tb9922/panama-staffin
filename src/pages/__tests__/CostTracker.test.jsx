@@ -49,7 +49,7 @@ function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
   return renderWithProviders(<CostTracker />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

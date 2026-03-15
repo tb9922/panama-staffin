@@ -114,7 +114,7 @@ describe('TimesheetManager', () => {
 
   it('hides bulk action buttons for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-    renderWithProviders(<TimesheetManager />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<TimesheetManager />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /confirm all as scheduled/i })).not.toBeInTheDocument();
   });

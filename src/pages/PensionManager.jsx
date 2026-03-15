@@ -4,6 +4,7 @@ import Modal from '../components/Modal.jsx';
 import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const STATUS_BADGE = {
   eligible_enrolled:       BADGE.green,
@@ -63,6 +64,7 @@ export default function PensionManager() {
   const [showModal, setShowModal]   = useState(false);
   const [form, setForm]             = useState(EMPTY_FORM);
   const [editStaffId, setEditStaffId] = useState(null);
+  useDirtyGuard(!!showModal);
 
   useEffect(() => {
     const h = getCurrentHome();

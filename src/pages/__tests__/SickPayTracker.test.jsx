@@ -151,7 +151,7 @@ describe('SickPayTracker', () => {
   it('viewer does not see "Record Sick Period" button or Update buttons', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     setupMocks();
-    renderWithProviders(<SickPayTracker />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<SickPayTracker />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() =>
       expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
     );

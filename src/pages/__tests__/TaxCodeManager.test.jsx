@@ -94,7 +94,7 @@ function renderViewer(codes) {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   setupMocks(codes);
   return renderWithProviders(<TaxCodeManager />, {
-    user: { username: 'viewer', role: 'viewer' },
+    user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
 

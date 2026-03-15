@@ -144,7 +144,7 @@ describe('Config', () => {
 
   it('viewer does NOT see Save Changes button', async () => {
     setupViewerMocks();
-    renderWithProviders(<Config />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<Config />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
@@ -240,7 +240,7 @@ describe('Config', () => {
 
   it('viewer role — config fields are rendered (visible to all)', async () => {
     setupViewerMocks();
-    renderWithProviders(<Config />, { user: { username: 'viewer', role: 'viewer' } });
+    renderWithProviders(<Config />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
 
     // Config fields visible to viewers

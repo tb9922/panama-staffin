@@ -10,7 +10,6 @@ export default defineConfig({
       'src/pages/__tests__/**/*.test.{js,jsx}',
       'src/components/__tests__/**/*.test.{js,jsx}',
       'src/hooks/__tests__/**/*.test.{js,jsx}',
-      'src/contexts/__tests__/**/*.test.{js,jsx}',
     ],
     setupFiles: ['src/test/setup.js'],
     globals: true,

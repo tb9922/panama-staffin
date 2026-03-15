@@ -5,6 +5,7 @@ import { getCurrentHome, getPaymentSchedules, createPaymentSchedule, updatePayme
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function PayablesManager() {
   const { canWrite } = useData();
@@ -18,6 +19,7 @@ export default function PayablesManager() {
   const [form, setForm] = useState({});
   const [processing, setProcessing] = useState(null);
   const home = getCurrentHome();
+  useDirtyGuard(!!showModal);
 
   const load = useCallback(async () => {
     if (!home) return;

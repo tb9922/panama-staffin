@@ -83,7 +83,7 @@ function renderAdmin() {
 
 function renderViewer() {
   api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-  return renderWithProviders(<TrainingMatrix />, { user: { username: 'viewer', role: 'viewer' } });
+  return renderWithProviders(<TrainingMatrix />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
