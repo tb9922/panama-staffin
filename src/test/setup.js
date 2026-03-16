@@ -19,7 +19,10 @@ vi.mock('../contexts/DataContext.jsx', () => ({
 beforeEach(() => { _useData.mockReturnValue(_defaultDataCtx); });
 
 // Guard jsdom-only globals for node-environment tests (lib + integration)
-beforeEach(() => { if (typeof sessionStorage !== 'undefined') sessionStorage.clear(); });
+beforeEach(() => {
+  if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+  if (typeof localStorage !== 'undefined') localStorage.clear();
+});
 beforeEach(() => {
   vi.stubGlobal('alert', vi.fn());
   vi.stubGlobal('confirm', vi.fn(() => true));

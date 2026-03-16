@@ -52,13 +52,13 @@ export async function login(username, password) {
   if (!res.ok) throw new Error('Invalid credentials');
   const user = await res.json();
   // JWT is now in HttpOnly cookie (set by server) — only store display info
-  sessionStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '', isPlatformAdmin: user.isPlatformAdmin || false }));
+  localStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '', isPlatformAdmin: user.isPlatformAdmin || false }));
   return user;
 }
 
 export function getLoggedInUser() {
   try {
-    const stored = sessionStorage.getItem('user');
+    const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
   } catch {
     return null;
@@ -66,7 +66,7 @@ export function getLoggedInUser() {
 }
 
 export function logout() {
-  sessionStorage.removeItem('user');
+  localStorage.removeItem('user');
   // Clear HttpOnly cookie via server endpoint (fire-and-forget)
   fetch(`${API_BASE}/login/logout`, {
     method: 'POST',
