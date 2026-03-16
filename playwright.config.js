@@ -50,6 +50,7 @@ export default defineConfig({
       port: 3001,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
+      env: { ...process.env, NODE_ENV: 'test' },
     },
     {
       command: 'npx vite',
