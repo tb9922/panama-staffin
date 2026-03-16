@@ -42,12 +42,12 @@ router.post('/', loginLimiter, async (req, res, next) => {
 
     // Set JWT as HttpOnly cookie — not accessible to JavaScript, immune to XSS token theft.
     // SameSite=Lax allows top-level navigations (email/Slack links) while blocking cross-origin POSTs.
-    // Secure requires HTTPS in production.
+    // Secure requires HTTPS in production. Path=/ so Playwright storageState captures it.
     res.cookie('panama_token', result.token, {
       httpOnly: true,
       secure: config.nodeEnv === 'production',
       sameSite: 'lax',
-      path: '/api',
+      path: '/',
       maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
     });
 
@@ -85,6 +85,8 @@ router.post('/logout', requireAuth, async (req, res) => {
     const expiresAt = new Date(req.user.exp * 1000);
     await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt).catch(() => {});
   }
+  res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
+  // Also clear old path=/api cookie from pre-existing sessions
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
   res.json({ ok: true });

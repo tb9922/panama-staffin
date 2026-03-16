@@ -21,14 +21,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
     // Platform admins see all homes with home_manager access
     if (req.user.is_platform_admin) {
       const homes = await homeService.listHomes();
-      return res.json(homes.map(h => ({
-        id: h.slug,
-        name: h.config?.home_name || h.name,
-        beds: h.config?.registered_beds,
-        type: h.config?.care_type,
-        roleId: 'home_manager',
-        staffId: null,
-      })));
+      return res.json(homes.map(h => ({ ...h, roleId: 'home_manager', staffId: null })));
     }
 
     // Regular users: single joined query returns homes + role
