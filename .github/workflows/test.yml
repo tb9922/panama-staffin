@@ -119,6 +119,16 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$Fqm4wyinj2K9eafKdNoP.OBwyUl14dGqkOWK.XzqW/2JcuF8qmqs6
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
   # ── Auto-deploy to production on push to main ────────────────────────────────
   # Requires three GitHub repository secrets:
   #   SERVER_HOST  — IP or hostname of your production server
