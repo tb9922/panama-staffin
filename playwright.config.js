@@ -23,7 +23,7 @@ export default defineConfig({
         storageState: '.playwright/admin-state.json',
       },
       dependencies: ['setup'],
-      testIgnore: ['auth.setup.js', 'viewer.spec.js'],
+      testIgnore: ['auth.setup.js', 'viewer.spec.js', 'auth.spec.js'],
     },
     {
       name: 'viewer',
@@ -33,6 +33,14 @@ export default defineConfig({
       },
       dependencies: ['setup'],
       testMatch: 'viewer.spec.js',
+    },
+    // Auth flow tests run LAST — logout deny-lists admin tokens which would
+    // block subsequent chromium tests (isDenied checks by username).
+    {
+      name: 'auth-flow',
+      use: { browserName: 'chromium' },
+      dependencies: ['chromium', 'viewer'],
+      testMatch: 'auth.spec.js',
     },
   ],
 
