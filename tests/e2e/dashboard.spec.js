@@ -8,13 +8,6 @@ test.describe('Dashboard', () => {
   });
 
   test('renders dashboard heading', async ({ page }) => {
-    // Diagnostic: wait 3s then log page state to help debug CI failures
-    await page.waitForTimeout(3_000);
-    const url = page.url();
-    const title = await page.title();
-    const bodyText = await page.locator('body').innerText().catch(() => '(could not get body text)');
-    console.log(`[DIAG] URL: ${url}, Title: ${title}`);
-    console.log(`[DIAG] Body text (first 500 chars): ${bodyText.slice(0, 500)}`);
     await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
   });
 
