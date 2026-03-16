@@ -6,7 +6,8 @@ test.describe('Finance Module', () => {
   test('Finance Dashboard renders KPIs', async ({ page }) => {
     await page.goto('/finance');
     await expect(page.getByRole('heading', { name: /Finance/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('[class*="card"], [class*="Card"]').first()).toBeVisible({ timeout: 10_000 });
+    // Dashboard has sub-headings like "Receivables Ageing" once loaded
+    await expect(page.getByRole('heading', { name: /Receivables|Revenue|Income|Expense/i }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('Income page loads with table', async ({ page }) => {
@@ -26,6 +27,6 @@ test.describe('Finance Module', () => {
   test('Expenses page has Add button', async ({ page }) => {
     await page.goto('/finance/expenses');
     await expect(page.getByRole('heading', { name: /Expense/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Add|New|Record/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Add Expense/i })).toBeVisible();
   });
 });

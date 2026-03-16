@@ -13,7 +13,7 @@ test.describe('Compliance Module', () => {
   test('Incident Tracker loads with table', async ({ page }) => {
     await page.goto('/incidents');
     await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Log|Add|New|Report/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /New Incident/i })).toBeVisible();
   });
 
   test('CQC Evidence shows compliance score', async ({ page }) => {
@@ -24,6 +24,6 @@ test.describe('Compliance Module', () => {
   test('Risk Register loads', async ({ page }) => {
     await page.goto('/risks');
     await expect(page.getByRole('heading', { name: /Risk/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Add|New|Log/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /New Risk/i })).toBeVisible();
   });
 });

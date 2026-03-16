@@ -36,13 +36,15 @@ import gdprRouter from './gdpr.js';
 const router = Router();
 
 // ── Rate limiting — all HR endpoints (GDPR special category data) ─────────
-router.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
-}));
+if (process.env.NODE_ENV !== 'test') {
+  router.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later' },
+  }));
+}
 
 // ── Staff List (for picker dropdown) ────────────────────────────────────────
 router.get('/staff', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
