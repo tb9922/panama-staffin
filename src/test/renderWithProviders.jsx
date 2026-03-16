@@ -6,7 +6,7 @@ import { useData } from '../contexts/DataContext.jsx';
 /**
  * Render a component wrapped in all required providers.
  * Uses createMemoryRouter (required by useBlocker in useDirtyGuard).
- * Sets sessionStorage so AuthContext → getLoggedInUser() works.
+ * Sets localStorage so AuthContext → getLoggedInUser() works.
  *
  * When canWrite is false, overrides the DataContext mock to return viewer
  * permissions (canWrite: () => false, homeRole: 'viewer').
@@ -27,7 +27,7 @@ export function renderWithProviders(ui, {
       staffId: null,
     });
   }
-  sessionStorage.setItem('user', JSON.stringify(user));
+  localStorage.setItem('user', JSON.stringify(user));
   const router = createMemoryRouter(
     [{ path, element: ui }],
     { initialEntries: [route] },
