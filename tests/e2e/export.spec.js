@@ -5,9 +5,8 @@ import { test, expect } from '@playwright/test';
 test.describe('Excel & PDF Exports', () => {
   test('Audit Log export triggers download', async ({ page }) => {
     await page.goto('/audit');
-    await expect(page.getByText(/Audit/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Audit/i })).toBeVisible({ timeout: 15_000 });
 
-    // Listen for download event
     const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
     await page.getByRole('button', { name: /Export|Download/i }).click();
     const download = await downloadPromise;
@@ -16,9 +15,8 @@ test.describe('Excel & PDF Exports', () => {
 
   test('CQC Evidence PDF generation triggers download', async ({ page }) => {
     await page.goto('/cqc');
-    await expect(page.getByText(/CQC/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /CQC/i })).toBeVisible({ timeout: 15_000 });
 
-    // Look for PDF generation button
     const pdfBtn = page.getByRole('button', { name: /PDF|Generate|Download|Pack/i });
     if (await pdfBtn.isVisible()) {
       const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
@@ -30,8 +28,7 @@ test.describe('Excel & PDF Exports', () => {
 
   test('Reports page loads with export options', async ({ page }) => {
     await page.goto('/reports');
-    await expect(page.getByText(/Report/i)).toBeVisible({ timeout: 15_000 });
-    // Should show export/generate buttons
+    await expect(page.getByRole('heading', { name: /Report/i })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: /Generate|Export|Download|PDF/i })).toBeVisible();
   });
 });

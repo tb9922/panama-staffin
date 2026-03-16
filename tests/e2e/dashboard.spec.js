@@ -20,12 +20,10 @@ test.describe('Dashboard', () => {
   });
 
   test('sidebar navigation is visible', async ({ page }) => {
-    // Wait for app to load
     await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
-
-    // Check key nav groups exist
-    await expect(page.getByText('Scheduling')).toBeVisible();
-    await expect(page.getByText('Staff')).toBeVisible();
-    await expect(page.getByText('Compliance')).toBeVisible();
+    // Check nav group buttons exist in sidebar
+    await expect(page.getByRole('button', { name: 'Scheduling' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Staff$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Compliance' })).toBeVisible();
   });
 });

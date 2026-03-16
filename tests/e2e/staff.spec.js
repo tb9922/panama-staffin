@@ -5,11 +5,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Staff Register', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/staff');
-    await expect(page.getByText('Staff Database')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Staff Database' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('page loads with staff table', async ({ page }) => {
-    // Table should be present with header row
     const table = page.locator('table');
     await expect(table).toBeVisible();
   });
