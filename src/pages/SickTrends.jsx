@@ -43,7 +43,6 @@ export default function SickTrends() {
   useEffect(() => {
     if (!homeSlug) return;
     // SickTrends shows 6 months back — request wider override window
-    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);

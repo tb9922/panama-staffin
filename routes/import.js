@@ -91,7 +91,7 @@ function splitCsvLine(line) {
 }
 
 // GET /api/import/staff/template?home=X — CSV template with header row
-router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), (req, res) => {
+router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'read'), (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="staff_import_template.csv"');
   res.setHeader('Cache-Control', 'no-store');
@@ -99,7 +99,7 @@ router.get('/staff/template', readRateLimiter, requireAuth, requireHomeAccess, r
 });
 
 // POST /api/import/staff?home=X — CSV upload + validate/import
-router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), upload.single('file'), async (req, res, next) => {
+router.post('/staff', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (!req.file.originalname.toLowerCase().endsWith('.csv')) {

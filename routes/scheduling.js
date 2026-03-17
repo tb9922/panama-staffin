@@ -168,7 +168,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       trainingOut = [];
       onboardingOut = undefined;
       // Strip commercially sensitive fields — staff don't need cost parameters
-      const { agency_rate_day, agency_rate_night, ot_premium, bh_premium_multiplier, ...safeConfig } = req.home.config;
+      const { agency_rate_day: _ard, agency_rate_night: _arn, ot_premium: _otp, bh_premium_multiplier: _bhm, ...safeConfig } = req.home.config;
       configOut = safeConfig;
     }
 

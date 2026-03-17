@@ -21,7 +21,6 @@ export default function Reports() {
   useEffect(() => {
     if (!homeSlug) return;
     // Cost report may need a full month of overrides; default ±90 day window is sufficient
-    setLoading(true);
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))

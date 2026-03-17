@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import logger from '../logger.js';
 import * as webhookRepo from '../repositories/webhookRepo.js';
+import { resolvedToPrivateIp } from '../lib/ssrf.js';
 
 const MAX_RETRIES = 5;
 // Exponential backoff: 30s, 2min, 10min, 1hr, 6hr
@@ -43,6 +44,15 @@ async function fireWebhook(hook, event, payload) {
   const start = Date.now();
   let statusCode = null;
   let error = null;
+
+  // Re-validate URL at delivery time to prevent DNS rebinding SSRF
+  if (await resolvedToPrivateIp(hook.url)) {
+    error = 'Webhook URL resolves to private IP at delivery time — blocked';
+    logger.warn({ webhookId: hook.id, url: hook.url }, error);
+    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+      .catch(logErr => logger.warn({ err: logErr }, 'Webhook delivery log failed'));
+    return;
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -111,6 +121,14 @@ export async function processRetries() {
         ? delivery.payload
         : JSON.stringify(delivery.payload);
       const signature = crypto.createHmac('sha256', delivery.secret).update(body).digest('hex');
+
+      // Re-validate URL at retry time to prevent DNS rebinding SSRF
+      if (await resolvedToPrivateIp(delivery.url)) {
+        await webhookRepo.markDeliveryFailed(delivery.id);
+        logger.warn({ deliveryId: delivery.id, url: delivery.url }, 'Webhook retry blocked — URL resolves to private IP');
+        processed++;
+        continue;
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);

@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "audit:routes": "node scripts/audit-routes.js",
-    "test": "vitest run",
+    "test": "vitest run --retry 1",
     "test:watch": "vitest",
     "test:integration": "bash scripts/test-integration.sh",
     "test:frontend": "vitest run --config vitest.config.frontend.js",

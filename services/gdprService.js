@@ -1,7 +1,10 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 import { ValidationError } from '../errors.js';
+import { config as appConfig } from '../config.js';
 import logger from '../logger.js';
 
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
@@ -364,6 +367,27 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         [anon, homeId, originalName]
       );
     }
+
+    // Delete HR file attachments linked to this staff member's cases (documents may contain personal data)
+    const hrCaseCondition = `
+      (a.case_type = 'disciplinary' AND a.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    const { rows: attachments } = await client.query(
+      `SELECT a.stored_name, a.case_type, a.case_id FROM hr_file_attachments a
+       WHERE a.home_id = $1 AND (${hrCaseCondition})`,
+      [homeId, staffId]
+    );
+    // Delete physical files from disk
+    for (const att of attachments) {
+      const filePath = path.join(appConfig.upload.dir, String(homeId), att.case_type, String(att.case_id), att.stored_name);
+      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+    }
+    // Delete attachment metadata
+    await client.query(
+      `DELETE FROM hr_file_attachments a WHERE a.home_id = $1 AND (${hrCaseCondition})`,
+      [homeId, staffId]
+    );
 
     // Anonymise incident addenda authored by this staff member (post-freeze notes)
     if (originalName) {

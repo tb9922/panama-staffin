@@ -53,7 +53,6 @@ export default function CQCEvidence() {
   useEffect(() => {
     if (!homeSlug) return;
     // CQC scoring needs up to 365 days of overrides for the 1-year view
-    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
       .toISOString().slice(0, 10);

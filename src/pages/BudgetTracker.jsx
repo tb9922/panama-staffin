@@ -30,7 +30,6 @@ export default function BudgetTracker() {
   useEffect(() => {
     if (!homeSlug) return;
     // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
-    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0)).toISOString().slice(0, 10);
@@ -51,6 +50,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -142,7 +142,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       await saveConfig(getCurrentHome(), newConfig);
       setSchedData(prev => ({ ...prev, config: newConfig }));
     } catch (e) {
-      setError(e.message);
+      setSaveError(e.message);
     }
   }
 
@@ -182,6 +182,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
         <p className="text-xs text-gray-500">12-month rolling view | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
+      {saveError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded text-sm" role="alert">{saveError}</div>}
       <div className="flex items-center justify-between mb-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Budget vs Actual</h1>

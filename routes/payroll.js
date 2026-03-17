@@ -350,7 +350,7 @@ router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requ
     // staff_member: own payslip only, no aggregate totals
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
       lines = lines.filter(l => l.staff_id === req.staffId);
-      const { total_gross, total_enhancements, total_sleep_ins, staff_count: _sc, ...safeRun } = run;
+      const { total_gross: _tg, total_enhancements: _te, total_sleep_ins: _ts, staff_count: _sc, ...safeRun } = run;
       return res.json({ run: safeRun, lines });
     }
     res.json({ run, lines });

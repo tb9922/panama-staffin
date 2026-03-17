@@ -83,7 +83,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
   }
 });
 
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const parsed = dataBodySchema.safeParse(req.body);
     if (!parsed.success) {

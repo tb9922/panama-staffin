@@ -33,7 +33,6 @@ export default function ScenarioModel() {
 
   useEffect(() => {
     if (!homeSlug) return;
-    setLoading(true);
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
