@@ -11,7 +11,7 @@
  * @returns {{ rate: number, label: string }}
  */
 export function getMinimumWageRate(staffDob, config, asOfDate) {
-  const nlwRate = config?.nlw_rate || 12.71;
+  const nlwRate = config?.nlw_rate || 12.21;
   if (!staffDob) return { rate: nlwRate, label: 'NLW' };
 
   const ref = asOfDate

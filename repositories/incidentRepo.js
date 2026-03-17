@@ -195,7 +195,7 @@ export async function sync(homeId, incidentsArr, client) {
          reported_by               = EXCLUDED.reported_by,
          reported_at               = EXCLUDED.reported_at,
          updated_at                = NOW(),
-         deleted_at                = NULL
+         deleted_at                = CASE WHEN incidents.frozen_at IS NOT NULL THEN incidents.deleted_at ELSE EXCLUDED.deleted_at END
        WHERE incidents.frozen_at IS NULL`,
       [homeId, ...values]
     );
