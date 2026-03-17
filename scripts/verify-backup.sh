@@ -10,7 +10,7 @@
 #   BACKUP_FILE=path/to.sql.gz ./scripts/verify-backup.sh  # verify specific backup
 #
 # Cron (weekly at 3am Sunday, after 2am daily backup):
-#   0 3 * * 0 /var/www/panama/scripts/verify-backup.sh >> /var/log/panama-verify.log 2>&1
+#   0 3 * * 0 /var/www/panama-staffing/scripts/verify-backup.sh >> /var/log/panama-verify.log 2>&1
 #
 # Optional: set HEALTHCHECK_URL for Healthchecks.io ping on success/failure
 #   HEALTHCHECK_URL=https://hc-ping.com/your-uuid-here

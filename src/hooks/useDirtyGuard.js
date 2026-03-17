@@ -27,7 +27,7 @@ export default function useDirtyGuard(isDirty) {
     if (blocker.state !== 'blocked') return;
     const leave = window.confirm('You have unsaved changes. Leave this page?');
     if (leave) {
-      blocker.proceed();
+      setTimeout(blocker.proceed, 0); // defer to match React Router's usePrompt pattern
     } else {
       blocker.reset();
     }

@@ -11,7 +11,7 @@
  *   node scripts/purge-retention.js --execute    # actually delete
  *
  * Cron (weekly, Sunday 3am):
- *   0 3 * * 0 cd /var/www/panama && node scripts/purge-retention.js --execute >> /var/log/panama-purge.log 2>&1
+ *   0 3 * * 0 cd /var/www/panama-staffing && node scripts/purge-retention.js --execute >> /var/log/panama-purge.log 2>&1
  *
  * Safety:
  *   - Dry run by default — shows what would be deleted without deleting

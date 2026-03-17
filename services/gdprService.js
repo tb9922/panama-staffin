@@ -7,6 +7,7 @@ import { ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
 import logger from '../logger.js';
 
+/** Deduplicate rows by id. Assumes id is a non-null SERIAL PRIMARY KEY. */
 function dedupeById(rows) {
   const seen = new Set();
   return rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
