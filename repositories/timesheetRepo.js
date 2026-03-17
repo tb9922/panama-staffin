@@ -188,42 +188,48 @@ export async function bulkUpsert(homeId, entries, client) {
     return withTransaction(c => bulkUpsert(homeId, entries, c));
   }
   const conn = client || pool;
-  const results = [];
+  if (entries.length === 0) return [];
+
+  // Batch INSERT — one query instead of per-row loop
+  const values = [];
+  const params = [];
+  let idx = 1;
   for (const entry of entries) {
-    const { rows } = await conn.query(
-      `INSERT INTO timesheet_entries
-         (home_id, staff_id, date, scheduled_start, scheduled_end,
-          actual_start, actual_end, snapped_start, snapped_end,
-          snap_applied, snap_minutes_saved, break_minutes, payable_hours,
-          status, notes, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
-       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
-         actual_start       = EXCLUDED.actual_start,
-         actual_end         = EXCLUDED.actual_end,
-         snapped_start      = EXCLUDED.snapped_start,
-         snapped_end        = EXCLUDED.snapped_end,
-         snap_applied       = EXCLUDED.snap_applied,
-         snap_minutes_saved = EXCLUDED.snap_minutes_saved,
-         break_minutes      = EXCLUDED.break_minutes,
-         payable_hours      = EXCLUDED.payable_hours,
-         status             = CASE WHEN timesheet_entries.status = 'locked' THEN timesheet_entries.status
-                                   ELSE EXCLUDED.status END,
-         notes              = EXCLUDED.notes,
-         updated_at         = NOW()
-       RETURNING ${COLS}`,
-      [
-        homeId, entry.staff_id, entry.date,
-        entry.scheduled_start || null, entry.scheduled_end || null,
-        entry.actual_start || null, entry.actual_end || null,
-        entry.snapped_start || null, entry.snapped_end || null,
-        entry.snap_applied ?? false, entry.snap_minutes_saved ?? 0,
-        entry.break_minutes ?? 0, entry.payable_hours ?? null,
-        entry.status ?? 'pending', entry.notes || null,
-      ],
+    values.push(`($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},NOW())`);
+    params.push(
+      homeId, entry.staff_id, entry.date,
+      entry.scheduled_start || null, entry.scheduled_end || null,
+      entry.actual_start || null, entry.actual_end || null,
+      entry.snapped_start || null, entry.snapped_end || null,
+      entry.snap_applied ?? false, entry.snap_minutes_saved ?? 0,
+      entry.break_minutes ?? 0, entry.payable_hours ?? null,
+      entry.status ?? 'pending', entry.notes || null,
     );
-    results.push(shapeRow(rows[0]));
   }
-  return results;
+  const { rows } = await conn.query(
+    `INSERT INTO timesheet_entries
+       (home_id, staff_id, date, scheduled_start, scheduled_end,
+        actual_start, actual_end, snapped_start, snapped_end,
+        snap_applied, snap_minutes_saved, break_minutes, payable_hours,
+        status, notes, updated_at)
+     VALUES ${values.join(', ')}
+     ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+       actual_start       = EXCLUDED.actual_start,
+       actual_end         = EXCLUDED.actual_end,
+       snapped_start      = EXCLUDED.snapped_start,
+       snapped_end        = EXCLUDED.snapped_end,
+       snap_applied       = EXCLUDED.snap_applied,
+       snap_minutes_saved = EXCLUDED.snap_minutes_saved,
+       break_minutes      = EXCLUDED.break_minutes,
+       payable_hours      = EXCLUDED.payable_hours,
+       status             = CASE WHEN timesheet_entries.status = 'locked' THEN timesheet_entries.status
+                                 ELSE EXCLUDED.status END,
+       notes              = EXCLUDED.notes,
+       updated_at         = NOW()
+     RETURNING ${COLS}`,
+    params,
+  );
+  return rows.map(shapeRow);
 }
 
 /** Approve all pending entries for a specific staff member within a date range. */

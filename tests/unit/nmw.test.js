@@ -70,9 +70,9 @@ describe('getMinimumWageRate', () => {
     const result21 = getMinimumWageRate('1990-01-01', sparseConfig);
     expect(result21.rate).toBe(12.21);
     const result19 = getMinimumWageRate('2006-06-16', sparseConfig);
-    expect(result19.rate).toBe(10.85);
+    expect(result19.rate).toBe(10.00);
     const result16 = getMinimumWageRate('2009-01-01', sparseConfig);
-    expect(result16.rate).toBe(8.00);
+    expect(result16.rate).toBe(7.55);
   });
 
   it('uses config rates when provided', () => {

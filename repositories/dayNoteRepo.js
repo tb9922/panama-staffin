@@ -41,13 +41,19 @@ export async function replace(homeId, notesObj, client, fromDate, toDate) {
   const entries = Object.entries(notesObj).filter(([, note]) => note && note.trim());
   if (entries.length === 0) return;
 
+  // Batch INSERT — one query instead of per-row loop
+  const values = [];
+  const params = [];
+  let idx = 1;
   for (const [date, note] of entries) {
-    await conn.query(
-      `INSERT INTO day_notes (home_id, date, note, updated_at) VALUES ($1,$2,$3,NOW())
-       ON CONFLICT (home_id, date) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()`,
-      [homeId, date, note]
-    );
+    values.push(`($${idx++}, $${idx++}, $${idx++}, NOW())`);
+    params.push(homeId, date, note);
   }
+  await conn.query(
+    `INSERT INTO day_notes (home_id, date, note, updated_at) VALUES ${values.join(', ')}
+     ON CONFLICT (home_id, date) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()`,
+    params
+  );
 }
 
 /**

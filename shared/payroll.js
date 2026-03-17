@@ -10,7 +10,7 @@
  * A night shift starting Saturday is a Saturday shift for all hours.
  */
 
-import { NIGHT_SHIFTS, getShiftHours, isOTShift } from './rotation.js';
+import { NIGHT_SHIFTS, getShiftHours, isOTShift, formatDate } from './rotation.js';
 
 // ── Age & NMW ─────────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ export function getNMWBracket(age) {
  * Returns null if no applicable rate found.
  */
 export function getApplicableNMWRate(bracket, date, nmwRates) {
-  const dateStr = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+  const dateStr = typeof date === 'string' ? date : formatDate(date);
   const applicable = nmwRates
     .filter(r => r.age_bracket === bracket && r.effective_from <= dateStr)
     .sort((a, b) => b.effective_from.localeCompare(a.effective_from));
@@ -172,7 +172,7 @@ export function calculateShiftPay(shift, date, staff, rules, config, isSleepIn, 
   const sorted = [...rules].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
 
   // Filter rules by shift date — a rule effective from Jan 15 must not apply to Jan 1-14
-  const dateStr = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+  const dateStr = typeof date === 'string' ? date : formatDate(date);
   const dateRules = sorted.filter(r =>
     (!r.effective_from || r.effective_from <= dateStr) && (!r.effective_to || r.effective_to >= dateStr)
   );

@@ -16,7 +16,7 @@ const loginLimiter = rateLimit({
   // Pre-auth: key by IP + submitted username so one user's typos don't block others.
   max: config.nodeEnv === 'test' ? 1000 : 30,
   keyGenerator: (req) => {
-    const ip = ipKeyGenerator(req);
+    const ip = ipKeyGenerator(req.ip);
     const username = req.body?.username || '';
     return `login:${ip}:${username}`;
   },

@@ -2,7 +2,7 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requirePlatformAdmin, requireHomeAccess, requireHomeManager } from '../middleware/auth.js';
-import { writeRateLimiter } from '../lib/rateLimiter.js';
+import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as userService from '../services/userService.js';
 import * as userRepo from '../repositories/userRepo.js';
@@ -59,7 +59,7 @@ const idSchema = z.coerce.number().int().positive();
 // ── Platform-only endpoints (must be defined BEFORE /:id param routes) ───────
 
 // GET /api/users/all-homes — list all homes with integer IDs for access management
-router.get('/all-homes', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+router.get('/all-homes', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const allHomes = await homeRepo.listAllWithIds();
     res.json(allHomes);
@@ -68,7 +68,7 @@ router.get('/all-homes', requireAuth, requirePlatformAdmin, async (req, res, nex
 
 // GET /api/users/all-roles/:id — get all role assignments for a user across all homes (platform admin only)
 // Must be defined BEFORE /:id to avoid param route catch
-router.get('/all-roles/:id', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+router.get('/all-roles/:id', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
@@ -97,7 +97,7 @@ router.post('/change-password', writeRateLimiter, requireAuth, async (req, res, 
 // ── Per-home endpoints (home_manager OR platform admin) ──────────────────────
 
 // GET /api/users?home=:slug — list users at this home, ordered by role hierarchy
-router.get('/', requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
   try {
     const users = await userRepo.findByHome(req.home.id);
     res.json(users);
@@ -140,7 +140,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
 });
 
 // GET /api/users/:id?home=:slug — get single user (only if they have role at this home)
-router.get('/:id', requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
+router.get('/:id', readRateLimiter, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
   try {
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
@@ -201,7 +201,7 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireHomeAcc
 });
 
 // GET /api/users/:id/homes — list homes a user has access to (platform admin only)
-router.get('/:id/homes', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+router.get('/:id/homes', readRateLimiter, requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
@@ -251,7 +251,7 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
 });
 
 // GET /api/users/:id/roles?home=:slug — get user's role at this home
-router.get('/:id/roles', requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
+router.get('/:id/roles', readRateLimiter, requireAuth, requireHomeAccess, requireHomeManager, async (req, res, next) => {
   try {
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });

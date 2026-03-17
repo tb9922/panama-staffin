@@ -25,6 +25,6 @@ export function getMinimumWageRate(staffDob, config, asOfDate) {
   if (m < 0 || (m === 0 && ref.getUTCDate() < dob.getUTCDate())) age--;
 
   if (age >= 21) return { rate: nlwRate, label: 'NLW' };
-  if (age >= 18) return { rate: config?.nmw_rate_18_20 || 10.85, label: 'NMW (18-20)' };
-  return { rate: config?.nmw_rate_under_18 || 8.00, label: 'NMW (U18)' };
+  if (age >= 18) return { rate: config?.nmw_rate_18_20 || 10.00, label: 'NMW (18-20)' };
+  return { rate: config?.nmw_rate_under_18 || 7.55, label: 'NMW (U18)' };
 }
