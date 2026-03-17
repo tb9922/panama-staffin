@@ -200,6 +200,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       let nmwCompliant = true;
       let nmwLowest = Infinity;
       const nmwWarnings = [];
+      const shiftDetails = []; // collect for batch INSERT
 
       for (const date of dates) {
         // Skip dates after staff left (deactivated mid-period leavers)
@@ -214,10 +215,10 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
           acc.holiday_days += 1;
           acc.holiday_pay = round2(acc.holiday_pay + dailyRate);
           // Record as a shift so lookback query can find it
-          await payrollRunRepo.createLineShift(line.id, {
+          shiftDetails.push({
             date, shift_code: 'AL', hours: 0, base_rate: 0, base_amount: 0,
             enhancements_json: [], total_amount: dailyRate, effective_hourly_rate: 0,
-          }, client);
+          });
           continue;
         }
 
@@ -261,17 +262,17 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (nmw.effectiveRate > 0 && nmw.effectiveRate < nmwLowest) nmwLowest = nmw.effectiveRate;
         if (nmw.warning) nmwWarnings.push(`${date}: ${nmw.warning}`);
 
-        // Insert shift detail
-        await payrollRunRepo.createLineShift(line.id, {
+        // Collect shift detail for batch INSERT
+        shiftDetails.push({
           date,
           shift_code:           shift,
           hours:                result.hours,
-          base_rate:            parseFloat(s.hourly_rate),
+          base_rate:            s.hourly_rate != null ? parseFloat(s.hourly_rate) : 0,
           base_amount:          result.basePay,
           enhancements_json:    result.enhancements,
           total_amount:         result.total,
           effective_hourly_rate: nmw.effectiveRate,
-        }, client);
+        });
 
         // Accumulate by enhancement type
         acc.base_hours += hours;
@@ -308,6 +309,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
               break;
           }
         }
+      }
+
+      // Batch INSERT all shift details for this line (replaces N individual INSERTs)
+      if (shiftDetails.length > 0) {
+        await payrollRunRepo.createLineShiftsBatch(line.id, shiftDetails, client);
       }
 
       // Round gross accumulators

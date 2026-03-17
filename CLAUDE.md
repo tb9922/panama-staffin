@@ -66,6 +66,12 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 36. ~~Complaints PUT/DELETE double-path /api/complaints/complaints/:id~~ — FIXED: routes use `/:id` not `/complaints/:id`
 37. ~~Webhook SSRF via DNS rebinding~~ — FIXED: extracted lib/ssrf.js, re-validate at delivery + retry time
 38. ~~BudgetTracker setError not in scope~~ — FIXED: local saveError state in BudgetTrackerInner
+39. ~~staffRepo.shapeRow parseFloat(null)→NaN~~ — FIXED: null-guard on `skill` and `hourly_rate` (prevents NaN in payroll/cost calcs)
+40. ~~rotation.js getTeamBase null team TypeError~~ — FIXED: `!team` guard in getTeamBase (prevents crash for staff with no team)
+41. ~~Webhook retry duplicate delivery~~ — FIXED: `findPendingRetries` uses FOR UPDATE SKIP LOCKED
+42. ~~Username creation race returns 500~~ — FIXED: catch PG unique constraint 23505 in userService.createUser
+43. ~~Payroll N+1 INSERT (~680 queries/run)~~ — FIXED: batch INSERT via `createLineShiftsBatch()` (~40 queries/run)
+44. ~~Employer NI Secondary Threshold wrong (£9,100)~~ — FIXED: migration 110 corrects to £5,000/year per Autumn Budget 2024
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
@@ -841,7 +847,6 @@ Phase 2 features (detailed micro-step spec exists — see session memory):
 ### Current Known Gaps
 - AL carryover is set manually — no automatic year-end rollover
 - No UI to set `override_hours` on TRN/ADM overrides (accepted by API, not yet exposed in editor)
-- Frontend loads full home data blob into state — backend is paginated but frontend doesn't use it yet
 
 ## Design System
 
