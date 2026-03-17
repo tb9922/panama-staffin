@@ -197,7 +197,7 @@ async function cleanup() {
 // ── seedDefaultRulesIfNeeded ────────────────────────────────────────────────
 
 describe('seedDefaultRulesIfNeeded', () => {
-  it('seeds 7 default rules for a home with none', async () => {
+  it('seeds 6 default rules for a home with none', async () => {
     // Ensure clean slate
     await pool.query(`DELETE FROM pay_rate_rules WHERE home_id = $1`, [homeId]);
 
@@ -214,7 +214,7 @@ describe('seedDefaultRulesIfNeeded', () => {
       `SELECT * FROM pay_rate_rules WHERE home_id = $1 AND effective_to IS NULL ORDER BY applies_to`,
       [homeId],
     );
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(6);
 
     const types = rows.map(r => r.applies_to).sort();
     expect(types).toContain('night');
@@ -222,7 +222,6 @@ describe('seedDefaultRulesIfNeeded', () => {
     expect(types).toContain('weekend_sun');
     expect(types).toContain('bank_holiday');
     expect(types).toContain('sleep_in');
-    expect(types).toContain('overtime');
     expect(types).toContain('on_call');
   });
 
@@ -240,7 +239,7 @@ describe('seedDefaultRulesIfNeeded', () => {
       `SELECT COUNT(*)::int AS cnt FROM pay_rate_rules WHERE home_id = $1 AND effective_to IS NULL`,
       [homeId],
     );
-    expect(rows[0].cnt).toBe(7);
+    expect(rows[0].cnt).toBe(6);
   });
 });
 

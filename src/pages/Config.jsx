@@ -4,7 +4,7 @@ import { isCareRole } from '../lib/rotation.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, saveConfig, getPayRateConsistency } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 export default function Config() {
@@ -22,6 +22,7 @@ export default function Config() {
   const [syncStatus, setSyncStatus] = useState(null);
   const [newBhDate, setNewBhDate] = useState('');
   const [newBhName, setNewBhName] = useState('');
+  const [consistency, setConsistency] = useState(null);
 
   useDirtyGuard(dirty);
 
@@ -29,9 +30,13 @@ export default function Config() {
     try {
       setLoading(true);
       setLoadError(null);
-      const d = await getSchedulingData(homeSlug);
+      const [d, c] = await Promise.all([
+        getSchedulingData(homeSlug),
+        getPayRateConsistency(homeSlug).catch(() => null),
+      ]);
       setConfig(JSON.parse(JSON.stringify(d.config || {})));
       setStaff(d.staff || []);
+      setConsistency(c);
     } catch (e) {
       setLoadError(e.message);
     } finally {
@@ -218,6 +223,14 @@ export default function Config() {
       {/* Overtime & Agency */}
       <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Overtime & Agency</h2>
+        {consistency && !consistency.consistent && consistency.warnings.length > 0 && (
+          <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800" role="status">
+            <p className="font-semibold mb-1">Rate mismatch detected</p>
+            {consistency.warnings.map((w, i) => (
+              <p key={i} className="text-xs mt-1">{w.message}</p>
+            ))}
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="OT Premium" path="ot_premium" step={0.5} unit="/hr" />
           <Field label="Agency Day Rate" path="agency_rate_day" unit="/hr" />

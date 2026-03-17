@@ -15,6 +15,7 @@ vi.mock('../../lib/api.js', async () => {
     updatePayRateRule: vi.fn(),
     deletePayRateRule: vi.fn(),
     getNMWRates: vi.fn(),
+    getPayRateConsistency: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -43,9 +44,10 @@ const MOCK_NMW_RATES = [
   { id: 'nmw-2', age_bracket: '18-20', effective_from: '2025-04-01', hourly_rate: '10.00' },
 ];
 
-function setupMocks(rules = MOCK_RULES, nmwRates = MOCK_NMW_RATES) {
+function setupMocks(rules = MOCK_RULES, nmwRates = MOCK_NMW_RATES, consistency = { consistent: true, warnings: [] }) {
   api.getPayRateRules.mockResolvedValue(rules);
   api.getNMWRates.mockResolvedValue(nmwRates);
+  api.getPayRateConsistency.mockResolvedValue(consistency);
 }
 
 describe('PayRatesConfig', () => {
@@ -142,5 +144,63 @@ describe('PayRatesConfig', () => {
     expect(screen.getAllByText('Rule Name').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Applies To').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Rate Type').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('add-new-rule dropdown does not offer "overtime" option', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '+ Add Rule' })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole('button', { name: '+ Add Rule' }));
+    const dialog = screen.getByRole('dialog');
+    const selects = dialog.querySelectorAll('select');
+    // First select is "Applies To"
+    const appliesToSelect = selects[0];
+    const options = Array.from(appliesToSelect.options).map(o => o.value);
+    expect(options).not.toContain('overtime');
+    expect(options).toContain('on_call');
+  });
+
+  it('legacy overtime rule shows amber badge with "Legacy / unused" label', async () => {
+    const rulesWithOvertime = [
+      ...MOCK_RULES,
+      {
+        id: 'rule-ot', name: 'Overtime Premium', rate_type: 'fixed_hourly',
+        amount: '2.00', applies_to: 'overtime', priority: 0, effective_from: '2020-01-01',
+      },
+    ];
+    setupMocks(rulesWithOvertime);
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() =>
+      expect(screen.getByText('Overtime Premium')).toBeInTheDocument()
+    );
+    expect(screen.getByText('Legacy / unused')).toBeInTheDocument();
+  });
+
+  it('shows amber banner when consistency check reports mismatch', async () => {
+    const mismatch = {
+      consistent: false,
+      warnings: [{
+        field: 'ot_premium',
+        message: 'Extra Shift Premium in Pay Rate Rules is \u00A33.00/hr, but Home Settings OT Premium is \u00A32.00/hr.',
+        configValue: 2, rulesValue: 3,
+      }],
+    };
+    setupMocks(MOCK_RULES, MOCK_NMW_RATES, mismatch);
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() =>
+      expect(screen.getByText('Rate mismatch detected')).toBeInTheDocument()
+    );
+  });
+
+  it('does not show banner when consistency check reports no mismatch', async () => {
+    setupMocks(MOCK_RULES, MOCK_NMW_RATES, { consistent: true, warnings: [] });
+    renderWithProviders(<PayRatesConfig />);
+    await waitFor(() =>
+      expect(screen.getByText('Night Enhancement')).toBeInTheDocument()
+    );
+    expect(screen.queryByText('Rate mismatch detected')).not.toBeInTheDocument();
   });
 });

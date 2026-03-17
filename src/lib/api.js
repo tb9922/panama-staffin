@@ -415,6 +415,9 @@ export async function deletePayRateRule(homeSlug, ruleId) {
 export async function getNMWRates() {
   return apiFetch(`${API_BASE}/payroll/nmw`, { headers: authHeaders() });
 }
+export async function getPayRateConsistency(homeSlug) {
+  return apiFetch(`${API_BASE}/payroll/rates/consistency?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
 
 // Timesheets
 export async function getTimesheets(homeSlug, date) {

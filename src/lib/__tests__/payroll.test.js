@@ -36,8 +36,7 @@ const RATE_RULES = [
   { applies_to: 'weekend_sun', rate_type: 'percentage',    amount: 20,   name: 'Sunday Enhancement'    },
   { applies_to: 'bank_holiday',rate_type: 'percentage',    amount: 50,   name: 'Bank Holiday Premium'  },
   { applies_to: 'sleep_in',    rate_type: 'flat_per_shift',amount: 50,   name: 'Sleep-in Flat Rate'    },
-  { applies_to: 'overtime',    rate_type: 'fixed_hourly',  amount: 2.00, name: 'Overtime Premium'      },
-  { applies_to: 'on_call',     rate_type: 'fixed_hourly',  amount: 2.00, name: 'On-Call Premium'       },
+  { applies_to: 'on_call',     rate_type: 'fixed_hourly',  amount: 2.00, name: 'Extra Shift Premium'   },
 ];
 
 function makeStaff(overrides = {}) {

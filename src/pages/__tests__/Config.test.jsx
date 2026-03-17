@@ -17,6 +17,7 @@ vi.mock('../../lib/api.js', async (importActual) => {
     getSchedulingData: vi.fn(),
     saveConfig: vi.fn(),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
+    getPayRateConsistency: vi.fn(),
   };
 });
 
@@ -43,17 +44,19 @@ vi.mock('../../lib/design.js', async (importActual) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-import { getSchedulingData, saveConfig, getLoggedInUser } from '../../lib/api.js';
+import { getSchedulingData, saveConfig, getLoggedInUser, getPayRateConsistency } from '../../lib/api.js';
 
-function setupAdminMocks() {
+function setupAdminMocks(consistency = { consistent: true, warnings: [] }) {
   getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA });
   saveConfig.mockResolvedValue({});
+  getPayRateConsistency.mockResolvedValue(consistency);
 }
 
 function setupViewerMocks() {
   getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
   getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA });
+  getPayRateConsistency.mockResolvedValue({ consistent: true, warnings: [] });
 }
 
 // ---------------------------------------------------------------------------
@@ -273,5 +276,27 @@ describe('Config', () => {
     expect(screen.getByRole('option', { name: 'Nursing' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Dementia' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Mixed' })).toBeInTheDocument();
+  });
+
+  it('shows amber banner in Overtime & Agency section when rate mismatch detected', async () => {
+    const mismatch = {
+      consistent: false,
+      warnings: [{
+        field: 'ot_premium',
+        message: 'Extra Shift Premium in Pay Rate Rules is \u00A33.00/hr, but Home Settings OT Premium is \u00A32.00/hr.',
+        configValue: 2, rulesValue: 3,
+      }],
+    };
+    setupAdminMocks(mismatch);
+    renderWithProviders(<Config />);
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+    expect(screen.getByText('Rate mismatch detected')).toBeInTheDocument();
+  });
+
+  it('does not show banner when consistency check reports no mismatch', async () => {
+    setupAdminMocks({ consistent: true, warnings: [] });
+    renderWithProviders(<Config />);
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+    expect(screen.queryByText('Rate mismatch detected')).not.toBeInTheDocument();
   });
 });
