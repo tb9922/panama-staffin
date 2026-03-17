@@ -28,8 +28,8 @@ test.describe('Scheduling — Roster', () => {
 test.describe('Scheduling — Daily Status', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/day');
-    // Daily Status heading is the date (e.g. "Monday, 16 March 2026")
-    await expect(page.locator('h1').first()).toBeVisible({ timeout: 15_000 });
+    // Wait for the page to load — look for the coverage section
+    await expect(page.getByText(/early/i)).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows coverage periods', async ({ page }) => {
