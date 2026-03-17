@@ -48,6 +48,8 @@ export default function GdprDashboard() {
   const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'complaint'
   const [form, setForm] = useState({});
 
+  const [saving, setSaving] = useState(false);
+
   // Erasure confirmation state
   const [erasureConfirm, setErasureConfirm] = useState(null); // request id to erase
   const [erasureInput, setErasureInput] = useState('');
@@ -83,10 +85,13 @@ export default function GdprDashboard() {
 
   useEffect(() => { load(); }, [load]);
 
+  function closeModal() { setShowModal(null); setForm({}); }
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleCreateRequest() {
-    if (!form.request_type || !form.subject_type || !form.subject_id || !form.date_received) return;
+    if (saving || !form.request_type || !form.subject_type || !form.subject_id || !form.date_received) return;
+    setSaving(true);
     try {
       const data = {
         ...form,
@@ -96,11 +101,12 @@ export default function GdprDashboard() {
       setShowModal(null);
       setForm({});
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateBreach() {
-    if (!form.title || !form.discovered_date) return;
+    if (saving || !form.title || !form.discovered_date) return;
+    setSaving(true);
     try {
       const data = { ...form };
       // Combine date + time into UTC ISO datetime for precise ICO deadline calculation
@@ -115,37 +121,43 @@ export default function GdprDashboard() {
       setShowModal(null);
       setForm({});
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateConsent() {
-    if (!form.subject_type || !form.subject_id || !form.purpose || !form.legal_basis) return;
+    if (saving || !form.subject_type || !form.subject_id || !form.purpose || !form.legal_basis) return;
+    setSaving(true);
     try {
       await createConsentRecord(home, form);
       setShowModal(null);
       setForm({});
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleCreateComplaint() {
-    if (!form.date_received || !form.category || !form.description) return;
+    if (saving || !form.date_received || !form.category || !form.description) return;
+    setSaving(true);
     try {
       await createDPComplaint(home, form);
       setShowModal(null);
       setForm({});
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleAssessBreach(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       await assessBreach(home, id);
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleGatherData(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       const data = await gatherRequestData(home, id);
       // Download as JSON
@@ -156,7 +168,7 @@ export default function GdprDashboard() {
       a.download = `sar_data_${data.subject_id}_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   function handleExecuteErasure(id) {
@@ -165,36 +177,43 @@ export default function GdprDashboard() {
   }
 
   async function confirmErasure() {
-    if (erasureInput !== 'ERASE' || !erasureConfirm) return;
+    if (saving || erasureInput !== 'ERASE' || !erasureConfirm) return;
+    setSaving(true);
     try {
       await executeErasure(home, erasureConfirm);
       setErasureConfirm(null);
       setErasureInput('');
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleUpdateStatus(type, id, status) {
+    if (saving) return;
+    setSaving(true);
     try {
       if (type === 'request') await updateDataRequest(home, id, { status });
       else if (type === 'breach') await updateDataBreach(home, id, { status });
       else if (type === 'complaint') await updateDPComplaint(home, id, { status });
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleRunRetentionScan() {
+    if (saving) return;
+    setSaving(true);
     try {
       const scan = await scanRetention(home);
       setRetentionScan(scan);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleWithdrawConsent(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   // ── Compliance Score ─────────────────────────────────────────────────────
@@ -575,7 +594,7 @@ export default function GdprDashboard() {
 
   function renderRequestModal() {
     return (
-      <Modal isOpen={true} onClose={() => setShowModal(null)} title="New Data Request" size="lg">
+      <Modal isOpen={true} onClose={closeModal} title="New Data Request" size="lg">
         <div className="space-y-4">
           <div>
             <label className={INPUT.label}>Request Type</label>
@@ -617,8 +636,8 @@ export default function GdprDashboard() {
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleCreateRequest}>Create Request</button>
+          <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateRequest} disabled={saving}>{saving ? 'Creating...' : 'Create Request'}</button>
         </div>
       </Modal>
     );
@@ -626,7 +645,7 @@ export default function GdprDashboard() {
 
   function renderBreachModal() {
     return (
-      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Report Data Breach" size="lg">
+      <Modal isOpen={true} onClose={closeModal} title="Report Data Breach" size="lg">
         <div className="space-y-4">
           <div>
             <label className={INPUT.label}>Title</label>
@@ -674,8 +693,8 @@ export default function GdprDashboard() {
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleCreateBreach}>Report Breach</button>
+          <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateBreach} disabled={saving}>{saving ? 'Reporting...' : 'Report Breach'}</button>
         </div>
       </Modal>
     );
@@ -683,7 +702,7 @@ export default function GdprDashboard() {
 
   function renderConsentModal() {
     return (
-      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Record Consent" size="lg">
+      <Modal isOpen={true} onClose={closeModal} title="Record Consent" size="lg">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -718,8 +737,8 @@ export default function GdprDashboard() {
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleCreateConsent}>Record Consent</button>
+          <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateConsent} disabled={saving}>{saving ? 'Recording...' : 'Record Consent'}</button>
         </div>
       </Modal>
     );
@@ -727,7 +746,7 @@ export default function GdprDashboard() {
 
   function renderComplaintModal() {
     return (
-      <Modal isOpen={true} onClose={() => setShowModal(null)} title="Log DP Complaint" size="lg">
+      <Modal isOpen={true} onClose={closeModal} title="Log DP Complaint" size="lg">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -763,8 +782,8 @@ export default function GdprDashboard() {
           </div>
         </div>
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={() => setShowModal(null)}>Cancel</button>
-          <button className={BTN.primary} onClick={handleCreateComplaint}>Log Complaint</button>
+          <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
+          <button className={BTN.primary} onClick={handleCreateComplaint} disabled={saving}>{saving ? 'Logging...' : 'Log Complaint'}</button>
         </div>
       </Modal>
     );

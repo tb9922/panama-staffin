@@ -48,21 +48,20 @@ export default function WhistleblowingTracker() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const today = useLiveDate();
+  const homeSlug = getCurrentHome();
 
   const load = useCallback(async () => {
+    if (!homeSlug) return;
     try {
       setError(null);
-      const home = getCurrentHome();
-      if (!home) return;
-      const result = await getWhistleblowingConcerns(home);
+      const result = await getWhistleblowingConcerns(homeSlug);
       setConcerns(result.concerns || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-    // getCurrentHome() reads a module-level var; re-run on home switch via DataContext remount
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -121,12 +120,11 @@ export default function WhistleblowingTracker() {
 
   async function handleSave() {
     if (!form.date_raised || !form.category || !form.severity) return;
-    const home = getCurrentHome();
     try {
       if (editingId) {
-        await updateWhistleblowingConcern(home, editingId, form);
+        await updateWhistleblowingConcern(homeSlug, editingId, form);
       } else {
-        await createWhistleblowingConcern(home, form);
+        await createWhistleblowingConcern(homeSlug, form);
       }
       setShowModal(false);
       await load();
@@ -137,9 +135,8 @@ export default function WhistleblowingTracker() {
 
   async function handleDelete() {
     if (!editingId || !confirm('Delete this whistleblowing concern?')) return;
-    const home = getCurrentHome();
     try {
-      await deleteWhistleblowingConcern(home, editingId);
+      await deleteWhistleblowingConcern(homeSlug, editingId);
       setShowModal(false);
       await load();
     } catch (err) {

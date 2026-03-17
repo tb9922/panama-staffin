@@ -132,7 +132,7 @@ export default function ContractManager() {
 
   function daysUntil(dateStr) {
     if (!dateStr) return null;
-    const diff = (new Date(dateStr) - new Date(today)) / 86400000;
+    const diff = (new Date(dateStr + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000;
     return Math.ceil(diff);
   }
 

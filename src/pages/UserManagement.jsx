@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import useDirtyGuard from '../hooks/useDirtyGuard';
 import {
   getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
   setUserHomeRole, listAllHomesForAccess, getUserAllRoles, setUserRolesBulk,
@@ -43,6 +44,7 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState(null);
   const [resetPwUser, setResetPwUser] = useState(null);
   const [rolesUser, setRolesUser] = useState(null);
+  useDirtyGuard(!!(addOpen || editUser || resetPwUser || rolesUser));
 
   const refresh = useCallback(async () => {
     if (!homeSlug) return;

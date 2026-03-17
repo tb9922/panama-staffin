@@ -39,7 +39,7 @@ const concernUpdateSchema = concernBodySchema.omit({ anonymous: true }).partial(
 });
 
 // GET /api/whistleblowing?home=X
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const concernsResult = await whistleblowingRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
@@ -65,7 +65,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 });
 
 // POST /api/whistleblowing?home=X
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
   try {
     const parsed = concernBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -82,7 +82,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
 });
 
 // PUT /api/whistleblowing/:id?home=X
-router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -107,7 +107,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // DELETE /api/whistleblowing/:id?home=X
-router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('governance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

@@ -30,7 +30,8 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename(req, file, cb) {
-    const ext = path.extname(file.originalname);
+    // Sanitize extension: strip anything that isn't alphanumeric or dot
+    const ext = path.extname(file.originalname).replace(/[^a-zA-Z0-9.]/g, '');
     cb(null, crypto.randomUUID() + ext);
   },
 });

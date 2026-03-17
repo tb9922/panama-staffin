@@ -60,6 +60,12 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 30. ~~StaffRegister.jsx NLW fallback 12.71~~ — FIXED: corrected to 12.21
 31. ~~isTokenDenied returns false for malformed tokens~~ — FIXED: && changed to || (deny if jti OR username missing)
 32. ~~findHomesWithRolesForUser UNION inefficiency~~ — FIXED: UNION ALL (NOT EXISTS already dedupes)
+33. ~~POST /api/data privilege escalation~~ — FIXED: `requireModule('config', 'write')` not `scheduling:write`
+34. ~~Staff CSV import auth allows scheduling:write to create staff~~ — FIXED: `requireModule('staff', 'write')`
+35. ~~GDPR erasure misses hr_file_attachments~~ — FIXED: delete physical files + DB metadata in executeErasure
+36. ~~Complaints PUT/DELETE double-path /api/complaints/complaints/:id~~ — FIXED: routes use `/:id` not `/complaints/:id`
+37. ~~Webhook SSRF via DNS rebinding~~ — FIXED: extracted lib/ssrf.js, re-validate at delivery + retry time
+38. ~~BudgetTracker setError not in scope~~ — FIXED: local saveError state in BudgetTrackerInner
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
@@ -79,7 +85,7 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 2,269+ tests across 117 files (unit + integration + page), all passing
+- **Testing**: Vitest — 2,316+ tests across 120 files (unit + integration + page), all passing
 
 ## Architecture
 

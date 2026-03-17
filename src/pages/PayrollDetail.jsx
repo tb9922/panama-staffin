@@ -73,7 +73,7 @@ export default function PayrollDetail() {
     const h = getCurrentHome();
     if (!h) return;
     getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+  }, [homeSlug]);
 
   // staffMap from scheduling API for name/role lookup
   const staffMap = useMemo(() => {
@@ -135,11 +135,14 @@ export default function PayrollDetail() {
   }
 
   async function handleApprove() {
+    if (action) return;
     setAction('approving');
     setError(null);
     try {
       const updated = await approvePayrollRun(homeSlug, runId);
       setRun(updated);
+      setShowApproveConfirm(false);
+      await load();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -540,10 +543,7 @@ export default function PayrollDetail() {
           </button>
           <button
             className={BTN.danger}
-            onClick={async () => {
-              setShowApproveConfirm(false);
-              await handleApprove();
-            }}
+            onClick={handleApprove}
             disabled={action === 'approving'}
           >
             {action === 'approving' ? 'Approving…' : 'Confirm Approve'}

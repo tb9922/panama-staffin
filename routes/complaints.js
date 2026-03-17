@@ -89,8 +89,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   } catch (err) { next(err); }
 });
 
-// PUT /api/complaints/complaints/:id?home=X
-router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+// PUT /api/complaints/:id?home=X
+router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
@@ -114,8 +114,8 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
   } catch (err) { next(err); }
 });
 
-// DELETE /api/complaints/complaints/:id?home=X
-router.delete('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+// DELETE /api/complaints/:id?home=X
+router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const idParsed = idSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });

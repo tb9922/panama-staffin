@@ -18,6 +18,7 @@
 set -euo pipefail
 
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
+: "${DB_NAME:?DB_NAME is required (e.g. panama_dev or panama_prod)}"
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -29,8 +30,6 @@ FILENAME="panama_${TIMESTAMP}.sql.gz"
 # Database connection — reads from environment or defaults
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-# WARNING: Defaults to panama_dev — set DB_NAME=panama_prod in production crontab
-DB_NAME="${DB_NAME:-panama_dev}"
 DB_USER="${DB_USER:-panama}"
 
 # ── Setup ─────────────────────────────────────────────────────────────────────

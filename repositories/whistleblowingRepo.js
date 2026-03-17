@@ -73,7 +73,7 @@ export async function sync(homeId, arr, client) {
          lessons_learned, reported_at, updated_at
        ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         date_raised=EXCLUDED.date_raised,raised_by_role=EXCLUDED.raised_by_role,anonymous=EXCLUDED.anonymous,
+         date_raised=EXCLUDED.date_raised,raised_by_role=EXCLUDED.raised_by_role,
          category=EXCLUDED.category,description=EXCLUDED.description,severity=EXCLUDED.severity,status=EXCLUDED.status,
          acknowledgement_date=EXCLUDED.acknowledgement_date,investigator=EXCLUDED.investigator,investigation_start_date=EXCLUDED.investigation_start_date,
          findings=EXCLUDED.findings,outcome=EXCLUDED.outcome,outcome_details=EXCLUDED.outcome_details,
@@ -120,7 +120,7 @@ export async function upsert(homeId, data) {
        lessons_learned, reported_at, updated_at
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date_raised=$3,raised_by_role=$4,anonymous=$5,
+       date_raised=$3,raised_by_role=$4,
        category=$6,description=$7,severity=$8,status=$9,
        acknowledgement_date=$10,investigator=$11,investigation_start_date=$12,
        findings=$13,outcome=$14,outcome_details=$15,
@@ -147,7 +147,7 @@ export async function upsert(homeId, data) {
 
 // Column name whitelist for dynamic SQL
 const ALLOWED_COLUMNS = new Set([
-  'date_raised', 'raised_by_role', 'anonymous',
+  'date_raised', 'raised_by_role',
   'category', 'description', 'severity', 'status',
   'acknowledgement_date', 'investigator', 'investigation_start_date',
   'findings', 'outcome', 'outcome_details',

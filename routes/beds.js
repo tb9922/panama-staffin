@@ -59,7 +59,7 @@ const moveSchema = z.object({
 
 // GET /api/beds/summary?home=slug — occupancy summary
 // MUST be defined before /:bedId to avoid "summary" matching as a bedId
-router.get('/summary', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/summary', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const summary = await bedService.getOccupancySummary(req.home.id);
     res.json(summary);
@@ -67,7 +67,7 @@ router.get('/summary', readRateLimiter, requireAuth, requireHomeAccess, async (r
 });
 
 // GET /api/beds?home=slug — list all beds for home
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const beds = await bedService.getBeds(req.home.id);
     res.json({ beds });
@@ -75,7 +75,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
 });
 
 // GET /api/beds/:bedId?home=slug — single bed detail
-router.get('/:bedId', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/:bedId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const parsed = idSchema.safeParse(req.params.bedId);
     if (!parsed.success) return zodError(res, parsed);
@@ -85,7 +85,7 @@ router.get('/:bedId', readRateLimiter, requireAuth, requireHomeAccess, async (re
 });
 
 // GET /api/beds/:bedId/history?home=slug — transition history
-router.get('/:bedId/history', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/:bedId/history', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const parsed = idSchema.safeParse(req.params.bedId);
     if (!parsed.success) return zodError(res, parsed);

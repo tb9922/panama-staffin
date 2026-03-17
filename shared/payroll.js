@@ -434,6 +434,11 @@ function parseTimeMinutes(timeStr) {
 }
 
 function csvEscape(str) {
+  // Neutralise CSV formula injection (=, +, -, @, tab, CR can trigger Excel formula execution)
+  // Always quote formula-dangerous strings so the prefix char stays hidden
+  if (/^[=+\-@\t\r]/.test(str)) {
+    return `"'${str.replace(/"/g, '""')}"`;
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

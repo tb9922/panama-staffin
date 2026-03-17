@@ -19,13 +19,13 @@ const usernameRegex = /^[a-zA-Z0-9._-]+$/;
 const createUserSchema = z.object({
   username: z.string().min(3).max(100).regex(usernameRegex, 'Username must be alphanumeric with . _ -'),
   password: z.string().min(10).max(200),
-  role: z.enum(['admin', 'viewer']),
+  role: z.enum(['viewer']),
   displayName: z.string().max(200).optional().default(''),
   homeRoleId: z.enum(ROLE_IDS).optional(),
 });
 
 const updateUserSchema = z.object({
-  role: z.enum(['admin', 'viewer']).optional(),
+  role: z.enum(['viewer']).optional(),
   displayName: z.string().max(200).optional(),
   active: z.boolean().optional(),
 });
@@ -125,7 +125,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
     const user = await withTransaction(async (client) => {
       const created = await userService.createUser(username, password, role, displayName, req.user.username, client);
       // Assign role at this home (defaults to viewer if no specific role requested)
-      const effectiveRole = homeRoleId || (role === 'admin' ? 'home_manager' : 'viewer');
+      const effectiveRole = homeRoleId || 'viewer';
       await userHomeRepo.assignRole(username, req.home.id, effectiveRole, null, req.user.username, client);
       return created;
     });

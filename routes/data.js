@@ -6,6 +6,8 @@ import * as homeService from '../services/homeService.js';
 import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
 import { homeConfigSchema } from '../lib/zodHelpers.js';
+import { isOwnDataOnly } from '../shared/roles.js';
+import logger from '../logger.js';
 
 const staffItemSchema = z.object({
   id: z.string().min(1).max(50),
@@ -62,8 +64,17 @@ function detectCriticalErrors(body) {
 
 const router = Router();
 
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
+    logger.warn({ home: req.home.slug, user: req.user.username }, 'GET /api/data called — deprecated, use dedicated endpoints');
+    res.setHeader('X-Deprecated', 'Use /api/scheduling, /api/incidents, etc.');
+
+    // staff_member own-data: block full data blob access
+    if (isOwnDataOnly(req.homeRole, 'scheduling')) {
+      if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
+      return res.status(403).json({ error: 'Use /api/scheduling for staff member access' });
+    }
+
     const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
     const data = await homeService.assembleData(req.home.slug, effectiveRole);
     res.json(data);
@@ -72,7 +83,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
   }
 });
 
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const parsed = dataBodySchema.safeParse(req.body);
     if (!parsed.success) {

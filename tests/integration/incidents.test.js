@@ -201,10 +201,9 @@ describe('Incidents: freeze and addenda', () => {
   });
 
   it('blocks update to frozen incident', async () => {
-    const result = await incidentRepo.update(incId, homeA,
+    await expect(incidentRepo.update(incId, homeA,
       { severity: 'minor' }
-    );
-    expect(result).toBeNull();
+    )).rejects.toThrow(/frozen/);
   });
 
   it('blocks delete of frozen incident', async () => {

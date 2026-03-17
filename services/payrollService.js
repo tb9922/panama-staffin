@@ -263,31 +263,32 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         acc.total_hours += hours;
 
         for (const e of result.enhancements) {
+          const amt = round2(e.enhancementAmount);
           switch (e.type) {
             case 'night':
               acc.night_hours += hours;
-              acc.night_enhancement += e.enhancementAmount;
+              acc.night_enhancement += amt;
               break;
             case 'weekend_sat':
             case 'weekend_sun':
               acc.weekend_hours += hours;
-              acc.weekend_enhancement += e.enhancementAmount;
+              acc.weekend_enhancement += amt;
               break;
             case 'bank_holiday':
               acc.bank_holiday_hours += hours;
-              acc.bank_holiday_enhancement += e.enhancementAmount;
+              acc.bank_holiday_enhancement += amt;
               break;
             case 'overtime':
               acc.overtime_hours += hours;
-              acc.overtime_enhancement += e.enhancementAmount;
+              acc.overtime_enhancement += amt;
               break;
             case 'sleep_in':
               acc.sleep_in_count += 1;
-              acc.sleep_in_pay += e.enhancementAmount;
+              acc.sleep_in_pay += amt;
               break;
             case 'on_call':
               acc.on_call_hours += hours;
-              acc.on_call_enhancement += e.enhancementAmount;
+              acc.on_call_enhancement += amt;
               break;
           }
         }

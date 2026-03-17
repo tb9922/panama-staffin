@@ -18,6 +18,7 @@ export default function PayablesManager() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [processing, setProcessing] = useState(null);
+  const [saving, setSaving] = useState(false);
   const home = getCurrentHome();
   useDirtyGuard(!!showModal);
 
@@ -76,11 +77,13 @@ export default function PayablesManager() {
   function closeModal() { setShowModal(false); setEditing(null); setForm({}); }
 
   async function handleSave() {
+    if (saving) return;
     setError(null);
     if (!form.supplier || !form.category || !form.amount || !form.next_due || !form.frequency) {
       setError('Please fill in all required fields');
       return;
     }
+    setSaving(true);
     try {
       if (editing?.id) {
         await updatePaymentSchedule(home, editing.id, form);
@@ -90,21 +93,25 @@ export default function PayablesManager() {
       closeModal();
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleProcess(sched) {
-    if (processing) return;
+    if (saving || processing) return;
     if (!confirm(`Process payment for ${sched.supplier} — ${formatCurrency(sched.amount)}?\n\nThis will create an expense and advance the schedule to the next period.`)) return;
     setError(null);
     setProcessing(sched.id);
+    setSaving(true);
     try {
       await processPaymentSchedule(home, sched.id);
       load();
     } catch (e) { setError(e.message); }
-    finally { setProcessing(null); }
+    finally { setProcessing(null); setSaving(false); }
   }
 
   async function handleToggleHold(sched) {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     try {
       await updatePaymentSchedule(home, sched.id, {
@@ -113,6 +120,7 @@ export default function PayablesManager() {
       });
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleExport() {
@@ -189,7 +197,7 @@ export default function PayablesManager() {
                         <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(s.amount)}</td>
                         <td className={`${TABLE.td} ${isPastDue ? 'text-red-600 font-bold' : ''}`}>{s.next_due}</td>
                         <td className={TABLE.td}>
-                          {canEdit && <button onClick={() => handleProcess(s)} disabled={processing === s.id} className={`${BTN.success} ${BTN.xs}`}>{processing === s.id ? 'Processing...' : 'Process'}</button>}
+                          {canEdit && <button onClick={() => handleProcess(s)} disabled={saving || processing === s.id} className={`${BTN.success} ${BTN.xs}`}>{processing === s.id ? 'Processing...' : 'Process'}</button>}
                         </td>
                       </tr>
                     );
@@ -229,7 +237,7 @@ export default function PayablesManager() {
                   <td className={TABLE.td}>{s.auto_approve ? <span className={BADGE.green}>Yes</span> : <span className={BADGE.gray}>No</span>}</td>
                   <td className={TABLE.td}>{s.on_hold ? <span className={BADGE.amber}>On Hold</span> : <span className={BADGE.green}>Active</span>}</td>
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
-                    {canEdit && <button onClick={() => handleToggleHold(s)} className={`${BTN.ghost} ${BTN.xs}`}>
+                    {canEdit && <button onClick={() => handleToggleHold(s)} disabled={saving} className={`${BTN.ghost} ${BTN.xs}`}>
                       {s.on_hold ? 'Release' : 'Hold'}
                     </button>}
                   </td>
@@ -284,7 +292,7 @@ export default function PayablesManager() {
 
         <div className={MODAL.footer}>
           <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-          {canEdit && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Schedule'}</button>}
+          {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Schedule'}</button>}
         </div>
       </Modal>
     </div>

@@ -53,7 +53,7 @@ export async function nextId(homeId, client) {
  * Return all non-deleted staff for a home, shaped for the frontend.
  * @param {number} homeId
  */
-export async function findByHome(homeId, { limit = 200, offset = 0 } = {}, client) {
+export async function findByHome(homeId, { limit = 1000, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT ${STAFF_COLS}, COUNT(*) OVER() AS _total FROM staff

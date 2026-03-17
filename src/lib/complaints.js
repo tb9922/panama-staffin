@@ -86,7 +86,7 @@ export function getComplaintStatus(complaint, config, asOfDate) {
 
 // ── Stats ───────────────────────────────────────────────────────────────────
 
-export function getComplaintStats(complaints, config, fromDate, toDate) {
+export function getComplaintStats(complaints, config, fromDate, toDate, asOfDate) {
   const filtered = complaints.filter(c => {
     if (fromDate && c.date < fromDate) return false;
     if (toDate && c.date > toDate) return false;
@@ -103,7 +103,7 @@ export function getComplaintStats(complaints, config, fromDate, toDate) {
   let overdue = 0;
 
   for (const c of filtered) {
-    const st = getComplaintStatus(c, config);
+    const st = getComplaintStatus(c, config, asOfDate);
     if (st.responseDaysActual !== null) {
       totalResponseDays += st.responseDaysActual;
       resolvedWithDays++;
@@ -145,13 +145,12 @@ export function getSurveyStats(surveys, fromDate, toDate) {
 
 // ── Dashboard Alerts ────────────────────────────────────────────────────────
 
-export function getComplaintAlerts(complaints, config) {
+export function getComplaintAlerts(complaints, config, asOfDate) {
   const alerts = [];
-  const _today = formatDate(new Date());
 
   for (const c of complaints) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
-    const st = getComplaintStatus(c, config);
+    const st = getComplaintStatus(c, config, asOfDate);
 
     if (st.isOverdueAck) {
       alerts.push({ type: 'error', msg: `Complaint "${c.title || 'Untitled'}" not acknowledged within 2 days` });

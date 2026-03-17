@@ -19,7 +19,7 @@ export async function findResidentById(id, homeId) {
 export async function createResident(homeId, data) {
   validateFundingConsistency(data);
   const resident = await financeRepo.createResident(homeId, data);
-  logger.info({ homeId, residentId: resident.id, name: resident.resident_name, fundingType: resident.funding_type }, 'Finance resident created');
+  logger.info({ homeId, residentId: resident.id, fundingType: resident.funding_type }, 'Finance resident created');
   return resident;
 }
 

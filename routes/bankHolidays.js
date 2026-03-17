@@ -31,7 +31,13 @@ router.get('/', requireAuth, async (req, res, next) => {
       throw fetchErr;
     }
 
-    const holidays = (data['england-and-wales']?.events || []).map(e => ({ date: e.date, name: e.title }));
+    const events = data?.['england-and-wales']?.events;
+    if (!Array.isArray(events)) {
+      logger.warn('Unexpected bank holiday response shape from GOV.UK');
+      if (bankHolidayCache) return res.json(bankHolidayCache);
+      return res.status(502).json({ error: 'Unexpected response from GOV.UK bank holidays API' });
+    }
+    const holidays = events.filter(e => e.date && e.title).map(e => ({ date: e.date, name: e.title }));
     bankHolidayCache = holidays;
     cacheExpiry = now + CACHE_TTL_MS;
     res.json(holidays);

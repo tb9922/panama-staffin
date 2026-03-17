@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
@@ -67,15 +67,17 @@ export default function PensionManager() {
   useDirtyGuard(!!showModal);
 
   useEffect(() => {
-    const h = getCurrentHome();
-    if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug]);
 
-  const staffMap = {};
-  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  const staffMap = useMemo(() => {
+    const map = {};
+    (schedData?.staff || []).forEach(s => { map[s.id] = s; });
+    return map;
+  }, [schedData]);
 
-  const activeStaff = (schedData?.staff || []).filter(s => s.active !== false);
+  const activeStaff = useMemo(() => (schedData?.staff || []).filter(s => s.active !== false), [schedData]);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

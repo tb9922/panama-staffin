@@ -60,7 +60,7 @@ export default function HandoverNotes() {
     const h = getCurrentHome();
     if (!h) return;
     getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(e => console.warn('HandoverNotes incidents fetch failed:', e.message));
-  }, []);
+  }, [slug]);
 
   function goDay(delta) {
     setDateStr(formatDate(addDays(parseDate(dateStr), delta)));
@@ -105,21 +105,29 @@ export default function HandoverNotes() {
   }
 
   async function handleDelete(id) {
+    if (saving) return;
     if (!window.confirm('Delete this handover entry?')) return;
+    setSaving(true);
     try {
       await deleteHandoverEntry(slug, id);
       setEntries(prev => prev.filter(e => e.id !== id));
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleAcknowledge(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       const updated = await acknowledgeHandoverEntry(slug, id);
       setEntries(prev => prev.map(e => e.id === id ? updated : e));
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -237,7 +245,7 @@ export default function HandoverNotes() {
                                       ✓ Acknowledged by {entry.acknowledged_by} · {new Date(entry.acknowledged_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                     </p>
                                   ) : (
-                                    <button onClick={() => handleAcknowledge(entry.id)} className="mt-1 text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2">
+                                    <button onClick={() => handleAcknowledge(entry.id)} disabled={saving} className="mt-1 text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2">
                                       Acknowledge
                                     </button>
                                   )}
@@ -245,7 +253,7 @@ export default function HandoverNotes() {
                                 {canEdit && (
                                   <div className="flex gap-1 shrink-0">
                                     <button onClick={() => openEdit(entry)} className={`${BTN.ghost} ${BTN.sm} text-xs`}>Edit</button>
-                                    <button onClick={() => handleDelete(entry.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">Del</button>
+                                    <button onClick={() => handleDelete(entry.id)} disabled={saving} className="text-xs text-red-500 hover:text-red-700 px-2 py-1">Del</button>
                                   </div>
                                 )}
                               </div>

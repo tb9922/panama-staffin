@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData } from '../lib/api.js';
@@ -40,15 +40,17 @@ export default function TaxCodeManager() {
   useDirtyGuard(!!showModal);
 
   useEffect(() => {
-    const h = getCurrentHome();
-    if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug]);
 
-  const staffMap = {};
-  (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
+  const staffMap = useMemo(() => {
+    const map = {};
+    (schedData?.staff || []).forEach(s => { map[s.id] = s; });
+    return map;
+  }, [schedData]);
 
-  const activeStaff = (schedData?.staff || []).filter(s => s.active !== false);
+  const activeStaff = useMemo(() => (schedData?.staff || []).filter(s => s.active !== false), [schedData]);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;
@@ -181,7 +183,7 @@ export default function TaxCodeManager() {
                   <td className={TABLE.td}>
                     <div className="font-medium text-gray-900">{staff?.name || code.staff_id}</div>
                     {staff?.ni_number && (
-                      <div className="text-xs text-gray-500">NI: {staff.ni_number}</div>
+                      <div className="text-xs text-gray-500">NI: {canEdit ? staff.ni_number : staff.ni_number.replace(/.(?=.{2})/g, '*')}</div>
                     )}
                     {staff?.role && (
                       <div className="text-xs text-gray-400">{staff.role}</div>
@@ -234,7 +236,7 @@ export default function TaxCodeManager() {
                 <tr key={s.id} className="bg-amber-50">
                   <td className={TABLE.td}>
                     <div className="font-medium text-gray-900">{s.name}</div>
-                    {s.ni_number && <div className="text-xs text-gray-500">NI: {s.ni_number}</div>}
+                    {s.ni_number && <div className="text-xs text-gray-500">NI: {canEdit ? s.ni_number : s.ni_number.replace(/.(?=.{2})/g, '*')}</div>}
                     <div className="text-xs text-gray-400">{s.role}</div>
                   </td>
                   <td className={TABLE.td}><span className="font-mono text-gray-400">1257L (default)</span></td>

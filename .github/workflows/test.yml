@@ -119,6 +119,20 @@ jobs:
           VIEWER_PASSWORD_HASH: $2b$12$Fqm4wyinj2K9eafKdNoP.OBwyUl14dGqkOWK.XzqW/2JcuF8qmqs6
           ALLOWED_ORIGIN: http://localhost:5173
 
+      - name: Verify backup-restore cycle
+        run: |
+          PGPASSWORD=test_password pg_dump -h localhost -U panama panama_test --no-owner --no-privileges | gzip > /tmp/ci-backup.sql.gz
+          LINES=$(gzip -dc /tmp/ci-backup.sql.gz | wc -l)
+          echo "Backup: ${LINES} lines"
+          test "${LINES}" -gt 100
+          PGPASSWORD=test_password createdb -h localhost -U panama panama_verify
+          gzip -dc /tmp/ci-backup.sql.gz | PGPASSWORD=test_password psql -h localhost -U panama -d panama_verify --quiet --single-transaction > /dev/null
+          LIVE=$(PGPASSWORD=test_password psql -h localhost -U panama -d panama_test -tAc "SELECT MAX(id) FROM migrations")
+          RESTORED=$(PGPASSWORD=test_password psql -h localhost -U panama -d panama_verify -tAc "SELECT MAX(id) FROM migrations")
+          echo "Migrations: live=${LIVE} restored=${RESTORED}"
+          test "${LIVE}" = "${RESTORED}"
+          PGPASSWORD=test_password dropdb -h localhost -U panama panama_verify
+          echo "Backup-restore verification passed"
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -166,5 +180,5 @@ jobs:
             fi
             pm2 reload panama --update-env
             sleep 5
-            curl -f http://localhost:3001/readiness || exit 1
+            curl -f http://localhost:3001/health || exit 1
             echo "Health check passed — deploy complete: $(date)"

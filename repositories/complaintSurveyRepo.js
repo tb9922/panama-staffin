@@ -142,7 +142,7 @@ export async function update(id, homeId, data, version) {
     k === 'area_scores' ? JSON.stringify(v ?? {}) : v
   );
 
-  const setClause = fields.map(([k], i) => `${k} = $${i + 3}`).join(', ');
+  const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const params = [id, homeId, ...values];
   let sql = `UPDATE complaint_surveys SET ${setClause}, version = version + 1, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;

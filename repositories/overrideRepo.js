@@ -40,15 +40,23 @@ export async function findByHome(homeId, fromDate, toDate, client) {
 }
 
 /**
- * Full replace: delete all overrides for a home then insert the incoming set.
+ * Full replace: delete overrides for a home within a date range, then insert the incoming set.
+ * Date range MUST match the window used by assembleData (6mo back, 3mo forward)
+ * to avoid destroying overrides outside the loaded window.
  * Schedule data — not regulated, safe to hard-delete within transaction.
  * @param {number} homeId
  * @param {object} overridesObj { "YYYY-MM-DD": { "staffId": { shift, reason, source } } }
  * @param {object} [client]
+ * @param {string} [fromDate] "YYYY-MM-DD" inclusive lower bound for delete scope
+ * @param {string} [toDate]   "YYYY-MM-DD" inclusive upper bound for delete scope
  */
-export async function replace(homeId, overridesObj, client) {
+export async function replace(homeId, overridesObj, client, fromDate, toDate) {
   const conn = client || pool;
-  await conn.query('DELETE FROM shift_overrides WHERE home_id = $1', [homeId]);
+  if (fromDate && toDate) {
+    await conn.query('DELETE FROM shift_overrides WHERE home_id = $1 AND date >= $2 AND date <= $3', [homeId, fromDate, toDate]);
+  } else {
+    await conn.query('DELETE FROM shift_overrides WHERE home_id = $1', [homeId]);
+  }
 
   if (!overridesObj || Object.keys(overridesObj).length === 0) return;
 

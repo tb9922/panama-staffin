@@ -54,10 +54,9 @@ export default function MonthlyTimesheet() {
 
   const [schedData, setSchedData] = useState(null);
   useEffect(() => {
-    const h = getCurrentHome();
-    if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug]);
 
   const activeStaff = useMemo(
     () => (schedData?.staff || []).filter(s => s.active),

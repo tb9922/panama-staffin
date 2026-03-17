@@ -26,7 +26,7 @@ const updateBodySchema = z.object({
 });
 
 // GET /api/handover?home=X&date=YYYY-MM-DD
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     const dateParam = dateSchema.safeParse(req.query.date);
     if (!dateParam.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
