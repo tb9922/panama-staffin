@@ -475,9 +475,23 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
 
+    // Anonymise hr_investigation_meetings linked to this staff member's cases
+    const meetingCaseCondition = `
+      (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    await client.query(
+      `UPDATE hr_investigation_meetings SET
+         attendees = '[]'::jsonb, summary = NULL, key_points = NULL, outcome = NULL,
+         recorded_by = $3
+       WHERE home_id = $1 AND (${meetingCaseCondition})`,
+      [homeId, staffId, anon]
+    );
+
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
+    // - payroll_ytd: cumulative tax year totals, retained alongside payroll_lines (reconstructable)
     // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
     // - shift_overrides: dates/shift codes retained as operational data, reason cleared above

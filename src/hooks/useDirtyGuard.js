@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useBlocker } from 'react-router-dom';
 
 /**
@@ -17,8 +17,19 @@ export default function useDirtyGuard(isDirty) {
   }, [isDirty]);
 
   // In-app navigation (React Router)
-  useBlocker(({ currentLocation, nextLocation }) => {
+  const blocker = useBlocker(useCallback(({ currentLocation, nextLocation }) => {
     if (!isDirty) return false;
     return currentLocation.pathname !== nextLocation.pathname;
-  });
+  }, [isDirty]));
+
+  // Show confirmation when blocker is active
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    const leave = window.confirm('You have unsaved changes. Leave this page?');
+    if (leave) {
+      blocker.proceed();
+    } else {
+      blocker.reset();
+    }
+  }, [blocker]);
 }

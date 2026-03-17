@@ -6,6 +6,7 @@ import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { getRoleLabel } from '../../shared/roles.js';
+import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
 
@@ -263,9 +264,8 @@ function ChangePasswordModal({ onClose }) {
   }
 
   return (
-    <div className={MODAL.overlay} onClick={onClose}>
-      <form className={MODAL.panelSm} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
-        <h2 className={MODAL.title}>Change Password</h2>
+    <Modal open onClose={onClose} title="Change Password" size="sm">
+      <form onSubmit={handleSubmit}>
         {error && <div id="pw-error" className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4" role="alert">{error}</div>}
         {done ? (
           <div className="text-center py-4">
@@ -296,6 +296,6 @@ function ChangePasswordModal({ onClose }) {
           </>
         )}
       </form>
-    </div>
+    </Modal>
   );
 }

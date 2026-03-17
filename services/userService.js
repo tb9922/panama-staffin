@@ -80,6 +80,9 @@ export async function updateUser(id, fields, actorUsername) {
   const target = await userRepo.findById(id);
   if (!target) throw new Error('User not found');
 
+  // Strip is_platform_admin — only settable via direct DB or platform admin routes
+  delete fields.is_platform_admin;
+
   // Cannot deactivate yourself
   if (fields.active === false && target.username === actorUsername) {
     throw new Error('Cannot deactivate your own account');

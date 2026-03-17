@@ -44,7 +44,7 @@ const staffUpdateSchema = staffBodySchema.partial().extend({
 // POST /api/staff?home=X — create a new staff member
 // Server generates the ID inside a transaction to prevent concurrent collisions.
 // Client-provided ID is accepted for backwards compatibility but server-generated is preferred.
-router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
   try {
     const parsed = staffBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
@@ -61,7 +61,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
 });
 
 // PUT /api/staff/:staffId?home=X — update a staff member
-router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
@@ -81,7 +81,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
 });
 
 // DELETE /api/staff/:staffId?home=X — soft-delete staff + remove their overrides
-router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
   try {
     const idParsed = staffIdSchema.safeParse(req.params.staffId);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid staff ID' });
