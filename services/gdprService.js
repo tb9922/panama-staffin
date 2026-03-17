@@ -201,6 +201,17 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       const queries = [
         conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+        // Finance: resident record (fees, funding, payment info) and invoices — search by name
+        subjectName
+          ? conn.query(`SELECT * FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(
+              `SELECT fi.* FROM finance_invoices fi
+               JOIN finance_residents fr ON fr.id = fi.resident_id AND fr.home_id = fi.home_id
+               WHERE fi.home_id = $1 AND fr.resident_name = $2 AND fi.deleted_at IS NULL`,
+              [homeId, subjectName])
+          : { rows: [] },
       ];
       // Name-based queries only run when subject_name is provided (residents have no stable ID across tables)
       if (subjectName) {
@@ -222,8 +233,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         data: {
           dols: results[0].rows,
           mca_assessments: results[1].rows,
-          incidents: results[2]?.rows || [],
-          complaints: results[3]?.rows || [],
+          finance_residents: results[2].rows,
+          finance_invoices: results[3].rows,
+          incidents: results[4]?.rows || [],
+          complaints: results[5]?.rows || [],
         },
       };
     }

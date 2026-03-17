@@ -465,12 +465,12 @@ export function calculateSSP(sickPeriod, payDate, sspConfig) {
 
   if (!sspConfig || !sickPeriod) return ZERO;
 
-  const startDate = new Date(sickPeriod.start_date);
-  const payD = new Date(payDate);
+  const startDate = new Date(sickPeriod.start_date + 'T00:00:00Z');
+  const payD = new Date(payDate + 'T00:00:00Z');
 
   // Must be within the sick period
   if (payD < startDate) return ZERO;
-  if (sickPeriod.end_date && payD > new Date(sickPeriod.end_date)) return ZERO;
+  if (sickPeriod.end_date && payD > new Date(sickPeriod.end_date + 'T00:00:00Z')) return ZERO;
 
   // 28-week cap: each week = 5 qualifying days; daily rate = weekly / qualifying_days_per_week
   const maxWeeks = sspConfig.max_weeks || 28;
