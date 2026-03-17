@@ -142,7 +142,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
       await saveConfig(getCurrentHome(), newConfig);
       setSchedData(prev => ({ ...prev, config: newConfig }));
     } catch (e) {
-      alert(`Save failed: ${e.message}`);
+      setError(e.message);
     }
   }
 

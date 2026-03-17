@@ -141,6 +141,7 @@ export default function PayrollDetail() {
     try {
       const updated = await approvePayrollRun(homeSlug, runId);
       setRun(updated);
+      setShowApproveConfirm(false);
       await load();
     } catch (e) {
       setError(e.message);
@@ -542,10 +543,7 @@ export default function PayrollDetail() {
           </button>
           <button
             className={BTN.danger}
-            onClick={async () => {
-              setShowApproveConfirm(false);
-              await handleApprove();
-            }}
+            onClick={handleApprove}
             disabled={action === 'approving'}
           >
             {action === 'approving' ? 'Approving…' : 'Confirm Approve'}

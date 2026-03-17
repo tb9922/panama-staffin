@@ -20,15 +20,22 @@ export async function findByHome(homeId, fromDate, toDate) {
 }
 
 /**
- * Full replace: delete all day notes then insert non-empty ones.
- * Simple text data — not regulated, safe to hard-delete within transaction.
+ * Full replace: delete day notes within a date range then insert non-empty ones.
+ * Date range MUST match the window used by assembleData to avoid destroying
+ * notes outside the loaded window.
  * @param {number} homeId
  * @param {object} notesObj { "YYYY-MM-DD": "note text" }
  * @param {object} [client]
+ * @param {string} [fromDate] "YYYY-MM-DD" inclusive lower bound for delete scope
+ * @param {string} [toDate]   "YYYY-MM-DD" inclusive upper bound for delete scope
  */
-export async function replace(homeId, notesObj, client) {
+export async function replace(homeId, notesObj, client, fromDate, toDate) {
   const conn = client || pool;
-  await conn.query('DELETE FROM day_notes WHERE home_id = $1', [homeId]);
+  if (fromDate && toDate) {
+    await conn.query('DELETE FROM day_notes WHERE home_id = $1 AND date >= $2 AND date <= $3', [homeId, fromDate, toDate]);
+  } else {
+    await conn.query('DELETE FROM day_notes WHERE home_id = $1', [homeId]);
+  }
 
   if (!notesObj) return;
   const entries = Object.entries(notesObj).filter(([, note]) => note && note.trim());

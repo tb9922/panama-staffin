@@ -147,13 +147,17 @@ export default function GdprDashboard() {
   }
 
   async function handleAssessBreach(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       await assessBreach(home, id);
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleGatherData(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       const data = await gatherRequestData(home, id);
       // Download as JSON
@@ -164,7 +168,7 @@ export default function GdprDashboard() {
       a.download = `sar_data_${data.subject_id}_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   function handleExecuteErasure(id) {
@@ -173,36 +177,43 @@ export default function GdprDashboard() {
   }
 
   async function confirmErasure() {
-    if (erasureInput !== 'ERASE' || !erasureConfirm) return;
+    if (saving || erasureInput !== 'ERASE' || !erasureConfirm) return;
+    setSaving(true);
     try {
       await executeErasure(home, erasureConfirm);
       setErasureConfirm(null);
       setErasureInput('');
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleUpdateStatus(type, id, status) {
+    if (saving) return;
+    setSaving(true);
     try {
       if (type === 'request') await updateDataRequest(home, id, { status });
       else if (type === 'breach') await updateDataBreach(home, id, { status });
       else if (type === 'complaint') await updateDPComplaint(home, id, { status });
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleRunRetentionScan() {
+    if (saving) return;
+    setSaving(true);
     try {
       const scan = await scanRetention(home);
       setRetentionScan(scan);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   async function handleWithdrawConsent(id) {
+    if (saving) return;
+    setSaving(true);
     try {
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
       load();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
   // ── Compliance Score ─────────────────────────────────────────────────────

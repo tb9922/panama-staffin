@@ -169,8 +169,8 @@ export function getCycleDates(cycleStartDate, date, days = 28) {
   const start = parseDate(cycleStartDate);
   const current = new Date(date);
   // Use UTC to avoid DST off-by-one
-  const currentUTC = Date.UTC(current.getFullYear(), current.getMonth(), current.getDate());
-  const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const currentUTC = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate());
+  const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const diffDays = Math.round((currentUTC - startUTC) / (1000 * 60 * 60 * 24));
   const cycleNumber = Math.floor(diffDays / days);
   const cycleStart = addDays(start, cycleNumber * days);

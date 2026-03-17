@@ -74,10 +74,16 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt) {
       }
     }
 
+    // Use the same date window as assembleData to avoid destroying overrides/notes
+    // outside the loaded range (e.g. far-future AL bookings).
+    const today = new Date();
+    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+
     if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
     if (body.staff) await staffRepo.sync(home.id, body.staff, client);
-    if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client);
-    if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client);
+    if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client, from, to);
+    if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client, from, to);
     if (body.annual_leave != null) await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });

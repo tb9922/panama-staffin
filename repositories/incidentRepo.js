@@ -386,6 +386,10 @@ const ALLOWED_COLUMNS = new Set([
 // Fields that need JSON.stringify before binding
 const JSON_COLUMNS = new Set(['staff_involved', 'witnesses', 'corrective_actions']);
 
+/**
+ * Update an incident. Returns shaped row on success.
+ * Returns null on version conflict. Throws ConflictError if frozen.
+ */
 export async function update(id, homeId, data, version) {
   const fields = Object.entries(data).filter(
     ([k, v]) => v !== undefined && ALLOWED_COLUMNS.has(k)
@@ -400,7 +404,16 @@ export async function update(id, homeId, data, version) {
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ` RETURNING ${INCIDENT_COLS}`;
   const { rows, rowCount } = await pool.query(sql, params);
-  if (rowCount === 0 && version != null) return null;
+  if (rowCount === 0) {
+    // Distinguish frozen from version conflict
+    const frozen = await isFrozen(id, homeId);
+    if (frozen) {
+      const err = new Error('This incident is frozen and cannot be modified. Use addenda for post-freeze notes.');
+      err.status = 403;
+      throw err;
+    }
+    return null; // version conflict or not found
+  }
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
