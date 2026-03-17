@@ -72,6 +72,29 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 42. ~~Username creation race returns 500~~ — FIXED: catch PG unique constraint 23505 in userService.createUser
 43. ~~Payroll N+1 INSERT (~680 queries/run)~~ — FIXED: batch INSERT via `createLineShiftsBatch()` (~40 queries/run)
 44. ~~Employer NI Secondary Threshold wrong (£9,100)~~ — FIXED: migration 110 corrects to £5,000/year per Autumn Budget 2024
+45. ~~Duty of Candour uses 14 calendar days~~ — FIXED: proper 10 working days (Mon-Fri minus bank holidays)
+46. ~~Whistleblowing protection rate 100% for all-anonymous~~ — FIXED: returns null, scores protection as N/A
+47. ~~IPC audit CQC metric ignores frequency~~ — FIXED: score scaled by min(1, auditCount/4)
+48. ~~CQC notification negative hours on bad data~~ — FIXED: skip entries where notification precedes incident
+49. ~~IPC outbreak alerts not deduplicated~~ — FIXED: deduplicate by type+status
+50. ~~Risk band NaN→critical false positive~~ — FIXED: isFinite() guard
+51. ~~rotation.js alPay/grossPay/bhPay NaN on null hourly_rate~~ — FIXED: `|| 0` guard on all three
+52. ~~Staff CRUD uses scheduling:write~~ — FIXED: changed to staff:write (shift_coordinator no longer edits NI/DoB)
+53. ~~GDPR erasure misses hr_investigation_meetings~~ — FIXED: anonymise attendees/summary/outcome; preserve manager's recorded_by
+54. ~~GDPR erasure misses case notes about subject~~ — FIXED: anonymise by case linkage, not just author
+55. ~~GDPR SAR misses case notes about subject~~ — FIXED: gather by case linkage + deduplication
+56. ~~is_platform_admin escalation path~~ — FIXED: stripped in updateUser() service layer
+57. ~~ChangePasswordModal bypasses Modal component~~ — FIXED: uses `<Modal>` with focus trap, ARIA, Escape
+58. ~~useDirtyGuard silently blocks navigation~~ — FIXED: window.confirm dialog on in-app navigation
+59. ~~Webhook CRUD not audit-logged~~ — FIXED: create/update/delete logged
+60. ~~SSRF regex matches legitimate fc/fd domains~~ — FIXED: tightened to require IPv6 hex (fc00:/fd00:)
+61. ~~Nginx root path mismatch with deploy script~~ — FIXED: /var/www/panama-staffing/dist
+62. ~~SSP 28-week cap never triggers~~ — FIXED: SICK shifts written to payroll_line_shifts
+63. ~~Board Pack PDF training page always blank~~ — FIXED: access .perType from calculateTrainingBreakdown
+64. ~~Pension auto-enrolment saves NULL enrolled_date~~ — FIXED: property name mismatch + migration 111 backfill
+65. ~~Staff ID concurrent creation silent overwrite~~ — FIXED: server-only ID generation via transactional nextId()
+66. ~~CQC evidence shows "null% protected"~~ — FIXED: handle null protectionRate in template literal
+67. ~~Stale /var/www/panama paths in docs/scripts~~ — FIXED: updated to /var/www/panama-staffing
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
@@ -91,7 +114,7 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 2,316+ tests across 120 files (unit + integration + page), all passing
+- **Testing**: Vitest — 2,317+ tests across 120 files (unit + integration + page), all passing
 
 ## Architecture
 
