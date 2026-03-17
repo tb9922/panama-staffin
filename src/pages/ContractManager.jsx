@@ -203,7 +203,7 @@ export default function ContractManager() {
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Probation End</th>
                 <th scope="col" className={TABLE.th}>Hours/Week</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

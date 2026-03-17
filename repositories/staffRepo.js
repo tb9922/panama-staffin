@@ -29,6 +29,27 @@ function shapeRow(row) {
 }
 
 /**
+ * Generate the next staff ID for a home (e.g. "S001", "S002").
+ * Uses FOR UPDATE to prevent concurrent ID collisions.
+ * @param {number} homeId
+ * @param {object} client - transaction client (required for FOR UPDATE safety)
+ * @returns {Promise<string>}
+ */
+export async function nextId(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT id FROM staff WHERE home_id = $1 ORDER BY id FOR UPDATE`,
+    [homeId]
+  );
+  let maxNum = 0;
+  for (const r of rows) {
+    const num = parseInt(r.id.replace(/^S/i, ''), 10);
+    if (!isNaN(num) && num > maxNum) maxNum = num;
+  }
+  return 'S' + String(maxNum + 1).padStart(3, '0');
+}
+
+/**
  * Return all non-deleted staff for a home, shaped for the frontend.
  * @param {number} homeId
  */
@@ -129,8 +150,9 @@ export async function findById(homeId, staffId) {
  * @param {number} homeId
  * @param {object} staff — staff object with all fields including id
  */
-export async function upsertOne(homeId, staff) {
-  const { rows } = await pool.query(
+export async function upsertOne(homeId, staff, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `INSERT INTO staff
        (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
         start_date, leaving_date, date_of_birth, ni_number, contract_hours,

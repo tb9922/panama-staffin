@@ -200,7 +200,7 @@ export default function FlexWorkingTracker() {
                 <th scope="col" className={TABLE.th}>Decision Deadline</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Decision</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

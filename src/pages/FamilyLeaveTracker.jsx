@@ -183,7 +183,7 @@ export default function FamilyLeaveTracker() {
                 <th scope="col" className={TABLE.th}>End Date</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Expected Return</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

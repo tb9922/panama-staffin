@@ -188,7 +188,7 @@ export default function PerformanceTracker() {
                 <th scope="col" className={TABLE.th}>Date Raised</th>
                 <th scope="col" className={TABLE.th}>Type</th>
                 <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

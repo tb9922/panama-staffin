@@ -198,7 +198,7 @@ export default function EdiTracker() {
                 <th scope="col" className={TABLE.th}>Date Recorded</th>
                 <th scope="col" className={TABLE.th}>Category</th>
                 <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

@@ -53,6 +53,7 @@ export default function WhistleblowingTracker() {
     try {
       setError(null);
       const home = getCurrentHome();
+      if (!home) return;
       const result = await getWhistleblowingConcerns(home);
       setConcerns(result.concerns || []);
     } catch (err) {
@@ -60,6 +61,7 @@ export default function WhistleblowingTracker() {
     } finally {
       setLoading(false);
     }
+    // getCurrentHome() reads a module-level var; re-run on home switch via DataContext remount
   }, []);
 
   useEffect(() => { load(); }, [load]);
