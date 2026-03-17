@@ -286,7 +286,7 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
       const stored = overrides[dateKey]?.[staff.id]?.al_hours;
       const hrs = stored != null ? parseFloat(stored) : getALDeductionHours(staff, dateKey, config);
       alHours += hrs;
-      alPay += hrs * staff.hourly_rate;
+      alPay += hrs * (staff.hourly_rate || 0);
     }
   });
 

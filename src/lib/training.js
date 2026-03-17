@@ -276,7 +276,7 @@ export function getSupervisionAlerts(activeStaff, config, supervisionsData, asOf
     if (result.status === 'overdue') {
       alerts.push({ type: 'error', msg: `${s.name}: Supervision overdue by ${result.overdueDays} days` });
     } else if (result.status === 'due') {
-      alerts.push({ type: 'warning', msg: `${s.name}: Supervision overdue by ${result.overdueDays} days` });
+      alerts.push({ type: 'warning', msg: `${s.name}: Supervision due — ${result.overdueDays} days past date` });
     } else if (result.status === 'not_started') {
       alerts.push({ type: 'warning', msg: `${s.name}: No supervision records` });
     }

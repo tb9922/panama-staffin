@@ -197,7 +197,8 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     return { tax: 0, taxableIncome: grossPay, isRefund: false };
   }
 
-  // ytd.gross_pay = cumulative GROSS pay from all prior approved periods this tax year.
+  // ytd.gross_pay = cumulative TAXABLE pay (gross minus pension under Net Pay Arrangement)
+  //   from all prior approved periods this tax year.
   // ytd.tax_deducted = cumulative tax already paid.
   const priorGross    = ytd?.gross_pay ?? 0;
   const priorTaxPaid  = ytd?.tax_deducted ?? 0;
@@ -234,7 +235,7 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
   const isRefund = taxThisPeriod < 0;
 
   return {
-    tax: round2(taxThisPeriod), // allow negative for refund — payroll service clamps to 0 for payment
+    tax: round2(taxThisPeriod), // may be negative for refund — HMRC requires refunds through payroll
     taxableIncome: round2(Math.max(0, grossPay - periodAllowance)),
     isRefund,
   };

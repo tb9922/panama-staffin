@@ -120,9 +120,13 @@ export function getIpcAlerts(audits, asOfDate, config) {
     }
   }
 
-  // Active outbreaks
+  // Active outbreaks — deduplicate by type+status to avoid repeated alerts across audits
+  const seenOutbreaks = new Set();
   for (const audit of arr) {
     if (audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed')) {
+      const key = `${audit.outbreak.type || 'unspecified'}-${audit.outbreak.status}`;
+      if (seenOutbreaks.has(key)) continue;
+      seenOutbreaks.add(key);
       alerts.push({ type: 'error', msg: `IPC: Active outbreak (${audit.outbreak.status}) — ${audit.outbreak.type || 'unspecified type'}` });
     }
   }
@@ -153,5 +157,10 @@ export function calculateIpcAuditCompliance(data, asOfDate) {
 
   const avgScore = Math.round(recent.reduce((sum, a) => sum + a.overall_score, 0) / recent.length);
 
-  return { score: avgScore, avgScore, totalAudits: recent.length };
+  // Penalise if fewer than 4 audits per year (quarterly requirement).
+  // Scale: 4+ = 100%, 3 = 75%, 2 = 50%, 1 = 25%.
+  const frequencyFactor = Math.min(1, recent.length / 4);
+  const score = Math.round(avgScore * frequencyFactor);
+
+  return { score, avgScore, totalAudits: recent.length };
 }

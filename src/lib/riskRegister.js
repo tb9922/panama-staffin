@@ -67,7 +67,7 @@ export function getRiskScore(likelihood, impact) {
 }
 
 export function getRiskBand(score) {
-  if (!score || score < 1) return RISK_SCORE_BANDS[0];
+  if (!score || !isFinite(score) || score < 1) return RISK_SCORE_BANDS[0];
   return RISK_SCORE_BANDS.find(b => score >= b.min && score <= b.max) || RISK_SCORE_BANDS[3];
 }
 

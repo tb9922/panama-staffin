@@ -188,7 +188,7 @@ export function getIncidentStats(incidents, config, fromDate, toDate) {
 
 // ── Dashboard Alerts ─────────────────────────────────────────────────────────
 
-export function getIncidentAlerts(incidents) {
+export function getIncidentAlerts(incidents, bankHolidays) {
   const alerts = [];
   const now = new Date();
 
@@ -208,7 +208,7 @@ export function getIncidentAlerts(incidents) {
     }
 
     // Overdue Duty of Candour
-    if (isDutyOfCandourOverdue(inc)) {
+    if (isDutyOfCandourOverdue(inc, undefined, bankHolidays)) {
       alerts.push({ type: 'error', msg: `Incident ${inc.date}: Duty of Candour notification OVERDUE` });
     }
 
@@ -282,6 +282,7 @@ export function calculateCqcNotificationsPct(incidents, fromDate, toDate) {
     // cqc_notified_date is DATE (no time) — assumes midnight, conservative estimate
     const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
     const hours = (notifiedTime - incTime) / (1000 * 60 * 60);
+    if (hours < 0) continue; // data entry error: notification before incident — skip
     const deadline = getCqcNotificationDeadline(inc);
     if (deadline.hoursAllowed && hours <= deadline.hoursAllowed) onTime++;
   }
@@ -307,12 +308,29 @@ export function getSafeguardingIncidentStats(incidents, fromDate, toDate) {
 
 // ── Duty of Candour ──────────────────────────────────────────────────────────
 
-export function isDutyOfCandourOverdue(incident, asOfDate) {
+/**
+ * Count forward `count` working days (Mon-Fri, excluding bank holidays) from a start date.
+ * Returns the calendar date that is `count` working days after `start`.
+ */
+export function addWorkingDays(start, count, bankHolidays) {
+  const bhSet = new Set((bankHolidays || []).map(bh => bh.date));
+  let current = new Date(start.getTime());
+  let added = 0;
+  while (added < count) {
+    current = addDays(current, 1);
+    const dow = current.getUTCDay(); // 0=Sun, 6=Sat
+    if (dow === 0 || dow === 6) continue;
+    if (bhSet.has(formatDate(current))) continue;
+    added++;
+  }
+  return current;
+}
+
+export function isDutyOfCandourOverdue(incident, asOfDate, bankHolidays) {
   if (!incident.duty_of_candour_applies || !incident.date) return false;
   if (incident.candour_notification_date) return false;
   const incDate = parseDate(incident.date);
-  const deadlineDays = 14; // 10 working days ≈ 14 calendar days
-  const deadline = addDays(incDate, deadlineDays);
+  const deadline = addWorkingDays(incDate, 10, bankHolidays);
   const today = asOfDate ? formatDate(typeof asOfDate === 'string' ? parseDate(asOfDate) : asOfDate) : formatDate(new Date());
   return today > formatDate(deadline);
 }

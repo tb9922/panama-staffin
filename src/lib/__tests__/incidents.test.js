@@ -3,6 +3,7 @@ import {
   isCqcNotificationOverdue,
   isRiddorOverdue,
   isDutyOfCandourOverdue,
+  addWorkingDays,
   getCqcNotificationDeadline,
   getIncidentAlerts,
 } from '../incidents.js';
@@ -228,25 +229,43 @@ describe('isDutyOfCandourOverdue', () => {
     expect(isDutyOfCandourOverdue(inc)).toBe(false);
   });
 
-  it('returns true when 15 calendar days have passed without notification', () => {
-    // DoC deadline = 14 calendar days (10 working days approximation)
-    setNow('2025-06-16T12:00:00Z'); // 15 days after June 1
+  it('returns true when 10 working days have passed without notification', () => {
+    // June 2 (Mon) is day 1. 10 working days = Jun 2-6 (5) + Jun 9-13 (5) = Jun 13.
+    // Jun 14 (Sat) is past deadline.
+    setNow('2025-06-14T12:00:00Z');
     const inc = {
       duty_of_candour_applies: true,
-      date: '2025-06-01',
+      date: '2025-06-01', // Sunday
       candour_notification_date: null,
     };
     expect(isDutyOfCandourOverdue(inc)).toBe(true);
   });
 
-  it('returns false when 13 calendar days have passed', () => {
-    setNow('2025-06-14T12:00:00Z'); // 13 days after June 1
+  it('returns false on last working day of deadline', () => {
+    // Jun 13 (Fri) is exactly 10 working days after Jun 1 — still within deadline
+    setNow('2025-06-13T12:00:00Z');
     const inc = {
       duty_of_candour_applies: true,
       date: '2025-06-01',
       candour_notification_date: null,
     };
     expect(isDutyOfCandourOverdue(inc)).toBe(false);
+  });
+
+  it('excludes bank holidays from working day count', () => {
+    // Jun 2 (Mon) is bank holiday — pushes deadline to Jun 16 (Mon)
+    // Jun 14 should NOT be overdue
+    setNow('2025-06-14T12:00:00Z');
+    const inc = {
+      duty_of_candour_applies: true,
+      date: '2025-06-01',
+      candour_notification_date: null,
+    };
+    const bankHolidays = [{ date: '2025-06-02', name: 'Test BH' }];
+    expect(isDutyOfCandourOverdue(inc, undefined, bankHolidays)).toBe(false);
+    // Jun 17 should be overdue (past Jun 16 deadline)
+    setNow('2025-06-17T12:00:00Z');
+    expect(isDutyOfCandourOverdue(inc, undefined, bankHolidays)).toBe(true);
   });
 });
 
