@@ -3,7 +3,6 @@ import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -19,6 +18,7 @@ function getMonthDates(year, month) {
 }
 
 export default function BudgetTracker() {
+  const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -28,9 +28,9 @@ export default function BudgetTracker() {
   useDirtyGuard(editingBudget !== null);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
+    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0)).toISOString().slice(0, 10);
@@ -38,7 +38,7 @@ export default function BudgetTracker() {
       .then(setSchedData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading budget data...</div>;
   if (error) return <div className="p-6 text-red-600" role="alert">Error: {error}</div>;
@@ -50,6 +50,7 @@ export default function BudgetTracker() {
 function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditingBudget, budgetInput, setBudgetInput, agencyCapInput, setAgencyCapInput }) {
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  const [saving, setSaving] = useState(false);
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -146,17 +147,25 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   }
 
   async function saveBudgetOverride(monthKey) {
+    if (saving) return;
     const val = parseFloat(budgetInput);
     if (isNaN(val) || val < 0) return;
-    await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
-    setEditingBudget(null);
+    setSaving(true);
+    try {
+      await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
+      setEditingBudget(null);
+    } finally { setSaving(false); }
   }
 
   async function saveDefaultBudget() {
-    const total = parseFloat(budgetInput) || 0;
-    const agCap = parseFloat(agencyCapInput) || 0;
-    await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
-    setEditingBudget(null);
+    if (saving) return;
+    setSaving(true);
+    try {
+      const total = parseFloat(budgetInput) || 0;
+      const agCap = parseFloat(agencyCapInput) || 0;
+      await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
+      setEditingBudget(null);
+    } finally { setSaving(false); }
   }
 
   // SVG chart
@@ -186,7 +195,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           }} className={BTN.primary}>
             Set Budget
           </button>}
-          <button onClick={() => {
+          <button onClick={async () => {
             const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
             const rows = monthData.map(m => [
               m.fullLabel,
@@ -199,6 +208,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
               Math.round(m.agency),
               Math.round(m.bh),
             ]);
+            const { downloadXLSX } = await import('../lib/excel.js');
             downloadXLSX(`budget_${config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
           }} className={BTN.secondary}>Export Excel</button>
           <button onClick={() => window.print()}
@@ -222,7 +232,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
             </div>
             <div className={MODAL.footer}>
               <button onClick={() => setEditingBudget(null)} className={BTN.secondary}>Cancel</button>
-              <button onClick={saveDefaultBudget} className={BTN.primary}>Save</button>
+              <button onClick={saveDefaultBudget} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
             </div>
       </Modal>
 
@@ -423,7 +433,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                 patchConfig({ budget_overrides: newOverrides });
                 setEditingBudget(null);
               }} className={BTN.secondary}>Use Default</button>
-              <button onClick={() => saveBudgetOverride(editingBudget)} className={BTN.primary}>Save</button>
+              <button onClick={() => saveBudgetOverride(editingBudget)} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>
             </div>
       </Modal>
     </div>

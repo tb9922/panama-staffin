@@ -117,7 +117,7 @@ const VALID_SHIFTS = [
 const shiftSchema = z.enum(VALID_SHIFTS);
 
 // GET /api/scheduling?home=X — full scheduling bundle
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -137,7 +137,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res
     const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([
       staffRepo.findByHome(req.home.id),
       overrideRepo.findByHome(req.home.id, fromDate, toDate),
-      dayNoteRepo.findByHome(req.home.id),
+      dayNoteRepo.findByHome(req.home.id, fromDate, toDate),
       trainingRepo.findByHome(req.home.id),
       onboardingRepo.findByHome(req.home.id),
     ]);

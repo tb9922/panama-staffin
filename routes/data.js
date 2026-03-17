@@ -62,7 +62,7 @@ function detectCriticalErrors(body) {
 
 const router = Router();
 
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
     const data = await homeService.assembleData(req.home.slug, effectiveRole);

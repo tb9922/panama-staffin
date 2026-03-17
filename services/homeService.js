@@ -78,7 +78,7 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt) {
     if (body.staff) await staffRepo.sync(home.id, body.staff, client);
     if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client);
     if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client);
-    await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
+    if (body.annual_leave != null) await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
     await auditRepo.log('save', homeSlug, username, null, client);
   });
 

@@ -392,7 +392,7 @@ export async function update(id, homeId, data, version) {
   );
   if (fields.length === 0) return null;
 
-  const setClause = fields.map(([k], i) => `${k} = $${i + 3}`).join(', ');
+  const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
   const values = fields.map(([k, v]) => JSON_COLUMNS.has(k) ? JSON.stringify(v) : v);
   const params = [id, homeId, ...values];
   let sql = `UPDATE incidents SET ${setClause}, version = version + 1, updated_at = NOW()

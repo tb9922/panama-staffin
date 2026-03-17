@@ -13,19 +13,20 @@ function getMonday(date) {
 }
 
 export default function Reports() {
+  const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     // Cost report may need a full month of overrides; default ±90 day window is sufficient
+    setLoading(true);
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading report data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;

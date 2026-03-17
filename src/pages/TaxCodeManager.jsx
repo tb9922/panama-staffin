@@ -40,10 +40,9 @@ export default function TaxCodeManager() {
   useDirtyGuard(!!showModal);
 
   useEffect(() => {
-    const h = getCurrentHome();
-    if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug]);
 
   const staffMap = {};
   (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });
@@ -181,7 +180,7 @@ export default function TaxCodeManager() {
                   <td className={TABLE.td}>
                     <div className="font-medium text-gray-900">{staff?.name || code.staff_id}</div>
                     {staff?.ni_number && (
-                      <div className="text-xs text-gray-500">NI: {staff.ni_number}</div>
+                      <div className="text-xs text-gray-500">NI: {canEdit ? staff.ni_number : staff.ni_number.replace(/.(?=.{2})/g, '*')}</div>
                     )}
                     {staff?.role && (
                       <div className="text-xs text-gray-400">{staff.role}</div>

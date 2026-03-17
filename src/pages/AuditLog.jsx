@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { loadAuditLog } from '../lib/api.js';
-import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, BTN, BADGE } from '../lib/design.js';
 
 export default function AuditLog() {
@@ -14,6 +13,7 @@ export default function AuditLog() {
     setExporting(true);
     try {
       const all = await loadAuditLog(10000);
+      const { downloadXLSX } = await import('../lib/excel.js');
       await downloadXLSX('audit-log', [{
         name: 'Audit',
         headers: ['Time', 'Action', 'Home', 'User', 'Details'],

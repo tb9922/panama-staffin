@@ -54,6 +54,7 @@ function ResidentsTab({ home, canEdit }) {
   const [form, setForm] = useState({});
   const [modalTab, setModalTab] = useState('profile');
   const [feeHistory, setFeeHistory] = useState([]);
+  const [saving, setSaving] = useState(false);
   useDirtyGuard(!!showModal);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterFunding, setFilterFunding] = useState('');
@@ -97,8 +98,10 @@ function ResidentsTab({ home, canEdit }) {
   function closeModal() { setShowModal(false); setEditing(null); setForm({}); setFeeHistory([]); }
 
   async function handleSave() {
+    if (saving) return;
     setError(null);
     if (!form.resident_name) return;
+    setSaving(true);
     try {
       if (editing?.id) {
         await updateFinanceResident(home, editing.id, { ...form, _version: editing.version });
@@ -108,6 +111,7 @@ function ResidentsTab({ home, canEdit }) {
       closeModal();
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -305,7 +309,7 @@ function ResidentsTab({ home, canEdit }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Resident'}</button>}
+              {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Resident'}</button>}
             </div>
       </Modal>
     </>
@@ -327,6 +331,7 @@ function InvoicesTab({ home, canEdit }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPayer, setFilterPayer] = useState('');
   const [residents, setResidents] = useState([]);
+  const [saving, setSaving] = useState(false);
   useDirtyGuard(!!showModal);
 
   // Payment sub-form
@@ -382,8 +387,10 @@ function InvoicesTab({ home, canEdit }) {
   function closeModal() { setShowModal(false); setEditing(null); setForm({}); setLines([]); }
 
   async function handleSave() {
+    if (saving) return;
     setError(null);
     if (!form.payer_name || !form.payer_type) return;
+    setSaving(true);
     try {
       const payload = { ...form, lines: lines.map(l => ({ ...l, amount: parseFloat(l.amount) || (parseFloat(l.quantity) * parseFloat(l.unit_price)) || 0 })) };
       if (editing?.id) {
@@ -394,16 +401,20 @@ function InvoicesTab({ home, canEdit }) {
       closeModal();
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handlePayment() {
+    if (saving) return;
     if (!editing?.id || !payForm.amount) return;
+    setSaving(true);
     setError(null);
     try {
       await recordFinancePayment(home, editing.id, payForm);
       closeModal();
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -592,7 +603,7 @@ function InvoicesTab({ home, canEdit }) {
                     <div className="col-span-2"><label className={INPUT.label}>Reference</label>
                       <input value={payForm.payment_reference} onChange={e => setPayForm(p => ({ ...p, payment_reference: e.target.value }))} className={INPUT.base} placeholder="Payment reference" /></div>
                     {canEdit && <div className="col-span-2">
-                      <button onClick={handlePayment} className={BTN.success}>Record Payment</button>
+                      <button onClick={handlePayment} disabled={saving} className={BTN.success}>{saving ? 'Recording...' : 'Record Payment'}</button>
                     </div>}
                   </div>
                 )}
@@ -601,7 +612,7 @@ function InvoicesTab({ home, canEdit }) {
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-              {canEdit && modalTab !== 'payment' && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Create Invoice'}</button>}
+              {canEdit && modalTab !== 'payment' && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Invoice'}</button>}
             </div>
       </Modal>
     </>

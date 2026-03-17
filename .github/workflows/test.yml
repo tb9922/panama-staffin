@@ -166,5 +166,5 @@ jobs:
             fi
             pm2 reload panama --update-env
             sleep 5
-            curl -f http://localhost:3001/readiness || exit 1
+            curl -f http://localhost:3001/health || exit 1
             echo "Health check passed — deploy complete: $(date)"

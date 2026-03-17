@@ -62,6 +62,7 @@ export default function ComplaintsTracker() {
   const [editingSurveyId, setEditingSurveyId] = useState(null);
   const [surveyForm, setSurveyForm] = useState({ ...EMPTY_SURVEY });
   const [viewMode, setViewMode] = useState('complaints');
+  const [saving, setSaving] = useState(false);
 
   useDirtyGuard(showModal || showSurveyModal);
 
@@ -152,7 +153,9 @@ export default function ComplaintsTracker() {
   }
 
   async function handleSave() {
+    if (saving) return;
     if (!form.date || !form.title) return;
+    setSaving(true);
     try {
       if (editingId) {
         await updateComplaint(home, editingId, form);
@@ -163,18 +166,20 @@ export default function ComplaintsTracker() {
       load();
     } catch (err) {
       alert(err.message || 'Failed to save complaint');
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleDelete() {
+    if (saving) return;
     if (!editingId || !confirm('Delete this complaint?')) return;
+    setSaving(true);
     try {
       await deleteComplaint(home, editingId);
       setShowModal(false);
       load();
     } catch (err) {
       alert(err.message || 'Failed to delete complaint');
-    }
+    } finally { setSaving(false); }
   }
 
   function openAddSurvey() {
@@ -190,7 +195,9 @@ export default function ComplaintsTracker() {
   }
 
   async function handleSaveSurvey() {
+    if (saving) return;
     if (!surveyForm.date || !surveyForm.type) return;
+    setSaving(true);
     try {
       if (editingSurveyId) {
         await updateComplaintSurvey(home, editingSurveyId, surveyForm);
@@ -201,18 +208,20 @@ export default function ComplaintsTracker() {
       load();
     } catch (err) {
       alert(err.message || 'Failed to save survey');
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleDeleteSurvey() {
+    if (saving) return;
     if (!editingSurveyId || !confirm('Delete this survey?')) return;
+    setSaving(true);
     try {
       await deleteComplaintSurvey(home, editingSurveyId);
       setShowSurveyModal(false);
       load();
     } catch (err) {
       alert(err.message || 'Failed to delete survey');
-    }
+    } finally { setSaving(false); }
   }
 
   function handleExport() {
@@ -558,10 +567,10 @@ export default function ComplaintsTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {canEdit && editingId && <button onClick={handleDelete} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}
+              {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
             </div>
       </Modal>
 
@@ -628,10 +637,10 @@ export default function ComplaintsTracker() {
               </div>
             </div>
             <div className={MODAL.footer}>
-              {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} className={BTN.danger}>Delete</button>}
+              {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
               <div className="flex-1" />
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
-              {canEdit && <button onClick={handleSaveSurvey} className={BTN.primary}>Save</button>}
+              {canEdit && <button onClick={handleSaveSurvey} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
             </div>
       </Modal>
     </div>

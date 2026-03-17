@@ -106,9 +106,9 @@ export function getWhistleblowingStats(concerns, fromDate, toDate) {
 
 // ── Dashboard Alerts ─────────────────────────────────────────────────────────
 
-export function getWhistleblowingAlerts(concerns) {
+export function getWhistleblowingAlerts(concerns, asOfDate) {
   const alerts = [];
-  const now = new Date();
+  const now = asOfDate instanceof Date ? asOfDate : asOfDate ? parseDate(asOfDate) : new Date();
   const todayStr = formatDate(now);
 
   for (const c of (concerns || [])) {

@@ -61,6 +61,7 @@ export default function IncidentTracker() {
   const [addenda, setAddenda] = useState([]);
   const [addendumText, setAddendumText] = useState('');
   const [freezing, setFreezing] = useState(false);
+  const [saving, setSaving] = useState(false);
   useDirtyGuard(showModal && !isFrozen);
   const [filterType, setFilterType] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
@@ -192,7 +193,8 @@ export default function IncidentTracker() {
   }
 
   async function handleAddAddendum() {
-    if (!editingId || !addendumText.trim()) return;
+    if (saving || !editingId || !addendumText.trim()) return;
+    setSaving(true);
     try {
       const home = getCurrentHome();
       const result = await addIncidentAddendum(home, editingId, addendumText.trim());
@@ -200,14 +202,16 @@ export default function IncidentTracker() {
       setAddendumText('');
     } catch (err) {
       alert(err.message || 'Failed to add note');
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleSave() {
+    if (saving) return;
     if (isFrozen) return;
     if (!form.date || !form.type || !form.severity) return;
     const home = getCurrentHome();
     const username = getLoggedInUser()?.username || 'admin';
+    setSaving(true);
     try {
       if (editingId) {
         await updateIncident(home, editingId, form);
@@ -218,19 +222,25 @@ export default function IncidentTracker() {
       setShowModal(false);
     } catch (err) {
       alert(err.message || 'Failed to save incident');
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleDelete() {
+    if (saving) return;
     if (isFrozen) return;
     if (!editingId || !confirm('Delete this incident record?')) return;
     const home = getCurrentHome();
+    setSaving(true);
     try {
       await deleteIncident(home, editingId);
       await load();
       setShowModal(false);
     } catch (err) {
       alert(err.message || 'Failed to delete incident');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -819,7 +829,7 @@ export default function IncidentTracker() {
                   <label className={INPUT.label}>Add Note</label>
                   <textarea className={`${INPUT.base} h-20`} placeholder="Post-event note, update, or correction..."
                     value={addendumText} onChange={e => setAddendumText(e.target.value)} />
-                  <button onClick={handleAddAddendum} disabled={!addendumText.trim()}
+                  <button onClick={handleAddAddendum} disabled={saving || !addendumText.trim()}
                     className={`${BTN.primary} ${BTN.sm} mt-2`}>Add Note</button>
                 </div>
               </div>
@@ -828,7 +838,7 @@ export default function IncidentTracker() {
             {/* Footer */}
             <div className={MODAL.footer}>
               {canEdit && editingId && !isFrozen && (
-                <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+                <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
               {canEdit && editingId && !isFrozen && (form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed') && (
                 <button onClick={handleFreeze} disabled={freezing} className={`${BTN.secondary} ${BTN.sm}`}>
@@ -838,8 +848,8 @@ export default function IncidentTracker() {
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Close</button>
               {canEdit && !isFrozen && (
-                <button onClick={handleSave} disabled={!form.date || !form.type || !form.severity} className={BTN.primary}>
-                  {editingId ? 'Update' : 'Save'}
+                <button onClick={handleSave} disabled={saving || !form.date || !form.type || !form.severity} className={BTN.primary}>
+                  {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
                 </button>
               )}
             </div>

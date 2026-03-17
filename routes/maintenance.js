@@ -32,7 +32,7 @@ const maintenanceUpdateSchema = maintenanceBodySchema.partial().extend({
 });
 
 // GET /api/maintenance?home=X
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const checksResult = await maintenanceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });

@@ -27,6 +27,7 @@ export default function ReceivablesManager() {
   const [chases, setChases] = useState([]);
   const [showChaseModal, setShowChaseModal] = useState(false);
   const [chaseForm, setChaseForm] = useState({});
+  const [saving, setSaving] = useState(false);
   const home = getCurrentHome();
   useDirtyGuard(!!showChaseModal);
 
@@ -60,16 +61,19 @@ export default function ReceivablesManager() {
   }
 
   async function handleAddChase() {
+    if (saving) return;
     setError(null);
     if (!selectedInvoice || !chaseForm.chase_date || !chaseForm.method) {
       setError('Please fill in chase date and method');
       return;
     }
+    setSaving(true);
     try {
       await createInvoiceChase(home, selectedInvoice.id, chaseForm);
       setChases(await getInvoiceChases(home, selectedInvoice.id));
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleExport() {
@@ -255,7 +259,7 @@ export default function ReceivablesManager() {
 
         <div className={MODAL.footer}>
           <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>
-          {canEdit && <button onClick={handleAddChase} className={BTN.primary}>Record Chase</button>}
+          {canEdit && <button onClick={handleAddChase} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Record Chase'}</button>}
         </div>
       </Modal>
     </div>

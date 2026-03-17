@@ -352,7 +352,7 @@ describe('User management (CRUD)', () => {
       .post('/api/users')
       .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'auth-test-newuser', password: 'AnotherPw!2025', role: 'admin' })
+      .send({ username: 'auth-test-newuser', password: 'AnotherPw!2025', role: 'viewer' })
       .expect(409);
   });
 

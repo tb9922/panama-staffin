@@ -27,7 +27,7 @@ const loginLimiter = rateLimit({
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username required'),
-  password: z.string().min(1, 'Password required').max(200),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
 });
 
 router.post('/', loginLimiter, async (req, res, next) => {

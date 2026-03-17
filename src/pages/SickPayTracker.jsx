@@ -48,10 +48,9 @@ export default function SickPayTracker() {
   useDirtyGuard(showCreate || !!showUpdate);
 
   useEffect(() => {
-    const h = getCurrentHome();
-    if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, []);
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug]);
 
   const staffMap = {};
   (schedData?.staff || []).forEach(s => { staffMap[s.id] = s; });

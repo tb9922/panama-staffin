@@ -35,14 +35,15 @@ function getDatesInRange(start, end) {
 export default function SickTrends() {
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
+  const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     // SickTrends shows 6 months back — request wider override window
+    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
@@ -50,7 +51,7 @@ export default function SickTrends() {
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading sick trend data...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;

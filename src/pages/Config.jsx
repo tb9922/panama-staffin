@@ -18,6 +18,7 @@ export default function Config() {
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [newBhDate, setNewBhDate] = useState('');
   const [newBhName, setNewBhName] = useState('');
@@ -54,7 +55,8 @@ export default function Config() {
   }
 
   async function handleSave() {
-    if (!canEdit) return;
+    if (!canEdit || saving) return;
+    setSaving(true);
     setSaveError(null);
     try {
       await saveConfig(homeSlug, config);
@@ -63,6 +65,8 @@ export default function Config() {
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setSaveError(e.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -117,7 +121,7 @@ export default function Config() {
       {dirty && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
-          <button onClick={handleSave} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>Save Now</button>
+          <button onClick={handleSave} disabled={saving} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>{saving ? 'Saving...' : 'Save Now'}</button>
         </div>
       )}
       {saveError && (
@@ -127,9 +131,9 @@ export default function Config() {
       )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        {canEdit && <button onClick={handleSave}
+        {canEdit && <button onClick={handleSave} disabled={saving}
           className={`${BTN.primary} ${saved ? '!bg-green-600' : dirty ? '!bg-amber-600 hover:!bg-amber-700' : ''}`}>
-          {saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
+          {saving ? 'Saving...' : saved ? 'Saved!' : dirty ? 'Save Changes *' : 'Save Changes'}
         </button>}
       </div>
 

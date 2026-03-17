@@ -28,6 +28,7 @@ export default function ExpenseTracker() {
   const user = getLoggedInUser();
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  const [saving, setSaving] = useState(false);
   useDirtyGuard(!!showModal);
 
   const load = useCallback(async () => {
@@ -74,12 +75,13 @@ export default function ExpenseTracker() {
   function closeModal() { setShowModal(false); setEditing(null); setForm({}); setReadOnly(false); }
 
   async function handleSave() {
-    if (readOnly) return;
+    if (readOnly || saving) return;
     setError(null);
     if (!form.description || !form.category || !form.net_amount) {
       setError('Please fill in all required fields');
       return;
     }
+    setSaving(true);
     try {
       const payload = {
         ...form,
@@ -93,14 +95,18 @@ export default function ExpenseTracker() {
       closeModal();
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleApprove(exp) {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     try {
       await approveFinanceExpense(home, exp.id);
       load();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -185,7 +191,7 @@ export default function ExpenseTracker() {
                   <td className={TABLE.td}><span className={BADGE[getStatusBadge(exp.status, EXPENSE_STATUSES)]}>{getLabel(exp.status, EXPENSE_STATUSES)}</span></td>
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
                     {canEdit && exp.status === 'pending' && exp.created_by !== user?.username && (
-                      <button onClick={() => handleApprove(exp)} className={`${BTN.success} ${BTN.xs}`}>Approve</button>
+                      <button onClick={() => handleApprove(exp)} disabled={saving} className={`${BTN.success} ${BTN.xs}`}>Approve</button>
                     )}
                   </td>
                 </tr>
@@ -263,7 +269,7 @@ export default function ExpenseTracker() {
 
         <div className={MODAL.footer}>
           <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
-          {canEdit && !readOnly && <button onClick={handleSave} className={BTN.primary}>{editing ? 'Save Changes' : 'Add Expense'}</button>}
+          {canEdit && !readOnly && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Expense'}</button>}
         </div>
       </Modal>
     </div>

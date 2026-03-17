@@ -30,22 +30,19 @@ function shapeRow(row) {
 
 /**
  * Generate the next staff ID for a home (e.g. "S001", "S002").
- * Uses FOR UPDATE to prevent concurrent ID collisions.
+ * Uses MAX aggregate — concurrent creates are safe via unique constraint (home_id, id).
  * @param {number} homeId
- * @param {object} client - transaction client (required for FOR UPDATE safety)
+ * @param {object} client - transaction client
  * @returns {Promise<string>}
  */
 export async function nextId(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT id FROM staff WHERE home_id = $1 ORDER BY id FOR UPDATE`,
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(id FROM 2) AS INT)), 0) AS max_num
+     FROM staff WHERE home_id = $1 AND id ~ '^S[0-9]+$'`,
     [homeId]
   );
-  let maxNum = 0;
-  for (const r of rows) {
-    const num = parseInt(r.id.replace(/^S/i, ''), 10);
-    if (!isNaN(num) && num > maxNum) maxNum = num;
-  }
+  const maxNum = rows[0]?.max_num || 0;
   return 'S' + String(maxNum + 1).padStart(3, '0');
 }
 
@@ -53,7 +50,7 @@ export async function nextId(homeId, client) {
  * Return all non-deleted staff for a home, shaped for the frontend.
  * @param {number} homeId
  */
-export async function findByHome(homeId, { limit = 200, offset = 0 } = {}, client) {
+export async function findByHome(homeId, { limit = 1000, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT ${STAFF_COLS}, COUNT(*) OVER() AS _total FROM staff

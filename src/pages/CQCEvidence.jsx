@@ -45,14 +45,15 @@ function metricColor(value, lowerIsBetter) {
 }
 
 export default function CQCEvidence() {
+  const homeSlug = getCurrentHome();
   const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
     // CQC scoring needs up to 365 days of overrides for the 1-year view
+    setLoading(true);
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
       .toISOString().slice(0, 10);
@@ -94,7 +95,7 @@ export default function CQCEvidence() {
       });
     }).catch(e => setError(e.message || 'Failed to load CQC data'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
   if (error || !moduleData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load CQC data'}</div>;
@@ -112,6 +113,7 @@ function CQCEvidenceInner({ data }) {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
   const [generating, setGenerating] = useState(false);
+  const [savingEvidence, setSavingEvidence] = useState(false);
 
   useDirtyGuard(showAddEvidence);
 
@@ -166,8 +168,10 @@ function CQCEvidenceInner({ data }) {
   }
 
   async function handleSaveEvidence() {
+    if (savingEvidence) return;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) return;
     const home = getCurrentHome();
+    setSavingEvidence(true);
     try {
       await createCqcEvidence(home, {
         ...evidenceForm,
@@ -180,17 +184,23 @@ function CQCEvidenceInner({ data }) {
       await loadEvidence();
     } catch (err) {
       alert('Failed to save evidence: ' + err.message);
+    } finally {
+      setSavingEvidence(false);
     }
   }
 
   async function handleDeleteEvidence(evId) {
+    if (savingEvidence) return;
     if (!confirm('Remove this evidence item?')) return;
     const home = getCurrentHome();
+    setSavingEvidence(true);
     try {
       await deleteCqcEvidence(home, evId);
       await loadEvidence();
     } catch (err) {
       alert('Failed to delete evidence: ' + err.message);
+    } finally {
+      setSavingEvidence(false);
     }
   }
 
@@ -374,6 +384,7 @@ function CQCEvidenceInner({ data }) {
                                   </div>
                                 </div>
                                 {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
+                                  disabled={savingEvidence}
                                   className="text-xs text-red-400 hover:text-red-600 shrink-0 ml-2">Remove</button>}
                               </div>
                             ))}
@@ -473,8 +484,8 @@ function CQCEvidenceInner({ data }) {
             <div className={MODAL.footer}>
               <button onClick={() => setShowAddEvidence(false)} className={BTN.ghost}>Cancel</button>
               <button onClick={handleSaveEvidence}
-                disabled={!evidenceForm.quality_statement || !evidenceForm.title.trim()}
-                className={BTN.primary}>Save Evidence</button>
+                disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}
+                className={BTN.primary}>{savingEvidence ? 'Saving...' : 'Save Evidence'}</button>
             </div>
       </Modal>
     </div>

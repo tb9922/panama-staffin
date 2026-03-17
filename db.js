@@ -33,10 +33,10 @@ pool.on('error', (err) => {
   logger.error({ error: err.message }, 'Unexpected database pool error');
 });
 
-// Set per-connection statement timeout so no query runs forever
+// Set per-connection timeouts so no query runs forever and locks don't hang indefinitely
 pool.on('connect', (client) => {
-  client.query('SET statement_timeout = 30000').catch((err) => {
-    logger.warn({ error: err.message }, 'Failed to set statement_timeout on new connection');
+  client.query('SET statement_timeout = 30000; SET lock_timeout = 10000').catch((err) => {
+    logger.warn({ error: err.message }, 'Failed to set timeouts on new connection');
   });
 });
 

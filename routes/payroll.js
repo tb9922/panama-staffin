@@ -332,7 +332,7 @@ router.post('/runs/:runId/approve', writeRateLimiter, requireAuth, requireHomeAc
 });
 
 // GET /api/payroll/runs/:runId/export?home=X&format=sage|xero|generic — CSV download
-router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });

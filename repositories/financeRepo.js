@@ -235,7 +235,7 @@ export async function getResidentsWithOutstandingBalance(homeId, limit = 5) {
       AND outstanding_balance > 0
     ORDER BY outstanding_balance DESC LIMIT $2
   `, [homeId, limit]);
-  return rows;
+  return rows.map(r => ({ ...r, outstanding_balance: f(r.outstanding_balance) }));
 }
 
 // ── Fee Changes ───────────────────────────────────────────────────────────────

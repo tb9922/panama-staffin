@@ -93,8 +93,8 @@ describe('shared/roles.js', () => {
       expect(hasModuleAccess('viewer', 'scheduling', 'read')).toBe(true);
     });
 
-    it('read check: own does NOT satisfy read (requires staff portal)', () => {
-      expect(hasModuleAccess('staff_member', 'scheduling', 'read')).toBe(false);
+    it('read check: own satisfies read (staff_member can see own scheduling data)', () => {
+      expect(hasModuleAccess('staff_member', 'scheduling', 'read')).toBe(true);
     });
 
     it('write check: write satisfies write', () => {

@@ -30,6 +30,7 @@ function getMonthDates(year, month) {
 export default function CostTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('scheduling');
+  const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -45,13 +46,13 @@ export default function CostTracker() {
   }, [today]);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
     if (!homeSlug) return;
+    setLoading(true);
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [homeSlug]);
 
   if (!canEdit) {
     return (
