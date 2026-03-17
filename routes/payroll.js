@@ -35,7 +35,6 @@ import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
-import { checkConsistency } from '../shared/payRateConsistency.js';
 
 const router = Router();
 
@@ -139,16 +138,6 @@ router.get('/rates', readRateLimiter, requireAuth, requireHomeAccess, requireMod
 
     const rules = await payRateRulesRepo.findActiveByHome(req.home.id);
     res.json(rules);
-  } catch (err) { next(err); }
-});
-
-// GET /api/payroll/rates/consistency?home=X — compare config vs rules (read-only, no seeding)
-router.get('/rates/consistency', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
-  try {
-    if (blockOwnDataRole(req, res, 'payroll')) return;
-    const rules = await payRateRulesRepo.findActiveByHome(req.home.id);
-    const result = checkConsistency(req.home.config, rules);
-    res.json(result);
   } catch (err) { next(err); }
 });
 

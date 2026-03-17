@@ -63,7 +63,8 @@ const DEFAULT_RULES = [
   { name: 'Sunday Enhancement',    rate_type: 'percentage',    amount: 20,   applies_to: 'weekend_sun', priority: 0, effective_from: '2020-01-01' },
   { name: 'Bank Holiday Premium',  rate_type: 'percentage',    amount: 50,   applies_to: 'bank_holiday',priority: 0, effective_from: '2020-01-01' },
   { name: 'Sleep-in Flat Rate',    rate_type: 'flat_per_shift',amount: 50,   applies_to: 'sleep_in',    priority: 0, effective_from: '2020-01-01' },
-  { name: 'Extra Shift Premium',   rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0, effective_from: '2020-01-01' },
+  { name: 'Overtime Premium',      rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'overtime',    priority: 0, effective_from: '2020-01-01' },
+  { name: 'On-Call Premium',       rate_type: 'fixed_hourly',  amount: 2.00, applies_to: 'on_call',     priority: 0, effective_from: '2020-01-01' },
 ];
 
 /**

@@ -3,29 +3,18 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
-  getPayRateConsistency, getCurrentHome, } from '../lib/api.js';
+  getCurrentHome, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 
-// Display labels for all applies_to values (including legacy)
 const APPLIES_TO_LABELS = {
   night:        'Night Shifts',
   weekend_sat:  'Saturday',
   weekend_sun:  'Sunday',
   bank_holiday: 'Bank Holidays',
   sleep_in:     'Sleep-in',
-  overtime:     'Legacy / unused',
-  on_call:      'Extra Shift Premium (OC-*)',
-};
-
-// Only these values are selectable when creating new rules
-const SELECTABLE_APPLIES_TO = {
-  night:        'Night Shifts',
-  weekend_sat:  'Saturday',
-  weekend_sun:  'Sunday',
-  bank_holiday: 'Bank Holidays',
-  sleep_in:     'Sleep-in',
-  on_call:      'Extra Shift Premium (OC-*)',
+  overtime:     'Overtime (OT)',
+  on_call:      'On-Call (OC-*)',
 };
 
 const RATE_TYPE_LABELS = {
@@ -45,7 +34,6 @@ export default function PayRatesConfig() {
 
   const [rules, setRules] = useState([]);
   const [nmwRates, setNmwRates] = useState([]);
-  const [consistency, setConsistency] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null); // null | { mode: 'add' | 'edit', rule? }
@@ -59,14 +47,9 @@ export default function PayRatesConfig() {
     try {
       setLoading(true);
       setError(null);
-      const [r, n, c] = await Promise.all([
-        getPayRateRules(homeSlug),
-        getNMWRates(),
-        getPayRateConsistency(homeSlug).catch(() => null),
-      ]);
+      const [r, n] = await Promise.all([getPayRateRules(homeSlug), getNMWRates()]);
       setRules(r);
       setNmwRates(n);
-      setConsistency(c);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -158,15 +141,6 @@ export default function PayRatesConfig() {
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
       )}
 
-      {consistency && !consistency.consistent && consistency.warnings.length > 0 && (
-        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800" role="status">
-          <p className="font-semibold mb-1">Rate mismatch detected</p>
-          {consistency.warnings.map((w, i) => (
-            <p key={i} className="text-xs mt-1">{w.message}</p>
-          ))}
-        </div>
-      )}
-
       {/* Enhancement Rules */}
       <div className={`${CARD.flush} mb-6`}>
         <div className="border-b border-gray-100 px-5 py-3">
@@ -195,9 +169,7 @@ export default function PayRatesConfig() {
                   <tr key={rule.id} className={TABLE.tr}>
                     <td className={`${TABLE.td} font-medium`}>{rule.name}</td>
                     <td className={TABLE.td}>
-                      <span className={rule.applies_to === 'overtime' ? BADGE.amber : BADGE.blue}>
-                        {APPLIES_TO_LABELS[rule.applies_to] || rule.applies_to}
-                      </span>
+                      <span className={BADGE.blue}>{APPLIES_TO_LABELS[rule.applies_to] || rule.applies_to}</span>
                     </td>
                     <td className={TABLE.td + ' text-gray-500 text-xs'}>{RATE_TYPE_LABELS[rule.rate_type]}</td>
                     <td className={`${TABLE.td} font-mono font-semibold`}>{formatAmount(rule)}</td>
@@ -260,16 +232,12 @@ export default function PayRatesConfig() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Applies To</label>
-              {modal?.mode === 'edit' && form.applies_to === 'overtime' ? (
-                <input className={`${INPUT.base} bg-gray-100`} value="Legacy / unused" disabled />
-              ) : (
-                <select className={INPUT.select} value={form.applies_to}
-                  onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
-                  {Object.entries(modal?.mode === 'add' ? SELECTABLE_APPLIES_TO : APPLIES_TO_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              )}
+              <select className={INPUT.select} value={form.applies_to}
+                onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
+                {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className={INPUT.label}>Rate Type</label>
