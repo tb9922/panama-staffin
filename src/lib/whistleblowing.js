@@ -160,10 +160,11 @@ export function calculateSpeakUpCulture(data, fromDate, toDate) {
   const resolutionScore = Math.round((resolutionRate / 100) * 30);
 
   // Protection rate: % with reporter_protected out of non-anonymous (scored 30%)
+  // If all concerns are anonymous, protection is N/A — award full 30% (no one to protect)
   const nonAnonymous = concerns.filter(c => !c.anonymous);
   const protectedCount = nonAnonymous.filter(c => c.reporter_protected === true).length;
-  const protectionRate = nonAnonymous.length > 0 ? Math.round((protectedCount / nonAnonymous.length) * 100) : 100;
-  const protectionScore = Math.round((protectionRate / 100) * 30);
+  const protectionRate = nonAnonymous.length > 0 ? Math.round((protectedCount / nonAnonymous.length) * 100) : null;
+  const protectionScore = protectionRate != null ? Math.round((protectionRate / 100) * 30) : 30;
 
   const score = loggedScore + resolutionScore + protectionScore;
 
