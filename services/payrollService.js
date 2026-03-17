@@ -224,6 +224,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
         // ── Phase 2: Sick → SSP ──
         if (shift === 'SICK') {
+          let sspAmount = 0;
           const sspConfig = getSSPConfig(date, allSSPConfigs);
           if (sspConfig) {
             const staffPeriods = sickPeriodsMap.get(s.id) || [];
@@ -232,10 +233,16 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
               const r = calculateSSP(sickPeriod, date, sspConfig);
               if (r.eligible) {
                 acc.ssp_days += r.sspDays;
-                acc.ssp_amount = round2(acc.ssp_amount + r.sspAmount);
+                sspAmount = r.sspAmount;
+                acc.ssp_amount = round2(acc.ssp_amount + sspAmount);
               }
             }
           }
+          // Record SICK shift so getSSPDaysByRun can count SSP days for cap tracking
+          shiftDetails.push({
+            date, shift_code: 'SICK', hours: 0, base_rate: 0, base_amount: 0,
+            enhancements_json: [], total_amount: sspAmount, effective_hourly_rate: 0,
+          });
           continue;
         }
 
@@ -366,10 +373,10 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (eligibility.shouldAutoEnrol) {
           await pensionRepo.upsertEnrolment(homeId, {
             staff_id: s.id, status: 'eligible_enrolled',
-            enrolment_date: run.period_end, opt_in_date: null,
+            enrolled_date: run.period_end, opt_in_date: null,
           }, client);
           // Set enrolment in-memory — calculatePensionContributions only needs .status
-          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolment_date: run.period_end };
+          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolled_date: run.period_end };
           notesParts.push('AUTO-ENROLLED: Pension auto-enrolment triggered');
         }
       }

@@ -157,13 +157,8 @@ export default function StaffRegister() {
   }
 
   async function addStaff() {
-    const maxId = allStaff.reduce((max, s) => {
-      const num = parseInt(s.id.replace('S', ''));
-      return num > max ? num : max;
-    }, 0);
-    const id = 'S' + String(maxId + 1).padStart(3, '0');
     const staffEntry = {
-      ...newStaff, id,
+      ...newStaff,
       start_date: newStaff.start_date || null,
       leaving_date: newStaff.leaving_date || null,
     };

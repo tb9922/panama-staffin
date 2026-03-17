@@ -80,6 +80,9 @@ export async function updateUser(id, fields, actorUsername) {
   const target = await userRepo.findById(id);
   if (!target) throw new Error('User not found');
 
+  // Strip is_platform_admin — only settable via direct DB or platform admin routes
+  delete fields.is_platform_admin;
+
   // Cannot deactivate yourself
   if (fields.active === false && target.username === actorUsername) {
     throw new Error('Cannot deactivate your own account');
@@ -104,9 +107,9 @@ export async function updateUser(id, fields, actorUsername) {
     await authService.revokeUser(target.username);
   }
 
-  // If role or platform admin flag changed, force re-login so new JWT has correct claims
-  if ((fields.role && fields.role !== target.role) ||
-      (fields.is_platform_admin !== undefined && fields.is_platform_admin !== target.is_platform_admin)) {
+  // If role changed, force re-login so new JWT has correct claims
+  // (is_platform_admin is stripped above and only settable via direct DB)
+  if (fields.role && fields.role !== target.role) {
     await authService.revokeUser(target.username);
     // If upgraded to admin, grant all homes
     if (fields.role === 'admin' && fields.role !== target.role) {

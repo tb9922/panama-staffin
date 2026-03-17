@@ -197,8 +197,9 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     return { tax: 0, taxableIncome: grossPay, isRefund: false };
   }
 
-  // ytd.gross_pay = cumulative TAXABLE pay (gross minus pension under Net Pay Arrangement)
-  //   from all prior approved periods this tax year.
+  // ytd.gross_pay as received here = cumulative TAXABLE pay (gross minus pension).
+  //   Note: the DB column payroll_ytd.gross_pay stores full gross; payrollService.calculateRun
+  //   swaps it with taxable_pay before calling this function (Net Pay Arrangement).
   // ytd.tax_deducted = cumulative tax already paid.
   const priorGross    = ytd?.gross_pay ?? 0;
   const priorTaxPaid  = ytd?.tax_deducted ?? 0;

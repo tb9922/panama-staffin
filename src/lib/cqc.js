@@ -849,7 +849,7 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     const su = calculateSpeakUpCulture(data, fromStr2, toStr2);
     autoEvidence.push({
       label: 'Speak Up Culture Score', value: su.score, unit: '%',
-      detail: `${su.totalConcerns} concerns, ${su.resolutionRate}% resolved, ${su.protectionRate}% protected`,
+      detail: `${su.totalConcerns} concerns, ${su.resolutionRate}% resolved${su.protectionRate != null ? `, ${su.protectionRate}% protected` : ''}`,
       source: 'Whistleblowing Tracker',
     });
   }

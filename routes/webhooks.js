@@ -5,6 +5,7 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as webhookRepo from '../repositories/webhookRepo.js';
 import { zodError } from '../errors.js';
 import { isPrivateUrl, resolvedToPrivateIp } from '../lib/ssrf.js';
+import * as auditService from '../services/auditService.js';
 
 const router = Router();
 
@@ -40,6 +41,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       return res.status(400).json({ error: 'Webhook URL resolves to a private/internal IP address' });
     }
     const hook = await webhookRepo.create(req.home.id, parsed.data);
+    await auditService.log('webhook_create', req.home.slug, req.user.username, `url=${parsed.data.url} events=${parsed.data.events.join(',')}`);
     res.status(201).json(hook);
   } catch (err) { next(err); }
 });
@@ -56,6 +58,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const hook = await webhookRepo.update(id, req.home.id, parsed.data);
     if (!hook) return res.status(404).json({ error: 'Webhook not found' });
+    await auditService.log('webhook_update', req.home.slug, req.user.username, `id=${id} url=${parsed.data.url}`);
     res.json(hook);
   } catch (err) { next(err); }
 });
@@ -67,6 +70,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid webhook ID' });
     const removed = await webhookRepo.remove(id, req.home.id);
     if (!removed) return res.status(404).json({ error: 'Webhook not found' });
+    await auditService.log('webhook_delete', req.home.slug, req.user.username, `id=${id}`);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

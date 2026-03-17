@@ -7,6 +7,12 @@ import { ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
 import logger from '../logger.js';
 
+/** Deduplicate rows by id. Assumes id is a non-null SERIAL PRIMARY KEY. */
+function dedupeById(rows) {
+  const seen = new Set();
+  return rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+}
+
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
 
 /**
@@ -38,7 +44,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         // HR module tables (GDPR special category — employee relations data)
         hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
         hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
-        hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes,
+        hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes, hrCaseNotesOnCases,
         onboarding, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
       ] = await Promise.all([
@@ -101,6 +107,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         staffName
           ? conn.query(`SELECT * FROM hr_case_notes WHERE home_id = $1 AND author = $2`, [homeId, staffName])
           : { rows: [] },
+        // HR module — case notes on this staff member's cases (written by anyone)
+        conn.query(
+          `SELECT cn.* FROM hr_case_notes cn
+           WHERE cn.home_id = $1 AND (
+             (cn.case_type = 'disciplinary' AND cn.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (cn.case_type = 'grievance' AND cn.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+             OR (cn.case_type = 'performance' AND cn.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
+           )`, [homeId, subjectId]),
         // Onboarding data (DBS, RTW, references, etc.)
         conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Care Certificate progress
@@ -171,7 +185,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           hr_tupe_transfers: hrTupe.rows,
           tupe_note: 'TUPE records are home-level only; verify manually if subject was involved in a transfer',
           hr_rtw_dbs_renewals: hrRenewals.rows,
-          hr_case_notes: hrCaseNotes.rows,
+          hr_case_notes: dedupeById([...hrCaseNotes.rows, ...hrCaseNotesOnCases.rows]),
           onboarding: onboarding.rows,
           care_certificates: careCertificates.rows,
           complaints: complaints.rows,
@@ -356,9 +370,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
        WHERE home_id = $1 AND staff_id = $3`,
       [homeId, anon, staffId]
     );
-    // Case notes: anonymise author and clear content.
-    // Must use originalName (captured before staff UPDATE) — by this point staff.name is already [REDACTED].
-    // Column is `content`, not `note`.
+    // Case notes: anonymise notes authored BY the staff member (using originalName)
     if (originalName) {
       await client.query(
         `UPDATE hr_case_notes SET author = $1, content = '[REDACTED]'
@@ -366,6 +378,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         [anon, homeId, originalName]
       );
     }
+    // Case notes: anonymise notes ON the staff member's cases (written by anyone)
+    await client.query(
+      `UPDATE hr_case_notes SET content = '[REDACTED]'
+       WHERE home_id = $1 AND (
+         (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+         OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+         OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
+       )`,
+      [homeId, staffId]
+    );
 
     // Delete HR file attachments linked to this staff member's cases (documents may contain personal data)
     const hrCaseCondition = `
@@ -475,9 +497,32 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
 
+    // Anonymise hr_investigation_meetings linked to this staff member's cases
+    const meetingCaseCondition = `
+      (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
+      OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    // Clear content fields (may contain subject PII). Preserve recorded_by — it is the
+    // manager's username, not the subject's data. Only anonymise recorded_by if it matches
+    // the subject's name (rare case where the subject recorded their own meeting).
+    await client.query(
+      `UPDATE hr_investigation_meetings SET
+         attendees = '[]'::jsonb, summary = NULL, key_points = NULL, outcome = NULL
+       WHERE home_id = $1 AND (${meetingCaseCondition})`,
+      [homeId, staffId]
+    );
+    if (originalName) {
+      await client.query(
+        `UPDATE hr_investigation_meetings SET recorded_by = $3
+         WHERE home_id = $1 AND recorded_by = $4 AND (${meetingCaseCondition})`,
+        [homeId, staffId, anon, originalName]
+      );
+    }
+
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
+    // - payroll_ytd: cumulative tax year totals, retained alongside payroll_lines (reconstructable)
     // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
     // - shift_overrides: dates/shift codes retained as operational data, reason cleared above

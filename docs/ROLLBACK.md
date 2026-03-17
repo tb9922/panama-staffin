@@ -5,7 +5,7 @@
 If a deployment breaks the application but the database is fine:
 
 ```bash
-cd /var/www/panama
+cd /var/www/panama-staffing
 
 # Find the previous working commit
 git log --oneline -5

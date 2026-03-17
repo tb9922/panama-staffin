@@ -1265,16 +1265,17 @@ export function generateBoardPackPDF(data, dateRangeDays = 28) {
   y = addHeader(doc, 'Training Compliance', `As of ${today}`, homeName);
 
   const trainingBreakdown = calculateTrainingBreakdown(data, today);
-  if (trainingBreakdown.length > 0) {
+  const trainingTypes = trainingBreakdown.perType || [];
+  if (trainingTypes.length > 0) {
     doc.autoTable({
       startY: y,
       head: [['Training Type', 'Compliant', 'Expired', 'Not Started', 'Compliance %']],
-      body: trainingBreakdown.map(t => [
+      body: trainingTypes.map(t => [
         t.name,
         t.compliant,
         t.expired,
         t.notStarted,
-        `${t.compliancePct}%`,
+        `${t.total > 0 ? Math.round((t.compliant / t.total) * 100) : 100}%`,
       ]),
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
