@@ -17,13 +17,10 @@ test.describe('Staff CRUD', () => {
   test('Add Staff form validates required fields', async ({ page }) => {
     await page.getByRole('button', { name: /Add Staff/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
-    // Click the modal submit button (exact match to avoid matching background "Add Staff" button)
+    // Submit button should be disabled when required fields are empty
     const submitBtn = page.getByRole('dialog').getByRole('button', { name: /^Add$|Save|Create/i });
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click();
-      // Form should still be open (validation prevented submit)
-      await expect(page.getByRole('dialog')).toBeVisible();
-    }
+    await expect(submitBtn).toBeVisible();
+    await expect(submitBtn).toBeDisabled();
   });
 
   test('clicking a staff row opens edit view', async ({ page }) => {
