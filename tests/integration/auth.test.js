@@ -609,6 +609,48 @@ describe('Token revocation', () => {
       .send({ username: ADMIN_USER })
       .expect(403);
   });
+
+  it('logout of one session does not block another session', async () => {
+    // Login twice as admin — two distinct JWTs
+    const res1 = await request(app)
+      .post('/api/login')
+      .send({ username: ADMIN_USER, password: ADMIN_PW })
+      .expect(200);
+    const res2 = await request(app)
+      .post('/api/login')
+      .send({ username: ADMIN_USER, password: ADMIN_PW })
+      .expect(200);
+    const token1 = res1.body.token;
+    const token2 = res2.body.token;
+
+    // Both tokens should work
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${token2}`)
+      .expect(200);
+
+    // Logout session 1
+    await request(app)
+      .post('/api/login/logout')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    // Session 2 should still work
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${token2}`)
+      .expect(200);
+
+    // Session 1 should be blocked
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(401);
+  });
 });
 
 // ── Home access management (platform admin only) ────────────────────────────
