@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Scheduling — Roster', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/rotation');
-    await expect(page.getByRole('heading', { name: /Rotation/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Roster' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('roster grid renders with staff rows', async ({ page }) => {
@@ -28,7 +28,8 @@ test.describe('Scheduling — Roster', () => {
 test.describe('Scheduling — Daily Status', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/day');
-    await expect(page.getByRole('heading', { name: /Daily Status|Day View/i })).toBeVisible({ timeout: 15_000 });
+    // Daily Status heading is the date (e.g. "Monday, 16 March 2026")
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows coverage periods', async ({ page }) => {

@@ -23,7 +23,7 @@ test.describe('Compliance Module', () => {
 
   test('Risk Register loads', async ({ page }) => {
     await page.goto('/risks');
-    await expect(page.getByRole('heading', { name: /Risk/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Risk Register' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: /New Risk/i })).toBeVisible();
   });
 });
