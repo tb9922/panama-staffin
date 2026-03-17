@@ -501,13 +501,22 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       (case_type = 'disciplinary' AND case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
       OR (case_type = 'grievance' AND case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
       OR (case_type = 'performance' AND case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))`;
+    // Clear content fields (may contain subject PII). Preserve recorded_by — it is the
+    // manager's username, not the subject's data. Only anonymise recorded_by if it matches
+    // the subject's name (rare case where the subject recorded their own meeting).
     await client.query(
       `UPDATE hr_investigation_meetings SET
-         attendees = '[]'::jsonb, summary = NULL, key_points = NULL, outcome = NULL,
-         recorded_by = $3
+         attendees = '[]'::jsonb, summary = NULL, key_points = NULL, outcome = NULL
        WHERE home_id = $1 AND (${meetingCaseCondition})`,
-      [homeId, staffId, anon]
+      [homeId, staffId]
     );
+    if (originalName) {
+      await client.query(
+        `UPDATE hr_investigation_meetings SET recorded_by = $3
+         WHERE home_id = $1 AND recorded_by = $4 AND (${meetingCaseCondition})`,
+        [homeId, staffId, anon, originalName]
+      );
+    }
 
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)

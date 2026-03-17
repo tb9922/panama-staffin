@@ -290,9 +290,10 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     }
   });
 
-  const grossPay = totalHours * staff.hourly_rate;
+  const rate = staff.hourly_rate || 0;
+  const grossPay = totalHours * rate;
   const otPay = otHours * config.ot_premium;
-  const bhPay = bhHours * staff.hourly_rate * (config.bh_premium_multiplier - 1);
+  const bhPay = bhHours * rate * (config.bh_premium_multiplier - 1);
   const weeks = dates.length / 7;
   const avgWeeklyHours = weeks > 0 ? totalHours / weeks : 0;
 
