@@ -20,7 +20,7 @@ const optDate = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-
 const optNI   = z.preprocess(v => v === '' ? null : v, z.string().regex(/^[A-Z]{2}\d{6}[A-D]$/).nullable().optional());
 
 const staffBodySchema = z.object({
-  id:              z.string().min(1).max(20),
+  id:              z.string().min(1).max(20).optional(),
   name:            z.string().min(1).max(200),
   role:            z.enum(STAFF_ROLES),
   team:            z.enum(STAFF_TEAMS),
@@ -42,13 +42,20 @@ const staffUpdateSchema = staffBodySchema.partial().extend({
 });
 
 // POST /api/staff?home=X — create a new staff member
-// Client generates the ID (format "S001", "S002" etc.) — server accepts it as-is
+// Server generates the ID inside a transaction to prevent concurrent collisions.
+// Client-provided ID is accepted for backwards compatibility but server-generated is preferred.
 router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
   try {
     const parsed = staffBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const staff = await staffRepo.upsertOne(req.home.id, parsed.data);
-    await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: parsed.data.id });
+    const data = parsed.data;
+    const staff = await withTransaction(async (client) => {
+      if (!data.id) {
+        data.id = await staffRepo.nextId(req.home.id, client);
+      }
+      return staffRepo.upsertOne(req.home.id, data, client);
+    });
+    await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: data.id });
     res.status(201).json(staff);
   } catch (err) { next(err); }
 });

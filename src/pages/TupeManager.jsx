@@ -151,7 +151,7 @@ export default function TupeManager() {
                 <th scope="col" className={TABLE.th}>Transferee</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Staff Affected</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

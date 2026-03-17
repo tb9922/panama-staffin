@@ -38,6 +38,13 @@ export async function assembleData(homeSlug, userRole) {
     day_notes: dayNotes,
   };
 
+  // Strip edit_lock_pin from config for non-admin roles — prevents any user
+  // from reading the PIN via DevTools network tab.
+  if (userRole !== 'admin' && payload.config?.edit_lock_pin) {
+    payload.config = { ...payload.config };
+    delete payload.config.edit_lock_pin;
+  }
+
   // Viewer role: allowlist — only scheduling-relevant fields pass through.
   // Denylist is unsafe because new PII fields would leak until explicitly blocked.
   if (userRole !== 'admin') {

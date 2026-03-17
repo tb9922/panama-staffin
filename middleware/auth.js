@@ -74,6 +74,14 @@ export async function requireHomeAccess(req, res, next) {
     return res.status(404).json({ error: 'Home not found' });
   }
 
+  // Platform admins bypass per-home role check — they have implicit home_manager access
+  if (req.user.is_platform_admin) {
+    req.home = home;
+    req.homeRole = 'home_manager';
+    req.staffId = null;
+    return next();
+  }
+
   // Resolve per-home role from user_home_roles
   const assignment = await getHomeRole(req.user.username, home.id);
   if (!assignment) {

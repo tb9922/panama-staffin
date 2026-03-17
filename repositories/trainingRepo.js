@@ -7,7 +7,9 @@ import { pool, toDateStr } from '../db.js';
  */
 export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() AS _total
+    `SELECT id, home_id, staff_id, training_type_id, completed, expiry,
+            trainer, method, certificate_ref, level, notes, updated_at,
+            COUNT(*) OVER() AS _total
      FROM training_records
      WHERE home_id = $1 AND deleted_at IS NULL
      ORDER BY staff_id, training_type_id

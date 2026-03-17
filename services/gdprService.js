@@ -16,6 +16,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
   const ownClient = !client;
   const conn = client || await pool.connect();
   try {
+    // Snapshot isolation: wrap in read-only transaction so concurrent writes
+    // cannot produce an inconsistent SAR export across our 31 queries.
+    if (ownClient) await conn.query('BEGIN TRANSACTION READ ONLY');
+
     if (subjectType === 'staff') {
       // Resolve staff name once — avoids 6 redundant subqueries
       const { rows: [staffRow] } = await conn.query(
@@ -210,7 +214,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
 
     return { subject_type: subjectType, subject_id: subjectId, data: {} };
   } finally {
-    if (ownClient) conn.release();
+    if (ownClient) {
+      await conn.query('COMMIT').catch(() => {});
+      conn.release();
+    }
   }
 }
 

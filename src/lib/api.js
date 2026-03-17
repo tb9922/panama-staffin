@@ -24,6 +24,8 @@ function authHeaders(extra = {}) {
   };
 }
 
+const h = (homeSlug) => encodeURIComponent(homeSlug);
+
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...options });
   if (res.status === 401) {
@@ -389,8 +391,6 @@ export async function revokeUserTokens(username) {
 }
 
 // ── Payroll API ───────────────────────────────────────────────────────────────
-
-const h = (homeSlug) => encodeURIComponent(homeSlug);
 
 // Pay rate rules
 export async function getPayRateRules(homeSlug) {

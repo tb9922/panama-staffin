@@ -202,7 +202,7 @@ export default function RtwDbsRenewals() {
                 <th scope="col" className={TABLE.th}>Expiry Date</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 <th scope="col" className={TABLE.th}>Checked By</th>
-                <th scope="col" className={TABLE.th}>Actions</th>
+                {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
             </thead>
             <tbody>

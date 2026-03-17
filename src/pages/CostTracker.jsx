@@ -29,7 +29,7 @@ function getMonthDates(year, month) {
 
 export default function CostTracker() {
   const { canWrite } = useData();
-  const canEdit = canWrite('finance');
+  const canEdit = canWrite('scheduling');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
