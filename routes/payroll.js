@@ -34,8 +34,35 @@ import { dispatchEvent }      from '../services/webhookService.js';
 import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
+import { isOwnDataOnly } from '../shared/roles.js';
 
 const router = Router();
+
+/**
+ * For own-data roles (staff_member): require a linked staff_id.
+ * Returns true (and sends 403) if own-data role has no staff link.
+ * Usage: if (requireStaffLink(req, res, 'payroll')) return;
+ */
+function requireStaffLink(req, res, moduleId) {
+  if (!isOwnDataOnly(req.homeRole, moduleId)) return false;
+  if (!req.staffId) {
+    res.status(403).json({ error: 'No staff link configured' });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Guard for home-level payroll data that staff_member must not see.
+ * Returns true (and sends 403) if staff_member tries to access.
+ */
+function blockOwnDataRole(req, res, moduleId) {
+  if (isOwnDataOnly(req.homeRole, moduleId)) {
+    res.status(403).json({ error: 'Access restricted to managers and officers' });
+    return true;
+  }
+  return false;
+}
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
@@ -105,6 +132,7 @@ const agencyShiftBodySchema = z.object({
 // GET /api/payroll/rates?home=X — list active rules (seeds defaults on first call)
 router.get('/rates', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     // Seed defaults if none exist yet (idempotent)
     await payrollService.seedDefaultRulesIfNeeded(req.home.id);
 
@@ -165,7 +193,11 @@ router.get('/timesheets', readRateLimiter, requireAuth, requireHomeAccess, requi
   try {
     const dateP = dateSchema.safeParse(req.query.date);
     if (!dateP.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
-    const entries = await timesheetRepo.findByHomeAndDate(req.home.id, dateP.data);
+    if (requireStaffLink(req, res, 'payroll')) return;
+    let entries = await timesheetRepo.findByHomeAndDate(req.home.id, dateP.data);
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      entries = entries.filter(e => e.staff_id === req.staffId);
+    }
     res.json(entries);
   } catch (err) { next(err); }
 });
@@ -176,7 +208,12 @@ router.get('/timesheets/period', readRateLimiter, requireAuth, requireHomeAccess
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
     if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end date parameters required' });
-    const entries = await timesheetRepo.findByHomePeriod(req.home.id, startP.data, endP.data, safeStr(req.query.status, 20), safeStr(req.query.staff_id, 20));
+    if (requireStaffLink(req, res, 'payroll')) return;
+    // staff_member: force filter to own staff ID
+    const staffIdFilter = isOwnDataOnly(req.homeRole, 'payroll')
+      ? req.staffId
+      : safeStr(req.query.staff_id, 20);
+    const entries = await timesheetRepo.findByHomePeriod(req.home.id, startP.data, endP.data, safeStr(req.query.status, 20), staffIdFilter);
     res.json(entries);
   } catch (err) { next(err); }
 });
@@ -268,9 +305,17 @@ router.post('/timesheets/approve-range', writeRateLimiter, requireAuth, requireH
 // GET /api/payroll/runs?home=X — list all runs
 router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (requireStaffLink(req, res, 'payroll')) return;
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const { rows, total } = await payrollRunRepo.findByHome(req.home.id, { limit, offset });
+    // staff_member: strip aggregate totals from run list
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      for (const r of rows) {
+        delete r.total_gross; delete r.total_enhancements;
+        delete r.total_sleep_ins; delete r.staff_count;
+      }
+    }
     res.json({ rows, total });
   } catch (err) { next(err); }
 });
@@ -298,9 +343,16 @@ router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requ
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
+    if (requireStaffLink(req, res, 'payroll')) return;
     const run   = await payrollRunRepo.findById(runIdP.data, req.home.id);
     if (!run) return res.status(404).json({ error: 'Run not found' });
-    const lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
+    let lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
+    // staff_member: own payslip only, no aggregate totals
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      lines = lines.filter(l => l.staff_id === req.staffId);
+      const { total_gross, total_enhancements, total_sleep_ins, staff_count: _sc, ...safeRun } = run;
+      return res.json({ run: safeRun, lines });
+    }
     res.json({ run, lines });
   } catch (err) { next(err); }
 });
@@ -356,6 +408,11 @@ router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requi
     const staffIdP = z.string().min(1).max(20).regex(/^[A-Za-z0-9_-]+$/).safeParse(req.params.staffId);
     if (!staffIdP.success) return res.status(400).json({ error: 'Invalid staff ID' });
     const staffId = staffIdP.data;
+    // staff_member can only access own payslip
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      if (!req.staffId) return res.status(403).json({ error: 'No staff link configured' });
+      if (staffId !== req.staffId) return res.status(403).json({ error: 'Access denied — you can only view your own payslip' });
+    }
     const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffId);
     if (!payslips.length) return res.status(404).json({ error: 'No payslip data found for this staff member' });
     const pdf = generatePayslipPDF(payslips[0]);
@@ -370,7 +427,10 @@ router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireHomeAcc
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
-    const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, null);
+    if (requireStaffLink(req, res, 'payroll')) return;
+    // staff_member: only own payslip
+    const staffFilter = isOwnDataOnly(req.homeRole, 'payroll') ? req.staffId : null;
+    const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffFilter);
     res.json(payslips);
   } catch (err) { next(err); }
 });
@@ -380,6 +440,7 @@ router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireHomeAcc
 // GET /api/payroll/agency/providers?home=X
 router.get('/agency/providers', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     res.json(await agencyRepo.findProvidersByHome(req.home.id));
   } catch (err) { next(err); }
 });
@@ -412,6 +473,7 @@ router.put('/agency/providers/:id', writeRateLimiter, requireAuth, requireHomeAc
 // GET /api/payroll/agency/shifts?home=X&start=YYYY-MM-DD&end=YYYY-MM-DD
 router.get('/agency/shifts', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
     if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end required' });
@@ -450,6 +512,7 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
 // GET /api/payroll/agency/metrics?home=X&weeks=12
 router.get('/agency/metrics', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const weeks = Math.min(52, Math.max(1, parseInt(req.query.weeks, 10) || 12));
     res.json(await agencyRepo.getMetrics(req.home.id, weeks));
   } catch (err) { next(err); }
@@ -473,7 +536,12 @@ const taxCodeBodySchema = z.object({
 // GET /api/payroll/tax-codes?home=X
 router.get('/tax-codes', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    res.json(await taxRepo.listTaxCodesByHome(req.home.id));
+    let codes = await taxRepo.listTaxCodesByHome(req.home.id);
+    if (requireStaffLink(req, res, 'payroll')) return;
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      codes = codes.filter(c => c.staff_id === req.staffId);
+    }
+    res.json(codes);
   } catch (err) { next(err); }
 });
 
@@ -491,10 +559,19 @@ router.post('/tax-codes', writeRateLimiter, requireAuth, requireHomeAccess, requ
 // GET /api/payroll/ytd?home=X&staffId=X&year=X
 router.get('/ytd', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    const staffId = z.string().min(1).max(20).safeParse(req.query.staffId);
-    const year    = z.coerce.number().int().min(2020).safeParse(req.query.year);
-    if (!staffId.success || !year.success) return res.status(400).json({ error: 'staffId and year are required' });
-    const ytd = await taxRepo.getYTD(req.home.id, staffId.data, year.data);
+    const year = z.coerce.number().int().min(2020).safeParse(req.query.year);
+    if (!year.success) return res.status(400).json({ error: 'year is required' });
+    if (requireStaffLink(req, res, 'payroll')) return;
+    // staff_member: force own staffId
+    let sid;
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      sid = req.staffId;
+    } else {
+      const staffIdP = z.string().min(1).max(20).safeParse(req.query.staffId);
+      if (!staffIdP.success) return res.status(400).json({ error: 'staffId is required' });
+      sid = staffIdP.data;
+    }
+    const ytd = await taxRepo.getYTD(req.home.id, sid, year.data);
     res.json(ytd || null);
   } catch (err) { next(err); }
 });
@@ -514,7 +591,12 @@ const enrolmentBodySchema = z.object({
 // GET /api/payroll/pensions?home=X
 router.get('/pensions', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    res.json(await pensionRepo.listEnrolmentsByHome(req.home.id));
+    let enrolments = await pensionRepo.listEnrolmentsByHome(req.home.id);
+    if (requireStaffLink(req, res, 'payroll')) return;
+    if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      enrolments = enrolments.filter(e => e.staff_id === req.staffId);
+    }
+    res.json(enrolments);
   } catch (err) { next(err); }
 });
 
@@ -573,7 +655,11 @@ const sickPeriodUpdateSchema = z.object({
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
 router.get('/sick-periods', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    const staffId = safeStr(req.query.staffId, 20);
+    if (requireStaffLink(req, res, 'payroll')) return;
+    // staff_member: force own staffId
+    const staffId = isOwnDataOnly(req.homeRole, 'payroll')
+      ? req.staffId
+      : safeStr(req.query.staffId, 20);
     res.json(await sspRepo.listSickPeriods(req.home.id, staffId));
   } catch (err) { next(err); }
 });
@@ -623,6 +709,7 @@ const markPaidSchema = z.object({
 // GET /api/payroll/hmrc?home=X&year=X
 router.get('/hmrc', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const year = z.coerce.number().int().min(2020).safeParse(req.query.year);
     if (!year.success) return res.status(400).json({ error: 'year is required' });
     // Refresh overdue status before returning
@@ -649,6 +736,7 @@ router.put('/hmrc/:id/paid', writeRateLimiter, requireAuth, requireHomeAccess, r
 // Admin only, approved/exported/locked runs only
 router.get('/runs/:runId/summary-pdf', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     const run = await payrollRunRepo.findById(runIdP.data, req.home.id);

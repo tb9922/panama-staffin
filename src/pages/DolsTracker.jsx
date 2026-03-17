@@ -47,12 +47,13 @@ export default function DolsTracker() {
   useDirtyGuard(showModal);
 
   const today = useLiveDate();
+  const homeSlug = getCurrentHome();
 
   const load = useCallback(async () => {
+    if (!homeSlug) return;
     try {
       setError(null);
-      const home = getCurrentHome();
-      const result = await getDols(home);
+      const result = await getDols(homeSlug);
       setDols(result.dols || []);
       setMcaAssessments(result.mcaAssessments || []);
     } catch (err) {
@@ -60,7 +61,7 @@ export default function DolsTracker() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [homeSlug]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -131,12 +132,11 @@ export default function DolsTracker() {
 
   async function handleSaveDols() {
     if (!form.resident_name || !form.application_date) return;
-    const home = getCurrentHome();
     try {
       if (editingId) {
-        await updateDols(home, editingId, form);
+        await updateDols(homeSlug, editingId, form);
       } else {
-        await createDols(home, form);
+        await createDols(homeSlug, form);
       }
       setShowModal(false);
       await load();
@@ -147,9 +147,8 @@ export default function DolsTracker() {
 
   async function handleDeleteDols() {
     if (!editingId || !confirm('Delete this DoLS/LPS record?')) return;
-    const home = getCurrentHome();
     try {
-      await deleteDols(home, editingId);
+      await deleteDols(homeSlug, editingId);
       setShowModal(false);
       await load();
     } catch (err) {
@@ -182,12 +181,11 @@ export default function DolsTracker() {
 
   async function handleSaveMca() {
     if (!form.resident_name || !form.assessment_date) return;
-    const home = getCurrentHome();
     try {
       if (editingId) {
-        await updateMcaAssessment(home, editingId, form);
+        await updateMcaAssessment(homeSlug, editingId, form);
       } else {
-        await createMcaAssessment(home, form);
+        await createMcaAssessment(homeSlug, form);
       }
       setShowModal(false);
       await load();
@@ -198,9 +196,8 @@ export default function DolsTracker() {
 
   async function handleDeleteMca() {
     if (!editingId || !confirm('Delete this MCA assessment?')) return;
-    const home = getCurrentHome();
     try {
-      await deleteMcaAssessment(home, editingId);
+      await deleteMcaAssessment(homeSlug, editingId);
       setShowModal(false);
       await load();
     } catch (err) {

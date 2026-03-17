@@ -14,6 +14,7 @@ import {
   getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
 } from '../shared/rotation.js';
+import { isOwnDataOnly } from '../shared/roles.js';
 
 const router = Router();
 
@@ -145,7 +146,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
-    let staffOut, onboardingOut;
+    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training;
     if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
@@ -155,12 +156,28 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       onboardingOut = onboarding;
     }
 
+    // staff_member own-data: minimal staff fields, own overrides only, no training/onboarding
+    let configOut = req.home.config;
+    if (isOwnDataOnly(req.homeRole, 'scheduling')) {
+      if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
+      staffOut = staff.map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
+      overridesOut = {};
+      for (const [date, entries] of Object.entries(overrides)) {
+        if (entries[req.staffId]) overridesOut[date] = { [req.staffId]: entries[req.staffId] };
+      }
+      trainingOut = [];
+      onboardingOut = undefined;
+      // Strip commercially sensitive fields — staff don't need cost parameters
+      const { agency_rate_day, agency_rate_night, ot_premium, bh_premium_multiplier, ...safeConfig } = req.home.config;
+      configOut = safeConfig;
+    }
+
     res.json({
-      config: req.home.config,
+      config: configOut,
       staff: staffOut,
-      overrides,
+      overrides: overridesOut,
       day_notes: dayNotes,
-      training,
+      training: trainingOut,
       ...(onboardingOut !== undefined && { onboarding: onboardingOut }),
     });
   } catch (err) {
