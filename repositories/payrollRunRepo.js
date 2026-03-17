@@ -363,6 +363,38 @@ export async function createLineShift(lineId, shift, client) {
   return shapeLineShift(rows[0]);
 }
 
+/**
+ * Batch-insert shift details for a payroll line (replaces N individual createLineShift calls).
+ * Uses a single multi-value INSERT for all shifts in one line.
+ */
+export async function createLineShiftsBatch(lineId, shifts, client) {
+  if (!shifts.length) return;
+  const conn = client || pool;
+  const COLS_PER_ROW = 8; // date thru effective_hourly_rate (lineId shared as $1)
+  const placeholders = [];
+  const values = [];
+  for (let i = 0; i < shifts.length; i++) {
+    const base = i * COLS_PER_ROW + 2; // $1 is lineId
+    placeholders.push(
+      `($1,$${base},$${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7})`
+    );
+    const s = shifts[i];
+    values.push(
+      s.date, s.shift_code, s.hours,
+      s.base_rate, s.base_amount,
+      s.enhancements_json ? JSON.stringify(s.enhancements_json) : null,
+      s.total_amount, s.effective_hourly_rate,
+    );
+  }
+  await conn.query(
+    `INSERT INTO payroll_line_shifts
+       (payroll_line_id, date, shift_code, hours, base_rate, base_amount,
+        enhancements_json, total_amount, effective_hourly_rate)
+     VALUES ${placeholders.join(',')}`,
+    [lineId, ...values],
+  );
+}
+
 export async function findShiftsByLine(lineId, homeId) {
   const { rows } = await pool.query(
     `SELECT ${LINE_SHIFT_COLS.split(',').map(c => `pls.${c.trim()}`).join(', ')} FROM payroll_line_shifts pls

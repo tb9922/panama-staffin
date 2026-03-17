@@ -80,7 +80,7 @@ export function getCycleDay(date, cycleStartDate) {
 }
 
 export function getTeamBase(team) {
-  if (team === 'Float') return null;
+  if (!team || team === 'Float') return null;
   const match = team.match(/[AB]$/);
   return match ? match[0] : null;
 }
