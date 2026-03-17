@@ -2,7 +2,7 @@
 ALTER TABLE shift_overrides
   ADD CONSTRAINT chk_shift_valid CHECK (
     shift IN ('E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
-              'OC-E', 'OC-L', 'OC-EL', 'OC-N', 'AG-E', 'AG-L', 'AG-N', 'BH-D', 'BH-N')
+              'OC-E', 'OC-L', 'OC-EL', 'OC-N', 'AG-E', 'AG-L', 'AG-EL', 'AG-N', 'BH-D', 'BH-N')
   );
 
 ALTER TABLE shift_overrides

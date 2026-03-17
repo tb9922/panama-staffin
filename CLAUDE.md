@@ -95,6 +95,18 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 65. ~~Staff ID concurrent creation silent overwrite~~ — FIXED: server-only ID generation via transactional nextId()
 66. ~~CQC evidence shows "null% protected"~~ — FIXED: handle null protectionRate in template literal
 67. ~~Stale /var/www/panama paths in docs/scripts~~ — FIXED: updated to /var/www/panama-staffing
+68. ~~Login rate limiter uses ipKeyGenerator(req) not req.ip~~ — FIXED: was global rate limit instead of per-IP
+69. ~~Resident SAR misses finance_residents + finance_invoices~~ — FIXED: Article 15 compliance
+70. ~~NMW fallback rates use April 2026 values~~ — FIXED: corrected to 2025-26 (10.00/7.55)
+71. ~~SSP calculateSSP parses dates without UTC suffix~~ — FIXED: T00:00:00Z prevents BST miscalculation
+72. ~~payroll.js toISOString date shift in BST~~ — FIXED: uses formatDate() from rotation.js
+73. ~~dayNoteRepo N+1 INSERT loop (~270 queries)~~ — FIXED: batch INSERT
+74. ~~timesheetRepo N+1 INSERT loop (~40 queries)~~ — FIXED: batch INSERT
+75. ~~users.js GET endpoints missing readRateLimiter~~ — FIXED: added to all 6 GETs
+76. ~~CostTracker RBAC gates on scheduling:write~~ — FIXED: changed to finance:write
+77. ~~Migration 106 uses CREATE INDEX CONCURRENTLY inside transaction~~ — FIXED: removed CONCURRENTLY
+78. ~~Migration 107 missing AG-EL shift code~~ — FIXED: added to CHECK constraint
+79. ~~Migration 109 references renamed tables (pay_rates, timesheets, hmrc_submissions)~~ — FIXED: commented out
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 
@@ -111,7 +123,7 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
-- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 100+ migrations)
+- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 111 migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
 - **Testing**: Vitest — 2,317+ tests across 120 files (unit + integration + page), all passing
@@ -259,7 +271,7 @@ Each user has a **per-home role** assigned via `user_home_roles` table (migratio
 
 ## Data Model
 
-Data is stored in PostgreSQL (100+ migrations). The logical shape per home:
+Data is stored in PostgreSQL (111 migrations). The logical shape per home:
 
 ```js
 {

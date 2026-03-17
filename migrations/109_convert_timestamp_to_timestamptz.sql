@@ -104,13 +104,18 @@ ALTER TABLE cqc_evidence ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING deleted_
 ALTER TABLE audit_log ALTER COLUMN ts TYPE TIMESTAMPTZ USING ts AT TIME ZONE 'UTC';
 
 -- 025: pay_rates
-ALTER TABLE pay_rates ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE pay_rates ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+-- SKIPPED: table renamed to pay_rate_rules
+-- ALTER TABLE pay_rates ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+-- SKIPPED: table renamed to pay_rate_rules
+-- ALTER TABLE pay_rates ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
 
 -- 026: timesheets
-ALTER TABLE timesheets ALTER COLUMN approved_at TYPE TIMESTAMPTZ USING approved_at AT TIME ZONE 'UTC';
-ALTER TABLE timesheets ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE timesheets ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+-- SKIPPED: table is timesheet_entries
+-- ALTER TABLE timesheets ALTER COLUMN approved_at TYPE TIMESTAMPTZ USING approved_at AT TIME ZONE 'UTC';
+-- SKIPPED: table is timesheet_entries
+-- ALTER TABLE timesheets ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+-- SKIPPED: table is timesheet_entries
+-- ALTER TABLE timesheets ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
 
 -- 027: payroll_runs
 ALTER TABLE payroll_runs ALTER COLUMN calculated_at TYPE TIMESTAMPTZ USING calculated_at AT TIME ZONE 'UTC';
@@ -138,8 +143,10 @@ ALTER TABLE sick_periods ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_
 ALTER TABLE enhanced_sick_config ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
 
 -- 032: hmrc_submissions
-ALTER TABLE hmrc_submissions ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE hmrc_submissions ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+-- SKIPPED: table is hmrc_liabilities
+-- ALTER TABLE hmrc_submissions ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+-- SKIPPED: table is hmrc_liabilities
+-- ALTER TABLE hmrc_submissions ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
 
 -- 085: complaint_surveys.updated_at
 ALTER TABLE complaint_surveys ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
