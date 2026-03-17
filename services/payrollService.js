@@ -121,7 +121,23 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates(client);
 
-    // Wipe existing lines (cascades to payroll_line_shifts)
+    // Log pension contributions that will be cascade-deleted with the lines
+    const { rows: cascadedPensions } = await client.query(
+      `SELECT pc.id, pc.staff_id, pc.employee_amount, pc.employer_amount
+       FROM pension_contributions pc
+       JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
+       WHERE pl.payroll_run_id = $1 AND pc.home_id = $2`,
+      [runId, homeId]
+    );
+    if (cascadedPensions.length > 0) {
+      await auditRepo.log(
+        'payroll_recalc_pension_cascade', homeSlug, username,
+        `Cascade-deleting ${cascadedPensions.length} pension contributions for run ${runId}`,
+        client
+      );
+    }
+
+    // Wipe existing lines (cascades to payroll_line_shifts + pension_contributions)
     await payrollRunRepo.deleteLines(runId, homeId, client);
 
     const dates = eachDayInRange(run.period_start, run.period_end);

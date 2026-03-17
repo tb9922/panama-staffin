@@ -12,6 +12,10 @@ vi.mock('../../logger.js', () => ({
   default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
+vi.mock('../../lib/ssrf.js', () => ({
+  resolvedToPrivateIp: vi.fn().mockResolvedValue(false),
+}));
+
 // ── Imports after mocks ───────────────────────────────────────────────────────
 
 import { dispatchEvent } from '../../services/webhookService.js';

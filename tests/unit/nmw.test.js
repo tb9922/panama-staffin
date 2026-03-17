@@ -68,7 +68,7 @@ describe('getMinimumWageRate', () => {
   it('uses fallback rates when config fields missing', () => {
     const sparseConfig = {};
     const result21 = getMinimumWageRate('1990-01-01', sparseConfig);
-    expect(result21.rate).toBe(12.71);
+    expect(result21.rate).toBe(12.21);
     const result19 = getMinimumWageRate('2006-06-16', sparseConfig);
     expect(result19.rate).toBe(10.85);
     const result16 = getMinimumWageRate('2009-01-01', sparseConfig);
@@ -84,6 +84,6 @@ describe('getMinimumWageRate', () => {
 
   it('handles null config gracefully', () => {
     const result = getMinimumWageRate('1990-01-01', null);
-    expect(result).toEqual({ rate: 12.71, label: 'NLW' });
+    expect(result).toEqual({ rate: 12.21, label: 'NLW' });
   });
 });

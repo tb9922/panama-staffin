@@ -137,8 +137,10 @@ export function getTrainingStatus(staffMember, trainingType, staffRecords, asOfD
       return { status: TRAINING_STATUS.WRONG_LEVEL, record, daysUntilExpiry, requiredLevel };
     }
   } else if (requiredLevel && !record.level) {
-    // Type has levels but record doesn't specify one — treat as wrong level
-    return { status: TRAINING_STATUS.WRONG_LEVEL, record, daysUntilExpiry, requiredLevel };
+    // Type has levels but record doesn't specify one — expired takes precedence over wrong level
+    if (daysUntilExpiry >= 0) {
+      return { status: TRAINING_STATUS.WRONG_LEVEL, record, daysUntilExpiry, requiredLevel };
+    }
   }
 
   if (daysUntilExpiry <= 30) {
@@ -232,8 +234,8 @@ export function getSupervisionStatus(staff, config, supervisionsData, asOfDate) 
   }
   const sorted = [...staffSups].sort((a, b) => b.date.localeCompare(a.date));
   const latest = sorted[0];
-  // Use the session date, not today — frequency may have changed since the session
-  const freq = getSupervisionFrequency(staff, config, latest.date);
+  // Use today's date — frequency should reflect current probation status, not status at last session
+  const freq = getSupervisionFrequency(staff, config, asOfDate);
   const lastDate = parseDate(latest.date);
   const nextDue = addDays(lastDate, freq);
   const now = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);

@@ -59,10 +59,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
         // Name-based queries use pre-resolved staffName (no subquery).
-        // Note: access_log.home_id is always NULL. SAR returns all access logs for this person
-        // across all homes — this is correct per GDPR (it's their personal data regardless of home).
+        // Scope to current home — SAR is per-home, not cross-tenant.
         staffName
-          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 ORDER BY ts DESC LIMIT 500`, [staffName])
+          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 AND home_id = $2 ORDER BY ts DESC LIMIT 500`, [staffName, homeId])
           : { rows: [] },
         // Staff appears in incident staff_involved JSONB array
         conn.query(
