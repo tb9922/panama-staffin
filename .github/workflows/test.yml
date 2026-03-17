@@ -133,7 +133,6 @@ jobs:
           test "${LIVE}" = "${RESTORED}"
           PGPASSWORD=test_password dropdb -h localhost -U panama panama_verify
           echo "Backup-restore verification passed"
-
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

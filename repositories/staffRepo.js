@@ -30,19 +30,22 @@ function shapeRow(row) {
 
 /**
  * Generate the next staff ID for a home (e.g. "S001", "S002").
- * Uses MAX aggregate — concurrent creates are safe via unique constraint (home_id, id).
+ * Uses FOR UPDATE to prevent concurrent ID collisions.
  * @param {number} homeId
- * @param {object} client - transaction client
+ * @param {object} client - transaction client (required for FOR UPDATE safety)
  * @returns {Promise<string>}
  */
 export async function nextId(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT COALESCE(MAX(CAST(SUBSTRING(id FROM 2) AS INT)), 0) AS max_num
-     FROM staff WHERE home_id = $1 AND id ~ '^S[0-9]+$'`,
+    `SELECT id FROM staff WHERE home_id = $1 ORDER BY id FOR UPDATE`,
     [homeId]
   );
-  const maxNum = rows[0]?.max_num || 0;
+  let maxNum = 0;
+  for (const r of rows) {
+    const num = parseInt(r.id.replace(/^S/i, ''), 10);
+    if (!isNaN(num) && num > maxNum) maxNum = num;
+  }
   return 'S' + String(maxNum + 1).padStart(3, '0');
 }
 
