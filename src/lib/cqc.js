@@ -531,6 +531,87 @@ export function calculateTrainingTrend(data, asOfDate) {
   return { currentPct, pastPct, trend };
 }
 
+// ── Provenance Metadata ─────────────────────────────────────────────────────
+// Per-metric source tracking, assumptions, and confidence derivation.
+
+const METRIC_PROVENANCE = {
+  trainingCompliance:      { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Training types from config trusted'], exclusions: [] },
+  staffingFillRate:        { source_modules: ['rotation', 'escalation'], evidence_category: 'management_info', assumptions: ['minimum_staffing config trusted'], exclusions: ['Agency skill level not assessed'] },
+  agencyDependency:        { source_modules: ['rotation', 'escalation'], evidence_category: 'management_info', assumptions: ['Agency rates from config'], exclusions: [] },
+  incidentResponseTime:    { source_modules: ['incidents'], evidence_category: 'management_info', assumptions: ['Notification time based on date-only field'], exclusions: [] },
+  cqcNotifications:        { source_modules: ['incidents'], evidence_category: 'management_info', assumptions: ['Deadline interpretation per Reg 18'], exclusions: [] },
+  supervisionCompletion:   { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Supervision frequency from config'], exclusions: [] },
+  staffTurnover:           { source_modules: ['rotation'], evidence_category: 'management_info', assumptions: ['Leaving date set on deactivation'], exclusions: [] },
+  appraisalCompletion:     { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Annual cycle assumed'], exclusions: [] },
+  fireDrillCompliance:     { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Quarterly = 91 days'], exclusions: [] },
+  careCertCompletion:      { source_modules: ['careCertificate'], evidence_category: 'outcomes', assumptions: ['12-week completion target'], exclusions: [] },
+  complaintResolutionRate: { source_modules: ['complaints'], evidence_category: 'outcomes', assumptions: ['Resolution = status closed/resolved'], exclusions: [] },
+  maintenanceCompliancePct:{ source_modules: ['maintenance'], evidence_category: 'processes', assumptions: ['Frequency from check config'], exclusions: [] },
+  ipcAuditCompliance:      { source_modules: ['ipc'], evidence_category: 'processes', assumptions: ['Quarterly audits expected'], exclusions: [] },
+  dolsCompliancePct:       { source_modules: ['dols'], evidence_category: 'management_info', assumptions: ['Expiry dates accurate'], exclusions: [] },
+  riskManagementScore:     { source_modules: ['riskRegister'], evidence_category: 'processes', assumptions: ['Review dates maintained'], exclusions: [] },
+  policyCompliancePct:     { source_modules: ['policyReview'], evidence_category: 'processes', assumptions: ['Review frequency from policy config'], exclusions: [] },
+  satisfactionScore:       { source_modules: ['complaints'], evidence_category: 'peoples_experience', assumptions: ['Survey responses representative'], exclusions: ['Response rate not factored'] },
+  speakUpCulture:          { source_modules: ['whistleblowing'], evidence_category: 'feedback', assumptions: ['Anonymous concerns included'], exclusions: ['Protection rate N/A when all anonymous'] },
+};
+
+/** Derive confidence level from data completeness and recency. */
+function deriveConfidence(metricId, raw, detail, data, dateRange) {
+  // Not evidenced: metric returned default/empty
+  if (raw == null || (typeof raw === 'number' && isNaN(raw))) return 'not_evidenced';
+
+  // Check data availability for key metrics
+  const staff = data?.staff || [];
+  const activeStaff = staff.filter(s => s.active !== false);
+
+  switch (metricId) {
+    case 'trainingCompliance':
+    case 'supervisionCompletion':
+    case 'appraisalCompletion':
+      return activeStaff.length === 0 ? 'not_evidenced' : raw >= 0 ? 'high' : 'not_evidenced';
+    case 'staffingFillRate':
+      return detail?.totalSlots > 0 ? 'high' : 'not_evidenced';
+    case 'incidentResponseTime':
+    case 'cqcNotifications':
+      return (detail?.total || 0) > 0 ? 'high' : 'medium'; // no incidents = inferred compliance
+    case 'complaintResolutionRate':
+      return (detail?.total || 0) > 0 ? 'high' : 'medium';
+    case 'satisfactionScore':
+      return (detail?.totalSent || detail?.responses || 0) > 0 ? 'high' : 'not_evidenced';
+    case 'fireDrillCompliance':
+      return (data?.fire_drills || []).length > 0 ? 'high' : 'not_evidenced';
+    case 'ipcAuditCompliance':
+      return (detail?.totalAudits || 0) >= 4 ? 'high' : (detail?.totalAudits || 0) > 0 ? 'medium' : 'not_evidenced';
+    case 'maintenanceCompliancePct':
+      return (detail?.total || 0) > 0 ? 'high' : 'not_evidenced';
+    case 'riskManagementScore':
+    case 'policyCompliancePct':
+      return (detail?.total || 0) > 0 ? 'high' : 'not_evidenced';
+    case 'dolsCompliancePct':
+      return (detail?.active || detail?.total || 0) > 0 ? 'high' : 'medium'; // no DoLS = inferred
+    case 'speakUpCulture':
+      return (detail?.totalConcerns || 0) > 0 ? 'high' : 'medium';
+    default:
+      return raw > 0 ? 'medium' : 'low';
+  }
+}
+
+/** Build a human-readable evidence summary for a metric. */
+function buildEvidenceSummary(metricId, raw, detail, dateRange) {
+  const days = dateRange?.days || 28;
+  switch (metricId) {
+    case 'staffingFillRate': return `${detail?.filledSlots || 0}/${detail?.totalSlots || 0} slots filled over ${days} days; ${detail?.shortfallDays || 0} shortfall days`;
+    case 'agencyDependency': return `Agency cost ${detail?.pct || 0}% of total staffing cost over ${days} days`;
+    case 'incidentResponseTime': return `${detail?.onTime || 0}/${detail?.total || 0} notified on time`;
+    case 'cqcNotifications': return `${detail?.onTime || 0}/${detail?.total || 0} within CQC deadline`;
+    case 'staffTurnover': return `${detail?.leavers || 0} leavers, avg headcount ${detail?.avgHeadcount || 0} over ${days} days`;
+    case 'complaintResolutionRate': return `${detail?.resolved || 0}/${detail?.total || 0} complaints resolved`;
+    case 'ipcAuditCompliance': return `${detail?.totalAudits || 0} audits, avg score ${detail?.avgScore || 0}%`;
+    case 'careCertCompletion': return `${detail?.completed || 0}/${detail?.total || 0} certificates completed`;
+    default: return `${raw}%`;
+  }
+}
+
 // ── Composite Compliance Score ──────────────────────────────────────────────
 
 export function calculateComplianceScore(data, dateRange, asOfDate) {
@@ -610,6 +691,19 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const speakUp = calculateSpeakUpCulture(data, fromStr, toStr);
   metrics.speakUpCulture = { raw: speakUp.score, score: speakUp.score, detail: speakUp };
 
+  // Enrich every metric with provenance fields
+  for (const [id, metric] of Object.entries(metrics)) {
+    const prov = METRIC_PROVENANCE[id] || {};
+    const metricDef = METRIC_DEFINITIONS.find(m => m.id === id);
+    metric.weight = metricDef?.weight || 0;
+    metric.source_modules = prov.source_modules || [];
+    metric.evidence_category = prov.evidence_category || 'management_info';
+    metric.evidence_summary = buildEvidenceSummary(id, metric.raw, metric.detail, dateRange);
+    metric.assumptions = prov.assumptions || [];
+    metric.exclusions = prov.exclusions || [];
+    metric.confidence = deriveConfidence(id, metric.raw, metric.detail, data, dateRange);
+  }
+
   // Sum available weights and normalize
   const availableMetrics = METRIC_DEFINITIONS.filter(m => m.available);
   const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
@@ -627,7 +721,15 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const overallScore = Math.round(weightedSum);
   const band = getScoreBand(overallScore);
 
-  return { overallScore, band, metrics, availableMetrics, unavailableMetrics, availableWeight: totalWeight };
+  // Overall confidence: worst confidence across all metrics
+  const CONFIDENCE_ORDER = ['not_evidenced', 'low', 'medium', 'high'];
+  const overallConfidence = Object.values(metrics).reduce((worst, m) => {
+    const idx = CONFIDENCE_ORDER.indexOf(m.confidence);
+    const worstIdx = CONFIDENCE_ORDER.indexOf(worst);
+    return idx < worstIdx ? m.confidence : worst;
+  }, 'high');
+
+  return { overallScore, band, confidence: overallConfidence, metrics, availableMetrics, unavailableMetrics, availableWeight: totalWeight };
 }
 
 // ── Evidence Aggregation Per Statement ──────────────────────────────────────

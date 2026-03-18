@@ -60,6 +60,12 @@ const breachUpdateSchema = z.object({
   root_cause:         z.string().max(5000).nullable().optional(),
   preventive_measures: z.string().max(5000).nullable().optional(),
   status:             z.enum(['open', 'contained', 'resolved', 'closed']).optional(),
+  // ICO breach decision record fields
+  recommended_ico_notification: z.boolean().optional(),
+  manual_decision:    z.boolean().optional(),
+  decision_by:        z.string().max(100).optional(),
+  decision_at:        dateSchema.optional(),
+  decision_rationale: z.string().max(5000).nullable().optional(),
   _version:           z.number().int().nonnegative().optional(),
 });
 
@@ -213,7 +219,10 @@ router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAc
     const breach = await gdprService.findBreachById(idP.data, req.home.id);
     if (!breach) return res.status(404).json({ error: 'Breach not found' });
     const assessment = gdprService.assessBreachRisk(breach);
-    const updates = { ico_notifiable: assessment.icoNotifiable };
+    const updates = {
+      ico_notifiable: assessment.icoNotifiable,
+      recommended_ico_notification: assessment.icoNotifiable,
+    };
     if (assessment.icoNotifiable && assessment.icoDeadline) {
       updates.ico_notification_deadline = assessment.icoDeadline;
     }

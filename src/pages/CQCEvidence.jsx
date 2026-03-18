@@ -313,7 +313,9 @@ function CQCEvidenceInner({ data }) {
           <div className={scoreStyle.value}>{score.overallScore}%</div>
           <div className="flex items-center gap-1.5 mt-1">
             <span className={BADGE[score.band.badgeKey]}>{score.band.label}</span>
-            <span className="text-[10px] text-gray-400">{score.availableMetrics.length} of {METRIC_DEFINITIONS.length} metrics</span>
+            <span className={BADGE[score.confidence === 'high' ? 'green' : score.confidence === 'medium' ? 'amber' : 'red']}>
+              {score.confidence} confidence
+            </span>
           </div>
         </div>
 
