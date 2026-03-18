@@ -32,8 +32,8 @@ router.post('/snapshot', writeRateLimiter, requireAuth, requireHomeAccess, requi
     );
     if (!computed) return res.status(500).json({ error: 'Failed to compute snapshot' });
 
-    // Compute input_hash for deduplication — prevents identical snapshots
-    const hashInput = JSON.stringify({ engine: parsed.data.engine, result: computed.result });
+    // Compute input_hash for deduplication — includes window dates so different periods aren't deduped
+    const hashInput = JSON.stringify({ engine: parsed.data.engine, window_from: parsed.data.window_from || null, window_to: parsed.data.window_to || null, result: computed.result });
     const input_hash = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 64);
 
     const snapshot = await assessmentRepo.create(req.home.id, {

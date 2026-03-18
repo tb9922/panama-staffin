@@ -14,7 +14,8 @@ import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
   DP_COMPLAINT_CATEGORIES, DATA_CATEGORIES,
   calculateDeadline, daysUntilDeadline, isOverdue,
-  calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
+  calculateGdprControlsScore,
+  getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -285,8 +286,10 @@ export default function GdprDashboard() {
 
   // ── Compliance Score ─────────────────────────────────────────────────────
 
-  const compliance = calculateGdprComplianceScore(requests, breaches, complaints, retentionScan);
-  const bandColors = { good: 'green', adequate: 'blue', requires_improvement: 'amber', inadequate: 'red' };
+  // Use the same 7-domain controls model that snapshots use, so live view matches saved snapshots
+  const controlsScore = calculateGdprControlsScore({ requests, breaches, complaints, retentionScan, consent });
+  const compliance = controlsScore.operationalHealth; // backward compat for issues list
+  const bandColors = { Good: 'green', Adequate: 'blue', 'Requires Improvement': 'amber', Inadequate: 'red' };
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -443,23 +446,43 @@ export default function GdprDashboard() {
 
     return (
       <div className="space-y-6">
-        {/* Compliance Score */}
+        {/* Controls Score (7-domain ICO framework) */}
         <div className={CARD.padded}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Compliance Score</h2>
-            <span className={BADGE[bandColors[compliance.band] || 'gray']}>
-              {compliance.score}/100 — {compliance.band.replace(/_/g, ' ')}
+            <h2 className="text-lg font-semibold">GDPR Controls Score</h2>
+            <span className={BADGE[bandColors[controlsScore.band?.label] || 'gray']}>
+              {controlsScore.overallScore}/100 — {controlsScore.band?.label || 'Unknown'}
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
             <div className={`h-3 rounded-full transition-all ${
-              compliance.score >= 90 ? 'bg-green-500' : compliance.score >= 70 ? 'bg-blue-500' : compliance.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
-            }`} style={{ width: `${compliance.score}%` }} />
+              controlsScore.overallScore >= 90 ? 'bg-green-500' : controlsScore.overallScore >= 70 ? 'bg-blue-500' : controlsScore.overallScore >= 50 ? 'bg-amber-500' : 'bg-red-500'
+            }`} style={{ width: `${controlsScore.overallScore}%` }} />
           </div>
+          {/* Per-domain breakdown */}
+          {controlsScore.domains && (
+            <div className="space-y-2 mt-3">
+              {Object.entries(controlsScore.domains).map(([id, d]) => (
+                <div key={id} className="flex items-center gap-3">
+                  <div className="w-36 text-xs text-gray-600 truncate">{d.label}</div>
+                  <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                    <div className={`h-1.5 rounded-full ${d.score >= 90 ? 'bg-green-500' : d.score >= 70 ? 'bg-blue-500' : d.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${d.score}%` }} />
+                  </div>
+                  <div className="w-10 text-right text-xs font-medium">{d.score}%</div>
+                  <span className={`text-[10px] ${BADGE[d.confidence === 'high' ? 'green' : d.confidence === 'medium' ? 'amber' : 'gray']}`}>{d.confidence}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Operational issues from legacy scorer */}
           {compliance.issues.length > 0 && (
-            <ul className="text-sm text-gray-600 space-y-1">
-              {compliance.issues.map((issue, i) => <li key={i} className="flex items-center gap-2"><span className="text-red-500">!</span> {issue}</li>)}
-            </ul>
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="text-xs font-semibold text-gray-500 mb-1">Operational Issues</div>
+              <ul className="text-sm text-gray-600 space-y-1">
+                {compliance.issues.map((issue, i) => <li key={i} className="flex items-center gap-2"><span className="text-red-500">!</span> {issue}</li>)}
+              </ul>
+            </div>
           )}
         </div>
 

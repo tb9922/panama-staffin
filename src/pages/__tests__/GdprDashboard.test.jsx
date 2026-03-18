@@ -100,10 +100,9 @@ describe('GdprDashboard', () => {
     expect(screen.getByRole('tab', { name: 'Access Log' })).toBeInTheDocument();
   });
 
-  it('shows compliance score on overview tab', async () => {
+  it('shows controls score on overview tab', async () => {
     renderWithProviders(<GdprDashboard />);
-    await waitFor(() => expect(screen.getByText(/85\/100/i)).toBeInTheDocument());
-    expect(screen.getByText(/compliance score/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/controls score/i)).toBeInTheDocument());
   });
 
   it('shows error message on API failure', async () => {

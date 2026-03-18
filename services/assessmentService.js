@@ -21,13 +21,14 @@ import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
+import { scanRetention } from './gdprService.js';
 
 // Scoring engines — pure functions, no browser APIs.
 // CONSTRAINT: these files (and their transitive imports) must remain browser-API-free.
 // If any file in the chain imports window/document/fetch, server-side scoring will crash.
-import { calculateComplianceScore, getDateRange } from '../src/lib/cqc.js';
+import { calculateComplianceScore } from '../src/lib/cqc.js';
 import { calculateGdprControlsScore } from '../src/lib/gdpr.js';
-import { formatDate } from '../shared/rotation.js';
+import { formatDate, parseDate, addDays } from '../shared/rotation.js';
 
 // ── CQC Data Assembly ───────────────────────────────────────────────────────
 // Gathers the same data shape that CQCEvidence.jsx builds client-side.
@@ -93,12 +94,12 @@ async function gatherCqcData(homeId) {
 // ── GDPR Data Assembly ──────────────────────────────────────────────────────
 
 async function gatherGdprData(homeId) {
-  const [requests, breaches, complaints, consent, retentionSchedule] = await Promise.all([
+  const [requests, breaches, complaints, consent, retentionScanResult] = await Promise.all([
     gdprRepo.findRequests(homeId),
     gdprRepo.findBreaches(homeId),
     gdprRepo.findDPComplaints(homeId),
     gdprRepo.findConsent(homeId),
-    gdprRepo.getRetentionSchedule(),
+    scanRetention(homeId),
   ]);
 
   return {
@@ -106,7 +107,7 @@ async function gatherGdprData(homeId) {
     breaches: breaches?.rows || [],
     complaints: complaints?.rows || [],
     consent: consent?.rows || [],
-    retentionScan: retentionSchedule || [],
+    retentionScan: retentionScanResult || [],
   };
 }
 
@@ -118,10 +119,18 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   if (engine === 'cqc') {
     const data = await gatherCqcData(homeId);
     if (!data) return null;
-    const dateRangeDays = windowFrom && windowTo
-      ? Math.round((new Date(windowTo) - new Date(windowFrom)) / (1000 * 60 * 60 * 24))
-      : 28;
-    const dateRange = getDateRange(dateRangeDays);
+    // Honor explicit window dates if provided; otherwise default to 28 days ending today
+    let dateRange;
+    if (windowFrom && windowTo) {
+      const from = parseDate(windowFrom);
+      const to = parseDate(windowTo);
+      const days = Math.round((to - from) / (1000 * 60 * 60 * 24)) + 1;
+      dateRange = { from, to, days };
+    } else {
+      const to = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const from = addDays(to, -27);
+      dateRange = { from, to, days: 28 };
+    }
     const result = calculateComplianceScore(data, dateRange, today);
     return {
       engine_version: result.engine_version,
