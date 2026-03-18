@@ -39,6 +39,8 @@ const PensionManager = lazy(() => import('../pages/PensionManager.jsx'));
 const SickPayTracker = lazy(() => import('../pages/SickPayTracker.jsx'));
 const HMRCDashboard = lazy(() => import('../pages/HMRCDashboard.jsx'));
 const GdprDashboard = lazy(() => import('../pages/GdprDashboard.jsx'));
+const RopaManager = lazy(() => import('../pages/RopaManager.jsx'));
+const DpiaManager = lazy(() => import('../pages/DpiaManager.jsx'));
 const HrDashboard = lazy(() => import('../pages/HrDashboard.jsx'));
 const DisciplinaryTracker = lazy(() => import('../pages/DisciplinaryTracker.jsx'));
 const GrievanceTracker = lazy(() => import('../pages/GrievanceTracker.jsx'));
@@ -133,6 +135,8 @@ export default function AppRoutes() {
 
       {/* GDPR */}
       <Route path="/gdpr" element={<RouteErrorBoundary><RequireModule module="gdpr"><GdprDashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/ropa" element={<RouteErrorBoundary><RequireModule module="gdpr"><RopaManager /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/dpia" element={<RouteErrorBoundary><RequireModule module="gdpr"><DpiaManager /></RequireModule></RouteErrorBoundary>} />
 
       {/* Reports & System */}
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />

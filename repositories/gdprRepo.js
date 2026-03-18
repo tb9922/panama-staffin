@@ -9,7 +9,7 @@ const ACCESS_LOG_COLS = 'id, ts, user_name, user_role, method, endpoint, home_id
 
 const DATA_REQUEST_COLS = 'id, home_id, request_type, subject_type, subject_id, subject_name, date_received, deadline, identity_verified, status, notes, completed_date, completed_by, version, created_at, updated_at';
 
-const DATA_BREACH_COLS = 'id, home_id, title, description, discovered_date, data_categories, individuals_affected, severity, risk_to_rights, ico_notifiable, ico_notification_deadline, ico_notified, ico_notified_date, ico_reference, containment_actions, root_cause, preventive_measures, status, version, created_at, updated_at';
+const DATA_BREACH_COLS = 'id, home_id, title, description, discovered_date, data_categories, individuals_affected, severity, risk_to_rights, ico_notifiable, ico_notification_deadline, ico_notified, ico_notified_date, ico_reference, recommended_ico_notification, manual_decision, decision_by, decision_at, decision_rationale, containment_actions, root_cause, preventive_measures, status, version, created_at, updated_at';
 
 const RETENTION_COLS = 'id, data_category, retention_period, retention_days, retention_basis, legal_basis, applies_to_table, special_category, notes';
 
@@ -152,6 +152,11 @@ function shapeBreach(row) {
     ico_notified: row.ico_notified,
     ico_notified_date: d(row.ico_notified_date),
     ico_reference: row.ico_reference,
+    recommended_ico_notification: row.recommended_ico_notification,
+    manual_decision: row.manual_decision,
+    decision_by: row.decision_by,
+    decision_at: ts(row.decision_at),
+    decision_rationale: row.decision_rationale,
     containment_actions: row.containment_actions,
     root_cause: row.root_cause,
     preventive_measures: row.preventive_measures,
@@ -206,7 +211,8 @@ export async function updateBreach(id, homeId, data, client, version) {
   const ALLOWED = [
     'title', 'description', 'severity', 'risk_to_rights',
     'ico_notifiable', 'ico_notification_deadline', 'ico_notified', 'ico_notified_date',
-    'ico_reference', 'containment_actions', 'root_cause', 'preventive_measures', 'status',
+    'ico_reference', 'recommended_ico_notification', 'manual_decision', 'decision_by',
+    'decision_at', 'decision_rationale', 'containment_actions', 'root_cause', 'preventive_measures', 'status',
   ];
   const fields = [];
   const values = [id, homeId];

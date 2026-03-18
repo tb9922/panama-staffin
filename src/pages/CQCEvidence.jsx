@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { CARD, BTN, BADGE, INPUT, MODAL, PAGE } from '../lib/design.js';
+import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
@@ -11,6 +11,7 @@ import {
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
   getCqcEvidence, createCqcEvidence,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
+  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -25,6 +26,11 @@ const CATEGORY_COLORS = {
   caring: 'text-pink-700 bg-pink-50 border-pink-200',
   responsive: 'text-amber-700 bg-amber-50 border-amber-200',
   'well-led': 'text-purple-700 bg-purple-50 border-purple-200',
+};
+
+const EVIDENCE_CATEGORY_LABELS = {
+  peoples_experience: "People's Experience", feedback: 'Feedback', observation: 'Observation',
+  processes: 'Processes', outcomes: 'Outcomes', management_info: 'Management Info',
 };
 
 const RANGE_OPTIONS = [
@@ -111,9 +117,15 @@ function CQCEvidenceInner({ data }) {
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
-  const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
+  const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
+
+  // Snapshot state
+  const [snapshots, setSnapshots] = useState([]);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [viewingSnapshot, setViewingSnapshot] = useState(null);
+  const [showSnapshots, setShowSnapshots] = useState(false);
 
   useDirtyGuard(showAddEvidence);
 
@@ -131,6 +143,50 @@ function CQCEvidenceInner({ data }) {
   }, []);
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
+
+  const loadSnapshots = useCallback(async () => {
+    const home = getCurrentHome();
+    if (!home) return;
+    setSnapshotLoading(true);
+    try {
+      const result = await getSnapshots(home, 'cqc');
+      setSnapshots(Array.isArray(result) ? result : []);
+    } catch (e) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
+    finally { setSnapshotLoading(false); }
+  }, []);
+
+  useEffect(() => { loadSnapshots(); }, [loadSnapshots]);
+
+  async function handleCreateSnapshot() {
+    const home = getCurrentHome();
+    if (!home || generating) return;
+    setGenerating(true);
+    try {
+      await createSnapshot(home, 'cqc');
+      loadSnapshots();
+    } catch (e) { alert(e.message); }
+    finally { setGenerating(false); }
+  }
+
+  async function handleViewSnapshot(id) {
+    const home = getCurrentHome();
+    try {
+      const snap = await getSnapshot(home, id);
+      setViewingSnapshot(snap);
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleSignOff(id, notes) {
+    const home = getCurrentHome();
+    try {
+      await signOffSnapshot(home, id, notes);
+      loadSnapshots();
+      if (viewingSnapshot?.id === id) {
+        const snap = await getSnapshot(home, id);
+        setViewingSnapshot(snap);
+      }
+    } catch (e) { alert(e.message); }
+  }
 
   const today = useLiveDate();
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
@@ -163,7 +219,7 @@ function CQCEvidenceInner({ data }) {
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
 
   function openAddEvidence(statementId) {
-    setEvidenceForm({ quality_statement: statementId || '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
+    setEvidenceForm({ quality_statement: statementId || '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
     setShowAddEvidence(true);
   }
 
@@ -249,6 +305,9 @@ function CQCEvidenceInner({ data }) {
         </div>
         <div className="flex gap-2">
           <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating} className={`${BTN.secondary} ${BTN.sm}`}>
+            Save Snapshot
+          </button>}
           <button onClick={handleGeneratePDF} disabled={generating} className={BTN.primary}>
             {generating ? 'Generating...' : 'Generate Evidence Pack'}
           </button>
@@ -376,7 +435,10 @@ function CQCEvidenceInner({ data }) {
                             {ev.manualEvidence.map(me => (
                               <div key={me.id} className="flex items-start justify-between py-1.5 px-2 rounded bg-gray-50">
                                 <div>
-                                  <div className="text-sm font-medium text-gray-800">{me.title}</div>
+                                  <div className="text-sm font-medium text-gray-800">
+                                    {me.title}
+                                    {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{EVIDENCE_CATEGORY_LABELS[me.evidence_category] || me.evidence_category}</span>}
+                                  </div>
                                   {me.description && <div className="text-xs text-gray-500 mt-0.5">{me.description}</div>}
                                   <div className="text-[10px] text-gray-400 mt-0.5">
                                     {me.date_from}{me.date_to ? ` to ${me.date_to}` : ' — ongoing'}
@@ -427,6 +489,116 @@ function CQCEvidenceInner({ data }) {
         </div>
       )}
 
+      {/* Snapshot History */}
+      <div className="mt-6">
+        <button onClick={() => setShowSnapshots(!showSnapshots)} className={`${BTN.ghost} ${BTN.sm} mb-2`}>
+          {showSnapshots ? 'Hide' : 'Show'} Snapshot History ({snapshots.length})
+        </button>
+        {showSnapshots && (
+          <div className={CARD.flush}>
+            {snapshots.length === 0 ? (
+              <div className="p-4 text-sm text-gray-400">No snapshots saved yet. Click "Save Snapshot" to create one.</div>
+            ) : (
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr>
+                    <th className={TABLE.th}>Date</th>
+                    <th className={TABLE.th}>Score</th>
+                    <th className={TABLE.th}>Band</th>
+                    <th className={TABLE.th}>Engine</th>
+                    <th className={TABLE.th}>Computed By</th>
+                    <th className={TABLE.th}>Sign-off</th>
+                    <th className={TABLE.th}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshots.map(s => (
+                    <tr key={s.id} className={TABLE.tr}>
+                      <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
+                      <td className={TABLE.td}>{s.overall_score}%</td>
+                      <td className={TABLE.td}><span className={BADGE[s.band === 'Outstanding' ? 'green' : s.band === 'Good' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
+                      <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
+                      <td className={TABLE.td}>{s.computed_by}</td>
+                      <td className={TABLE.td}>
+                        {s.signed_off_by ? (
+                          <span className={BADGE.green}>{s.signed_off_by}</span>
+                        ) : (
+                          <span className={BADGE.gray}>Pending</span>
+                        )}
+                      </td>
+                      <td className={TABLE.td}>
+                        <div className="flex gap-1">
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewSnapshot(s.id)}>View</button>
+                          {!s.signed_off_by && canEdit && (
+                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOff(s.id, '')}>Sign Off</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Snapshot Viewing Modal */}
+      {viewingSnapshot && (
+        <Modal isOpen={true} onClose={() => setViewingSnapshot(null)} title={`Snapshot — ${viewingSnapshot.computed_at?.slice(0, 10)}`} size="xl">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className={CARD.padded}>
+                <div className="text-xs text-gray-500">Score</div>
+                <div className="text-2xl font-bold">{viewingSnapshot.overall_score}%</div>
+              </div>
+              <div className={CARD.padded}>
+                <div className="text-xs text-gray-500">Band</div>
+                <div className="text-lg font-semibold">{viewingSnapshot.band}</div>
+              </div>
+              <div className={CARD.padded}>
+                <div className="text-xs text-gray-500">Engine Version</div>
+                <div className="text-lg">{viewingSnapshot.engine_version}</div>
+              </div>
+              <div className={CARD.padded}>
+                <div className="text-xs text-gray-500">Signed Off</div>
+                <div className="text-lg">{viewingSnapshot.signed_off_by || 'Pending'}</div>
+              </div>
+            </div>
+            {viewingSnapshot.result?.questionScores && (
+              <div>
+                <div className="text-sm font-semibold text-gray-600 mb-2">Per-Question Scores (Limiting Judgement)</div>
+                <div className="grid grid-cols-5 gap-2">
+                  {Object.entries(viewingSnapshot.result.questionScores).map(([q, qs]) => (
+                    <div key={q} className={`${CARD.padded} text-center`}>
+                      <div className="text-xs text-gray-500 capitalize">{q === 'well-led' ? 'Well-Led' : q}</div>
+                      <div className="text-lg font-bold">{qs.score}%</div>
+                      <span className={BADGE[qs.band?.badgeKey || 'gray']}>{qs.band?.label || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {viewingSnapshot.sign_off_notes && (
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">Sign-off notes:</span> {viewingSnapshot.sign_off_notes}
+              </div>
+            )}
+          </div>
+          <div className={MODAL.footer}>
+            <button className={BTN.secondary} onClick={() => setViewingSnapshot(null)}>Close</button>
+            <button className={BTN.primary} onClick={async () => {
+              setGenerating(true);
+              try {
+                const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
+                generateEvidencePackPDF(dataWithEvidence || {}, dateRangeDays, viewingSnapshot);
+              } catch (e) { alert(e.message); }
+              finally { setGenerating(false); }
+            }} disabled={generating}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
+          </div>
+        </Modal>
+      )}
+
       {/* Add Evidence Modal */}
       <Modal isOpen={showAddEvidence} onClose={() => setShowAddEvidence(false)} title="Add Evidence Item" size="lg">
 
@@ -455,10 +627,25 @@ function CQCEvidenceInner({ data }) {
                 </div>
               </div>
 
-              <div>
-                <label className={INPUT.label}>Title</label>
-                <input type="text" className={INPUT.base} placeholder="Brief title..."
-                  value={evidenceForm.title} onChange={e => setEvidenceForm({ ...evidenceForm, title: e.target.value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={INPUT.label}>Title</label>
+                  <input type="text" className={INPUT.base} placeholder="Brief title..."
+                    value={evidenceForm.title} onChange={e => setEvidenceForm({ ...evidenceForm, title: e.target.value })} />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Evidence Category</label>
+                  <select className={INPUT.select} value={evidenceForm.evidence_category}
+                    onChange={e => setEvidenceForm({ ...evidenceForm, evidence_category: e.target.value })}>
+                    <option value="">— None —</option>
+                    <option value="peoples_experience">People's Experience</option>
+                    <option value="feedback">Feedback</option>
+                    <option value="observation">Observation</option>
+                    <option value="processes">Processes</option>
+                    <option value="outcomes">Outcomes</option>
+                    <option value="management_info">Management Information</option>
+                  </select>
+                </div>
               </div>
 
               <div>

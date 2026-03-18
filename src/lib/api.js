@@ -1518,3 +1518,84 @@ export function logReportDownload(reportType, dateRange) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
   }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
 }
+
+// ── ROPA (Record of Processing Activities) ──────────────────────────────────
+
+export async function getRopaActivities(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/ropa?${params}`, { headers: authHeaders() });
+}
+
+export async function createRopaActivity(homeSlug, data) {
+  return apiFetch(`${API_BASE}/ropa?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateRopaActivity(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/ropa/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRopaActivity(homeSlug, id) {
+  return apiFetch(`${API_BASE}/ropa/${id}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── DPIA (Data Protection Impact Assessments) ───────────────────────────────
+
+export async function getDpiaAssessments(homeSlug, filters = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (filters.status) params.set('status', filters.status);
+  if (filters.limit) params.set('limit', filters.limit);
+  if (filters.offset) params.set('offset', filters.offset);
+  return apiFetch(`${API_BASE}/dpia?${params}`, { headers: authHeaders() });
+}
+
+export async function createDpiaAssessment(homeSlug, data) {
+  return apiFetch(`${API_BASE}/dpia?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateDpiaAssessment(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/dpia/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteDpiaAssessment(homeSlug, id) {
+  return apiFetch(`${API_BASE}/dpia/${id}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+// ── Assessment Snapshots ────────────────────────────────────────────────────
+
+export async function createSnapshot(homeSlug, engine, windowFrom, windowTo) {
+  const body = { engine };
+  if (windowFrom) body.window_from = windowFrom;
+  if (windowTo) body.window_to = windowTo;
+  return apiFetch(`${API_BASE}/assessment/snapshot?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+  });
+}
+
+export async function getSnapshots(homeSlug, engine) {
+  return apiFetch(`${API_BASE}/assessment/snapshots?home=${h(homeSlug)}&engine=${engine}`, { headers: authHeaders() });
+}
+
+export async function getSnapshot(homeSlug, id) {
+  return apiFetch(`${API_BASE}/assessment/snapshots/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function signOffSnapshot(homeSlug, id, notes) {
+  return apiFetch(`${API_BASE}/assessment/snapshots/${id}/sign-off?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ notes }),
+  });
+}
