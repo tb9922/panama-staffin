@@ -208,11 +208,25 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findBreachById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Breach not found' });
+    // Require rationale when human decision overrides the AI recommendation
+    if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
+        && parsed.data.manual_decision !== existing.recommended_ico_notification
+        && !parsed.data.decision_rationale?.trim()) {
+      return res.status(400).json({ error: 'Decision rationale is required when overriding the ICO notification recommendation' });
+    }
     const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_breach_update', req.home.slug, req.user.username, { id: idP.data, changes });
+    // Additional audit entry for ICO decision overrides
+    if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
+        && parsed.data.manual_decision !== existing.recommended_ico_notification) {
+      await auditService.log('breach_ico_override', req.home.slug, req.user.username, {
+        id: idP.data, recommended: existing.recommended_ico_notification,
+        decision: parsed.data.manual_decision, rationale: parsed.data.decision_rationale,
+      });
+    }
     res.json(result);
   } catch (err) { next(err); }
 });

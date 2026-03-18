@@ -9,6 +9,7 @@ import {
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
   getAccessLog, getCurrentHome, getLoggedInUser,
+  getRopaActivities, getDpiaAssessments,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot, } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
@@ -45,6 +46,8 @@ export default function GdprDashboard() {
   const [consent, setConsent] = useState([]);
   const [complaints, setComplaints] = useState([]);
   const [accessLogData, setAccessLogData] = useState([]);
+  const [ropaData, setRopaData] = useState([]);
+  const [dpiaData, setDpiaData] = useState([]);
 
   // Modal state
   const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'complaint'
@@ -72,13 +75,15 @@ export default function GdprDashboard() {
     if (!home) return;
     setLoading(true);
     try {
-      const [req, br, ret, con, comp, acc] = await Promise.all([
+      const [req, br, ret, con, comp, acc, ropa, dpia] = await Promise.all([
         getDataRequests(home),
         getDataBreaches(home),
         getRetentionSchedule(),
         getConsentRecords(home),
         getDPComplaints(home),
         getAccessLog(200),
+        getRopaActivities(home).catch(() => ({ rows: [] })),
+        getDpiaAssessments(home).catch(() => ({ rows: [] })),
       ]);
       setRequests(req);
       setBreaches(br);
@@ -86,6 +91,8 @@ export default function GdprDashboard() {
       setConsent(con);
       setComplaints(comp);
       setAccessLogData(acc);
+      setRopaData(ropa?.rows || []);
+      setDpiaData(dpia?.rows || []);
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -287,7 +294,7 @@ export default function GdprDashboard() {
   // ── Compliance Score ─────────────────────────────────────────────────────
 
   // Use the same 7-domain controls model that snapshots use, so live view matches saved snapshots
-  const controlsScore = calculateGdprControlsScore({ requests, breaches, complaints, retentionScan, consent });
+  const controlsScore = calculateGdprControlsScore({ requests, breaches, complaints, retentionScan, consent, ropa: ropaData, dpia: dpiaData });
   const compliance = controlsScore.operationalHealth; // backward compat for issues list
   const bandColors = { Good: 'green', Adequate: 'blue', 'Requires Improvement': 'amber', Inadequate: 'red' };
 

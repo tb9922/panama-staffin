@@ -21,6 +21,8 @@ import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
+import * as ropaRepo from '../repositories/ropaRepo.js';
+import * as dpiaRepo from '../repositories/dpiaRepo.js';
 import { scanRetention } from './gdprService.js';
 
 // Scoring engines — pure functions, no browser APIs.
@@ -94,12 +96,14 @@ async function gatherCqcData(homeId) {
 // ── GDPR Data Assembly ──────────────────────────────────────────────────────
 
 async function gatherGdprData(homeId) {
-  const [requests, breaches, complaints, consent, retentionScanResult] = await Promise.all([
+  const [requests, breaches, complaints, consent, retentionScanResult, ropa, dpia] = await Promise.all([
     gdprRepo.findRequests(homeId),
     gdprRepo.findBreaches(homeId),
     gdprRepo.findDPComplaints(homeId),
     gdprRepo.findConsent(homeId),
     scanRetention(homeId),
+    ropaRepo.findAll(homeId),
+    dpiaRepo.findAll(homeId),
   ]);
 
   return {
@@ -108,6 +112,8 @@ async function gatherGdprData(homeId) {
     complaints: complaints?.rows || [],
     consent: consent?.rows || [],
     retentionScan: retentionScanResult || [],
+    ropa: ropa?.rows || [],
+    dpia: dpia?.rows || [],
   };
 }
 

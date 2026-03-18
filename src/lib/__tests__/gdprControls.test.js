@@ -178,3 +178,108 @@ describe('GDPR_DOMAIN_PROVENANCE', () => {
     }
   });
 });
+
+// ── Hardening Scenario Tests ────────────────────────────────────────────────
+
+describe('Scenario: retention violations reduce retention domain score', () => {
+  it('violations lower retention domain below 100', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [],
+      retentionScan: [
+        { data_category: 'staff', action_needed: true },
+        { data_category: 'payroll', action_needed: true },
+        { data_category: 'audit', action_needed: false },
+      ],
+    });
+    expect(result.domains.retention.score).toBeLessThan(100);
+    const violationControl = result.domains.retention.controls.find(c => c.id === 'no_retention_violations');
+    expect(violationControl.evidenced).toBe(false);
+  });
+
+  it('no violations = 100% retention', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [],
+      retentionScan: [
+        { data_category: 'staff', action_needed: false },
+        { data_category: 'payroll', action_needed: false },
+        { data_category: 'audit', action_needed: false },
+        { data_category: 'clinical', action_needed: false },
+        { data_category: 'gdpr', action_needed: false },
+      ],
+    });
+    expect(result.domains.retention.score).toBe(100);
+  });
+});
+
+describe('Scenario: ROPA/DPIA data improves accountability domain', () => {
+  it('active ROPA entries evidence accountability', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [], retentionScan: [],
+      ropa: [{ status: 'active', dpia_required: false }],
+      dpia: [],
+    });
+    const ropaControl = result.domains.accountability.controls.find(c => c.id === 'ropa_maintained');
+    expect(ropaControl.evidenced).toBe(true);
+  });
+
+  it('missing ROPA reduces accountability', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [], retentionScan: [],
+      ropa: [],
+      dpia: [],
+    });
+    const ropaControl = result.domains.accountability.controls.find(c => c.id === 'ropa_maintained');
+    expect(ropaControl.evidenced).toBe(false);
+  });
+
+  it('completed DPIAs evidence accountability', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [], retentionScan: [],
+      ropa: [],
+      dpia: [{ screening_result: 'required', status: 'approved' }],
+    });
+    const dpiaControl = result.domains.accountability.controls.find(c => c.id === 'dpia_completed');
+    expect(dpiaControl.evidenced).toBe(true);
+  });
+
+  it('incomplete required DPIAs reduce accountability', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [], retentionScan: [],
+      ropa: [],
+      dpia: [{ screening_result: 'required', status: 'screening' }],
+    });
+    const dpiaControl = result.domains.accountability.controls.find(c => c.id === 'dpia_completed');
+    expect(dpiaControl.evidenced).toBe(false);
+  });
+
+  it('ROPA with dpia_required but no DPIA reduces accountability', () => {
+    const result = calculateGdprControlsScore({
+      requests: [], breaches: [], complaints: [], consent: [], retentionScan: [],
+      ropa: [{ status: 'active', dpia_required: true }],
+      dpia: [],
+    });
+    const coverageControl = result.domains.accountability.controls.find(c => c.id === 'high_risk_covered');
+    expect(coverageControl.evidenced).toBe(false);
+  });
+});
+
+describe('Scenario: live vs snapshot parity', () => {
+  it('calling calculateGdprControlsScore twice with same data returns same score', () => {
+    const data = {
+      requests: [{ status: 'completed', deadline: '2026-12-31' }],
+      breaches: [],
+      complaints: [],
+      consent: [{ legal_basis: 'consent' }],
+      retentionScan: [{ data_category: 'staff', action_needed: false }, { data_category: 'payroll', action_needed: false }, { data_category: 'audit', action_needed: false }, { data_category: 'clinical', action_needed: false }, { data_category: 'gdpr', action_needed: false }],
+      ropa: [{ status: 'active', dpia_required: false }],
+      dpia: [],
+    };
+    const score1 = calculateGdprControlsScore(data);
+    const score2 = calculateGdprControlsScore(data);
+    expect(score1.overallScore).toBe(score2.overallScore);
+    expect(score1.band.label).toBe(score2.band.label);
+    for (const domainId of Object.keys(score1.domains)) {
+      expect(score1.domains[domainId].score).toBe(score2.domains[domainId].score);
+    }
+  });
+});

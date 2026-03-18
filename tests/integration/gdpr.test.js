@@ -433,6 +433,46 @@ describe('Data Breaches — /breaches', () => {
     expect(res.body).toHaveProperty('icoNotifiable');
     expect(res.body).toHaveProperty('riskLevel');
   });
+
+  it('PUT /breaches/:id rejects override without rationale', async () => {
+    // First get the breach to check its recommended_ico_notification
+    const breach = await request(app)
+      .get(`${BASE}/breaches?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const b = breach.body.rows ? breach.body.rows[0] : breach.body[0];
+    if (b?.recommended_ico_notification == null) return; // skip if not assessed yet
+
+    // Try to override with opposite decision but no rationale
+    await request(app)
+      .put(`${BASE}/breaches/${b.id}?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ manual_decision: !b.recommended_ico_notification, _version: b.version })
+      .expect(400);
+  });
+
+  it('PUT /breaches/:id accepts override with rationale', async () => {
+    const breach = await request(app)
+      .get(`${BASE}/breaches?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const b = breach.body.rows ? breach.body.rows[0] : breach.body[0];
+    if (b?.recommended_ico_notification == null) return;
+
+    const res = await request(app)
+      .put(`${BASE}/breaches/${b.id}?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        manual_decision: !b.recommended_ico_notification,
+        decision_rationale: 'Manager assessment: risk is acceptable due to immediate containment',
+        decision_by: 'admin',
+        _version: b.version,
+      })
+      .expect(200);
+
+    expect(res.body.manual_decision).toBe(!b.recommended_ico_notification);
+    expect(res.body.decision_rationale).toBeTruthy();
+  });
 });
 
 // ── 5. Consent Records ──────────────────────────────────────────────────────

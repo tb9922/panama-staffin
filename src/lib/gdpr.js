@@ -214,7 +214,7 @@ export const GDPR_DOMAIN_PROVENANCE = {
   rights_management:  { source_modules: ['data_requests'], assumptions: ['All SARs recorded in system'], exclusions: ['Verbal requests not recorded'] },
   breach_management:  { source_modules: ['data_breaches'], assumptions: ['All breaches reported and logged'], exclusions: ['Near-misses may not be captured'] },
   retention:          { source_modules: ['retention_schedule'], assumptions: ['Schedule covers all data categories'], exclusions: ['Paper records not tracked'] },
-  accountability:     { source_modules: ['dp_complaints', 'data_breaches'], assumptions: ['Complaints represent governance maturity'], exclusions: ['Policy reviews not yet linked'] },
+  accountability:     { source_modules: ['dp_complaints', 'data_breaches', 'ropa', 'dpia'], assumptions: ['ROPA completeness indicates Art 30 maturity', 'DPIA coverage indicates Art 35 maturity'], exclusions: ['Policy reviews not yet linked'] },
   consent:            { source_modules: ['consent_records'], assumptions: ['All processing purposes documented'], exclusions: ['Implied consent not tracked'] },
   training:           { source_modules: ['data_breaches'], assumptions: ['Breach handling maturity implies training'], exclusions: ['Training records not directly available from GDPR module'] },
   security:           { source_modules: ['data_breaches'], assumptions: ['Breach patterns indicate security posture'], exclusions: ['Technical controls not assessed'] },
@@ -281,13 +281,27 @@ function evaluateDomain(domainId, data) {
       break;
     }
     case 'accountability': {
-      // Assessed from complaints handling + breach management maturity
+      // Assessed from complaints handling, breach management maturity, ROPA, and DPIA
       const dpComplaints = c || [];
       const resolved = dpComplaints.filter(x => x.status === 'resolved' || x.status === 'closed');
       const icoEscalated = dpComplaints.filter(x => x.ico_involved && x.status !== 'resolved' && x.status !== 'closed');
       controls.push({ id: 'dp_complaints_handled', label: 'DP complaints resolved', evidenced: dpComplaints.length === 0 || resolved.length >= dpComplaints.length * 0.7, detail: `${resolved.length}/${dpComplaints.length} resolved` });
       controls.push({ id: 'no_ico_escalations', label: 'No open ICO escalations', evidenced: icoEscalated.length === 0, detail: icoEscalated.length > 0 ? `${icoEscalated.length} open` : 'None' });
       controls.push({ id: 'breach_process_mature', label: 'Breach management process active', evidenced: b.length === 0 || b.some(x => x.containment_actions), detail: b.length > 0 ? 'Active' : 'No breaches to assess' });
+      // ROPA — Article 30 compliance
+      const ropa = data.ropa || [];
+      const activeRopa = ropa.filter(x => x.status === 'active');
+      const overdueRopa = ropa.filter(x => x.next_review_due && x.next_review_due < new Date().toISOString().slice(0, 10));
+      controls.push({ id: 'ropa_maintained', label: 'ROPA maintained (Art 30)', evidenced: activeRopa.length > 0, detail: `${activeRopa.length} active entries` });
+      controls.push({ id: 'ropa_reviewed', label: 'ROPA reviews up to date', evidenced: overdueRopa.length === 0, detail: overdueRopa.length > 0 ? `${overdueRopa.length} overdue` : 'All current' });
+      // DPIA — Article 35 compliance
+      const dpia = data.dpia || [];
+      const requiredDpias = dpia.filter(x => x.screening_result === 'required');
+      const completedDpias = requiredDpias.filter(x => x.status === 'completed' || x.status === 'approved');
+      controls.push({ id: 'dpia_completed', label: 'Required DPIAs completed', evidenced: requiredDpias.length === 0 || completedDpias.length === requiredDpias.length, detail: `${completedDpias.length}/${requiredDpias.length} complete` });
+      // Cross-check: ROPA entries flagged dpia_required should have a completed DPIA
+      const ropaRequiringDpia = ropa.filter(x => x.dpia_required && x.status === 'active');
+      controls.push({ id: 'high_risk_covered', label: 'High-risk processing has DPIA', evidenced: ropaRequiringDpia.length === 0 || requiredDpias.length >= ropaRequiringDpia.length, detail: ropaRequiringDpia.length > 0 ? `${requiredDpias.length}/${ropaRequiringDpia.length} covered` : 'No high-risk processing' });
       break;
     }
     case 'consent': {
