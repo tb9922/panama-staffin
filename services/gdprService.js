@@ -795,11 +795,12 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'finance_invoices', 'finance_expenses',
 ]);
 
-// Tables without home_id (global tables)
+// Global tables skipped from per-home retention scan (see scanRetention).
+// These lack meaningful per-home scoping — their counts reflect all homes combined.
 const GLOBAL_TABLES = new Set(['retention_schedule', 'access_log', 'audit_log']);
 
-// Tables that use 'ts' instead of 'created_at' for date column
-const TS_TABLES = new Set(['access_log', 'audit_log']);
+// Date column overrides for tables that don't use 'created_at'
+const TS_TABLES = new Set([]); // access_log/audit_log used 'ts' but are now skipped as global
 
 // Tables that use 'updated_at' instead of 'created_at'
 const UPDATED_AT_TABLES = new Set(['onboarding', 'pension_enrolments']);

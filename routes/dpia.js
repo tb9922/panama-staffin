@@ -86,6 +86,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dpiaRepo.findById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    // Enforce status workflow: approved requires completed first
+    if (parsed.data.status === 'approved' && existing.status !== 'completed') {
+      return res.status(400).json({ error: 'DPIA must be completed before it can be approved' });
+    }
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
     const result = await dpiaRepo.update(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
