@@ -167,13 +167,13 @@ describe('CQCEvidence', () => {
     expect(screen.getByRole('button', { name: '1 Year' })).toBeInTheDocument();
   });
 
-  it('renders quality statements for the Safe category (e.g. Staffing Levels)', async () => {
+  it('renders quality statements for the Safe category (e.g. Learning Culture)', async () => {
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Staffing Levels')).toBeInTheDocument();
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
     // Also check for another known quality statement in a different category
-    expect(screen.getByText('Staffing Levels')).toBeInTheDocument();
+    expect(screen.getByText('Learning Culture')).toBeInTheDocument();
   });
 
   it('shows Generate Evidence Pack button', async () => {
@@ -194,11 +194,11 @@ describe('CQCEvidence', () => {
     const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Staffing Levels')).toBeInTheDocument();
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
 
-    // Click on the Staffing Levels statement to expand it
-    await user.click(screen.getByText('Staffing Levels'));
+    // Click on the Learning Culture statement to expand it
+    await user.click(screen.getByText('Learning Culture'));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
@@ -209,10 +209,10 @@ describe('CQCEvidence', () => {
     const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Staffing Levels')).toBeInTheDocument();
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Staffing Levels'));
+    await user.click(screen.getByText('Learning Culture'));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
@@ -230,14 +230,14 @@ describe('CQCEvidence', () => {
     const user = userEvent.setup();
     renderViewer();
     await waitFor(() => {
-      expect(screen.getByText('Staffing Levels')).toBeInTheDocument();
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Staffing Levels'));
+    await user.click(screen.getByText('Learning Culture'));
 
     await waitFor(() => {
       // The statement description should be visible (expanded)
-      expect(screen.getByText(/Planned vs actual staffing/i)).toBeInTheDocument();
+      expect(screen.getByText(/Learning from incidents/i)).toBeInTheDocument();
     });
 
     // Viewer should NOT see the Add Evidence button

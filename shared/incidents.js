@@ -63,11 +63,15 @@ export const LOCATIONS = [
   { id: 'other',            name: 'Other' },
 ];
 
+// CQC Regulation 18 notification types. "without_delay" = as soon as reasonably
+// practicable (CQC expects same-day for deaths, within hours for abuse/police).
+// The hoursAllowed in getCqcNotificationDeadline converts these to measurable windows.
 export const CQC_NOTIFICATION_TYPES = [
-  { id: 'death',                   name: 'Death of a service user',               deadline: 'immediate' },
-  { id: 'serious_injury',         name: 'Serious injury',                        deadline: '72h' },
-  { id: 'abuse_allegation',       name: 'Abuse / allegation of abuse',           deadline: 'immediate' },
-  { id: 'police',                 name: 'Police involvement / criminal offence', deadline: 'immediate' },
+  { id: 'death',                   name: 'Death of a service user',               deadline: 'without_delay' },
+  { id: 'serious_injury',         name: 'Serious injury requiring treatment',    deadline: 'without_delay' },
+  { id: 'abuse_allegation',       name: 'Abuse / allegation of abuse',           deadline: 'without_delay' },
+  { id: 'police',                 name: 'Police involvement / criminal offence', deadline: 'without_delay' },
+  { id: 'unauthorised_absence',   name: 'Unauthorised absence of a service user', deadline: 'without_delay' },
   { id: 'deprivation_of_liberty', name: 'Deprivation of Liberty application',    deadline: '72h' },
   { id: 'seclusion_restraint',    name: 'Seclusion or restraint',                deadline: '72h' },
   { id: 'other',                  name: 'Other notifiable event',                deadline: '72h' },
@@ -112,7 +116,11 @@ export function ensureIncidentDefaults(data) {
 export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
   if (!incident.cqc_notifiable || !incident.date) return { deadline: null, hoursAllowed: null, isOverdue: false };
 
-  const hoursAllowed = incident.cqc_notification_deadline === 'immediate' ? 24 : 72;
+  // "without_delay" (Reg 18) = same day for deaths, within hours for others.
+  // We use 4h as the measurable window for "without delay" and 72h for DoLS/seclusion/other.
+  // Legacy "immediate" mapped to same window for backward compatibility.
+  const dl = incident.cqc_notification_deadline;
+  const hoursAllowed = (dl === 'without_delay' || dl === 'immediate') ? 4 : 72;
   const incidentTime = incident.time || '00:00';
   // Append 'Z' to parse as UTC, avoiding BST/GMT offset in deadline calculation
   const incidentDate = new Date(incident.date + 'T' + incidentTime + ':00Z');

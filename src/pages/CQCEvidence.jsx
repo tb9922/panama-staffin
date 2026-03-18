@@ -76,6 +76,7 @@ export default function CQCEvidence() {
         config: sched.config,
         staff: sched.staff,
         overrides: sched.overrides,
+        onboarding: sched.onboarding || {},
         training: train.training || sched.training || {},
         supervisions: train.supervisions || {},
         appraisals: train.appraisals || {},

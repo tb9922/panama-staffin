@@ -73,13 +73,14 @@ describe('daysUntilDeadline / isOverdue', () => {
 });
 
 describe('assessBreachRisk', () => {
-  it('returns low risk for minor breach', () => {
+  it('returns medium risk for minor breach (minimum inputs score 1.0)', () => {
     const result = assessBreachRisk({
       severity: 'low', risk_to_rights: 'unlikely',
       individuals_affected: 1, data_categories: [],
     });
-    expect(result.riskLevel).toBe('low');
-    expect(result.icoNotifiable).toBe(false);
+    // (1+1+1)/3 * 1.0 = 1.0 → medium; ICO notifiable because riskLevel !== 'low'
+    expect(result.riskLevel).toBe('medium');
+    expect(result.icoNotifiable).toBe(true);
   });
 
   it('returns critical risk for serious breach with many affected', () => {

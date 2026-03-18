@@ -86,29 +86,50 @@ export function hoursUntilICODeadline(icoDeadline) {
 
 // ── Risk Assessment ──────────────────────────────────────────────────────────
 
+// ICO breach risk assessment. Art 33(1): notify unless "unlikely to result in a risk."
+// The safe default is to recommend notification. Categories that carry identity fraud
+// or elevated vulnerability risk use a higher multiplier.
 export function assessBreachRisk(breachData) {
   const severityWeights = { low: 1, medium: 2, high: 3, critical: 4 };
   const riskWeights = { unlikely: 1, possible: 2, likely: 3, high: 4 };
 
   const sevScore = severityWeights[breachData.severity] || 1;
   const riskScore = riskWeights[breachData.risk_to_rights] || 1;
-  const affectedScore = Math.min(4, Math.ceil((breachData.individuals_affected || 0) / 10));
+  // Each affected individual matters — don't scale per-10
+  const affectedScore = Math.min(4, breachData.individuals_affected || 1);
 
+  // Special category data (GDPR Art 9) — health, biometric, criminal records
   const specialCats = (breachData.data_categories || []).filter(c =>
     ['staff_health', 'dbs', 'resident_health', 'dols', 'mca'].includes(c)
   );
-  const specialMultiplier = specialCats.length > 0 ? 1.5 : 1.0;
+  // Identity fraud risk data — NI numbers, financial, addresses
+  const identityRiskCats = (breachData.data_categories || []).filter(c =>
+    ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
+  );
+  // Care home residents are vulnerable adults — ICO aggravating factor
+  const involvesResidents = (breachData.data_categories || []).some(c =>
+    ['resident_health', 'dols', 'mca'].includes(c)
+  );
 
-  const rawScore = ((sevScore + riskScore + affectedScore) / 3) * specialMultiplier;
+  let multiplier = 1.0;
+  if (specialCats.length > 0) multiplier = 1.5;
+  if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
+  if (involvesResidents) multiplier = Math.max(multiplier, 1.5);
+
+  const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;
 
   let riskLevel;
   if (score >= 3.0) riskLevel = 'critical';
   else if (score >= 2.0) riskLevel = 'high';
-  else if (score >= 1.5) riskLevel = 'medium';
+  else if (score >= 1.0) riskLevel = 'medium';
   else riskLevel = 'low';
 
-  return { score, riskLevel, icoNotifiable: score >= 1.5, specialCategoryDataInvolved: specialCats.length > 0 };
+  // ICO default: notify unless demonstrably unlikely to result in risk.
+  // Only "low" risk level (all dimensions at minimum, no sensitive data) is not notifiable.
+  const icoNotifiable = riskLevel !== 'low';
+
+  return { score, riskLevel, icoNotifiable, specialCategoryDataInvolved: specialCats.length > 0 };
 }
 
 // ── Compliance Score ─────────────────────────────────────────────────────────
