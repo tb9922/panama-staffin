@@ -562,3 +562,56 @@ describe('Finance: summary queries', () => {
     expect(typeof count).toBe('number');
   });
 });
+
+// ── Invoice cross-home resident validation ────────────────────────────────────
+
+import * as financeService from '../../services/financeService.js';
+
+describe('Invoice: cross-home resident validation', () => {
+  let invoiceId, residentA, residentB, invoiceVersion;
+
+  beforeAll(async () => {
+    // Create a resident in home A
+    residentA = await financeRepo.createResident(homeA, {
+      resident_name: 'Alice Cross-Home', room_number: '1', status: 'active',
+      care_type: 'residential', funding_type: 'self_funded', created_by: 'admin',
+    });
+    // Create a resident in home B
+    residentB = await financeRepo.createResident(homeB, {
+      resident_name: 'Bob Other-Home', room_number: '2', status: 'active',
+      care_type: 'residential', funding_type: 'self_funded', created_by: 'admin',
+    });
+    // Create an invoice in home A linked to resident A
+    const inv = await financeService.createInvoiceWithLines(homeA, {
+      resident_id: residentA.id, payer_type: 'resident', payer_name: 'Alice',
+      invoice_date: '2026-03-01', due_date: '2026-03-31', status: 'draft',
+      lines: [{ description: 'Weekly fee', unit_price: 1000, quantity: 1, amount: 1000 }],
+    }, 'admin');
+    invoiceId = inv.id;
+    invoiceVersion = inv.version;
+  });
+
+  it('rejects update with cross-home resident_id', async () => {
+    try {
+      await financeService.updateInvoiceWithLines(invoiceId, homeA, {
+        resident_id: residentB.id,
+      }, 'admin', invoiceVersion);
+      expect.fail('Should have thrown');
+    } catch (err) {
+      expect(err.message).toMatch(/not found in this home/i);
+      expect(err.statusCode).toBe(400);
+    }
+  });
+
+  it('allows update with same-home resident_id', async () => {
+    const anotherResident = await financeRepo.createResident(homeA, {
+      resident_name: 'Carol Same-Home', room_number: '3', status: 'active',
+      care_type: 'residential', funding_type: 'self_funded', created_by: 'admin',
+    });
+    const result = await financeService.updateInvoiceWithLines(invoiceId, homeA, {
+      resident_id: anotherResident.id,
+    }, 'admin', invoiceVersion);
+    expect(result).not.toBeNull();
+    expect(result.resident_id).toBe(anotherResident.id);
+  });
+});

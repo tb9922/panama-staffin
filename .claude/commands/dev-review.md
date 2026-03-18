@@ -41,6 +41,49 @@ Before reading line 1, ask:
 
 Then estimate the effort: "2 hours of security fixes" or "budget a week to rewrite the data layer."
 
+### Cross-boundary checks (the things automated reviews miss)
+
+These are the blind spots that caught us before. Check EVERY one:
+
+**1. Trace page → API → route auth for every role that can access the page**
+- Find the page's `RequireModule` wrapper in AppRoutes.jsx
+- List every API call the page makes in load() and handlers
+- For each API call, check the route's middleware chain
+- Ask: can every role that passes RequireModule also pass the route's auth?
+- Flag: admin-only endpoints called by non-admin pages (the GdprDashboard 403 bug)
+
+**2. Check sibling functions when one is changed**
+- If a feature was added to one function (e.g. snapshot param on generateEvidencePackPDF), grep for ALL similar functions and check if they need the same change
+- Flag: generateBoardPackPDF missing snapshot support when evidence pack had it
+
+**3. Don't trust pre-existing code in files you modified**
+- Read the WHOLE function, not just the diff
+- The resident SAR `id = subjectId` bug was pre-existing but lived in a file we were editing
+
+**4. Check initial state / first render**
+- What is every useState initialized to? (null, [], {}, 0?)
+- When the scoring function runs on first render with that initial state, does it crash or produce wrong results?
+- Flag: retentionScan starting as null, controls score computing with null data
+
+**5. Check both sides of a data change**
+- If a record can change its parent/owner (e.g. invoice.resident_id), verify:
+  - New parent is validated (same home_id)
+  - Balance/totals recalculated for BOTH old and new parent
+  - Flag: invoice resident_id change only recalculating old resident's balance
+
+**6. Check that live view and saved snapshot use the same scorer + data**
+- If a scoring model exists, trace both paths:
+  - Live: page → imports scorer → passes what data?
+  - Snapshot: server → gatherData → imports scorer → passes what data?
+- Every field in the live path must also be in the server path, and vice versa
+- Flag: live using penalty model while snapshot used controls model
+
+**7. Check status workflow bypass**
+- If a Zod schema includes a `status` field, ask: can a caller set it to any state directly?
+- Dedicated status-change routes (approve, void, lock) should be the ONLY way to change status
+- The generic create/update path should NOT accept status
+- Flag: timesheet upsert accepting status='approved' directly
+
 ### Security checklist (run mentally, flag what fails)
 
 - Passwords hashed with bcrypt/argon2, not MD5/SHA/base64/plaintext
