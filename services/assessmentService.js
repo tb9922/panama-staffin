@@ -35,13 +35,14 @@ import { formatDate, parseDate, addDays } from '../shared/rotation.js';
 // ── CQC Data Assembly ───────────────────────────────────────────────────────
 // Gathers the same data shape that CQCEvidence.jsx builds client-side.
 
-async function gatherCqcData(homeId) {
+async function gatherCqcData(homeId, windowFrom, windowTo) {
   const home = await homeRepo.findById(homeId);
   if (!home) return null;
 
-  const today = new Date();
-  const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-  const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+  // Use snapshot window for override data if provided; otherwise default to 6 months back / 3 months forward
+  const anchor = windowTo ? new Date(windowTo + 'T00:00:00Z') : new Date();
+  const from = windowFrom || new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
+  const to = windowTo || new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
 
   const [
     staffResult, overrides, training, supervisions, appraisals,
@@ -123,7 +124,7 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   const today = formatDate(new Date());
 
   if (engine === 'cqc') {
-    const data = await gatherCqcData(homeId);
+    const data = await gatherCqcData(homeId, windowFrom, windowTo);
     if (!data) return null;
     // Honor explicit window dates if provided; otherwise default to 28 days ending today
     let dateRange;

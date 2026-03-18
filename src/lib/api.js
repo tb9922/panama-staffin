@@ -478,6 +478,11 @@ export async function approvePayrollRun(homeSlug, runId) {
     method: 'POST', headers: authHeaders(),
   });
 }
+export async function voidPayrollRun(homeSlug, runId) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}/void?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
 export function getPayrollExportUrl(homeSlug, runId, format) {
   return `${API_BASE}/payroll/runs/${runId}/export?home=${h(homeSlug)}&format=${format}`;
 }

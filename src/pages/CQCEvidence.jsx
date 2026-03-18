@@ -162,7 +162,7 @@ function CQCEvidenceInner({ data }) {
     if (!home || generating) return;
     setGenerating(true);
     try {
-      await createSnapshot(home, 'cqc');
+      await createSnapshot(home, 'cqc', formatDate(dateRange.from), formatDate(dateRange.to));
       loadSnapshots();
     } catch (e) { alert(e.message); }
     finally { setGenerating(false); }

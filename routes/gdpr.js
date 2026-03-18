@@ -143,6 +143,9 @@ router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAc
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const request = await gdprService.findRequestById(idP.data, req.home.id);
     if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request.identity_verified) {
+      return res.status(400).json({ error: 'Identity must be verified before gathering personal data' });
+    }
     const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, req.home.id, null, request.subject_name);
     await auditService.log('sar_gather', req.home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
