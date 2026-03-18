@@ -56,8 +56,8 @@ function baseConfig() {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 describe('QUALITY_STATEMENTS', () => {
-  it('has 34 quality statements', () => {
-    expect(QUALITY_STATEMENTS).toHaveLength(34);
+  it('has 29 quality statements', () => {
+    expect(QUALITY_STATEMENTS).toHaveLength(29);
   });
 
   it('covers all 5 CQC categories', () => {
@@ -108,8 +108,8 @@ describe('METRIC_DEFINITIONS', () => {
 });
 
 describe('SCORE_BANDS', () => {
-  it('has 3 bands: Good, Adequate, Action Needed', () => {
-    expect(SCORE_BANDS.map(b => b.label)).toEqual(['Good', 'Adequate', 'Action Needed']);
+  it('has 4 bands: Outstanding, Good, Requires Improvement, Inadequate', () => {
+    expect(SCORE_BANDS.map(b => b.label)).toEqual(['Outstanding', 'Good', 'Requires Improvement', 'Inadequate']);
   });
 
   it('bands are ordered by min descending', () => {
@@ -122,26 +122,31 @@ describe('SCORE_BANDS', () => {
 // ── getScoreBand ────────────────────────────────────────────────────────────
 
 describe('getScoreBand', () => {
-  it('returns Good for 90+', () => {
-    expect(getScoreBand(90).label).toBe('Good');
-    expect(getScoreBand(100).label).toBe('Good');
+  it('returns Outstanding for 90+', () => {
+    expect(getScoreBand(90).label).toBe('Outstanding');
+    expect(getScoreBand(100).label).toBe('Outstanding');
   });
 
-  it('returns Adequate for 80-89', () => {
-    expect(getScoreBand(80).label).toBe('Adequate');
-    expect(getScoreBand(89).label).toBe('Adequate');
+  it('returns Good for 75-89', () => {
+    expect(getScoreBand(75).label).toBe('Good');
+    expect(getScoreBand(89).label).toBe('Good');
   });
 
-  it('returns Action Needed for <80', () => {
-    expect(getScoreBand(79).label).toBe('Action Needed');
-    expect(getScoreBand(0).label).toBe('Action Needed');
-    expect(getScoreBand(50).label).toBe('Action Needed');
+  it('returns Requires Improvement for 50-74', () => {
+    expect(getScoreBand(50).label).toBe('Requires Improvement');
+    expect(getScoreBand(74).label).toBe('Requires Improvement');
+  });
+
+  it('returns Inadequate for <50', () => {
+    expect(getScoreBand(49).label).toBe('Inadequate');
+    expect(getScoreBand(0).label).toBe('Inadequate');
   });
 
   it('returns correct badge keys', () => {
     expect(getScoreBand(95).badgeKey).toBe('green');
-    expect(getScoreBand(85).badgeKey).toBe('amber');
-    expect(getScoreBand(50).badgeKey).toBe('red');
+    expect(getScoreBand(80).badgeKey).toBe('blue');
+    expect(getScoreBand(60).badgeKey).toBe('amber');
+    expect(getScoreBand(30).badgeKey).toBe('red');
   });
 });
 
@@ -605,17 +610,20 @@ describe('getEvidenceForStatement', () => {
     expect(getEvidenceForStatement('UNKNOWN', data, dateRange, asOfDate)).toBeNull();
   });
 
-  it('returns auto evidence for S2 (training)', () => {
+  it('returns auto evidence for S6 (training, staffing)', () => {
     const data = {
       config: baseConfig(),
       staff: [makeStaff()],
       training: {},
       supervisions: {},
+      onboarding: {},
+      care_certificate: {},
+      overrides: {},
       cqc_evidence: [],
     };
-    const result = getEvidenceForStatement('S2', data, dateRange, asOfDate);
+    const result = getEvidenceForStatement('S6', data, dateRange, asOfDate);
     expect(result).not.toBeNull();
-    expect(result.statement.id).toBe('S2');
+    expect(result.statement.id).toBe('S6');
     expect(result.autoEvidence.length).toBeGreaterThan(0);
     const labels = result.autoEvidence.map(e => e.label);
     expect(labels).toContain('Training Compliance');

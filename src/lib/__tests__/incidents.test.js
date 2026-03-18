@@ -43,27 +43,27 @@ describe('isCqcNotificationOverdue', () => {
     expect(isCqcNotificationOverdue(incident)).toBe(false);
   });
 
-  it('returns true for "immediate" (24h) deadline when 25 hours have passed', () => {
-    // Incident at 2025-06-01 09:00, now 25 hours later
-    setNow('2025-06-02T10:00:00Z');
+  it('returns true for "without_delay" (4h) deadline when 5 hours have passed', () => {
+    // Incident at 2025-06-01 09:00, now 5 hours later
+    setNow('2025-06-01T14:00:00Z');
     const incident = {
       cqc_notifiable: true,
       cqc_notified: false,
       date: '2025-06-01',
       time: '09:00',
-      cqc_notification_deadline: 'immediate',
+      cqc_notification_deadline: 'without_delay',
     };
     expect(isCqcNotificationOverdue(incident)).toBe(true);
   });
 
-  it('returns false for "immediate" (24h) deadline when 23 hours have passed', () => {
-    setNow('2025-06-02T08:00:00Z');
+  it('returns false for "without_delay" (4h) deadline when 3 hours have passed', () => {
+    setNow('2025-06-01T12:00:00Z');
     const incident = {
       cqc_notifiable: true,
       cqc_notified: false,
       date: '2025-06-01',
       time: '09:00',
-      cqc_notification_deadline: 'immediate',
+      cqc_notification_deadline: 'without_delay',
     };
     expect(isCqcNotificationOverdue(incident)).toBe(false);
   });
@@ -108,7 +108,18 @@ describe('isCqcNotificationOverdue', () => {
 // ── getCqcNotificationDeadline ────────────────────────────────────────────────
 
 describe('getCqcNotificationDeadline', () => {
-  it('returns hoursAllowed=24 for immediate deadline', () => {
+  it('returns hoursAllowed=4 for without_delay deadline', () => {
+    const incident = {
+      cqc_notifiable: true,
+      date: '2025-06-01',
+      time: '09:00',
+      cqc_notification_deadline: 'without_delay',
+    };
+    const { hoursAllowed } = getCqcNotificationDeadline(incident);
+    expect(hoursAllowed).toBe(4);
+  });
+
+  it('returns hoursAllowed=4 for legacy immediate deadline', () => {
     const incident = {
       cqc_notifiable: true,
       date: '2025-06-01',
@@ -116,7 +127,7 @@ describe('getCqcNotificationDeadline', () => {
       cqc_notification_deadline: 'immediate',
     };
     const { hoursAllowed } = getCqcNotificationDeadline(incident);
-    expect(hoursAllowed).toBe(24);
+    expect(hoursAllowed).toBe(4);
   });
 
   it('returns hoursAllowed=72 for 72h deadline', () => {

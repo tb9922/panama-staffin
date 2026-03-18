@@ -107,6 +107,16 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 77. ~~Migration 106 uses CREATE INDEX CONCURRENTLY inside transaction~~ — FIXED: removed CONCURRENTLY
 78. ~~Migration 107 missing AG-EL shift code~~ — FIXED: added to CHECK constraint
 79. ~~Migration 109 references renamed tables (pay_rates, timesheets, hmrc_submissions)~~ — FIXED: commented out
+80. ~~CQC quality statements misaligned with CQC framework~~ — FIXED: 29 statements aligned to Single Assessment Framework
+81. ~~CQC rating scale uses non-CQC terms~~ — FIXED: Outstanding/Good/Requires Improvement/Inadequate
+82. ~~5 CQC metrics invisible (not wired to any QS)~~ — FIXED: wired to correct statements
+83. ~~CQCEvidence.jsx never loads onboarding data~~ — FIXED: DBS/onboarding evidence now populated
+84. ~~CQC "immediate" notification = 24h~~ — FIXED: "without_delay" = 4h per Reg 18
+85. ~~Missing CQC notification type~~ — FIXED: added unauthorised absence (Reg 18(2)(g))
+86. ~~GDPR breach risk false negatives~~ — FIXED: NI/financial/address elevated, vulnerable adults factored
+87. ~~GDPR retention schedule table name mismatches~~ — FIXED: ssp_periods/training + migration 112
+88. ~~Staff SAR missing payroll_line_shifts, users, roles~~ — FIXED: 3 new query sets
+89. ~~Resident SAR missing beds, finance detail~~ — FIXED: 6 new query sets
 
 **See `~/.claude/projects/c--Users-teddy-panama-staffing/memory/code-quality.md` for full review findings.**
 

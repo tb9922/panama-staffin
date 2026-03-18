@@ -47,6 +47,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes, hrCaseNotesOnCases,
         onboarding, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
+        payrollLineShifts, userAccount, userHomeRoles,
       ] = await Promise.all([
         conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -149,6 +150,23 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
              OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
            )`, [homeId, subjectId]),
+        // Payroll shift detail (per-day hours, rates, amounts)
+        conn.query(
+          `SELECT pls.* FROM payroll_line_shifts pls
+           JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
+           JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
+           WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
+        // System user account (if staff member has a login)
+        staffName
+          ? conn.query(`SELECT id, username, display_name, role, is_platform_admin, active, last_login_at, created_at FROM users WHERE display_name = $1 OR username = $1`, [staffName])
+          : { rows: [] },
+        // Home role assignments (user_home_roles uses username, not user_id)
+        staffName
+          ? conn.query(
+              `SELECT uhr.* FROM user_home_roles uhr
+               JOIN users u ON u.username = uhr.username
+               WHERE (u.display_name = $1 OR u.username = $1)`, [staffName])
+          : { rows: [] },
       ]);
 
       return {
@@ -193,6 +211,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           payroll_ytd: payrollYtd.rows,
           hr_investigation_meetings: hrMeetings.rows,
           hr_file_attachments: hrAttachments.rows,
+          payroll_line_shifts: payrollLineShifts.rows,
+          user_account: userAccount.rows,
+          user_home_roles: userHomeRoles.rows,
         },
       };
     }
@@ -201,7 +222,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       const queries = [
         conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-        // Finance: resident record (fees, funding, payment info) and invoices — search by name
+        // Finance: resident record, invoices, fee changes, invoice lines, payment schedule, chase
         subjectName
           ? conn.query(`SELECT * FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
           : { rows: [] },
@@ -212,8 +233,50 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE fi.home_id = $1 AND fr.resident_name = $2 AND fi.deleted_at IS NULL`,
               [homeId, subjectName])
           : { rows: [] },
+        // Beds and bed transitions — linked via finance_residents by name
+        subjectName
+          ? conn.query(
+              `SELECT b.* FROM beds b
+               JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = b.home_id
+               WHERE b.home_id = $1 AND fr.resident_name = $2`, [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(
+              `SELECT bt.* FROM bed_transitions bt
+               JOIN beds b ON b.id = bt.bed_id AND b.home_id = bt.home_id
+               JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = b.home_id
+               WHERE bt.home_id = $1 AND fr.resident_name = $2 ORDER BY bt.transitioned_at DESC`, [homeId, subjectName])
+          : { rows: [] },
+        // Finance detail tables (linked via resident_id on finance_residents)
+        subjectName
+          ? conn.query(
+              `SELECT fc.* FROM finance_fee_changes fc
+               JOIN finance_residents fr ON fr.id = fc.resident_id AND fr.home_id = $1
+               WHERE fr.resident_name = $2`, [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(
+              `SELECT fil.* FROM finance_invoice_lines fil
+               JOIN finance_invoices fi ON fi.id = fil.invoice_id
+               JOIN finance_residents fr ON fr.id = fi.resident_id AND fr.home_id = fi.home_id
+               WHERE fi.home_id = $1 AND fr.resident_name = $2 AND fi.deleted_at IS NULL`,
+              [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(
+              `SELECT ps.* FROM finance_payment_schedule ps
+               JOIN finance_residents fr ON fr.id = ps.resident_id AND fr.home_id = $1
+               WHERE fr.resident_name = $2 AND ps.deleted_at IS NULL`, [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(
+              `SELECT ic.* FROM finance_invoice_chase ic
+               JOIN finance_invoices fi ON fi.id = ic.invoice_id
+               JOIN finance_residents fr ON fr.id = fi.resident_id AND fr.home_id = fi.home_id
+               WHERE fi.home_id = $1 AND fr.resident_name = $2`, [homeId, subjectName])
+          : { rows: [] },
       ];
-      // Name-based queries only run when subject_name is provided (residents have no stable ID across tables)
+      // Name-based queries for incidents/complaints
       if (subjectName) {
         queries.push(
           conn.query(
@@ -229,14 +292,20 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         subject_type: 'resident',
         subject_id: subjectId,
         gathered_at: new Date().toISOString(),
-        incomplete: !subjectName ? 'subject_name not provided — incidents and complaints not searched' : undefined,
+        incomplete: !subjectName ? 'subject_name not provided — incidents, complaints, and finance detail not searched' : undefined,
         data: {
           dols: results[0].rows,
           mca_assessments: results[1].rows,
           finance_residents: results[2].rows,
           finance_invoices: results[3].rows,
-          incidents: results[4]?.rows || [],
-          complaints: results[5]?.rows || [],
+          beds: results[4].rows,
+          bed_transitions: results[5].rows,
+          finance_fee_changes: results[6].rows,
+          finance_invoice_lines: results[7].rows,
+          finance_payment_schedule: results[8].rows,
+          finance_invoice_chase: results[9].rows,
+          incidents: results[10]?.rows || [],
+          complaints: results[11]?.rows || [],
         },
       };
     }
@@ -645,37 +714,41 @@ export async function scanRetention(homeId) {
  * Pure function — assess breach risk and determine ICO notifiability.
  * UK GDPR Article 33: notify ICO within 72 hours unless unlikely to result in risk.
  */
+// Server-side breach risk assessment — mirrors src/lib/gdpr.js assessBreachRisk
+// but adds ICO deadline and detailed factors for the API response.
 export function assessBreachRisk(breachData) {
   const severityWeights = { low: 1, medium: 2, high: 3, critical: 4 };
   const riskWeights = { unlikely: 1, possible: 2, likely: 3, high: 4 };
 
   const sevScore = severityWeights[breachData.severity] || 1;
   const riskScore = riskWeights[breachData.risk_to_rights] || 1;
-  const affectedScore = Math.min(4, Math.ceil((breachData.individuals_affected || 0) / 10));
+  const affectedScore = Math.min(4, breachData.individuals_affected || 1);
 
-  // Special category data multiplier
   const specialCats = (breachData.data_categories || []).filter(c =>
     ['staff_health', 'dbs', 'resident_health', 'dols', 'mca'].includes(c)
   );
-  const specialMultiplier = specialCats.length > 0 ? 1.5 : 1.0;
+  const identityRiskCats = (breachData.data_categories || []).filter(c =>
+    ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
+  );
+  const involvesResidents = (breachData.data_categories || []).some(c =>
+    ['resident_health', 'dols', 'mca'].includes(c)
+  );
 
-  const rawScore = ((sevScore + riskScore + affectedScore) / 3) * specialMultiplier;
+  let multiplier = 1.0;
+  if (specialCats.length > 0) multiplier = 1.5;
+  if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
+  if (involvesResidents) multiplier = Math.max(multiplier, 1.5);
+
+  const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;
 
-  let riskLevel, icoNotifiable;
-  if (score >= 3.0) {
-    riskLevel = 'critical';
-    icoNotifiable = true;
-  } else if (score >= 2.0) {
-    riskLevel = 'high';
-    icoNotifiable = true;
-  } else if (score >= 1.5) {
-    riskLevel = 'medium';
-    icoNotifiable = true;
-  } else {
-    riskLevel = 'low';
-    icoNotifiable = false;
-  }
+  let riskLevel;
+  if (score >= 3.0) riskLevel = 'critical';
+  else if (score >= 2.0) riskLevel = 'high';
+  else if (score >= 1.0) riskLevel = 'medium';
+  else riskLevel = 'low';
+
+  const icoNotifiable = riskLevel !== 'low';
 
   // ICO deadline: 72 hours from discovery
   const discoveredDate = new Date(breachData.discovered_date);
@@ -691,7 +764,7 @@ export function assessBreachRisk(breachData) {
       severity: sevScore,
       riskToRights: riskScore,
       affected: affectedScore,
-      specialMultiplier,
+      multiplier,
     },
   };
 }
