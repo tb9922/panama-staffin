@@ -160,12 +160,12 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         staffName
           ? conn.query(`SELECT id, username, display_name, role, is_platform_admin, active, last_login_at, created_at FROM users WHERE display_name = $1 OR username = $1`, [staffName])
           : { rows: [] },
-        // Home role assignments (user_home_roles uses username, not user_id)
+        // Home role assignments — scoped to this home only (user_home_roles uses username)
         staffName
           ? conn.query(
               `SELECT uhr.* FROM user_home_roles uhr
                JOIN users u ON u.username = uhr.username
-               WHERE (u.display_name = $1 OR u.username = $1)`, [staffName])
+               WHERE (u.display_name = $1 OR u.username = $1) AND uhr.home_id = $2`, [staffName, homeId])
           : { rows: [] },
       ]);
 
@@ -245,7 +245,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               `SELECT bt.* FROM bed_transitions bt
                JOIN beds b ON b.id = bt.bed_id AND b.home_id = bt.home_id
                JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = b.home_id
-               WHERE bt.home_id = $1 AND fr.resident_name = $2 ORDER BY bt.transitioned_at DESC`, [homeId, subjectName])
+               WHERE bt.home_id = $1 AND fr.resident_name = $2 ORDER BY bt.changed_at DESC`, [homeId, subjectName])
           : { rows: [] },
         // Finance detail tables (linked via resident_id on finance_residents)
         subjectName
@@ -643,6 +643,8 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',
   'hr_flexible_working', 'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
+  // Finance tables (6-year retention per Companies Act / HMRC)
+  'finance_invoices', 'finance_expenses',
 ]);
 
 // Tables without home_id (global tables)
@@ -722,7 +724,7 @@ export function assessBreachRisk(breachData) {
 
   const sevScore = severityWeights[breachData.severity] || 1;
   const riskScore = riskWeights[breachData.risk_to_rights] || 1;
-  const affectedScore = Math.min(4, breachData.individuals_affected || 1);
+  const affectedScore = Math.min(4, breachData.individuals_affected ?? 1);
 
   const specialCats = (breachData.data_categories || []).filter(c =>
     ['staff_health', 'dbs', 'resident_health', 'dols', 'mca'].includes(c)
@@ -730,14 +732,10 @@ export function assessBreachRisk(breachData) {
   const identityRiskCats = (breachData.data_categories || []).filter(c =>
     ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
   );
-  const involvesResidents = (breachData.data_categories || []).some(c =>
-    ['resident_health', 'dols', 'mca'].includes(c)
-  );
 
   let multiplier = 1.0;
   if (specialCats.length > 0) multiplier = 1.5;
   if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
-  if (involvesResidents) multiplier = Math.max(multiplier, 1.5);
 
   const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;

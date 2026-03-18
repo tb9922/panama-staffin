@@ -95,8 +95,9 @@ export function assessBreachRisk(breachData) {
 
   const sevScore = severityWeights[breachData.severity] || 1;
   const riskScore = riskWeights[breachData.risk_to_rights] || 1;
-  // Each affected individual matters — don't scale per-10
-  const affectedScore = Math.min(4, breachData.individuals_affected || 1);
+  // Each affected individual matters — don't scale per-10.
+  // ?? 1 preserves explicit 0 (e.g., breach discovered before data accessed).
+  const affectedScore = Math.min(4, breachData.individuals_affected ?? 1);
 
   // Special category data (GDPR Art 9) — health, biometric, criminal records
   const specialCats = (breachData.data_categories || []).filter(c =>
@@ -106,15 +107,11 @@ export function assessBreachRisk(breachData) {
   const identityRiskCats = (breachData.data_categories || []).filter(c =>
     ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
   );
-  // Care home residents are vulnerable adults — ICO aggravating factor
-  const involvesResidents = (breachData.data_categories || []).some(c =>
-    ['resident_health', 'dols', 'mca'].includes(c)
-  );
 
+  // specialCats already covers resident data (resident_health, dols, mca) at 1.5x
   let multiplier = 1.0;
   if (specialCats.length > 0) multiplier = 1.5;
   if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
-  if (involvesResidents) multiplier = Math.max(multiplier, 1.5);
 
   const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;

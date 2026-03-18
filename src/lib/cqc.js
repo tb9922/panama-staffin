@@ -119,7 +119,7 @@ export const QUALITY_STATEMENTS = [
   },
   {
     id: 'E6', category: 'effective', name: 'Consent to Care & Treatment',
-    cqcRef: 'Regulation 11 — Need for Consent / Regulation 13 — DoLS (QS14)',
+    cqcRef: 'Regulation 11 — Need for Consent / MCA 2005 — DoLS (QS14)',
     description: 'DoLS/LPS authorisations, MCA assessments, consent processes',
     autoMetrics: ['dolsCompliancePct', 'mcaTrainingCompliance'],
     icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
@@ -830,6 +830,47 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
       label: 'Maintenance Compliance', value: maint.score, unit: '%',
       detail: `${maint.compliant} compliant, ${maint.overdue} overdue of ${maint.total}`,
       source: 'Maintenance Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('incidentResponseTime')) {
+    const fromStr = formatDate(dateRange.from);
+    const toStr = formatDate(dateRange.to);
+    const irt = calculateIncidentResponseTime(data.incidents || [], fromStr, toStr);
+    autoEvidence.push({
+      label: 'Incident Response Time', value: irt.score, unit: '%',
+      detail: `${irt.onTime}/${irt.total} notified on time`,
+      source: 'Incident Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('cqcNotifications')) {
+    const fromStr = formatDate(dateRange.from);
+    const toStr = formatDate(dateRange.to);
+    const cqcn = calculateCqcNotificationsPct(data.incidents || [], fromStr, toStr);
+    autoEvidence.push({
+      label: 'CQC Notifications on Time', value: cqcn.score, unit: '%',
+      detail: `${cqcn.onTime}/${cqcn.total} within deadline`,
+      source: 'Incident Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('careCertCompletion')) {
+    const ccScore = calculateCareCertCompletionPct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Care Certificate Completion', value: typeof ccScore === 'object' ? ccScore.score : ccScore, unit: '%',
+      source: 'Care Certificate Tracker',
+    });
+  }
+  if (statement.autoMetrics.includes('riskManagementScore')) {
+    const risk = calculateRiskManagementScore(data, asOfDate);
+    autoEvidence.push({
+      label: 'Risk Management Score', value: risk.score, unit: '%',
+      source: 'Risk Register',
+    });
+  }
+  if (statement.autoMetrics.includes('policyCompliancePct')) {
+    const pol = calculatePolicyCompliancePct(data, asOfDate);
+    autoEvidence.push({
+      label: 'Policy Compliance', value: pol.score, unit: '%',
+      source: 'Policy Review Tracker',
     });
   }
 
