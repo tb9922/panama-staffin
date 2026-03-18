@@ -303,11 +303,15 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       if (subjectName) {
         queries.push(
           conn.query(
-            `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
-            [homeId, subjectName]),
+            residentPk
+              ? `SELECT * FROM incidents WHERE home_id = $1 AND (resident_id = $2 OR person_affected_name = $3) AND deleted_at IS NULL`
+              : `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $3 AND deleted_at IS NULL`,
+            residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName]),
           conn.query(
-            `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
-            [homeId, subjectName]),
+            residentPk
+              ? `SELECT * FROM complaints WHERE home_id = $1 AND (resident_id = $2 OR raised_by_name = $3) AND deleted_at IS NULL`
+              : `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $3 AND deleted_at IS NULL`,
+            residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName]),
         );
       }
       const results = await Promise.all(queries);
@@ -732,27 +736,42 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
       );
     }
 
-    // Anonymise incidents where resident was the affected person
-    await client.query(
-      `UPDATE incidents SET person_affected_name = $1
-       WHERE home_id = $2 AND person_affected_name = $3 AND deleted_at IS NULL`,
-      [anon, homeId, matchName]
-    );
+    // Anonymise incidents where resident was the affected person — use FK when available
+    if (residentPk) {
+      await client.query(
+        `UPDATE incidents SET person_affected_name = $1
+         WHERE home_id = $2 AND (resident_id = $3 OR person_affected_name = $4) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, matchName]);
+    } else {
+      await client.query(
+        `UPDATE incidents SET person_affected_name = $1
+         WHERE home_id = $2 AND person_affected_name = $3 AND deleted_at IS NULL`,
+        [anon, homeId, matchName]);
+    }
 
-    // Anonymise complaints raised by or about the resident
-    await client.query(
-      `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
-       WHERE home_id = $2 AND raised_by_name = $3 AND deleted_at IS NULL`,
-      [anon, homeId, matchName]
-    );
+    // Anonymise complaints raised by or about the resident — use FK when available
+    if (residentPk) {
+      await client.query(
+        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
+         WHERE home_id = $2 AND (resident_id = $3 OR raised_by_name = $4) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, matchName]);
+    } else {
+      await client.query(
+        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
+         WHERE home_id = $2 AND raised_by_name = $3 AND deleted_at IS NULL`,
+        [anon, homeId, matchName]);
+    }
 
-    // Anonymise bed occupancy + finance records via resident PK
+    // Anonymise bed occupancy + finance records
     if (residentPk) {
       await client.query(
         `UPDATE bed_transitions SET reason = NULL
          WHERE home_id = $1 AND resident_id = $2`,
         [homeId, residentPk]
       );
+    }
+    // Finance invoices — always attempt via PK (invoices always have resident_id FK)
+    if (residentPk) {
       await client.query(
         `UPDATE finance_invoices SET notes = NULL
          WHERE home_id = $1 AND resident_id = $2 AND deleted_at IS NULL`,

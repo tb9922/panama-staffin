@@ -363,6 +363,16 @@ export async function upsert(homeId, data) {
       data.reported_by || null, data.reported_at || now, now,
     ]
   );
+  // Auto-resolve resident_id for resident-type incidents
+  if (rows[0] && data.person_affected === 'resident' && data.person_affected_name && !data.resident_id) {
+    const { rows: fr } = await pool.query(
+      `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL LIMIT 1`,
+      [homeId, data.person_affected_name]
+    );
+    if (fr[0]) {
+      await pool.query(`UPDATE incidents SET resident_id = $1 WHERE home_id = $2 AND id = $3`, [fr[0].id, homeId, id]);
+    }
+  }
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
