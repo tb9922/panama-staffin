@@ -64,11 +64,12 @@ export async function findById(id, homeId, client) {
 }
 
 export async function signOff(id, homeId, signedOffBy, notes) {
-  // Prevent self-sign-off: computed_by != signed_off_by
+  // Prevent self-sign-off: computed_by must differ (NULL computed_by is allowed to be signed off)
   const { rows } = await pool.query(
     `UPDATE assessment_snapshots
      SET signed_off_by = $3, signed_off_at = NOW(), sign_off_notes = $4
-     WHERE id = $1 AND home_id = $2 AND signed_off_by IS NULL AND computed_by != $3
+     WHERE id = $1 AND home_id = $2 AND signed_off_by IS NULL
+       AND (computed_by IS NULL OR computed_by != $3)
      RETURNING ${COLS}`,
     [id, homeId, signedOffBy, notes || null]
   );

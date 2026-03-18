@@ -246,7 +246,7 @@ export default function GdprDashboard() {
       const updated = await getSnapshots(home, 'gdpr');
       setGdprSnapshots(updated);
     } catch (e) {
-      console.error('GDPR snapshot failed:', e.message);
+      alert(e.message || 'Failed to save snapshot');
     } finally {
       setSnapshotSaving(false);
     }

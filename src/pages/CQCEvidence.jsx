@@ -189,7 +189,7 @@ function CQCEvidenceInner({ data }) {
       const updated = await getSnapshots(homeSlug, 'cqc');
       setSnapshots(updated);
     } catch (e) {
-      console.error('Snapshot failed:', e.message);
+      alert(e.message || 'Failed to save snapshot');
     } finally {
       setSnapshotSaving(false);
     }

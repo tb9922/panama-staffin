@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as assessmentRepo from '../repositories/assessmentRepo.js';
@@ -28,13 +29,23 @@ router.post('/snapshot', writeRateLimiter, requireAuth, requireHomeAccess, requi
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    // Compute input_hash for deduplication — prevents identical snapshots
+    const hashInput = JSON.stringify({ engine: parsed.data.engine, result: parsed.data.result });
+    const input_hash = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 64);
     const snapshot = await assessmentRepo.create(req.home.id, {
       ...parsed.data,
       computed_by: req.user.username,
+      input_hash,
     });
     await auditService.log('assessment_snapshot', req.home.slug, req.user.username, `engine=${parsed.data.engine} score=${parsed.data.overall_score}`);
     res.status(201).json(snapshot);
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Unique constraint on (home_id, engine, input_hash) — duplicate snapshot
+    if (err.code === '23505' && err.constraint?.includes('dedup')) {
+      return res.status(409).json({ error: 'An identical snapshot already exists' });
+    }
+    next(err);
+  }
 });
 
 // GET /api/assessment/snapshots?home=X&engine=cqc — list historical snapshots
