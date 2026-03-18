@@ -1,4 +1,6 @@
 // CQC Compliance Evidence — Scoring Engine & Evidence Aggregation
+// Bump ENGINE_VERSION when scoring logic, weights, or banding changes.
+export const ENGINE_VERSION = 'v1';
 
 import { formatDate, parseDate, addDays, getStaffForDay, isCareRole, isWorkingShift } from './rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from './escalation.js';

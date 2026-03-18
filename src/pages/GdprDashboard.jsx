@@ -8,12 +8,14 @@ import {
   getRetentionSchedule, scanRetention,
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
-  getAccessLog, getCurrentHome, } from '../lib/api.js';
+  getAccessLog, getCurrentHome,
+  createSnapshot, getSnapshots, signOffSnapshot, } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
   DP_COMPLAINT_CATEGORIES, DATA_CATEGORIES,
   calculateDeadline, daysUntilDeadline, isOverdue,
   calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
+  ENGINE_VERSION,
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -38,6 +40,8 @@ export default function GdprDashboard() {
   // Data state
   const [requests, setRequests] = useState([]);
   const [breaches, setBreaches] = useState([]);
+  const [gdprSnapshots, setGdprSnapshots] = useState([]);
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
   const [retention, setRetention] = useState([]);
   const [retentionScan, setRetentionScan] = useState(null);
   const [consent, setConsent] = useState([]);
@@ -84,6 +88,12 @@ export default function GdprDashboard() {
   }, [home]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load GDPR snapshot history
+  useEffect(() => {
+    if (!home) return;
+    getSnapshots(home, 'gdpr').then(setGdprSnapshots).catch(() => {});
+  }, [home]);
 
   function closeModal() { setShowModal(null); setForm({}); }
 
@@ -221,6 +231,26 @@ export default function GdprDashboard() {
   const compliance = calculateGdprComplianceScore(requests, breaches, complaints, retentionScan);
   const bandColors = { good: 'green', adequate: 'blue', requires_improvement: 'amber', inadequate: 'red' };
 
+  async function handleTakeGdprSnapshot() {
+    if (snapshotSaving) return;
+    setSnapshotSaving(true);
+    try {
+      await createSnapshot(home, {
+        engine: 'gdpr',
+        engine_version: ENGINE_VERSION,
+        overall_score: compliance.score,
+        band: compliance.band,
+        result: { issues: compliance.issues, retentionScanned: retentionScan != null },
+      });
+      const updated = await getSnapshots(home, 'gdpr');
+      setGdprSnapshots(updated);
+    } catch (e) {
+      console.error('GDPR snapshot failed:', e.message);
+    } finally {
+      setSnapshotSaving(false);
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
@@ -294,9 +324,16 @@ export default function GdprDashboard() {
         <div className={CARD.padded}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Compliance Score</h2>
-            <span className={BADGE[bandColors[compliance.band] || 'gray']}>
-              {compliance.score}/100 — {compliance.band.replace(/_/g, ' ')}
-            </span>
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <button onClick={handleTakeGdprSnapshot} disabled={snapshotSaving} className={`${BTN.ghost} ${BTN.xs}`}>
+                  {snapshotSaving ? 'Saving...' : 'Take Snapshot'}
+                </button>
+              )}
+              <span className={BADGE[bandColors[compliance.band] || 'gray']}>
+                {compliance.score}/100 — {compliance.band.replace(/_/g, ' ')}
+              </span>
+            </div>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
             <div className={`h-3 rounded-full transition-all ${

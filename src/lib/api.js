@@ -1510,6 +1510,24 @@ export async function deletePlatformHome(id) {
   });
 }
 
+// ── Assessment Snapshots ────────────────────────────────────────────────────
+export async function createSnapshot(homeSlug, data) {
+  return apiFetch(`${API_BASE}/assessment/snapshot?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function getSnapshots(homeSlug, engine) {
+  return apiFetch(`${API_BASE}/assessment/snapshots?home=${h(homeSlug)}&engine=${engine}`, { headers: authHeaders() });
+}
+export async function getSnapshotById(homeSlug, id) {
+  return apiFetch(`${API_BASE}/assessment/snapshots/${id}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function signOffSnapshot(homeSlug, id, notes) {
+  return apiFetch(`${API_BASE}/assessment/snapshots/${id}/sign-off?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ notes }),
+  });
+}
+
 // Fire-and-forget audit log for report downloads
 export function logReportDownload(reportType, dateRange) {
   const home = getCurrentHome();

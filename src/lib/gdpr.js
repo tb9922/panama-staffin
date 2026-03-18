@@ -1,5 +1,7 @@
 // GDPR / Data Protection — Pure Functions
 // UK GDPR compliance for care home special category data
+// Bump ENGINE_VERSION when scoring logic or control definitions change.
+export const ENGINE_VERSION = 'v1';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
