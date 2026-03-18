@@ -196,12 +196,14 @@ function CQCEvidenceInner({ data }) {
   }
 
   async function handleSignOff(snapshotId) {
+    const notes = window.prompt('Sign-off notes (optional):');
+    if (notes === null) return; // cancelled
     try {
-      await signOffSnapshot(homeSlug, snapshotId);
+      await signOffSnapshot(homeSlug, snapshotId, notes || undefined);
       const updated = await getSnapshots(homeSlug, 'cqc');
       setSnapshots(updated);
     } catch (e) {
-      console.error('Sign-off failed:', e.message);
+      alert(e.message || 'Sign-off failed');
     }
   }
 
@@ -348,7 +350,9 @@ function CQCEvidenceInner({ data }) {
                 <div className="flex items-center gap-2">
                   {s.signed_off_by
                     ? <span className={BADGE.green}>Signed off by {s.signed_off_by}</span>
-                    : canEdit && <button onClick={() => handleSignOff(s.id)} className={`${BTN.ghost} ${BTN.xs}`}>Sign Off</button>
+                    : canEdit && s.computed_by !== getLoggedInUser()?.username && (
+                      <button onClick={() => handleSignOff(s.id)} className={`${BTN.ghost} ${BTN.xs}`}>Sign Off</button>
+                    )
                   }
                 </div>
               </div>

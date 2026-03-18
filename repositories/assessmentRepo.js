@@ -43,8 +43,9 @@ export async function create(homeId, data, client) {
   return shape(rows[0]);
 }
 
-export async function findByHome(homeId, engine, limit = 20) {
-  const { rows } = await pool.query(
+export async function findByHome(homeId, engine, limit = 20, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${COLS} FROM assessment_snapshots
      WHERE home_id = $1 AND engine = $2
      ORDER BY computed_at DESC LIMIT $3`,
@@ -53,8 +54,9 @@ export async function findByHome(homeId, engine, limit = 20) {
   return rows.map(shape);
 }
 
-export async function findById(id, homeId) {
-  const { rows } = await pool.query(
+export async function findById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${COLS} FROM assessment_snapshots WHERE id = $1 AND home_id = $2`,
     [id, homeId]
   );
@@ -62,10 +64,11 @@ export async function findById(id, homeId) {
 }
 
 export async function signOff(id, homeId, signedOffBy, notes) {
+  // Prevent self-sign-off: computed_by != signed_off_by
   const { rows } = await pool.query(
     `UPDATE assessment_snapshots
      SET signed_off_by = $3, signed_off_at = NOW(), sign_off_notes = $4
-     WHERE id = $1 AND home_id = $2 AND signed_off_by IS NULL
+     WHERE id = $1 AND home_id = $2 AND signed_off_by IS NULL AND computed_by != $3
      RETURNING ${COLS}`,
     [id, homeId, signedOffBy, notes || null]
   );
