@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import StaffPicker from '../components/StaffPicker.jsx';
+import ResidentPicker from '../components/ResidentPicker.jsx';
 import {
   getDataRequests, createDataRequest, updateDataRequest, gatherRequestData, executeErasure,
   getDataBreaches, createDataBreach, updateDataBreach, assessBreach,
@@ -831,13 +833,16 @@ export default function GdprDashboard() {
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Subject ID / Name</label>
-              <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} placeholder="e.g. S001 or name" />
+              {form.subject_type === 'resident' ? (
+                <ResidentPicker label="Resident" required value={form.subject_id}
+                  onChange={(id, resident) => setForm({ ...form, subject_id: id ? String(id) : '', subject_name: resident?.resident_name || '' })} />
+              ) : (
+                <StaffPicker label="Staff Member" required value={form.subject_id}
+                  onChange={val => {
+                    setForm({ ...form, subject_id: val });
+                  }} />
+              )}
             </div>
-          </div>
-          <div>
-            <label className={INPUT.label}>Subject Name</label>
-            <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
