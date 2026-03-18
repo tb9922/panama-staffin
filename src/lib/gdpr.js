@@ -291,7 +291,9 @@ function evaluateDomain(domainId, data) {
       // ROPA — Article 30 compliance
       const ropa = data.ropa || [];
       const activeRopa = ropa.filter(x => x.status === 'active');
-      const overdueRopa = ropa.filter(x => x.next_review_due && x.next_review_due < new Date().toISOString().slice(0, 10));
+      const today = new Date().toISOString().slice(0, 10);
+      // Overdue = review date in the past, OR no review date set on an active entry (never reviewed)
+      const overdueRopa = activeRopa.filter(x => !x.next_review_due || x.next_review_due < today);
       controls.push({ id: 'ropa_maintained', label: 'ROPA maintained (Art 30)', evidenced: activeRopa.length > 0, detail: `${activeRopa.length} active entries` });
       controls.push({ id: 'ropa_reviewed', label: 'ROPA reviews up to date', evidenced: overdueRopa.length === 0, detail: overdueRopa.length > 0 ? `${overdueRopa.length} overdue` : 'All current' });
       // DPIA — Article 35 compliance
