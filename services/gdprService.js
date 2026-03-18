@@ -219,13 +219,31 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
     }
 
     if (subjectType === 'resident') {
+      // Resolve resident PK for robust identity matching (avoids name collisions)
+      let residentPk = null;
+      if (subjectName) {
+        const { rows: [fr] } = await conn.query(
+          `SELECT id FROM finance_residents WHERE home_id = $1 AND (id::text = $2 OR resident_name = $3) AND deleted_at IS NULL LIMIT 1`,
+          [homeId, subjectId, subjectName]
+        );
+        residentPk = fr?.id || null;
+      }
+
       const queries = [
-        // Query by resident_name (consistent with erasure path identity resolution)
+        // Prefer resident_id FK when available, fall back to resident_name
         subjectName
-          ? conn.query(`SELECT * FROM dols WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          ? conn.query(
+              residentPk
+                ? `SELECT * FROM dols WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
+                : `SELECT * FROM dols WHERE home_id = $1 AND resident_name = $3 AND deleted_at IS NULL`,
+              residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName])
           : { rows: [] },
         subjectName
-          ? conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          ? conn.query(
+              residentPk
+                ? `SELECT * FROM mca_assessments WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
+                : `SELECT * FROM mca_assessments WHERE home_id = $1 AND resident_name = $3 AND deleted_at IS NULL`,
+              residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName])
           : { rows: [] },
         // Finance: resident record, invoices, fee changes, invoice lines, payment schedule, chase
         subjectName
@@ -658,28 +676,45 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     const matchName = subjectName || resident?.resident_name || subjectId;
 
     // Block erasure of residents with active DoLS authorisations (MCA 2005 legal obligation)
-    const { rows: activeDols } = await client.query(
-      `SELECT id FROM dols WHERE home_id = $1 AND resident_name = $2
-       AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE) AND deleted_at IS NULL`,
-      [homeId, matchName]
-    );
+    // Use resident_id FK when available for robust matching, fall back to name
+    const { rows: activeDols } = residentPk
+      ? await client.query(
+          `SELECT id FROM dols WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3)
+           AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE) AND deleted_at IS NULL`,
+          [homeId, residentPk, matchName])
+      : await client.query(
+          `SELECT id FROM dols WHERE home_id = $1 AND resident_name = $2
+           AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE) AND deleted_at IS NULL`,
+          [homeId, matchName]);
     if (activeDols.length > 0) {
       throw new ValidationError('Cannot erase resident with active DoLS authorisation (MCA 2005 legal obligation)');
     }
 
     // Anonymise DoLS records (expired/review_due only — actives blocked above)
-    await client.query(
-      `UPDATE dols SET resident_name = $1, dob = NULL, notes = NULL
-       WHERE home_id = $2 AND resident_name = $3 AND deleted_at IS NULL`,
-      [anon, homeId, matchName]
-    );
+    if (residentPk) {
+      await client.query(
+        `UPDATE dols SET resident_name = $1, dob = NULL, notes = NULL
+         WHERE home_id = $2 AND (resident_id = $3 OR resident_name = $4) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, matchName]);
+    } else {
+      await client.query(
+        `UPDATE dols SET resident_name = $1, dob = NULL, notes = NULL
+         WHERE home_id = $2 AND resident_name = $3 AND deleted_at IS NULL`,
+        [anon, homeId, matchName]);
+    }
 
-    // Anonymise MCA assessments
-    await client.query(
-      `UPDATE mca_assessments SET resident_name = $1, notes = NULL
-       WHERE home_id = $2 AND resident_name = $3 AND deleted_at IS NULL`,
-      [anon, homeId, matchName]
-    );
+    // Anonymise MCA assessments — same pattern
+    if (residentPk) {
+      await client.query(
+        `UPDATE mca_assessments SET resident_name = $1, notes = NULL
+         WHERE home_id = $2 AND (resident_id = $3 OR resident_name = $4) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, matchName]);
+    } else {
+      await client.query(
+        `UPDATE mca_assessments SET resident_name = $1, notes = NULL
+         WHERE home_id = $2 AND resident_name = $3 AND deleted_at IS NULL`,
+        [anon, homeId, matchName]);
+    }
 
     // Anonymise finance_residents — use PK if resolved, else fall back to name
     // Table has: resident_name, room_number, notes, top_up_contact (PII fields)
@@ -778,31 +813,27 @@ export async function scanRetention(homeId) {
     if (!RETENTION_ALLOWED_TABLES.has(rule.applies_to_table)) continue;
 
     const table = rule.applies_to_table;
-    const isGlobal = GLOBAL_TABLES.has(table);
+    // Skip global tables from per-home retention scoring — their counts reflect
+    // all homes combined, which distorts individual home compliance posture.
+    if (GLOBAL_TABLES.has(table)) continue;
     const dateCol = TS_TABLES.has(table) ? 'ts' : UPDATED_AT_TABLES.has(table) ? 'updated_at' : 'created_at';
     let count = 0;
     let expiredCount = 0;
 
     try {
-      // Count total records
+      // Count total records (always scoped by home_id — global tables skipped above)
       const totalResult = await pool.query(
-        isGlobal
-          ? `SELECT COUNT(*) AS cnt FROM ${table}`
-          : `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1`,
-        isGlobal ? [] : [homeId]
+        `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1`,
+        [homeId]
       );
       count = parseInt(totalResult.rows[0].cnt, 10);
 
       // Count records past retention
-      if (table !== 'retention_schedule') {
-        const expiredResult = await pool.query(
-          isGlobal
-            ? `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${dateCol} < NOW() - INTERVAL '1 day' * $1`
-            : `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $2 AND ${dateCol} < NOW() - INTERVAL '1 day' * $1`,
-          isGlobal ? [rule.retention_days] : [rule.retention_days, homeId]
-        );
-        expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
-      }
+      const expiredResult = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1 AND ${dateCol} < NOW() - INTERVAL '1 day' * $2`,
+        [homeId, rule.retention_days]
+      );
+      expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
     } catch (err) {
       logger.warn({ table, err: err?.message }, 'Retention scan: table query failed — skipping');
     }

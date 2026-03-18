@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
-import { getCurrentHome, getSchedulingData, logReportDownload } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getSnapshots, getSnapshot, logReportDownload } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 function getMonday(date) {
@@ -43,6 +43,14 @@ function ReportsInner({ data }) {
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   });
   const [boardDays, setBoardDays] = useState(28);
+  const [cqcSnapshots, setCqcSnapshots] = useState([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
+
+  const homeSlug = getCurrentHome();
+  useEffect(() => {
+    if (!homeSlug) return;
+    getSnapshots(homeSlug, 'cqc').then(setCqcSnapshots).catch(() => {});
+  }, [homeSlug]);
 
   async function generate(type) {
     setGenerating(type);
@@ -63,8 +71,12 @@ function ReportsInner({ data }) {
       } else if (type === 'staff') {
         generateStaffPDF(data);
       } else if (type === 'boardpack') {
-        generateBoardPackPDF(data, boardDays);
-        dateRange = `${boardDays} days`;
+        let snapshot = null;
+        if (selectedSnapshotId) {
+          snapshot = await getSnapshot(homeSlug, selectedSnapshotId);
+        }
+        generateBoardPackPDF(data, boardDays, snapshot);
+        dateRange = `${boardDays} days${snapshot ? ` (snapshot: ${snapshot.computed_at?.slice(0, 10)})` : ''}`;
       }
       logReportDownload(type, dateRange);
     } catch (err) {
@@ -133,13 +145,28 @@ function ReportsInner({ data }) {
       icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
       color: 'indigo',
       dateInput: (
-        <div>
-          <label className={INPUT.label}>Date range (days)</label>
-          <select value={boardDays} onChange={e => setBoardDays(Number(e.target.value))} className={INPUT.sm}>
-            <option value={28}>28 days</option>
-            <option value={90}>90 days</option>
-            <option value={365}>1 year</option>
-          </select>
+        <div className="space-y-2">
+          <div>
+            <label className={INPUT.label}>Date range (days)</label>
+            <select value={boardDays} onChange={e => setBoardDays(Number(e.target.value))} className={INPUT.sm}>
+              <option value={28}>28 days</option>
+              <option value={90}>90 days</option>
+              <option value={365}>1 year</option>
+            </select>
+          </div>
+          {cqcSnapshots.length > 0 && (
+            <div>
+              <label className={INPUT.label}>CQC Snapshot (optional)</label>
+              <select value={selectedSnapshotId} onChange={e => setSelectedSnapshotId(e.target.value)} className={INPUT.sm}>
+                <option value="">Live calculation</option>
+                {cqcSnapshots.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.computed_at?.slice(0, 10)} — {s.overall_score}%{s.signed_off_by ? ` (signed: ${s.signed_off_by})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       ),
     }] : []),
