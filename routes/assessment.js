@@ -67,9 +67,14 @@ router.put('/snapshots/:id/sign-off', writeRateLimiter, requireAuth, requireHome
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid snapshot ID' });
     const parsed = signOffSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    // Check existence + state before sign-off for specific error messages
+    const existing = await assessmentRepo.findById(id, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Snapshot not found' });
+    if (existing.signed_off_by) return res.status(409).json({ error: 'Already signed off' });
+    if (existing.computed_by === req.user.username) return res.status(403).json({ error: 'Cannot sign off your own snapshot' });
     const snapshot = await assessmentRepo.signOff(id, req.home.id, req.user.username, parsed.data.notes);
-    if (!snapshot) return res.status(404).json({ error: 'Snapshot not found or already signed off' });
-    await auditService.log('assessment_signoff', req.home.slug, req.user.username, `snapshot=${id}`);
+    if (!snapshot) return res.status(409).json({ error: 'Sign-off failed' });
+    await auditService.log('assessment_signoff', req.home.slug, req.user.username, `snapshot=${id} engine=${snapshot.engine} score=${snapshot.overall_score}`);
     res.json(snapshot);
   } catch (err) { next(err); }
 });

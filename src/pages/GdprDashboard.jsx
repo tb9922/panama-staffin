@@ -8,7 +8,7 @@ import {
   getRetentionSchedule, scanRetention,
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
-  getAccessLog, getCurrentHome,
+  getAccessLog, getCurrentHome, getLoggedInUser,
   createSnapshot, getSnapshots, signOffSnapshot, } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
@@ -33,6 +33,7 @@ const TABS = [
 export default function GdprDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
+  const canEditSnapshots = canWrite('compliance');
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -251,6 +252,18 @@ export default function GdprDashboard() {
     }
   }
 
+  async function handleGdprSignOff(snapshotId) {
+    const notes = window.prompt('Sign-off notes (optional):');
+    if (notes === null) return;
+    try {
+      await signOffSnapshot(home, snapshotId, notes || undefined);
+      const updated = await getSnapshots(home, 'gdpr');
+      setGdprSnapshots(updated);
+    } catch (e) {
+      alert(e.message || 'Sign-off failed');
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
@@ -325,7 +338,7 @@ export default function GdprDashboard() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Compliance Score</h2>
             <div className="flex items-center gap-2">
-              {canEdit && (
+              {canEditSnapshots && (
                 <button onClick={handleTakeGdprSnapshot} disabled={snapshotSaving} className={`${BTN.ghost} ${BTN.xs}`}>
                   {snapshotSaving ? 'Saving...' : 'Take Snapshot'}
                 </button>
@@ -346,6 +359,28 @@ export default function GdprDashboard() {
             </ul>
           )}
         </div>
+
+        {/* Snapshot History */}
+        {gdprSnapshots.length > 0 && (
+          <div className={`${CARD.padded} mb-4`}>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h3>
+            <div className="space-y-1">
+              {gdprSnapshots.slice(0, 5).map(s => (
+                <div key={s.id} className="flex items-center justify-between text-xs text-gray-600 py-1 border-b border-gray-50">
+                  <span>{new Date(s.computed_at).toLocaleDateString('en-GB')} — {s.overall_score}/100 ({s.band})</span>
+                  <div className="flex items-center gap-2">
+                    {s.signed_off_by
+                      ? <span className={BADGE.green}>Signed off by {s.signed_off_by}</span>
+                      : canEditSnapshots && s.computed_by !== getLoggedInUser()?.username && (
+                        <button onClick={() => handleGdprSignOff(s.id)} className={`${BTN.ghost} ${BTN.xs}`}>Sign Off</button>
+                      )
+                    }
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
