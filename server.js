@@ -45,6 +45,7 @@ import usersRouter from './routes/users.js';
 import bedsRouter from './routes/beds.js';
 import platformRouter from './routes/platform.js';
 import webhookRouter from './routes/webhooks.js';
+import assessmentRouter from './routes/assessment.js';
 import importRouter from './routes/import.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
@@ -119,6 +120,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/beds', bedsRouter);
 app.use('/api/platform', platformRouter);
 app.use('/api/webhooks', webhookRouter);
+app.use('/api/assessment', assessmentRouter);
 app.use('/api/import', importRouter);
 
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)

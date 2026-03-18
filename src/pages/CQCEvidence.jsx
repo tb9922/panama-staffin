@@ -11,9 +11,10 @@ import {
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
   getCqcEvidence, createCqcEvidence,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
+  createSnapshot, getSnapshots, signOffSnapshot,
 } from '../lib/api.js';
 import {
-  QUALITY_STATEMENTS, METRIC_DEFINITIONS,
+  QUALITY_STATEMENTS, METRIC_DEFINITIONS, ENGINE_VERSION,
   calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -107,6 +108,7 @@ export default function CQCEvidence() {
 function CQCEvidenceInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const homeSlug = getCurrentHome();
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
@@ -115,6 +117,8 @@ function CQCEvidenceInner({ data }) {
   const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
+  const [snapshots, setSnapshots] = useState([]);
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
 
   useDirtyGuard(showAddEvidence);
 
@@ -132,6 +136,12 @@ function CQCEvidenceInner({ data }) {
   }, []);
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
+
+  // Load snapshot history
+  useEffect(() => {
+    if (!homeSlug) return;
+    getSnapshots(homeSlug, 'cqc').then(setSnapshots).catch(() => {});
+  }, [homeSlug]);
 
   const today = useLiveDate();
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
@@ -162,6 +172,38 @@ function CQCEvidenceInner({ data }) {
 
   const bandColorMap = { green: 'emerald', blue: 'blue', amber: 'amber', red: 'red' };
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
+
+  async function handleTakeSnapshot() {
+    if (snapshotSaving || !score) return;
+    setSnapshotSaving(true);
+    try {
+      await createSnapshot(homeSlug, {
+        engine: 'cqc',
+        engine_version: ENGINE_VERSION,
+        window_from: formatDate(dateRange.from),
+        window_to: formatDate(dateRange.to),
+        overall_score: score.overallScore,
+        band: score.band.label,
+        result: { metrics: score.metrics, availableWeight: score.availableWeight },
+      });
+      const updated = await getSnapshots(homeSlug, 'cqc');
+      setSnapshots(updated);
+    } catch (e) {
+      console.error('Snapshot failed:', e.message);
+    } finally {
+      setSnapshotSaving(false);
+    }
+  }
+
+  async function handleSignOff(snapshotId) {
+    try {
+      await signOffSnapshot(homeSlug, snapshotId);
+      const updated = await getSnapshots(homeSlug, 'cqc');
+      setSnapshots(updated);
+    } catch (e) {
+      console.error('Sign-off failed:', e.message);
+    }
+  }
 
   function openAddEvidence(statementId) {
     setEvidenceForm({ quality_statement: statementId || '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '' });
@@ -249,6 +291,11 @@ function CQCEvidenceInner({ data }) {
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
         <div className="flex gap-2">
+          {canEdit && (
+            <button onClick={handleTakeSnapshot} disabled={snapshotSaving} className={`${BTN.secondary} ${BTN.sm}`}>
+              {snapshotSaving ? 'Saving...' : 'Take Snapshot'}
+            </button>
+          )}
           <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
           <button onClick={handleGeneratePDF} disabled={generating} className={BTN.primary}>
             {generating ? 'Generating...' : 'Generate Evidence Pack'}
@@ -289,6 +336,26 @@ function CQCEvidenceInner({ data }) {
           <div className="text-[10px] text-gray-500">Target &lt;10% — 15% weight</div>
         </div>
       </div>
+
+      {/* Snapshot History */}
+      {snapshots.length > 0 && (
+        <div className={`${CARD.padded} mb-5`}>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h3>
+          <div className="space-y-1">
+            {snapshots.slice(0, 5).map(s => (
+              <div key={s.id} className="flex items-center justify-between text-xs text-gray-600 py-1 border-b border-gray-50">
+                <span>{new Date(s.computed_at).toLocaleDateString('en-GB')} — {s.overall_score}% ({s.band})</span>
+                <div className="flex items-center gap-2">
+                  {s.signed_off_by
+                    ? <span className={BADGE.green}>Signed off by {s.signed_off_by}</span>
+                    : canEdit && <button onClick={() => handleSignOff(s.id)} className={`${BTN.ghost} ${BTN.xs}`}>Sign Off</button>
+                  }
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Date Range Toggle */}
       <div className="flex gap-1 mb-5 print:hidden">
