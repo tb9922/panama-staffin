@@ -137,7 +137,9 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
       const from = addDays(to, -27);
       dateRange = { from, to, days: 28 };
     }
-    const result = calculateComplianceScore(data, dateRange, today);
+    // asOfDate = window end date (for historical snapshots) or today (for current snapshots)
+    const asOfDate = windowTo || today;
+    const result = calculateComplianceScore(data, dateRange, asOfDate);
     return {
       engine_version: result.engine_version,
       overall_score: result.overallScore,

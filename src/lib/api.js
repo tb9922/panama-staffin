@@ -626,8 +626,9 @@ export async function assessBreach(homeSlug, id) {
 }
 
 // Retention
-export async function getRetentionSchedule() {
-  return apiFetch(`${API_BASE}/gdpr/retention`, { headers: authHeaders() });
+export async function getRetentionSchedule(homeSlug) {
+  const home = homeSlug || getCurrentHome();
+  return apiFetch(`${API_BASE}/gdpr/retention?home=${h(home)}`, { headers: authHeaders() });
 }
 export async function scanRetention(homeSlug) {
   return apiFetch(`${API_BASE}/gdpr/retention?scan=true&home=${h(homeSlug)}`, { headers: authHeaders() });

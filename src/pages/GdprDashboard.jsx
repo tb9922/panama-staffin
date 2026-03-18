@@ -75,15 +75,16 @@ export default function GdprDashboard() {
     if (!home) return;
     setLoading(true);
     try {
-      const [req, br, ret, con, comp, acc, ropa, dpia] = await Promise.all([
+      const [req, br, ret, con, comp, acc, ropa, dpia, retScan] = await Promise.all([
         getDataRequests(home),
         getDataBreaches(home),
-        getRetentionSchedule(),
+        getRetentionSchedule().catch(() => []),
         getConsentRecords(home),
         getDPComplaints(home),
-        getAccessLog(200),
+        getAccessLog(200).catch(() => []),  // admin-only — graceful fallback for non-admin
         getRopaActivities(home).catch(() => ({ rows: [] })),
         getDpiaAssessments(home).catch(() => ({ rows: [] })),
+        scanRetention(home).catch(() => []),  // auto-scan on load for accurate live score
       ]);
       setRequests(req);
       setBreaches(br);
@@ -93,6 +94,7 @@ export default function GdprDashboard() {
       setAccessLogData(acc);
       setRopaData(ropa?.rows || []);
       setDpiaData(dpia?.rows || []);
+      setRetentionScan(retScan);
       setError(null);
     } catch (e) {
       setError(e.message);

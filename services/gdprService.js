@@ -220,8 +220,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
 
     if (subjectType === 'resident') {
       const queries = [
-        conn.query(`SELECT * FROM dols WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+        // Query by resident_name (consistent with erasure path identity resolution)
+        subjectName
+          ? conn.query(`SELECT * FROM dols WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          : { rows: [] },
+        subjectName
+          ? conn.query(`SELECT * FROM mca_assessments WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          : { rows: [] },
         // Finance: resident record, invoices, fee changes, invoice lines, payment schedule, chase
         subjectName
           ? conn.query(`SELECT * FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])

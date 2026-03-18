@@ -255,7 +255,8 @@ router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAc
 // ── Retention Schedule ───────────────────────────────────────────────────────
 
 // GET /api/gdpr/retention — schedule + optional scan
-router.get('/retention', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+// Retention schedule is global (not per-home), but gated by GDPR module access.
+router.get('/retention', readRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
     if (req.query.scan === 'true') {
       if (!req.query.home) return res.status(400).json({ error: 'home parameter required for scan' });

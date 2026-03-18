@@ -636,7 +636,7 @@ describe('DP Complaints — /complaints', () => {
 
 describe('Retention Schedule — /retention', () => {
   it('GET returns schedule without scan', async () => {
-    const res = await adminGet('/retention').expect(200);
+    const res = await adminGet(`/retention?home=${homeASlug}`).expect(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
 
@@ -649,8 +649,8 @@ describe('Retention Schedule — /retention', () => {
     expect(res.body).toBeDefined();
   });
 
-  it('viewer cannot access retention (403)', async () => {
-    await viewerGet('/retention').expect(403);
+  it('user with gdpr access can view retention schedule', async () => {
+    await adminGet(`/retention?home=${homeASlug}`).expect(200);
   });
 });
 
