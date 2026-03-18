@@ -415,7 +415,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28) {
   y += 6;
 
   const bandLabel = score.band.label;
-  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
+  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'blue' ? [37, 99, 235] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
 
   doc.setFontSize(28);
   doc.setTextColor(...scoreColor);
@@ -1176,7 +1176,7 @@ export function generateBoardPackPDF(data, dateRangeDays = 28) {
   // CQC compliance score
   const score = calculateComplianceScore(data, dateRange, today);
   const bandLabel = score.band.label;
-  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
+  const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'blue' ? [37, 99, 235] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');

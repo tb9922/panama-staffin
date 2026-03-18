@@ -35,6 +35,7 @@ const RANGE_OPTIONS = [
 
 const SCORE_STYLES = {
   emerald: { card: 'rounded-xl p-3 bg-emerald-50 border border-emerald-200', label: 'text-xs font-medium text-emerald-600', value: 'text-3xl font-bold text-emerald-700 mt-0.5' },
+  blue:    { card: 'rounded-xl p-3 bg-blue-50 border border-blue-200',       label: 'text-xs font-medium text-blue-600',    value: 'text-3xl font-bold text-blue-700 mt-0.5' },
   amber:   { card: 'rounded-xl p-3 bg-amber-50 border border-amber-200',     label: 'text-xs font-medium text-amber-600',   value: 'text-3xl font-bold text-amber-700 mt-0.5' },
   red:     { card: 'rounded-xl p-3 bg-red-50 border border-red-200',         label: 'text-xs font-medium text-red-600',     value: 'text-3xl font-bold text-red-700 mt-0.5' },
 };
@@ -159,7 +160,7 @@ function CQCEvidenceInner({ data }) {
     return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
   }
 
-  const bandColorMap = { green: 'emerald', amber: 'amber', red: 'red' };
+  const bandColorMap = { green: 'emerald', blue: 'blue', amber: 'amber', red: 'red' };
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
 
   function openAddEvidence(statementId) {
