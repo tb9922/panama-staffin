@@ -16,7 +16,7 @@ import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const EMPTY_DOLS_FORM = {
-  resident_name: '', dob: '', room_number: '',
+  resident_name: '', resident_id: null, dob: '', room_number: '',
   application_type: 'dols', application_date: '',
   authorised: false, authorisation_date: '', expiry_date: '',
   authorisation_number: '', authorising_authority: '',
@@ -26,7 +26,7 @@ const EMPTY_DOLS_FORM = {
 };
 
 const EMPTY_MCA_FORM = {
-  resident_name: '', assessment_date: '', assessor: '',
+  resident_name: '', resident_id: null, assessment_date: '', assessor: '',
   decision_area: '', lacks_capacity: false, best_interest_decision: '',
   next_review_date: '', notes: '',
 };
@@ -113,6 +113,8 @@ export default function DolsTracker() {
     }
     setForm({
       resident_name: dol.resident_name || '',
+      resident_id: dol.resident_id || null,
+      _version: dol.version,
       dob: dol.dob || '',
       room_number: dol.room_number || '',
       application_type: dol.application_type || 'dols',
@@ -169,6 +171,8 @@ export default function DolsTracker() {
     setEditingId(mca.id);
     setForm({
       resident_name: mca.resident_name || '',
+      resident_id: mca.resident_id || null,
+      _version: mca.version,
       assessment_date: mca.assessment_date || '',
       assessor: mca.assessor || '',
       decision_area: mca.decision_area || '',

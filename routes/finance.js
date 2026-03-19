@@ -82,7 +82,8 @@ const invoiceBodySchema = z.object({
   lines: z.array(invoiceLineSchema).optional(),
 });
 
-const invoiceUpdateSchema = invoiceBodySchema.partial().extend({
+// Strip status from update — status changes only via dedicated payment/void routes
+const invoiceUpdateSchema = invoiceBodySchema.partial().omit({ status: true }).extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
@@ -118,7 +119,8 @@ const expenseBodySchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const expenseUpdateSchema = expenseBodySchema.partial().extend({
+// Strip status from update — status changes only via dedicated approve/reject routes
+const expenseUpdateSchema = expenseBodySchema.partial().omit({ status: true }).extend({
   _version: z.number().int().nonnegative().optional(),
 });
 

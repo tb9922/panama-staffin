@@ -765,18 +765,18 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     // Anonymise bed occupancy + finance records
     if (residentPk) {
       await client.query(
-        `UPDATE bed_transitions SET reason = NULL
-         WHERE home_id = $1 AND resident_id = $2`,
-        [homeId, residentPk]
-      );
-    }
-    // Finance invoices — always attempt via PK (invoices always have resident_id FK)
-    if (residentPk) {
+        `UPDATE bed_transitions SET reason = NULL WHERE home_id = $1 AND resident_id = $2`,
+        [homeId, residentPk]);
       await client.query(
-        `UPDATE finance_invoices SET notes = NULL
-         WHERE home_id = $1 AND resident_id = $2 AND deleted_at IS NULL`,
-        [homeId, residentPk]
-      );
+        `UPDATE finance_invoices SET notes = NULL WHERE home_id = $1 AND resident_id = $2 AND deleted_at IS NULL`,
+        [homeId, residentPk]);
+      // Finance detail tables — fee changes, invoice chase
+      await client.query(
+        `UPDATE finance_fee_changes SET notes = NULL WHERE home_id = $1 AND resident_id = $2`,
+        [homeId, residentPk]);
+      await client.query(
+        `UPDATE finance_invoice_chase SET notes = NULL WHERE invoice_id IN (SELECT id FROM finance_invoices WHERE home_id = $1 AND resident_id = $2)`,
+        [homeId, residentPk]);
     }
 
     // Mark the request as completed

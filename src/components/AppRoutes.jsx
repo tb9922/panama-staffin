@@ -78,11 +78,11 @@ export default function AppRoutes() {
 
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="staff"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/training" element={<RouteErrorBoundary><RequireModule module="staff"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/onboarding" element={<RouteErrorBoundary><RequireModule module="compliance"><OnboardingTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/training" element={<RouteErrorBoundary><RequireModule module="compliance"><TrainingMatrix /></RequireModule></RouteErrorBoundary>} />
       <Route path="/sick-trends" element={<RouteErrorBoundary><RequireModule module="staff"><SickTrends /></RequireModule></RouteErrorBoundary>} />
       <Route path="/fatigue" element={<RouteErrorBoundary><RequireModule module="staff"><FatigueTracker /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/care-cert" element={<RouteErrorBoundary><RequireModule module="staff"><CareCertificateTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/care-cert" element={<RouteErrorBoundary><RequireModule module="compliance"><CareCertificateTracker /></RequireModule></RouteErrorBoundary>} />
 
       {/* Compliance */}
       <Route path="/cqc" element={<RouteErrorBoundary><RequireModule module="compliance"><CQCEvidence /></RequireModule></RouteErrorBoundary>} />
@@ -95,7 +95,7 @@ export default function AppRoutes() {
       <Route path="/risks" element={<RouteErrorBoundary><RequireModule module="governance"><RiskRegister /></RequireModule></RouteErrorBoundary>} />
       <Route path="/policies" element={<RouteErrorBoundary><RequireModule module="governance"><PolicyReviewTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/speak-up" element={<RouteErrorBoundary><RequireModule module="governance"><WhistleblowingTracker /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/maintenance" element={<RouteErrorBoundary><RequireModule module="governance"><MaintenanceTracker /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/maintenance" element={<RouteErrorBoundary><RequireModule module="compliance"><MaintenanceTracker /></RequireModule></RouteErrorBoundary>} />
 
       {/* HR */}
       <Route path="/hr"                element={<RouteErrorBoundary><RequireModule module="hr"><HrDashboard /></RequireModule></RouteErrorBoundary>} />
@@ -140,7 +140,7 @@ export default function AppRoutes() {
 
       {/* Reports & System */}
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/audit" element={<RouteErrorBoundary><RequireModule module="reports"><AuditLog /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><UserManagement /></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />
 

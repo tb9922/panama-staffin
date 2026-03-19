@@ -99,7 +99,7 @@ export async function upsert(homeId, entry, client) {
        snap_minutes_saved = EXCLUDED.snap_minutes_saved,
        break_minutes      = EXCLUDED.break_minutes,
        payable_hours      = EXCLUDED.payable_hours,
-       status             = CASE WHEN timesheet_entries.status = 'locked' THEN timesheet_entries.status
+       status             = CASE WHEN timesheet_entries.status IN ('locked', 'approved') THEN timesheet_entries.status
                                  ELSE EXCLUDED.status END,
        notes              = EXCLUDED.notes,
        updated_at         = NOW()
@@ -222,7 +222,7 @@ export async function bulkUpsert(homeId, entries, client) {
        snap_minutes_saved = EXCLUDED.snap_minutes_saved,
        break_minutes      = EXCLUDED.break_minutes,
        payable_hours      = EXCLUDED.payable_hours,
-       status             = CASE WHEN timesheet_entries.status = 'locked' THEN timesheet_entries.status
+       status             = CASE WHEN timesheet_entries.status IN ('locked', 'approved') THEN timesheet_entries.status
                                  ELSE EXCLUDED.status END,
        notes              = EXCLUDED.notes,
        updated_at         = NOW()

@@ -169,6 +169,9 @@ router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireHomeA
     if (!request.identity_verified) {
       return res.status(400).json({ error: 'Identity must be verified before erasure' });
     }
+    if (request.subject_type === 'resident' && !request.subject_name?.trim()) {
+      return res.status(400).json({ error: 'Resident name is required for resident erasure. Update the request with the resident name before executing.' });
+    }
     let result;
     if (request.subject_type === 'staff') {
       result = await gdprService.executeErasure(

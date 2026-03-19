@@ -171,7 +171,7 @@ export async function upsertDols(homeId, data) {
 
 // Column name whitelist for dynamic SQL — DoLS
 const ALLOWED_DOLS_COLUMNS = new Set([
-  'resident_name', 'dob', 'room_number',
+  'resident_name', 'resident_id', 'dob', 'room_number',
   'application_type', 'application_date', 'authorised',
   'authorisation_date', 'expiry_date', 'authorisation_number', 'authorising_authority',
   'restrictions', 'reviewed_date', 'review_status', 'next_review_date',
@@ -299,7 +299,7 @@ export async function upsertMca(homeId, data) {
 
 // Column name whitelist for dynamic SQL — MCA
 const ALLOWED_MCA_COLUMNS = new Set([
-  'resident_name', 'assessment_date', 'assessor',
+  'resident_name', 'resident_id', 'assessment_date', 'assessor',
   'decision_area', 'lacks_capacity', 'best_interest_decision',
   'next_review_date', 'notes',
 ]);

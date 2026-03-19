@@ -160,7 +160,7 @@ export async function upsert(homeId, data) {
 
 // Column name whitelist for dynamic SQL
 const ALLOWED_COLUMNS = new Set([
-  'date', 'raised_by', 'raised_by_name', 'category', 'title', 'description',
+  'date', 'raised_by', 'raised_by_name', 'resident_id', 'category', 'title', 'description',
   'acknowledged_date', 'response_deadline', 'status', 'investigator',
   'investigation_notes', 'resolution', 'resolution_date', 'outcome_shared',
   'root_cause', 'improvements', 'lessons_learned',
