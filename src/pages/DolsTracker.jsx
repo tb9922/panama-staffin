@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
@@ -49,18 +49,22 @@ export default function DolsTracker() {
 
   const today = useLiveDate();
   const homeSlug = getCurrentHome();
+  const isMounted = useRef(true);
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;
     try {
       setError(null);
       const result = await getDols(homeSlug);
-      setDols(result.dols || []);
-      setMcaAssessments(result.mcaAssessments || []);
+      if (isMounted.current) {
+        setDols(result.dols || []);
+        setMcaAssessments(result.mcaAssessments || []);
+      }
     } catch (err) {
-      setError(err.message);
+      if (isMounted.current) setError(err.message);
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   }, [homeSlug]);
 
