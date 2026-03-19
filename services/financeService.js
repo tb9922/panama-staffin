@@ -489,6 +489,9 @@ export async function softDeleteInvoice(id, homeId, username) {
     const deleted = await financeRepo.softDelete('invoice', id, homeId, client);
     if (deleted) {
       await financeRepo.deleteInvoiceLines(id, homeId, client);
+      if (invoice.resident_id) {
+        await financeRepo.recalculateResidentBalance(invoice.resident_id, homeId, client);
+      }
       logger.info({ homeId, invoiceId: id, deletedBy: username }, 'Invoice soft-deleted');
     }
     return deleted;

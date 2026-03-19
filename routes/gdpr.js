@@ -127,6 +127,9 @@ router.put('/requests/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findRequestById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Request not found' });
+    if (parsed.data.status === 'completed' && existing.request_type === 'erasure') {
+      return res.status(400).json({ error: 'Erasure requests must be completed via /execute, not manually' });
+    }
     const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

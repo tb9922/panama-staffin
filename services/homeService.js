@@ -38,16 +38,20 @@ export async function assembleData(homeSlug, userRole) {
     day_notes: dayNotes,
   };
 
-  // Strip edit_lock_pin from config for non-admin roles — prevents any user
-  // from reading the PIN via DevTools network tab.
-  if (userRole !== 'admin' && payload.config?.edit_lock_pin) {
+  // edit_lock_pin: home_manager only (and legacy 'admin' string used by tests).
+  // deputy_manager and other roles must not see the PIN via DevTools network tab.
+  const hasPinAccess = userRole === 'admin' || userRole === 'home_manager';
+  if (!hasPinAccess && payload.config?.edit_lock_pin) {
     payload.config = { ...payload.config };
     delete payload.config.edit_lock_pin;
   }
 
-  // Viewer role: allowlist — only scheduling-relevant fields pass through.
-  // Denylist is unsafe because new PII fields would leak until explicitly blocked.
-  if (userRole !== 'admin') {
+  // PII allowlist — only roles with legitimate HR/payroll/staff-management access
+  // receive NI numbers, date_of_birth, and hourly_rate.
+  // Denylist is unsafe: new PII fields would leak until explicitly blocked.
+  // Roles excluded: shift_coordinator, viewer, staff_member (and any unknown role).
+  const PII_ROLES = new Set(['admin', 'home_manager', 'deputy_manager', 'hr_officer', 'finance_officer', 'training_lead']);
+  if (!PII_ROLES.has(userRole)) {
     payload.staff = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
       ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
   }

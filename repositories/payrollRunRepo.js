@@ -155,10 +155,12 @@ export async function updateStatus(runId, homeId, status, extra, client, version
 export async function updateTotals(runId, homeId, totals, client, version) {
   const conn = client || pool;
   const params = [totals.total_gross, totals.total_enhancements, totals.total_sleep_ins, totals.staff_count, runId, homeId];
+  // Only advance to 'calculated' from draft/calculated — never downgrade an approved/locked run
   let sql = `UPDATE payroll_runs
      SET total_gross = $1, total_enhancements = $2, total_sleep_ins = $3,
-         staff_count = $4, calculated_at = NOW(), status = 'calculated', updated_at = NOW(),
-         version = version + 1
+         staff_count = $4, calculated_at = NOW(),
+         status = CASE WHEN status IN ('draft', 'calculated') THEN 'calculated' ELSE status END,
+         updated_at = NOW(), version = version + 1
      WHERE id = $5 AND home_id = $6`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ` RETURNING ${RUN_COLS}`;
@@ -269,9 +271,10 @@ export async function updateLine(lineId, homeId, data, client) {
        sleep_in_count = $11, sleep_in_pay = $12,
        on_call_hours = $13, on_call_enhancement = $14,
        total_hours = $15, total_enhancements = $16, gross_pay = $17,
-       nmw_compliant = $18, nmw_lowest_rate = $19, notes = $20
-     WHERE id = $21
-       AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $22)
+       nmw_compliant = $18, nmw_lowest_rate = $19, notes = $20,
+       tax_code = $21, student_loan_plan = $22
+     WHERE id = $23
+       AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE home_id = $24)
      RETURNING ${LINE_COLS}`,
     [
       data.base_hours, data.base_pay,
@@ -283,6 +286,7 @@ export async function updateLine(lineId, homeId, data, client) {
       data.on_call_hours, data.on_call_enhancement,
       data.total_hours, data.total_enhancements, data.gross_pay,
       data.nmw_compliant, data.nmw_lowest_rate ?? null, data.notes || null,
+      data.tax_code ?? null, data.student_loan_plan ?? null,
       lineId, homeId,
     ],
   );

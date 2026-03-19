@@ -1,6 +1,6 @@
 // All 17 domain validators moved verbatim from server.js.
 // No logic changes — these are pure functions operating on the assembled data object.
-import { RIDDOR_CATEGORIES } from '../shared/incidents.js';
+import { RIDDOR_CATEGORIES, isCqcNotificationOverdue, isDutyOfCandourOverdue } from '../shared/incidents.js';
 import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
 import { getMinimumWageRate } from '../shared/nmw.js';
 
@@ -214,12 +214,9 @@ function validateIncidents(data, warnings, todayStr) {
   const now = new Date();
   let overdueCqc = 0, overdueRiddor = 0, staleInvestigations = 0, overdueDoc = 0, overdueActions = 0;
 
+  const bankHolidays = data.config?.bank_holidays || [];
   for (const inc of data.incidents) {
-    if (inc.cqc_notifiable && !inc.cqc_notified && inc.date) {
-      const deadlineHours = inc.cqc_notification_deadline === 'immediate' ? 24 : 72;
-      const deadline = new Date(new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z').getTime() + deadlineHours * 3600000);
-      if (now > deadline) overdueCqc++;
-    }
+    if (isCqcNotificationOverdue(inc, now)) overdueCqc++;
     if (inc.riddor_reportable && !inc.riddor_reported && inc.date) {
       const cat = RIDDOR_CATEGORIES.find(r => r.id === inc.riddor_category);
       // deadlineDays=0 means "immediate" — give 1 day grace, same logic as incidents.js isRiddorOverdue
@@ -230,10 +227,7 @@ function validateIncidents(data, warnings, todayStr) {
     if ((inc.investigation_status === 'open' || inc.investigation_status === 'under_review') && inc.date) {
       if (Math.floor((now - new Date(inc.date + 'T00:00:00Z')) / 86400000) > 14) staleInvestigations++;
     }
-    if (inc.duty_of_candour_applies && !inc.candour_notification_date && inc.date) {
-      const deadline = new Date(new Date(inc.date + 'T00:00:00Z').getTime() + 14 * 86400000);
-      if (now > deadline) overdueDoc++;
-    }
+    if (isDutyOfCandourOverdue(inc, now, bankHolidays)) overdueDoc++;
     for (const action of (inc.corrective_actions || [])) {
       if (action.status !== 'completed' && action.due_date && action.due_date < todayStr) overdueActions++;
     }

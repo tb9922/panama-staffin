@@ -26,7 +26,7 @@ function downloadCSV(filename, headers, rows) {
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
   hourly_rate: 12.21, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
-  contract_hours: null, al_entitlement: null, al_carryover: 0,
+  contract_hours: null, al_entitlement: null, al_carryover: 0, date_of_birth: null,
 };
 
 export default function StaffRegister() {
@@ -364,13 +364,20 @@ export default function StaffRegister() {
                     onChange={e => setNewStaff({ ...newStaff, start_date: e.target.value })}
                     className={INPUT.base} />
                 </div>
-                <div className="flex items-end pb-2">
-                  <label className="flex items-center text-sm">
-                    <input type="checkbox" checked={newStaff.wtr_opt_out}
-                      onChange={e => setNewStaff({ ...newStaff, wtr_opt_out: e.target.checked })} className="mr-2" />
-                    WTR Opt-Out
-                  </label>
+                <div>
+                  <label className={INPUT.label}>Date of Birth</label>
+                  <input type="date" value={newStaff.date_of_birth || ''}
+                    onChange={e => setNewStaff({ ...newStaff, date_of_birth: e.target.value || null })}
+                    className={INPUT.base} />
+                  <p className="text-xs text-gray-400 mt-0.5">For NMW age bracket</p>
                 </div>
+              </div>
+              <div className="flex items-center">
+                <label className="flex items-center text-sm">
+                  <input type="checkbox" checked={newStaff.wtr_opt_out}
+                    onChange={e => setNewStaff({ ...newStaff, wtr_opt_out: e.target.checked })} className="mr-2" />
+                  WTR Opt-Out
+                </label>
               </div>
               <div>
                 <label className={INPUT.label}>Notes</label>

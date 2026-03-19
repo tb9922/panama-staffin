@@ -29,7 +29,7 @@ const TABS = [
 
 const EMPTY_FORM = {
   date: '', time: '', location: '', type: '', severity: 'minor',
-  description: '', person_affected: 'resident', person_affected_name: '',
+  description: '', person_affected: 'resident', person_affected_name: '', resident_id: null,
   staff_involved: [], immediate_action: '', medical_attention: false, hospital_attendance: false,
   witnesses: [],
   cqc_notifiable: false, cqc_notification_type: '', cqc_notification_deadline: '',
@@ -169,6 +169,8 @@ export default function IncidentTracker() {
       corrective_actions: inc.corrective_actions || [],
       lessons_learned: inc.lessons_learned || '',
       investigation_closed_date: inc.investigation_closed_date || '',
+      resident_id: inc.resident_id || null,
+      _version: inc.version,
     });
     setActiveTab(inc.frozen_at ? 'addenda' : 'details');
     setShowModal(true);
@@ -479,7 +481,7 @@ export default function IncidentTracker() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={INPUT.label}>Person Affected</label>
-                    <select className={INPUT.select} value={form.person_affected} onChange={e => setForm({ ...form, person_affected: e.target.value })}>
+                    <select className={INPUT.select} value={form.person_affected} onChange={e => setForm({ ...form, person_affected: e.target.value, resident_id: null })}>
                       {PERSON_AFFECTED_TYPES.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>

@@ -557,6 +557,11 @@ describe('Password management', () => {
 
 describe('Token revocation', () => {
   it('admin can revoke a user tokens', async () => {
+    // Defensive cleanup in case a previous run left state behind
+    await pool.query(`DELETE FROM token_denylist WHERE username = 'auth-test-revokee'`);
+    await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-revokee'`);
+    await pool.query(`DELETE FROM users WHERE username = 'auth-test-revokee'`);
+
     // Create a temporary user and login
     const hash = await bcrypt.hash('RevokeTest!2025', 4);
     const { rows: [u] } = await pool.query(

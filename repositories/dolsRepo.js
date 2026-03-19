@@ -18,7 +18,7 @@ const MCA_COLS = `id, home_id, resident_name, resident_id, assessment_date, asse
 async function resolveResidentId(homeId, residentName, conn) {
   if (!residentName) return null;
   const { rows } = await conn.query(
-    `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL LIMIT 1`,
+    `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL ORDER BY id LIMIT 1`,
     [homeId, residentName]
   );
   return rows[0]?.id || null;
@@ -27,7 +27,7 @@ async function resolveResidentId(homeId, residentName, conn) {
 function shapeDolsRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
-    resident_name: row.resident_name, dob: row.dob, room_number: row.room_number,
+    resident_name: row.resident_name, resident_id: row.resident_id || null, dob: row.dob, room_number: row.room_number,
     application_type: row.application_type, application_date: row.application_date,
     authorised: row.authorised, authorisation_date: row.authorisation_date, expiry_date: row.expiry_date,
     authorisation_number: row.authorisation_number, authorising_authority: row.authorising_authority,
@@ -40,7 +40,7 @@ function shapeDolsRow(row) {
 function shapeMcaRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
-    resident_name: row.resident_name, assessment_date: row.assessment_date, assessor: row.assessor,
+    resident_name: row.resident_name, resident_id: row.resident_id || null, assessment_date: row.assessment_date, assessor: row.assessor,
     decision_area: row.decision_area, lacks_capacity: row.lacks_capacity,
     best_interest_decision: row.best_interest_decision, next_review_date: row.next_review_date,
     notes: row.notes, updated_at: ts(row.updated_at),

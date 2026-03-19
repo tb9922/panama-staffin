@@ -150,6 +150,19 @@ export default function PayrollDetail() {
     }
   }
 
+  async function handleSummaryPdf() {
+    setAction('exporting');
+    setError(null);
+    try {
+      const period = run ? `${run.period_start}_${run.period_end}` : runId;
+      await downloadWithAuth(getPayrollSummaryPdfUrl(homeSlug, runId), `payroll_summary_${period}.pdf`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAction(null);
+    }
+  }
+
   async function handleExport(format) {
     setAction('exporting');
     setError(null);
@@ -264,10 +277,7 @@ export default function PayrollDetail() {
               </button>
               <button
                 className={BTN.secondary}
-                onClick={() => downloadWithAuth(
-                  getPayrollSummaryPdfUrl(homeSlug, runId),
-                  `payroll_summary_${run.period_start}_${run.period_end}.pdf`,
-                )}
+                onClick={handleSummaryPdf}
                 disabled={isBusy}
               >
                 Summary PDF

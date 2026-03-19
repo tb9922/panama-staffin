@@ -191,7 +191,7 @@ export async function upsertOne(homeId, staff, client) {
  * @param {number} [version] — optimistic lock version (optional)
  * @returns {object|null} shaped staff row, or null if not found / version conflict
  */
-export async function updateOne(homeId, staffId, fields, version) {
+export async function updateOne(homeId, staffId, fields, version, client) {
   const setClauses = [];
   const params = [homeId, staffId];
   const settable = {
@@ -210,8 +210,9 @@ export async function updateOne(homeId, staffId, fields, version) {
       setClauses.push(`${col} = $${params.length}${typeCast}`);
     }
   }
+  const conn = client || pool;
   if (setClauses.length === 0) {
-    const { rows } = await pool.query(
+    const { rows } = await conn.query(
       `SELECT ${STAFF_COLS} FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
       [homeId, staffId]
     );
@@ -222,7 +223,7 @@ export async function updateOne(homeId, staffId, fields, version) {
   let sql = `UPDATE staff SET ${setClauses.join(', ')} WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`;
   if (version != null) { params.push(version); sql += ` AND version = $${params.length}`; }
   sql += ` RETURNING ${STAFF_COLS}`;
-  const { rows, rowCount } = await pool.query(sql, params);
+  const { rows, rowCount } = await conn.query(sql, params);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeRow(rows[0]) : null;
 }

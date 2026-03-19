@@ -25,6 +25,8 @@ export default function AuditLog() {
           e.details || '',
         ]),
       }]);
+    } catch (e) {
+      setError(e.message);
     } finally {
       setExporting(false);
     }
@@ -57,7 +59,7 @@ export default function AuditLog() {
             ) : log.length === 0 ? (
               <tr><td colSpan={5} className={TABLE.empty}>No audit entries yet</td></tr>
             ) : log.map((entry, i) => (
-              <tr key={i} className={TABLE.tr}>
+              <tr key={entry.id ?? `${entry.ts}-${i}`} className={TABLE.tr}>
                 <td className={`${TABLE.td} text-xs font-mono text-gray-500`}>{new Date(entry.ts).toLocaleString('en-GB')}</td>
                 <td className={TABLE.td}>
                   <span className={entry.action === 'login' ? BADGE.blue : BADGE.green}>{entry.action}</span>

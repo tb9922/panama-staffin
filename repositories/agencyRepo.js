@@ -70,9 +70,9 @@ function shapeShift(row) {
     agency_name: row.agency_name, // joined from providers
     date: toDate(row.date),
     shift_code: row.shift_code,
-    hours: parseFloat(row.hours),
-    hourly_rate: parseFloat(row.hourly_rate),
-    total_cost: parseFloat(row.total_cost),
+    hours: row.hours != null ? parseFloat(row.hours) : null,
+    hourly_rate: row.hourly_rate != null ? parseFloat(row.hourly_rate) : null,
+    total_cost: row.total_cost != null ? parseFloat(row.total_cost) : null,
     worker_name: row.worker_name,
     invoice_ref: row.invoice_ref,
     reconciled: row.reconciled,

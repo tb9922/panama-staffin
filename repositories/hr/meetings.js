@@ -55,7 +55,8 @@ export async function updateMeeting(id, homeId, data, client, version) {
   }
   if (data.attendees !== undefined) { fields.push(`attendees = $${n}`); vals.push(JSON.stringify(data.attendees)); n++; }
   fields.push('version = version + 1');
-  if (fields.length === 1) {
+  fields.push('updated_at = NOW()');
+  if (fields.length === 2) {
     const { rows } = await conn.query(`SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2`, [id, homeId]);
     return shapeMeeting(rows[0]);
   }

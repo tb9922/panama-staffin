@@ -712,9 +712,10 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const pol = calculatePolicyCompliancePct(data, asOfDate);
   metrics.policyCompliancePct = { raw: pol.score, score: pol.score, detail: pol };
 
-  // Satisfaction score: direct %
+  // Satisfaction score: direct %. null when no surveys — do not default to 100
+  // (a false "perfect score" would inflate CQC caring scores when no data exists)
   const sat = calculateSatisfactionScore(data.complaint_surveys || [], fromStr, toStr);
-  metrics.satisfactionScore = { raw: sat.score ?? 100, score: sat.score ?? 100, detail: sat };
+  metrics.satisfactionScore = { raw: sat.score ?? null, score: sat.score ?? null, detail: sat };
 
   // Speak up culture: direct %
   const speakUp = calculateSpeakUpCulture(data, fromStr, toStr);

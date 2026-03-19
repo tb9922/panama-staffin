@@ -114,7 +114,8 @@ export async function updateStatus(bedId, homeId, statusData, client) {
        booked_from = $8,
        booked_until = $9,
        notes = COALESCE($10, notes),
-       updated_by = $11
+       updated_by = $11,
+       updated_at = NOW()
      WHERE id = $1 AND home_id = $2
      RETURNING ${BED_COLS}`,
     [bedId, homeId,

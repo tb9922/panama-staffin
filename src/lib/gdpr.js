@@ -1,7 +1,5 @@
 // GDPR / Data Protection — Pure Functions
 // UK GDPR compliance for care home special category data
-// Bump ENGINE_VERSION when scoring logic or control definitions change.
-export const ENGINE_VERSION = 'v1';
 
 // ── Engine Version ──────────────────────────────────────────────────────────
 // Bump when the scoring model changes materially (penalty weights, domain structure,
@@ -314,16 +312,21 @@ function evaluateDomain(domainId, data) {
       break;
     }
     case 'training': {
-      // Training data not available from GDPR module alone — mark based on available signals
-      // If consent records exist and breach handling is mature, training is implied
+      // Training data not available from GDPR module alone — mark based on available signals.
+      // Zero breaches is not evidence of training — only mature breach handling implies it.
       const hasMatureProcess = b.length > 0 && b.some(x => x.root_cause) && b.some(x => x.containment_actions);
-      controls.push({ id: 'dp_training_evidenced', label: 'Data protection awareness evidenced', evidenced: hasMatureProcess || b.length === 0, detail: hasMatureProcess ? 'Mature breach handling implies training' : 'Insufficient data to assess directly' });
+      controls.push({ id: 'dp_training_evidenced', label: 'Data protection awareness evidenced', evidenced: hasMatureProcess, detail: hasMatureProcess ? 'Mature breach handling implies training' : 'Insufficient data to assess directly' });
       break;
     }
     case 'security': {
-      // Security assessed through breach patterns and access logging
-      const repeatedBreaches = b.length >= 3;
-      controls.push({ id: 'no_repeated_breaches', label: 'No pattern of repeated breaches', evidenced: !repeatedBreaches, detail: `${b.length} total breaches` });
+      // Security assessed through breach patterns and access logging.
+      // Repeated-breach check uses a 12-month rolling window — historic breaches should not
+      // permanently penalise a home that has since improved its controls.
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+      const recentBreaches = b.filter(x => x.discovered_at && new Date(x.discovered_at) >= twelveMonthsAgo);
+      const repeatedBreaches = recentBreaches.length >= 3;
+      controls.push({ id: 'no_repeated_breaches', label: 'No pattern of repeated breaches (12 months)', evidenced: !repeatedBreaches, detail: `${recentBreaches.length} breach(es) in past 12 months` });
       controls.push({ id: 'breach_severity_managed', label: 'No critical uncontained breaches', evidenced: !b.some(x => x.severity === 'critical' && x.status === 'open'), detail: 'Checked' });
       break;
     }
@@ -356,9 +359,10 @@ export function calculateGdprControlsScore(data) {
   const overallScore = assessedWeight > 0 ? Math.round(weightedSum / assessedWeight) : 0;
   const band = getGdprScoreBand(overallScore);
 
-  // Check for critical floor: any domain at Inadequate caps overall at Requires Improvement
+  // Check for critical floor: any domain at Inadequate caps overall at Requires Improvement.
+  // Applies to both Good and Adequate — a single failing domain can't be averaged away.
   const hasInadequate = Object.values(domains).some(d => d.assessed && d.band.label === 'Inadequate');
-  const finalBand = hasInadequate && band.label === 'Good' ? GDPR_SCORE_BANDS[2] : band;
+  const finalBand = hasInadequate && band.min >= 70 ? GDPR_SCORE_BANDS[2] : band;
 
   // Keep legacy operational health score for backward compat
   const operationalHealth = calculateGdprComplianceScore(

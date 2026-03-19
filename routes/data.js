@@ -75,8 +75,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       return res.status(403).json({ error: 'Use /api/scheduling for staff member access' });
     }
 
-    const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
-    const data = await homeService.assembleData(req.home.slug, effectiveRole);
+    const data = await homeService.assembleData(req.home.slug, req.homeRole);
     res.json(data);
   } catch (err) {
     next(err);

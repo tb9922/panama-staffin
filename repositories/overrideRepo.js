@@ -133,8 +133,9 @@ export async function upsertOne(homeId, date, staffId, { shift, reason, source, 
  * @param {string} staffId
  * @returns {boolean} true if a row was deleted
  */
-export async function deleteOne(homeId, date, staffId) {
-  const { rowCount } = await pool.query(
+export async function deleteOne(homeId, date, staffId, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
     `DELETE FROM shift_overrides WHERE home_id=$1 AND date=$2 AND staff_id=$3`,
     [homeId, date, staffId]
   );
@@ -185,8 +186,9 @@ export async function upsertBulk(homeId, rows, client) {
  * @param {string} toDate    "YYYY-MM-DD"
  * @returns {number} rows deleted
  */
-export async function deleteForDateRange(homeId, fromDate, toDate) {
-  const { rowCount } = await pool.query(
+export async function deleteForDateRange(homeId, fromDate, toDate, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
     `DELETE FROM shift_overrides WHERE home_id=$1 AND date >= $2 AND date <= $3`,
     [homeId, fromDate, toDate]
   );

@@ -69,29 +69,35 @@ export async function pruneExpired() {
 }
 
 /**
- * Revoke all active tokens for a username by inserting a user-scoped sentinel.
- * The middleware checks scope='user' entries by username, blocking all tokens.
+ * Revoke all active tokens for a username by inserting a sentinel.
+ * scope='user' — password change / self-initiated: cleared on re-login.
+ * scope='admin' — admin-initiated: survives re-login so a terminated
+ *   employee cannot clear the block by authenticating with their password.
  * @param {string} username
+ * @param {string} [scope='user']
  * @param {object} [client]
  */
-export async function revokeAllForUser(username, client) {
+export async function revokeAllForUser(username, scope = 'user', client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO token_denylist (jti, username, expires_at, scope)
-     VALUES (gen_random_uuid(), $1, NOW() + INTERVAL '24 hours', 'user')
+     VALUES (gen_random_uuid(), $1, NOW() + INTERVAL '24 hours', $2)
      RETURNING jti`,
-    [username]
+    [username, scope]
   );
   return rows[0]?.jti;
 }
 
 /**
- * Remove all deny-list entries for a username.
- * Called on successful re-login to prevent old revoked tokens from lingering.
+ * Remove all deny-list entries for a username except admin-initiated revocations.
+ * Called on successful re-login to prevent stale sentinels (password change,
+ * role change) from blocking the freshly-issued token.
+ * scope='admin' entries are deliberately preserved: an attacker who
+ * knows the password cannot clear an admin block by re-logging in.
  * @param {string} username
  */
 export async function clearForUser(username) {
-  await pool.query('DELETE FROM token_denylist WHERE username = $1', [username]);
+  await pool.query("DELETE FROM token_denylist WHERE username = $1 AND scope != 'admin'", [username]);
 }
 
 /**
@@ -101,7 +107,7 @@ export async function clearForUser(username) {
  */
 export async function isUserRevoked(username) {
   const { rows } = await pool.query(
-    `SELECT 1 FROM token_denylist WHERE username = $1 AND scope = 'user' AND expires_at > NOW() LIMIT 1`,
+    `SELECT 1 FROM token_denylist WHERE username = $1 AND scope IN ('user', 'admin') AND expires_at > NOW() LIMIT 1`,
     [username]
   );
   return rows.length > 0;
@@ -123,7 +129,7 @@ export async function isDenied(jti, username) {
     const { rows } = await pool.query(
       `SELECT 1 FROM token_denylist
        WHERE (jti = $1 AND expires_at > NOW())
-          OR (username = $2 AND scope = 'user' AND expires_at > NOW())
+          OR (username = $2 AND scope IN ('user', 'admin') AND expires_at > NOW())
        LIMIT 1`,
       [jti, username || '']
     );
@@ -133,7 +139,7 @@ export async function isDenied(jti, username) {
   if (username) {
     const { rows } = await pool.query(
       `SELECT 1 FROM token_denylist
-       WHERE username = $1 AND scope = 'user' AND expires_at > NOW()
+       WHERE username = $1 AND scope IN ('user', 'admin') AND expires_at > NOW()
        LIMIT 1`,
       [username]
     );

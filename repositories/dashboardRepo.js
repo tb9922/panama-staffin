@@ -29,6 +29,7 @@ export async function getIncidentCounts(homeId) {
          COUNT(*) FILTER (
            WHERE duty_of_candour_applies = true
              AND candour_notification_date IS NULL
+             -- 10 working days ≈ 14 calendar days; exact check uses isDutyOfCandourOverdue in app layer
              AND date < CURRENT_DATE - INTERVAL '14 days'
          )::int AS doc_overdue
        FROM incidents

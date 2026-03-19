@@ -148,7 +148,7 @@ export default function ComplaintsTracker() {
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item });
+    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
     setActiveTab('details');
     setShowModal(true);
   }

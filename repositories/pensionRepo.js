@@ -108,7 +108,7 @@ function shapeEnrolment(row) {
     postponed_until: toDateStr(row.postponed_until),
     reassessment_date: toDateStr(row.reassessment_date),
     notes: row.notes || null,
-    updated_at: row.updated_at,
+    updated_at: row.updated_at ? row.updated_at.toISOString() : null,
   };
 }
 

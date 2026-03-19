@@ -4,15 +4,14 @@ import { requireAuth, requireAdmin, requireHomeAccess, requireModule } from '../
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
-import { readRateLimiter } from '../lib/rateLimiter.js';
+import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { zodError } from '../errors.js';
 
 const router = Router();
-router.use(readRateLimiter);
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100).optional();
 
-router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const raw = parseInt(req.query.limit, 10);
     const limit = Number.isFinite(raw) ? Math.min(10000, Math.max(1, raw)) : 100;
@@ -40,7 +39,7 @@ const purgeSchema = z.object({
   days: z.coerce.number().int().min(30).max(3650).default(2555),
 });
 
-router.delete('/purge', requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
+router.delete('/purge', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
   try {
     const parsed = purgeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -57,7 +56,7 @@ const reportDownloadSchema = z.object({
   dateRange: z.string().max(100).optional().default(''),
 });
 
-router.post('/report-download', requireAuth, requireHomeAccess, requireModule('reports', 'read'), async (req, res, next) => {
+router.post('/report-download', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('reports', 'read'), async (req, res, next) => {
   try {
     const parsed = reportDownloadSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);

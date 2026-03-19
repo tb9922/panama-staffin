@@ -105,7 +105,7 @@ router.post('/revoke', requireAuth, requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid request body' });
     }
     const { username } = parsed.data;
-    await authService.revokeUser(username);
+    await authService.revokeUser(username, 'admin');
     await auditService.log('token_revoke', '-', req.user.username, { revoked_user: username });
     res.json({ ok: true, message: `All tokens revoked for ${username}` });
   } catch (err) {

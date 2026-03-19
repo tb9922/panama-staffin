@@ -218,6 +218,7 @@ export default function GdprDashboard() {
 
   async function handleSaveDecision() {
     if (saving || !decisionBreach) return;
+    if (!decisionForm.decision_rationale?.trim()) { setError('Decision rationale is required'); return; }
     setSaving(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -288,6 +289,7 @@ export default function GdprDashboard() {
 
   async function handleWithdrawConsent(id) {
     if (saving) return;
+    if (!window.confirm('Withdraw this consent record? This cannot be undone.')) return;
     setSaving(true);
     try {
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });

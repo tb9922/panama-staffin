@@ -78,7 +78,8 @@ export async function update(id, fields) {
   if (fields.role !== undefined)         { sets.push(`role = $${idx++}`);         vals.push(fields.role); }
   if (fields.display_name !== undefined) { sets.push(`display_name = $${idx++}`); vals.push(fields.display_name); }
   if (fields.active !== undefined)       { sets.push(`active = $${idx++}`);       vals.push(fields.active); }
-  if (fields.is_platform_admin !== undefined) { sets.push(`is_platform_admin = $${idx++}`); vals.push(fields.is_platform_admin); }
+  // is_platform_admin is intentionally excluded: repo-level defence in depth against
+  // privilege escalation. Elevation must go through a dedicated admin-only code path.
 
   if (sets.length === 0) return findById(id);
 
