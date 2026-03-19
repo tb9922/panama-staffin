@@ -25,7 +25,7 @@ export default function RopaManager() {
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [showModal, setShowModal] = useState(false);

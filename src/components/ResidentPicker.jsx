@@ -18,14 +18,13 @@ import { getCurrentHome, getFinanceResidents } from '../lib/api.js';
  *   placeholder - custom placeholder text
  */
 export default function ResidentPicker({ value, onChange, disabled, label, small, required, showAll, placeholder }) {
-  const [residents, setResidents] = useState([]);
-  const [loading, setLoading] = useState(false);
   const home = getCurrentHome();
+  const [residents, setResidents] = useState([]);
+  const [loading, setLoading] = useState(!!home);
 
   useEffect(() => {
     if (!home) return;
     let cancelled = false;
-    setLoading(true);
     getFinanceResidents(home, { status: 'active', limit: 500 })
       .then(result => {
         if (!cancelled) {

@@ -3,7 +3,7 @@ import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useData } from '../contexts/DataContext.jsx';
-import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment, deleteDpiaAssessment } from '../lib/api.js';
+import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment } from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
 
 const EMPTY_FORM = {
@@ -23,7 +23,7 @@ export default function DpiaManager() {
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [showModal, setShowModal] = useState(false);

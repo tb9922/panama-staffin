@@ -133,7 +133,7 @@ function CQCEvidenceInner({ data }) {
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState([]);
-  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [_snapshotLoading, setSnapshotLoading] = useState(false);
   const [viewingSnapshot, setViewingSnapshot] = useState(null);
   const [showSnapshots, setShowSnapshots] = useState(false);
 
