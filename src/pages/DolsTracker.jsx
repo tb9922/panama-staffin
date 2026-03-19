@@ -533,11 +533,21 @@ export default function DolsTracker() {
               </div>
 
               {/* Review */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={INPUT.label}>Last Reviewed</label>
                   <input type="date" className={INPUT.base} value={form.reviewed_date}
                     onChange={e => setForm({ ...form, reviewed_date: e.target.value })} />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Review Status</label>
+                  <select className={INPUT.select} value={form.review_status}
+                    onChange={e => setForm({ ...form, review_status: e.target.value })}>
+                    <option value="">Not set</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
                 <div>
                   <label className={INPUT.label}>Next Review Date</label>

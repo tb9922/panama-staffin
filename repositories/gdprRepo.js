@@ -418,36 +418,3 @@ export async function updateDPComplaint(id, homeId, data, client, version) {
   return rows[0] ? shapeDPComplaint(rows[0]) : null;
 }
 
-// ── Soft Delete ─────────────────────────────────────────────────────────────
-
-export async function softDeleteRequest(id, homeId) {
-  const { rowCount } = await pool.query(
-    'UPDATE data_requests SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
-    [id, homeId]
-  );
-  return rowCount > 0;
-}
-
-export async function softDeleteBreach(id, homeId) {
-  const { rowCount } = await pool.query(
-    'UPDATE data_breaches SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
-    [id, homeId]
-  );
-  return rowCount > 0;
-}
-
-export async function softDeleteConsent(id, homeId) {
-  const { rowCount } = await pool.query(
-    'UPDATE consent_records SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
-    [id, homeId]
-  );
-  return rowCount > 0;
-}
-
-export async function softDeleteDPComplaint(id, homeId) {
-  const { rowCount } = await pool.query(
-    'UPDATE dp_complaints SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
-    [id, homeId]
-  );
-  return rowCount > 0;
-}
