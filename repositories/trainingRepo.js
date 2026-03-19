@@ -94,8 +94,9 @@ export async function sync(homeId, trainingObj, client) {
   }
 }
 
-export async function upsertRecord(homeId, staffId, typeId, record) {
-  const { rows } = await pool.query(
+export async function upsertRecord(homeId, staffId, typeId, record, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `INSERT INTO training_records
        (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
         certificate_ref, level, notes, updated_at, deleted_at)
@@ -125,8 +126,9 @@ export async function upsertRecord(homeId, staffId, typeId, record) {
   };
 }
 
-export async function removeRecord(homeId, staffId, typeId) {
-  await pool.query(
+export async function removeRecord(homeId, staffId, typeId, client) {
+  const conn = client || pool;
+  await conn.query(
     'UPDATE training_records SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
     [homeId, staffId, typeId]
   );

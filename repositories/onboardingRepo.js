@@ -7,7 +7,7 @@ import { pool, withTransaction } from '../db.js';
  */
 export async function findByHome(homeId) {
   const { rows } = await pool.query(
-    'SELECT staff_id, data FROM onboarding WHERE home_id = $1',
+    'SELECT staff_id, data FROM onboarding WHERE home_id = $1 AND deleted_at IS NULL',
     [homeId]
   );
   const result = {};

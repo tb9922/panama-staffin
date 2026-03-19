@@ -32,6 +32,7 @@ router.post('/meetings/:caseType/:caseId', requireAuth, requireHomeAccess, requi
       ...parsed.data,
       recorded_by: req.user.username,
     });
+    if (!meeting) return res.status(404).json({ error: 'Case not found' });
     await auditService.log(`hr_${ctParsed.data}_meeting_create`, req.home.slug, req.user.username, { id: meeting.id });
     res.status(201).json(meeting);
   } catch (err) { next(err); }
@@ -52,6 +53,19 @@ router.put('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 
     if (!meeting) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log(`hr_${meeting.case_type}_meeting_update`, req.home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/hr/meetings/:id?home=X
+router.delete('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 'write'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid meeting ID' });
+    const existing = await hrRepo.findMeetingById(id, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Meeting not found' });
+    await hrRepo.deleteMeeting(id, req.home.id);
+    await auditService.log(`hr_${existing.case_type}_meeting_delete`, req.home.slug, req.user.username, { id });
+    res.status(204).end();
   } catch (err) { next(err); }
 });
 

@@ -5,6 +5,12 @@ const COLS = `id, home_id, case_type, case_id,
   summary, key_points, outcome, recorded_by,
   created_at, updated_at, version`;
 
+const PARENT_TABLE = {
+  disciplinary: 'hr_disciplinary_cases',
+  grievance:    'hr_grievance_cases',
+  performance:  'hr_performance_cases',
+};
+
 const shapeMeeting = createShaper({
   fields: [
     'id', 'home_id', 'case_type', 'case_id',
@@ -19,7 +25,7 @@ const shapeMeeting = createShaper({
 export async function findMeetings(caseType, caseId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS} FROM hr_investigation_meetings WHERE case_type = $1 AND case_id = $2 AND home_id = $3 ORDER BY meeting_date DESC, created_at DESC`,
+    `SELECT ${COLS} FROM hr_investigation_meetings WHERE case_type = $1 AND case_id = $2 AND home_id = $3 AND deleted_at IS NULL ORDER BY meeting_date DESC, created_at DESC`,
     [caseType, caseId, homeId]
   );
   return rows.map(shapeMeeting);
@@ -28,7 +34,7 @@ export async function findMeetings(caseType, caseId, homeId, client) {
 export async function findMeetingById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2`,
+    `SELECT ${COLS} FROM hr_investigation_meetings WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeMeeting(rows[0]) : null;
@@ -36,6 +42,13 @@ export async function findMeetingById(id, homeId, client) {
 
 export async function createMeeting(homeId, caseType, caseId, data, client) {
   const conn = client || pool;
+  const parentTable = PARENT_TABLE[caseType];
+  if (!parentTable) return null;
+  const { rows: parentRows } = await conn.query(
+    `SELECT 1 FROM ${parentTable} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [caseId, homeId]
+  );
+  if (parentRows.length === 0) return null;
   const { rows } = await conn.query(
     `INSERT INTO hr_investigation_meetings (home_id, case_type, case_id, meeting_date, meeting_time, meeting_type, location, attendees, summary, key_points, outcome, recorded_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING ${COLS}`,
@@ -43,6 +56,15 @@ export async function createMeeting(homeId, caseType, caseId, data, client) {
      JSON.stringify(data.attendees || []), data.summary || null, data.key_points || null, data.outcome || null, data.recorded_by]
   );
   return shapeMeeting(rows[0]);
+}
+
+export async function deleteMeeting(id, homeId, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    `UPDATE hr_investigation_meetings SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [id, homeId]
+  );
+  return rowCount > 0;
 }
 
 export async function updateMeeting(id, homeId, data, client, version) {

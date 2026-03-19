@@ -88,16 +88,19 @@ export async function sync(homeId, supervisionsObj, client) {
     }
   }
 
-  // Soft-delete sessions removed from the frontend (CQC Reg 18 evidence must be retained)
-  if (incomingIds.length === 0) {
+  // Soft-delete sessions removed from the frontend (CQC Reg 18 evidence must be retained).
+  // Only touch records belonging to staff IDs present in the incoming payload — this makes
+  // the delete safe against partial payloads where the frontend sends one staff member's
+  // sessions rather than the complete home dataset.
+  const incomingStaffIds = [...new Set(flat.map(r => r.staffId))];
+  if (incomingIds.length === 0 || incomingStaffIds.length === 0) {
     // Empty payload guard: never wipe all records — this indicates a likely frontend/network error
-    // A manager cannot have zero supervision sessions after any real usage
     return;
   }
   await conn.query(
     `UPDATE supervisions SET deleted_at = NOW()
-     WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-    [homeId, incomingIds]
+     WHERE home_id = $1 AND id != ALL($2::text[]) AND staff_id = ANY($3::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds, incomingStaffIds]
   );
 }
 
