@@ -37,6 +37,8 @@ export default function AnnualLeave() {
   const [bookingStaff, setBookingStaff] = useState('');
   const [bookingStart, setBookingStart] = useState('');
   const [bookingEnd, setBookingEnd] = useState('');
+  const [bookingError, setBookingError] = useState(null);
+  const [bookingMsg, setBookingMsg] = useState(null);
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -92,13 +94,16 @@ export default function AnnualLeave() {
     const accrual = accruals.get(bookingStaff);
     if (!accrual) return;
 
+    setBookingError(null);
+    setBookingMsg(null);
+
     if (accrual.missingContractHours) {
-      alert(`${staff.name} has no contract hours set. Set contract hours in Staff Database before booking AL.`);
+      setBookingError(`${staff.name} has no contract hours set. Set contract hours in Staff Database before booking AL.`);
       return;
     }
 
     if (accrual.remainingHours <= 0) {
-      alert(`${staff.name} has no leave left (${accrual.accruedHours.toFixed(1)}h earned, ${accrual.usedHours.toFixed(1)}h used). No more leave can be booked.`);
+      setBookingError(`${staff.name} has no leave left (${accrual.accruedHours.toFixed(1)}h earned, ${accrual.usedHours.toFixed(1)}h used). No more leave can be booked.`);
       return;
     }
 
@@ -134,8 +139,10 @@ export default function AnnualLeave() {
 
     const msgs = [];
     if (skippedOff > 0) msgs.push(`${skippedOff} scheduled OFF days skipped (AL not used)`);
-    if (issues.length > 0) msgs.push('Skipped days:\n' + issues.join('\n'));
-    if (msgs.length > 0) alert(`${toBook.length} AL days booked (${hoursBooked.toFixed(1)}h).\n\n${msgs.join('\n\n')}`);
+    if (issues.length > 0) msgs.push('Skipped days: ' + issues.join('; '));
+    if (toBook.length > 0 || msgs.length > 0) {
+      setBookingMsg(`${toBook.length} AL days booked (${hoursBooked.toFixed(1)}h).${msgs.length > 0 ? ' ' + msgs.join(' ') : ''}`);
+    }
 
     if (toBook.length > 0) {
       setSaving(true);
@@ -282,6 +289,8 @@ export default function AnnualLeave() {
               </div>
             </div>
             <div className="text-xs text-gray-500">Max {schedData.config.max_al_same_day} staff on AL per day</div>
+            {bookingError && <p className="text-sm text-red-600">{bookingError}</p>}
+            {bookingMsg && <p className="text-sm text-emerald-700">{bookingMsg}</p>}
             <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving || (selectedAccrual?.missingContractHours)}
               className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
               {saving ? 'Booking...' : 'Book Annual Leave'}

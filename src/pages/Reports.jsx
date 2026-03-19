@@ -37,6 +37,7 @@ function ReportsInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('reports');
   const [generating, setGenerating] = useState(null);
+  const [genError, setGenError] = useState(null);
   const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));
   const [costMonth, setCostMonth] = useState(() => {
     const now = new Date();
@@ -54,6 +55,7 @@ function ReportsInner({ data }) {
 
   async function generate(type) {
     setGenerating(type);
+    setGenError(null);
     try {
       const { generateRosterPDF, generateCostPDF, generateCoveragePDF, generateStaffPDF, generateBoardPackPDF } = await import('../lib/pdfReports.js');
 
@@ -81,7 +83,7 @@ function ReportsInner({ data }) {
       logReportDownload(type, dateRange);
     } catch (err) {
       console.error('PDF generation error:', err);
-      alert('Failed to generate PDF: ' + err.message);
+      setGenError('Failed to generate PDF: ' + err.message);
     } finally {
       setGenerating(null);
     }
@@ -186,6 +188,8 @@ function ReportsInner({ data }) {
         <h1 className="text-2xl font-bold text-gray-900">PDF Reports</h1>
         <p className="text-sm text-gray-500">Generate downloadable PDF reports for CQC inspections, management, and compliance</p>
       </div>
+
+      {genError && <p className="mb-4 text-sm text-red-600">{genError}</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {reports.map(report => {

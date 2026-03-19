@@ -66,6 +66,7 @@ export default function IncidentTracker() {
   const [addendumText, setAddendumText] = useState('');
   const [freezing, setFreezing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   useDirtyGuard(showModal && !isFrozen);
   const [filterType, setFilterType] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
@@ -131,6 +132,7 @@ export default function IncidentTracker() {
     setAddendumText('');
     setForm({ ...EMPTY_FORM, date: today });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -177,6 +179,7 @@ export default function IncidentTracker() {
       _version: inc.version,
     });
     setActiveTab(inc.frozen_at ? 'addenda' : 'details');
+    setSaveError(null);
     setShowModal(true);
     // Load addenda in background — guard against stale response if user switches incidents rapidly
     const home = getCurrentHome();
@@ -196,7 +199,7 @@ export default function IncidentTracker() {
       setIsFrozen(true);
       await load();
     } catch (err) {
-      alert(err.message || 'Failed to freeze incident');
+      setSaveError(err.message || 'Failed to freeze incident');
     } finally {
       setFreezing(false);
     }
@@ -211,7 +214,7 @@ export default function IncidentTracker() {
       setAddenda(prev => [...prev, result]);
       setAddendumText('');
     } catch (err) {
-      alert(err.message || 'Failed to add note');
+      setSaveError(err.message || 'Failed to add note');
     } finally { setSaving(false); }
   }
 
@@ -231,7 +234,7 @@ export default function IncidentTracker() {
       await load();
       setShowModal(false);
     } catch (err) {
-      alert(err.message || 'Failed to save incident');
+      setSaveError(err.message || 'Failed to save incident');
     } finally {
       setSaving(false);
     }
@@ -249,7 +252,7 @@ export default function IncidentTracker() {
       await load();
       setShowModal(false);
     } catch (err) {
-      alert(err.message || 'Failed to delete incident');
+      setSaveError(err.message || 'Failed to delete incident');
     } finally {
       setSaving(false);
     }
@@ -863,6 +866,7 @@ export default function IncidentTracker() {
                   {freezing ? 'Freezing...' : 'Freeze Record'}
                 </button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Close</button>
               {canEdit && !isFrozen && (

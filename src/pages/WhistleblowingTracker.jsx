@@ -48,6 +48,7 @@ export default function WhistleblowingTracker() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   const today = useLiveDate();
   const homeSlug = getCurrentHome();
@@ -90,6 +91,7 @@ export default function WhistleblowingTracker() {
     setEditingId(null);
     setForm({ ...EMPTY_FORM, date_raised: today });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -117,6 +119,7 @@ export default function WhistleblowingTracker() {
       lessons_learned: concern.lessons_learned || '',
     });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -131,7 +134,7 @@ export default function WhistleblowingTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      setSaveError('Failed to save: ' + err.message);
     }
   }
 
@@ -143,7 +146,7 @@ export default function WhistleblowingTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to delete: ' + err.message);
+      setSaveError('Failed to delete: ' + err.message);
     }
   }
 
@@ -456,6 +459,7 @@ export default function WhistleblowingTracker() {
               {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSave} disabled={!form.date_raised || !form.category || !form.severity} className={BTN.primary}>

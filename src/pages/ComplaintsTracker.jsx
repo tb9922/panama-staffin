@@ -66,6 +66,8 @@ export default function ComplaintsTracker() {
   const [surveyForm, setSurveyForm] = useState({ ...EMPTY_SURVEY });
   const [viewMode, setViewMode] = useState('complaints');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [surveyError, setSurveyError] = useState(null);
 
   useDirtyGuard(showModal || showSurveyModal);
 
@@ -145,6 +147,7 @@ export default function ComplaintsTracker() {
     const deadline = formatDate(new Date(Date.now() + (COMPLAINT_CONFIG.complaint_response_days) * 86400000));
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -152,6 +155,7 @@ export default function ComplaintsTracker() {
     setEditingId(item.id);
     setForm({ ...EMPTY_FORM, ...item, _version: item.version });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -168,7 +172,7 @@ export default function ComplaintsTracker() {
       setShowModal(false);
       load();
     } catch (err) {
-      alert(err.message || 'Failed to save complaint');
+      setSaveError(err.message || 'Failed to save complaint');
     } finally { setSaving(false); }
   }
 
@@ -182,19 +186,21 @@ export default function ComplaintsTracker() {
       setShowModal(false);
       load();
     } catch (err) {
-      alert(err.message || 'Failed to delete complaint');
+      setSaveError(err.message || 'Failed to delete complaint');
     } finally { setSaving(false); }
   }
 
   function openAddSurvey() {
     setEditingSurveyId(null);
     setSurveyForm({ ...EMPTY_SURVEY, date: today });
+    setSurveyError(null);
     setShowSurveyModal(true);
   }
 
   function openEditSurvey(item) {
     setEditingSurveyId(item.id);
     setSurveyForm({ ...EMPTY_SURVEY, ...item });
+    setSurveyError(null);
     setShowSurveyModal(true);
   }
 
@@ -211,7 +217,7 @@ export default function ComplaintsTracker() {
       setShowSurveyModal(false);
       load();
     } catch (err) {
-      alert(err.message || 'Failed to save survey');
+      setSurveyError(err.message || 'Failed to save survey');
     } finally { setSaving(false); }
   }
 
@@ -225,7 +231,7 @@ export default function ComplaintsTracker() {
       setShowSurveyModal(false);
       load();
     } catch (err) {
-      alert(err.message || 'Failed to delete survey');
+      setSurveyError(err.message || 'Failed to delete survey');
     } finally { setSaving(false); }
   }
 
@@ -585,6 +591,7 @@ export default function ComplaintsTracker() {
 
             <div className={MODAL.footer}>
               {canEdit && editingId && <button onClick={handleDelete} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
@@ -655,6 +662,7 @@ export default function ComplaintsTracker() {
             </div>
             <div className={MODAL.footer}>
               {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+              {surveyError && <p className="text-sm text-red-600 mr-auto">{surveyError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSaveSurvey} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}

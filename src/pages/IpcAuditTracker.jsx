@@ -46,6 +46,7 @@ export default function IpcAuditTracker() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
   const [filterType, setFilterType] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   const home = getCurrentHome();
 
@@ -84,6 +85,7 @@ export default function IpcAuditTracker() {
       outbreak: { ...EMPTY_FORM.outbreak },
     });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -101,6 +103,7 @@ export default function IpcAuditTracker() {
       notes: audit.notes || '',
     });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -123,7 +126,7 @@ export default function IpcAuditTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert(err.message || 'Failed to save IPC audit');
+      setSaveError(err.message || 'Failed to save IPC audit');
     }
   }
 
@@ -135,7 +138,7 @@ export default function IpcAuditTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert(err.message || 'Failed to delete IPC audit');
+      setSaveError(err.message || 'Failed to delete IPC audit');
     }
   }
 
@@ -485,6 +488,7 @@ export default function IpcAuditTracker() {
           {editingId && canEdit && (
             <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
+          {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
           {canEdit && (
             <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>

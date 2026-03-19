@@ -43,6 +43,7 @@ export default function PolicyReviewTracker() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStatus, setFilterStatus] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   useDirtyGuard(showModal);
 
@@ -99,6 +100,7 @@ export default function PolicyReviewTracker() {
   function openAdd() {
     setEditingId(null);
     setForm({ ...EMPTY_FORM });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -117,6 +119,7 @@ export default function PolicyReviewTracker() {
       changes: policy.changes || [],
       notes: policy.notes || '',
     });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -145,7 +148,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      alert(e.message || 'Failed to save');
+      setSaveError(e.message || 'Failed to save');
     }
   }
 
@@ -182,7 +185,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      alert(e.message || 'Failed to save');
+      setSaveError(e.message || 'Failed to save');
     }
   }
 
@@ -194,7 +197,7 @@ export default function PolicyReviewTracker() {
       setShowModal(false);
       await load();
     } catch (e) {
-      alert(e.message || 'Failed to delete');
+      setSaveError(e.message || 'Failed to delete');
     }
   }
 
@@ -447,6 +450,7 @@ export default function PolicyReviewTracker() {
               {canEdit && editingId && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               {canEdit && editingId && (
                 <button onClick={handleMarkReviewed} className={BTN.success}>Mark as Reviewed</button>
               )}

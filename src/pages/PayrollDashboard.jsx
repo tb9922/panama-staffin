@@ -186,7 +186,7 @@ export default function PayrollDashboard() {
                           <button className={`${BTN.danger} ${BTN.sm}`} onClick={async () => {
                             if (!await confirm('Void this payroll run? This cannot be undone.')) return;
                             try { await voidPayrollRun(homeSlug, run.id); load(); }
-                            catch (e) { alert(e.message); }
+                            catch (e) { setError(e.message); }
                           }}>Void</button>
                         )}
                       </div>

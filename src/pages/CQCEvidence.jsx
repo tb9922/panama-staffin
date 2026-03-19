@@ -127,6 +127,9 @@ function CQCEvidenceInner({ data }) {
   const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [snapshotError, setSnapshotError] = useState(null);
+  const [pdfError, setPdfError] = useState(null);
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState([]);
@@ -171,23 +174,26 @@ function CQCEvidenceInner({ data }) {
     const home = getCurrentHome();
     if (!home || generating) return;
     setGenerating(true);
+    setSnapshotError(null);
     try {
       await createSnapshot(home, 'cqc', formatDate(dateRange.from), formatDate(dateRange.to));
       loadSnapshots();
-    } catch (e) { alert(e.message); }
+    } catch (e) { setSnapshotError(e.message); }
     finally { setGenerating(false); }
   }
 
   async function handleViewSnapshot(id) {
     const home = getCurrentHome();
+    setSnapshotError(null);
     try {
       const snap = await getSnapshot(home, id);
       setViewingSnapshot(snap);
-    } catch (e) { alert(e.message); }
+    } catch (e) { setSnapshotError(e.message); }
   }
 
   async function handleSignOff(id, notes) {
     const home = getCurrentHome();
+    setSnapshotError(null);
     try {
       await signOffSnapshot(home, id, notes);
       loadSnapshots();
@@ -195,7 +201,7 @@ function CQCEvidenceInner({ data }) {
         const snap = await getSnapshot(home, id);
         setViewingSnapshot(snap);
       }
-    } catch (e) { alert(e.message); }
+    } catch (e) { setSnapshotError(e.message); }
   }
 
   const today = useLiveDate();
@@ -230,6 +236,7 @@ function CQCEvidenceInner({ data }) {
 
   function openAddEvidence(statementId) {
     setEvidenceForm({ quality_statement: statementId || '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
+    setSaveError(null);
     setShowAddEvidence(true);
   }
 
@@ -249,7 +256,7 @@ function CQCEvidenceInner({ data }) {
       setShowAddEvidence(false);
       await loadEvidence();
     } catch (err) {
-      alert('Failed to save evidence: ' + err.message);
+      setSaveError('Failed to save evidence: ' + err.message);
     } finally {
       setSavingEvidence(false);
     }
@@ -264,7 +271,7 @@ function CQCEvidenceInner({ data }) {
       await deleteCqcEvidence(home, evId);
       await loadEvidence();
     } catch (err) {
-      alert('Failed to delete evidence: ' + err.message);
+      setSaveError('Failed to delete evidence: ' + err.message);
     } finally {
       setSavingEvidence(false);
     }
@@ -272,13 +279,14 @@ function CQCEvidenceInner({ data }) {
 
   async function handleGeneratePDF() {
     setGenerating(true);
+    setPdfError(null);
     try {
       await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
       generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
       logReportDownload('cqc-evidence', `${dateRangeDays} days`);
     } catch (err) {
-      alert('Failed to generate PDF: ' + err.message);
+      setPdfError('Failed to generate PDF: ' + err.message);
     } finally {
       setGenerating(false);
     }
@@ -323,6 +331,9 @@ function CQCEvidenceInner({ data }) {
           </button>
         </div>
       </div>
+
+      {pdfError && <p className="mb-3 text-sm text-red-600">{pdfError}</p>}
+      {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -596,13 +607,15 @@ function CQCEvidenceInner({ data }) {
             )}
           </div>
           <div className={MODAL.footer}>
+            {snapshotError && <p className="text-sm text-red-600 mr-auto">{snapshotError}</p>}
             <button className={BTN.secondary} onClick={() => setViewingSnapshot(null)}>Close</button>
             <button className={BTN.primary} onClick={async () => {
               setGenerating(true);
+              setSnapshotError(null);
               try {
                 const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
                 generateEvidencePackPDF(dataWithEvidence || {}, dateRangeDays, viewingSnapshot);
-              } catch (e) { alert(e.message); }
+              } catch (e) { setSnapshotError(e.message); }
               finally { setGenerating(false); }
             }} disabled={generating}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
           </div>
@@ -679,6 +692,7 @@ function CQCEvidenceInner({ data }) {
             </div>
 
             <div className={MODAL.footer}>
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowAddEvidence(false)} className={BTN.ghost}>Cancel</button>
               <button onClick={handleSaveEvidence}
                 disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}

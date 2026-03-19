@@ -35,6 +35,7 @@ export default function MaintenanceTracker() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   useDirtyGuard(showModal);
 
@@ -77,12 +78,14 @@ export default function MaintenanceTracker() {
   function openAdd() {
     setEditingId(null);
     setForm({ ...EMPTY_FORM });
+    setSaveError(null);
     setShowModal(true);
   }
 
   function openEdit(item) {
     setEditingId(item.id);
     setForm({ ...EMPTY_FORM, ...item });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -108,7 +111,7 @@ export default function MaintenanceTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert(err.message || 'Failed to save maintenance check');
+      setSaveError(err.message || 'Failed to save maintenance check');
     }
   }
 
@@ -120,7 +123,7 @@ export default function MaintenanceTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert(err.message || 'Failed to delete maintenance check');
+      setSaveError(err.message || 'Failed to delete maintenance check');
     }
   }
 
@@ -369,6 +372,7 @@ export default function MaintenanceTracker() {
 
             <div className={MODAL.footer}>
               {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}

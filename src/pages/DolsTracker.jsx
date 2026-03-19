@@ -46,6 +46,7 @@ export default function DolsTracker() {
   const [viewMode, setViewMode] = useState('dols');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   useDirtyGuard(showModal);
 
@@ -107,6 +108,7 @@ export default function DolsTracker() {
   function openAddDols() {
     setEditingId(null);
     setForm({ ...EMPTY_DOLS_FORM, application_date: today });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -136,6 +138,7 @@ export default function DolsTracker() {
       next_review_date: dol.next_review_date || '',
       notes: dol.notes || '',
     });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -150,7 +153,7 @@ export default function DolsTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      setSaveError('Failed to save: ' + err.message);
     }
   }
 
@@ -162,7 +165,7 @@ export default function DolsTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to delete: ' + err.message);
+      setSaveError('Failed to delete: ' + err.message);
     }
   }
 
@@ -171,6 +174,7 @@ export default function DolsTracker() {
   function openAddMca() {
     setEditingId(null);
     setForm({ ...EMPTY_MCA_FORM, assessment_date: today });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -188,6 +192,7 @@ export default function DolsTracker() {
       next_review_date: mca.next_review_date || '',
       notes: mca.notes || '',
     });
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -202,7 +207,7 @@ export default function DolsTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      setSaveError('Failed to save: ' + err.message);
     }
   }
 
@@ -214,7 +219,7 @@ export default function DolsTracker() {
       setShowModal(false);
       await load();
     } catch (err) {
-      alert('Failed to delete: ' + err.message);
+      setSaveError('Failed to delete: ' + err.message);
     }
   }
 
@@ -577,6 +582,7 @@ export default function DolsTracker() {
               {editingId && canEdit && (
                 <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSaveDols}
@@ -653,6 +659,7 @@ export default function DolsTracker() {
               {editingId && canEdit && (
                 <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSaveMca}

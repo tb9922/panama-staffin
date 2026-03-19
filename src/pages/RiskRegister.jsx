@@ -52,6 +52,7 @@ export default function RiskRegister() {
   const [activeTab, setActiveTab] = useState('details');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterBand, setFilterBand] = useState('');
+  const [saveError, setSaveError] = useState(null);
 
   const home = getCurrentHome();
 
@@ -112,6 +113,7 @@ export default function RiskRegister() {
     setEditingId(null);
     setForm({ ...EMPTY_FORM, last_reviewed: today, next_review: '' });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -133,6 +135,7 @@ export default function RiskRegister() {
       status: risk.status || 'open',
     });
     setActiveTab('details');
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -152,7 +155,7 @@ export default function RiskRegister() {
       setShowModal(false);
       await load();
     } catch (e) {
-      alert(e.message || 'Failed to save');
+      setSaveError(e.message || 'Failed to save');
     }
   }
 
@@ -164,7 +167,7 @@ export default function RiskRegister() {
       setShowModal(false);
       await load();
     } catch (e) {
-      alert(e.message || 'Failed to delete');
+      setSaveError(e.message || 'Failed to delete');
     }
   }
 
@@ -583,6 +586,7 @@ export default function RiskRegister() {
               {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}
