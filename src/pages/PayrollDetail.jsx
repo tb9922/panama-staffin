@@ -34,9 +34,15 @@ function fmtHrs(n) {
   return `${parseFloat(n).toFixed(2)}h`;
 }
 
-// Fetch blob with cookie auth, trigger download
+// Fetch blob with cookie auth + CSRF headers, trigger download
+function getCsrfToken() {
+  return document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/)?.[1] || '';
+}
 async function downloadWithAuth(url, filename) {
-  const res = await fetch(url, { credentials: 'same-origin' });
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: 'Invalid response' }));
     throw new Error(body.error || `Export failed (${res.status})`);

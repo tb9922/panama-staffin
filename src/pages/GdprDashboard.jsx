@@ -166,7 +166,7 @@ export default function GdprDashboard() {
       const data = { ...form };
       // Combine date + time into UTC ISO datetime for precise ICO deadline calculation
       if (data.discovered_time) {
-        data.discovered_date = new Date(`${data.discovered_date}T${data.discovered_time}`).toISOString();
+        data.discovered_date = new Date(`${data.discovered_date}T${data.discovered_time}Z`).toISOString();
       }
       delete data.discovered_time;
       if (data.data_categories && typeof data.data_categories === 'string') {

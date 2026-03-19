@@ -83,6 +83,7 @@ export default function AnnualLeave() {
 
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
+    if (saving) return;
     if (!bookingStaff || !bookingStart || !bookingEnd || !schedData) return;
     const start = parseDate(bookingStart);
     const end = parseDate(bookingEnd);

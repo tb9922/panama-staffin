@@ -990,6 +990,7 @@ export async function downloadHrAttachment(id, originalName) {
   const home = getCurrentHome();
   const res = await fetch(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, {
     credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
   });
   if (!res.ok) throw new Error('Download failed');
   const blob = await res.blob();

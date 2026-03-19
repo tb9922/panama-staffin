@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Modal from '../components/Modal.jsx';
 import { BTN, MODAL } from '../lib/design.js';
 
@@ -6,6 +6,9 @@ export function useConfirm() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const resolveRef = useRef(null);
+
+  // Resolve pending promise on unmount to prevent leaks (finally blocks in callers run)
+  useEffect(() => () => { resolveRef.current?.(false); }, []);
 
   const confirm = useCallback((msg) => new Promise((resolve) => {
     resolveRef.current = resolve;
@@ -23,18 +26,15 @@ export function useConfirm() {
     setOpen(false);
   }, []);
 
-  const ConfirmDialog = open ? (
-    <Modal onClose={handleCancel}>
-      <div className={MODAL.panelSm}>
-        <h3 className={MODAL.title}>Confirm</h3>
-        <p className="mt-2 text-sm text-gray-700">{message}</p>
-        <div className={MODAL.footer}>
-          <button className={BTN.secondary} onClick={handleCancel}>Cancel</button>
-          <button className={BTN.danger} onClick={handleConfirm}>Confirm</button>
-        </div>
+  const ConfirmDialog = (
+    <Modal isOpen={open} onClose={handleCancel} title="Confirm" size="sm">
+      <p className="mt-2 text-sm text-gray-700">{message}</p>
+      <div className={MODAL.footer}>
+        <button className={BTN.secondary} onClick={handleCancel}>Cancel</button>
+        <button className={BTN.danger} onClick={handleConfirm}>Confirm</button>
       </div>
     </Modal>
-  ) : null;
+  );
 
   return { confirm, ConfirmDialog };
 }

@@ -220,7 +220,7 @@ function DashboardInner({ schedData }) {
           <p className="text-blue-200 text-sm">{config.registered_beds} beds — {config.care_type}</p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold">{today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+          <div className="text-2xl font-bold">{today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}</div>
           <div className="flex items-center gap-2 justify-end mt-1">
             <span className="text-blue-200 text-xs">Panama rotation</span>
             <button onClick={() => window.print()} className="text-blue-200 hover:text-white text-xs border border-blue-400/50 rounded-lg px-2.5 py-1 print:hidden transition-colors">Print</button>
