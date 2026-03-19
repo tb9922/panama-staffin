@@ -120,7 +120,7 @@ export async function upsert(homeId, data) {
        lessons_learned, reported_at, updated_at
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       date_raised=$3,raised_by_role=$4,
+       date_raised=$3,raised_by_role=$4,anonymous=$5,
        category=$6,description=$7,severity=$8,status=$9,
        acknowledgement_date=$10,investigator=$11,investigation_start_date=$12,
        findings=$13,outcome=$14,outcome_details=$15,

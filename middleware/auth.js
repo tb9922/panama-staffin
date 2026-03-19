@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { getHomeRole } from '../repositories/userHomeRepo.js';
+import { findByUsername as findUserByUsername } from '../repositories/userRepo.js';
 import { hasModuleAccess, ROLES } from '../shared/roles.js';
 import { z } from 'zod';
 
@@ -52,8 +53,18 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
-export function requirePlatformAdmin(req, res, next) {
+export async function requirePlatformAdmin(req, res, next) {
   if (req.user?.role !== 'admin' || !req.user?.is_platform_admin) {
+    return res.status(403).json({ error: 'Platform admin access required' });
+  }
+  // Re-verify from DB — JWT claim may be stale (platform admin demoted after last login).
+  // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
+  try {
+    const dbUser = await findUserByUsername(req.user.username);
+    if (!dbUser?.is_platform_admin) {
+      return res.status(403).json({ error: 'Platform admin access required' });
+    }
+  } catch {
     return res.status(403).json({ error: 'Platform admin access required' });
   }
   next();

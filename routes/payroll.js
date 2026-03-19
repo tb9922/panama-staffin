@@ -328,11 +328,16 @@ router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireMo
     if (parsed.data.period_start >= parsed.data.period_end) {
       return res.status(400).json({ error: 'period_start must be before period_end' });
     }
-    const overlap = await payrollRunRepo.hasOverlap(req.home.id, parsed.data.period_start, parsed.data.period_end);
-    if (overlap) {
+    // Wrap check+create in a transaction to prevent TOCTOU: without this, two
+    // concurrent requests can both pass the overlap check and create duplicate runs.
+    const run = await withTransaction(async (client) => {
+      const overlap = await payrollRunRepo.hasOverlap(req.home.id, parsed.data.period_start, parsed.data.period_end, client);
+      if (overlap) return null;
+      return payrollRunRepo.create(req.home.id, parsed.data, client);
+    });
+    if (!run) {
       return res.status(409).json({ error: 'A payroll run already exists that overlaps this period. Void the existing run first or adjust the dates.' });
     }
-    const run = await payrollRunRepo.create(req.home.id, parsed.data);
     await auditService.log('payroll_create', req.home.slug, req.user.username, { id: run.id, entity: 'run' });
     res.status(201).json(run);
   } catch (err) { next(err); }

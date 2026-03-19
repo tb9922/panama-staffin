@@ -158,7 +158,12 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
         // System user account (if staff member has a login)
         staffName
-          ? conn.query(`SELECT id, username, display_name, role, is_platform_admin, active, last_login_at, created_at FROM users WHERE display_name = $1 OR username = $1`, [staffName])
+          ? conn.query(
+              `SELECT u.id, u.username, u.display_name, u.role, u.is_platform_admin, u.active, u.last_login_at, u.created_at
+               FROM users u
+               WHERE (u.display_name = $1 OR u.username = $1)
+                 AND EXISTS (SELECT 1 FROM user_home_roles uhr WHERE uhr.username = u.username AND uhr.home_id = $2)`,
+              [staffName, homeId])
           : { rows: [] },
         // Home role assignments — scoped to this home only (user_home_roles uses username)
         staffName

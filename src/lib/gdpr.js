@@ -70,18 +70,25 @@ export function calculateDeadline(dateReceived, days = 30) {
 }
 
 export function calculateICODeadline(discoveredDate) {
-  const d = new Date(discoveredDate);
+  // Ensure date-only strings (YYYY-MM-DD) are parsed as UTC midnight, not local midnight.
+  // Without the explicit Z suffix, local-time parsing in BST would shift the anchor back by 1h.
+  const dateStr = typeof discoveredDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(discoveredDate)
+    ? discoveredDate + 'T00:00:00Z'
+    : discoveredDate;
+  const d = new Date(dateStr);
   return new Date(d.getTime() + 72 * 60 * 60 * 1000).toISOString();
 }
 
 export function daysUntilDeadline(deadline) {
   const now = new Date();
   const dl = new Date(deadline);
-  return Math.ceil((dl - now) / (1000 * 60 * 60 * 24));
+  // Math.floor: a deadline 12 hours past gives -0.5 → floor → -1 (correctly shows overdue).
+  // Math.ceil would give 0, hiding the overdue state for up to 24 hours.
+  return Math.floor((dl - now) / (1000 * 60 * 60 * 24));
 }
 
 export function isOverdue(deadline) {
-  return daysUntilDeadline(deadline) < 0;
+  return new Date(deadline) < new Date();
 }
 
 export function hoursUntilICODeadline(icoDeadline) {

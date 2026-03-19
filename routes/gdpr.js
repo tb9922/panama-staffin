@@ -251,14 +251,18 @@ router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAc
     const breach = await gdprService.findBreachById(idP.data, req.home.id);
     if (!breach) return res.status(404).json({ error: 'Breach not found' });
     const assessment = gdprService.assessBreachRisk(breach);
-    const updates = {
-      ico_notifiable: assessment.icoNotifiable,
-      recommended_ico_notification: assessment.icoNotifiable,
-    };
+    // Only update the recommendation field; do NOT overwrite ico_notifiable if a
+    // manual decision has already been recorded (manual_decision takes precedence).
+    const updates = { recommended_ico_notification: assessment.icoNotifiable };
+    if (breach.manual_decision == null) {
+      updates.ico_notifiable = assessment.icoNotifiable;
+    }
     if (assessment.icoNotifiable && assessment.icoDeadline) {
       updates.ico_notification_deadline = assessment.icoDeadline;
     }
-    await gdprService.updateBreach(idP.data, req.home.id, updates);
+    // Pass current version for optimistic locking — prevents overwriting concurrent edits.
+    const result = await gdprService.updateBreach(idP.data, req.home.id, updates, breach.version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('gdpr_update', req.home.slug, req.user.username, { id: idP.data, entity: 'data_breach', action: 'risk_assessment' });
     res.json(assessment);
   } catch (err) { next(err); }

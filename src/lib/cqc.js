@@ -739,26 +739,33 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
   const totalWeight = availableMetrics.reduce((s, m) => s + m.weight, 0);
 
-  // Compute weighted average per key question
+  // Compute weighted average per key question.
+  // Metrics with null scores (e.g. satisfactionScore when no surveys exist) are excluded
+  // and their weight is redistributed among the scored metrics in that question.
   const questionScores = {};
   for (const q of KEY_QUESTIONS) {
     const qMetrics = availableMetrics.filter(m => m.question === q);
     if (qMetrics.length === 0) { questionScores[q] = { score: 0, band: SCORE_BANDS[3], metrics: [] }; continue; }
-    const qWeight = qMetrics.reduce((s, m) => s + m.weight, 0);
+    const qScoredMetrics = qMetrics.filter(m => metrics[m.id]?.score != null);
+    if (qScoredMetrics.length === 0) { questionScores[q] = { score: 0, band: SCORE_BANDS[3], metrics: qMetrics.map(m => m.id) }; continue; }
+    const qScoredWeight = qScoredMetrics.reduce((s, m) => s + m.weight, 0);
     let qSum = 0;
-    for (const m of qMetrics) {
-      const result = metrics[m.id];
-      if (result) qSum += result.score * (m.weight / qWeight);
+    for (const m of qScoredMetrics) {
+      qSum += metrics[m.id].score * (m.weight / qScoredWeight);
     }
     const qScore = Math.round(qSum);
     questionScores[q] = { score: qScore, band: getScoreBand(qScore), metrics: qMetrics.map(m => m.id) };
   }
 
-  // Overall weighted score (kept for backward compat + numerical display)
+  // Overall weighted score (kept for backward compat + numerical display).
+  // Null-scored metrics are excluded and their weight redistributed.
+  const scoredMetrics = availableMetrics.filter(m => metrics[m.id]?.score != null);
+  const scoredWeight = scoredMetrics.reduce((s, m) => s + m.weight, 0);
   let weightedSum = 0;
-  for (const m of availableMetrics) {
-    const result = metrics[m.id];
-    if (result) weightedSum += result.score * (m.weight / totalWeight);
+  if (scoredWeight > 0) {
+    for (const m of scoredMetrics) {
+      weightedSum += metrics[m.id].score * (m.weight / scoredWeight);
+    }
   }
   const overallScore = Math.round(weightedSum);
 
