@@ -47,9 +47,10 @@ async function seed() {
     const viewerHash = await bcrypt.hash('view123', 12);
 
     await client.query(`
-      INSERT INTO users (username, password_hash, role, display_name)
-      VALUES ('admin', $1, 'admin', 'Admin'), ('viewer', $2, 'viewer', 'Viewer')
-      ON CONFLICT (username) DO NOTHING
+      INSERT INTO users (username, password_hash, role, display_name, is_platform_admin)
+      VALUES ('admin', $1, 'admin', 'Admin', true), ('viewer', $2, 'viewer', 'Viewer', false)
+      ON CONFLICT (username) DO UPDATE
+        SET is_platform_admin = EXCLUDED.is_platform_admin
     `, [adminHash, viewerHash]);
 
     // Upsert home with config (partial unique index: homes_slug_active WHERE deleted_at IS NULL)
