@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
 
@@ -15,6 +16,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
   const [error, setError] = useState(null);
   const [description, setDescription] = useState('');
   const fileInputRef = useRef(null);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     if (caseId) loadFiles();
@@ -51,7 +53,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
   }
 
   async function handleDelete(att) {
-    if (!window.confirm(`Delete "${att.original_name}"?`)) return;
+    if (!await confirm(`Delete "${att.original_name}"?`)) return;
     try {
       await deleteHrAttachment(att.id);
       await loadFiles();
@@ -134,6 +136,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
           </button>
         </div>
       )}
+      {ConfirmDialog}
     </div>
   );
 }

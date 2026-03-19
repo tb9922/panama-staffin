@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getPayrollRuns, createPayrollRun, voidPayrollRun, getCurrentHome } from '../lib/api.js';
@@ -36,6 +37,7 @@ export default function PayrollDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [runs, setRuns]         = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -182,7 +184,7 @@ export default function PayrollDashboard() {
                         <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>View</button>
                         {canEdit && ['draft', 'calculated'].includes(run.status) && (
                           <button className={`${BTN.danger} ${BTN.sm}`} onClick={async () => {
-                            if (!confirm('Void this payroll run? This cannot be undone.')) return;
+                            if (!await confirm('Void this payroll run? This cannot be undone.')) return;
                             try { await voidPayrollRun(homeSlug, run.id); load(); }
                             catch (e) { alert(e.message); }
                           }}>Void</button>
@@ -235,6 +237,7 @@ export default function PayrollDashboard() {
           </button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

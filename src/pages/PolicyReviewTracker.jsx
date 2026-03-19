@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, parseDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 export default function PolicyReviewTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -185,7 +187,8 @@ export default function PolicyReviewTracker() {
   }
 
   async function handleDelete() {
-    if (!editingId || !confirm('Delete this policy record?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this policy record?')) return;
     try {
       await deletePolicy(home, editingId);
       setShowModal(false);
@@ -455,6 +458,7 @@ export default function PolicyReviewTracker() {
               )}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

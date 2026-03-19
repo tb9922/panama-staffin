@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
@@ -34,6 +35,7 @@ const EMPTY_MCA_FORM = {
 export default function DolsTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [dols, setDols] = useState([]);
   const [mcaAssessments, setMcaAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +155,8 @@ export default function DolsTracker() {
   }
 
   async function handleDeleteDols() {
-    if (!editingId || !confirm('Delete this DoLS/LPS record?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this DoLS/LPS record?')) return;
     try {
       await deleteDols(homeSlug, editingId);
       setShowModal(false);
@@ -204,7 +207,8 @@ export default function DolsTracker() {
   }
 
   async function handleDeleteMca() {
-    if (!editingId || !confirm('Delete this MCA assessment?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this MCA assessment?')) return;
     try {
       await deleteMcaAssessment(homeSlug, editingId);
       setShowModal(false);
@@ -659,6 +663,7 @@ export default function DolsTracker() {
               )}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

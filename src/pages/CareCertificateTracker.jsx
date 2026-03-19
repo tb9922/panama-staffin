@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
@@ -32,6 +33,7 @@ export default function CareCertificateTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -202,7 +204,7 @@ export default function CareCertificateTracker() {
   }
 
   async function handleRemoveStaff() {
-    if (!confirm('Remove this staff member from Care Certificate tracking? All progress will be lost.')) return;
+    if (!await confirm('Remove this staff member from Care Certificate tracking? All progress will be lost.')) return;
     setSaving(true);
     try {
       await deleteCareCert(homeSlug, selectedStaffId);
@@ -552,6 +554,7 @@ export default function CareCertificateTracker() {
             </div>
       </Modal>
       )}
+      {ConfirmDialog}
     </div>
   );
 }

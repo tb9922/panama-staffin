@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate, addDays, parseDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -24,6 +25,7 @@ const EMPTY_FORM = {
 export default function MaintenanceTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [checks, setChecks] = useState([]);
   const [maintenanceCategories, setMaintenanceCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,8 @@ export default function MaintenanceTracker() {
   }
 
   async function handleDelete() {
-    if (!editingId || !confirm('Delete this maintenance record?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this maintenance record?')) return;
     try {
       await deleteMaintenanceCheck(home, editingId);
       setShowModal(false);
@@ -371,6 +374,7 @@ export default function MaintenanceTracker() {
               {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

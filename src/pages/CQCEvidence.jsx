@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -115,6 +116,7 @@ export default function CQCEvidence() {
 function CQCEvidenceInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const isMounted = useRef(true);
   useEffect(() => { return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
@@ -255,7 +257,7 @@ function CQCEvidenceInner({ data }) {
 
   async function handleDeleteEvidence(evId) {
     if (savingEvidence) return;
-    if (!confirm('Remove this evidence item?')) return;
+    if (!await confirm('Remove this evidence item?')) return;
     const home = getCurrentHome();
     setSavingEvidence(true);
     try {
@@ -683,6 +685,7 @@ function CQCEvidenceInner({ data }) {
                 className={BTN.primary}>{savingEvidence ? 'Saving...' : 'Save Evidence'}</button>
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

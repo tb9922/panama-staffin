@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 export default function IpcAuditTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [audits, setAudits] = useState([]);
   const [auditTypes, setAuditTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -126,7 +128,8 @@ export default function IpcAuditTracker() {
   }
 
   async function handleDelete() {
-    if (!editingId || !confirm('Delete this IPC audit record?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this IPC audit record?')) return;
     try {
       await deleteIpcAudit(home, editingId);
       setShowModal(false);
@@ -490,6 +493,7 @@ export default function IpcAuditTracker() {
           )}
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

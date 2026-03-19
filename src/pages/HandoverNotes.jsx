@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents } from '../lib/api.js';
@@ -42,6 +43,7 @@ export default function HandoverNotes() {
 
   const { canWrite } = useData();
   const canEdit = canWrite('scheduling');
+  const { confirm, ConfirmDialog } = useConfirm();
   const slug = getCurrentHome();
   const todayStr = useLiveDate();
 
@@ -106,7 +108,7 @@ export default function HandoverNotes() {
 
   async function handleDelete(id) {
     if (saving) return;
-    if (!window.confirm('Delete this handover entry?')) return;
+    if (!await confirm('Delete this handover entry?')) return;
     setSaving(true);
     try {
       await deleteHandoverEntry(slug, id);
@@ -334,6 +336,7 @@ export default function HandoverNotes() {
           </button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

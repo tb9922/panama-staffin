@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -20,6 +21,7 @@ export default function RopaManager() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -69,7 +71,7 @@ export default function RopaManager() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Archive this processing activity?')) return;
+    if (!await confirm('Archive this processing activity?')) return;
     try { await deleteRopaActivity(home, id); load(); }
     catch (e) { setError(e.message); }
   }
@@ -228,6 +230,7 @@ export default function RopaManager() {
           <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

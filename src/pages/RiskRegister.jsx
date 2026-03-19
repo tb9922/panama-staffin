@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
@@ -40,6 +41,7 @@ const HEATMAP_COLORS = {
 export default function RiskRegister() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [risks, setRisks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -155,7 +157,8 @@ export default function RiskRegister() {
   }
 
   async function handleDelete() {
-    if (!editingId || !confirm('Delete this risk?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this risk?')) return;
     try {
       await deleteRisk(home, editingId);
       setShowModal(false);
@@ -586,6 +589,7 @@ export default function RiskRegister() {
               </button>}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

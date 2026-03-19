@@ -56,8 +56,8 @@ function baseConfig() {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 describe('QUALITY_STATEMENTS', () => {
-  it('has 29 quality statements', () => {
-    expect(QUALITY_STATEMENTS).toHaveLength(29);
+  it('has 34 quality statements', () => {
+    expect(QUALITY_STATEMENTS).toHaveLength(34);
   });
 
   it('covers all 5 CQC categories', () => {

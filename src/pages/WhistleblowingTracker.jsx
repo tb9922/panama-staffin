@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
@@ -35,6 +36,7 @@ const EMPTY_FORM = {
 export default function WhistleblowingTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [concerns, setConcerns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -134,7 +136,8 @@ export default function WhistleblowingTracker() {
   }
 
   async function handleDelete() {
-    if (!editingId || !confirm('Delete this whistleblowing concern?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this whistleblowing concern?')) return;
     try {
       await deleteWhistleblowingConcern(homeSlug, editingId);
       setShowModal(false);
@@ -461,6 +464,7 @@ export default function WhistleblowingTracker() {
               )}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

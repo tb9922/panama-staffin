@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
@@ -36,6 +37,7 @@ const TABS = [
 export default function GdprDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -289,7 +291,7 @@ export default function GdprDashboard() {
 
   async function handleWithdrawConsent(id) {
     if (saving) return;
-    if (!window.confirm('Withdraw this consent record? This cannot be undone.')) return;
+    if (!await confirm('Withdraw this consent record? This cannot be undone.')) return;
     setSaving(true);
     try {
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
@@ -445,6 +447,7 @@ export default function GdprDashboard() {
           <button className={BTN.danger} disabled={erasureInput !== 'ERASE'} onClick={confirmErasure}>Execute Erasure</button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
@@ -48,6 +49,7 @@ const EMPTY_FORM = {
 export default function IncidentTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [incidents, setIncidents] = useState([]);
@@ -186,7 +188,7 @@ export default function IncidentTracker() {
 
   async function handleFreeze() {
     if (!editingId) return;
-    if (!confirm('Freeze this incident record? Once frozen, the incident details cannot be edited. You can still add notes.')) return;
+    if (!await confirm('Freeze this incident record? Once frozen, the incident details cannot be edited. You can still add notes.')) return;
     setFreezing(true);
     try {
       const home = getCurrentHome();
@@ -238,7 +240,8 @@ export default function IncidentTracker() {
   async function handleDelete() {
     if (saving) return;
     if (isFrozen) return;
-    if (!editingId || !confirm('Delete this incident record?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this incident record?')) return;
     const home = getCurrentHome();
     setSaving(true);
     try {
@@ -869,6 +872,7 @@ export default function IncidentTracker() {
               )}
             </div>
       </ModalWrapper>
+      {ConfirmDialog}
     </div>
   );
 }

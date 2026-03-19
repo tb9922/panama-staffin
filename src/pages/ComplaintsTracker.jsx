@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -46,6 +47,7 @@ const COMPLAINT_CONFIG = { complaint_response_days: 28 };
 export default function ComplaintsTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [complaints, setComplaints] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [complaintCategories, setComplaintCategories] = useState([]);
@@ -172,7 +174,8 @@ export default function ComplaintsTracker() {
 
   async function handleDelete() {
     if (saving) return;
-    if (!editingId || !confirm('Delete this complaint?')) return;
+    if (!editingId) return;
+    if (!await confirm('Delete this complaint?')) return;
     setSaving(true);
     try {
       await deleteComplaint(home, editingId);
@@ -214,7 +217,8 @@ export default function ComplaintsTracker() {
 
   async function handleDeleteSurvey() {
     if (saving) return;
-    if (!editingSurveyId || !confirm('Delete this survey?')) return;
+    if (!editingSurveyId) return;
+    if (!await confirm('Delete this survey?')) return;
     setSaving(true);
     try {
       await deleteComplaintSurvey(home, editingSurveyId);
@@ -656,6 +660,7 @@ export default function ComplaintsTracker() {
               {canEdit && <button onClick={handleSaveSurvey} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : 'Save'}</button>}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

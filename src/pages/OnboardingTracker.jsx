@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
   buildOnboardingMatrix, getOnboardingStats,
@@ -20,6 +21,7 @@ export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -125,7 +127,7 @@ export default function OnboardingTracker() {
   }
 
   async function handleClear() {
-    if (!confirm('Remove this onboarding record?')) return;
+    if (!await confirm('Remove this onboarding record?')) return;
     setSaving(true);
     try {
       await clearOnboardingSection(homeSlug, modalStaffId, modalSection);
@@ -930,6 +932,7 @@ export default function OnboardingTracker() {
               )}
             </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }
