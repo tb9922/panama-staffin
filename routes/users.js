@@ -255,13 +255,11 @@ router.get('/:id/roles', readRateLimiter, requireAuth, requireHomeAccess, requir
   try {
     const id = idSchema.safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
-    const user = await userRepo.findById(id.data);
+    // findByIdAtHome does an INNER JOIN so returns null whether the user doesn't exist
+    // or has no role at this home — avoids confirming cross-home user existence.
+    const user = await userRepo.findByIdAtHome(id.data, req.home.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // Return role at this home only (not all homes)
-    const allRoles = await userHomeRepo.findRolesForUser(user.username);
-    const homeRole = allRoles.find(r => r.home_id === req.home.id);
-    res.json({ role: homeRole || null });
+    res.json({ role: { role_id: user.role_id, staff_id: user.staff_id } });
   } catch (err) { next(err); }
 });
 

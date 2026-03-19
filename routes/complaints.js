@@ -84,7 +84,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = complaintBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const complaint = await complaintRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
+    // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
+    const { id: _id, ...complaintBody } = parsed.data;
+    const complaint = await complaintRepo.upsert(req.home.id, { ...complaintBody, reported_by: req.user.username });
     await auditService.log('complaint_create', req.home.slug, req.user.username, { id: complaint?.id });
     res.status(201).json(complaint);
   } catch (err) { next(err); }
@@ -132,7 +134,9 @@ router.post('/surveys', writeRateLimiter, requireAuth, requireHomeAccess, requir
   try {
     const parsed = surveyBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const survey = await complaintSurveyRepo.upsert(req.home.id, parsed.data);
+    // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
+    const { id: _id, ...surveyBody } = parsed.data;
+    const survey = await complaintSurveyRepo.upsert(req.home.id, surveyBody);
     await auditService.log('survey_create', req.home.slug, req.user.username, { id: survey?.id });
     res.status(201).json(survey);
   } catch (err) { next(err); }

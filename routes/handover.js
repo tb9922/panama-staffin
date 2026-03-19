@@ -29,7 +29,7 @@ const updateBodySchema = z.object({
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     const dateParam = dateSchema.safeParse(req.query.date);
-    if (!dateParam.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
+    if (!dateParam.success || !dateParam.data) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
     const result = await handoverRepo.findByHomeAndDate(req.home.id, dateParam.data);
     res.json(result.rows);
   } catch (err) {

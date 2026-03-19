@@ -11,13 +11,13 @@ router.get('/', requireAuth, requireHomeAccess, requireModule('reports', 'read')
   try {
     const homeSlug = req.home.slug;
 
-    // Assemble with effective role so GDPR stripping applies correctly
-    const effectiveRole = (req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager') ? 'admin' : 'viewer';
-    const data = await homeService.assembleData(homeSlug, effectiveRole);
+    // Pass the real per-home role so assembleData's PII_ROLES allowlist applies correctly.
+    // Training leads, HR officers, and finance officers have legitimate access to NI/DoB/hourly_rate.
+    const data = await homeService.assembleData(homeSlug, req.homeRole);
 
     await auditService.log('data_export', homeSlug, req.user.username, null);
 
-    res.setHeader('Content-Disposition', `attachment; filename=${homeSlug}_data.json`);
+    res.setHeader('Content-Disposition', `attachment; filename="${homeSlug}_data.json"`);
     res.setHeader('Content-Type', 'application/json');
     res.json(data);
   } catch (err) {

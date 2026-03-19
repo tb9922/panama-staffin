@@ -115,7 +115,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = incidentBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const incident = await incidentRepo.upsert(req.home.id, { ...parsed.data, reported_by: req.user.username });
+    // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
+    const { id: _id, ...incidentBody } = parsed.data;
+    const incident = await incidentRepo.upsert(req.home.id, { ...incidentBody, reported_by: req.user.username });
     if (!incident) {
       return res.status(409).json({ error: 'Incident is frozen and cannot be modified' });
     }

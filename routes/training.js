@@ -12,6 +12,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { getTrainingTypes } from '../shared/training.js';
+import { updateConfig } from '../repositories/homeRepo.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -117,7 +118,6 @@ router.put('/config/types', writeRateLimiter, requireAuth, requireHomeAccess, re
     const parsed = trainingTypesArraySchema.safeParse(req.body?.trainingTypes);
     if (!parsed.success) return zodError(res, parsed);
     const updatedConfig = { ...req.home.config, training_types: parsed.data };
-    const { updateConfig } = await import('../repositories/homeRepo.js');
     await updateConfig(req.home.id, updatedConfig);
     await auditService.log('training_types_update', req.home.slug, req.user.username, null);
     res.json({ ok: true });
