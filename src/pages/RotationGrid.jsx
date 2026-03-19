@@ -19,6 +19,7 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -83,6 +84,7 @@ function parseLocalDate(str) {
 export default function RotationGrid() {
   const { canWrite } = useData();
   const canEdit = canWrite('scheduling');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -368,7 +370,7 @@ export default function RotationGrid() {
   }
 
   async function revertAllOverrides() {
-    if (!confirm(`Revert ALL overrides for ${monthLabel}? This cannot be undone.`)) return;
+    if (!await confirm(`Revert ALL overrides for ${monthLabel}? This cannot be undone.`)) return;
     const firstOfMonth = formatDate(monthDates[0]);
     const lastOfMonth = formatDate(monthDates[monthDates.length - 1]);
     setSaving(true);
@@ -924,6 +926,7 @@ export default function RotationGrid() {
             </div>
           </>}
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }

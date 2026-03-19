@@ -3,6 +3,7 @@ import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
@@ -33,6 +34,7 @@ export default function StaffRegister() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [allStaff, setAllStaff] = useState([]);
   const [config, setConfig] = useState(null);
   const [overrides, setOverrides] = useState({});
@@ -178,7 +180,7 @@ export default function StaffRegister() {
 
   async function removeStaff(id) {
     const s = allStaff.find(x => x.id === id);
-    if (!s || !confirm(`Remove ${s.name} (${id})? This will also remove all their overrides.`)) return;
+    if (!s || !await confirm(`Remove ${s.name} (${id})? This will also remove all their overrides.`)) return;
     setSaving(true);
     setRowError(null);
     try {
@@ -652,6 +654,7 @@ export default function StaffRegister() {
       <div className="mt-3 text-xs text-gray-400 print:hidden">
         Click any field to edit inline, then click Save to persist. Changes to pay rates and skills affect all cost and coverage calculations across the app.
       </div>
+      {ConfirmDialog}
     </div>
   );
 }

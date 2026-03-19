@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
@@ -20,6 +21,7 @@ export default function PayablesManager() {
   const [processing, setProcessing] = useState(null);
   const [saving, setSaving] = useState(false);
   const home = getCurrentHome();
+  const { confirm, ConfirmDialog } = useConfirm();
   useDirtyGuard(!!showModal);
 
   const load = useCallback(async () => {
@@ -98,7 +100,7 @@ export default function PayablesManager() {
 
   async function handleProcess(sched) {
     if (saving || processing) return;
-    if (!confirm(`Process payment for ${sched.supplier} — ${formatCurrency(sched.amount)}?\n\nThis will create an expense and advance the schedule to the next period.`)) return;
+    if (!await confirm(`Process payment for ${sched.supplier} — ${formatCurrency(sched.amount)}? This will create an expense and advance the schedule to the next period.`)) return;
     setError(null);
     setProcessing(sched.id);
     setSaving(true);
@@ -295,6 +297,7 @@ export default function PayablesManager() {
           {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Schedule'}</button>}
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }
