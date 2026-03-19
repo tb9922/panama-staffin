@@ -3,15 +3,26 @@ import { pool } from '../db.js';
 const ts = v => v instanceof Date ? v.toISOString() : v;
 
 /* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */
-const DOLS_COLS = `id, home_id, resident_name, dob, room_number,
+const DOLS_COLS = `id, home_id, resident_name, resident_id, dob, room_number,
   application_type, application_date, authorised,
   authorisation_date, expiry_date, authorisation_number, authorising_authority,
   restrictions, reviewed_date, review_status, next_review_date,
   notes, version, updated_at, created_at, deleted_at`;
 
-const MCA_COLS = `id, home_id, resident_name, assessment_date, assessor,
+const MCA_COLS = `id, home_id, resident_name, resident_id, assessment_date, assessor,
   decision_area, lacks_capacity, best_interest_decision,
   next_review_date, notes, version, updated_at, created_at, deleted_at`;
+
+// Auto-resolve resident_id from finance_residents by name+home.
+// Called before insert to ensure FK is populated even when UI only sends resident_name.
+async function resolveResidentId(homeId, residentName, conn) {
+  if (!residentName) return null;
+  const { rows } = await conn.query(
+    `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL LIMIT 1`,
+    [homeId, residentName]
+  );
+  return rows[0]?.id || null;
+}
 
 function shapeDolsRow(row) {
   return {
@@ -126,23 +137,26 @@ export async function findDolsById(id, homeId) {
 export async function upsertDols(homeId, data) {
   const id = data.id || `dls-${randomUUID()}`;
   const now = new Date().toISOString();
+  // Auto-resolve resident_id from finance_residents if not provided
+  const residentId = data.resident_id || await resolveResidentId(homeId, data.resident_name, pool);
   const { rows } = await pool.query(
     `INSERT INTO dols (
-       id, home_id, resident_name, dob, room_number,
+       id, home_id, resident_name, resident_id, dob, room_number,
        application_type, application_date, authorised,
        authorisation_date, expiry_date, authorisation_number, authorising_authority,
        restrictions, reviewed_date, review_status, next_review_date,
        notes, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       resident_name=$3,dob=$4,room_number=$5,
-       application_type=$6,application_date=$7,authorised=$8,
-       authorisation_date=$9,expiry_date=$10,authorisation_number=$11,
-       authorising_authority=$12,restrictions=$13,reviewed_date=$14,
-       review_status=$15,next_review_date=$16,notes=$17,updated_at=$18,deleted_at=NULL
+       resident_name=$3,resident_id=$4,dob=$5,room_number=$6,
+       application_type=$7,application_date=$8,authorised=$9,
+       authorisation_date=$10,expiry_date=$11,authorisation_number=$12,
+       authorising_authority=$13,restrictions=$14,reviewed_date=$15,
+       review_status=$16,next_review_date=$17,notes=$18,updated_at=$19,deleted_at=NULL
      RETURNING ${DOLS_COLS}`,
     [
-      id, homeId, data.resident_name || null, data.dob || null, data.room_number || null,
+      id, homeId, data.resident_name || null, residentId,
+      data.dob || null, data.room_number || null,
       data.application_type || null, data.application_date || null,
       data.authorised ?? false,
       data.authorisation_date || null, data.expiry_date || null,
@@ -157,7 +171,7 @@ export async function upsertDols(homeId, data) {
 
 // Column name whitelist for dynamic SQL — DoLS
 const ALLOWED_DOLS_COLUMNS = new Set([
-  'resident_name', 'dob', 'room_number',
+  'resident_name', 'resident_id', 'dob', 'room_number',
   'application_type', 'application_date', 'authorised',
   'authorisation_date', 'expiry_date', 'authorisation_number', 'authorising_authority',
   'restrictions', 'reviewed_date', 'review_status', 'next_review_date',
@@ -260,19 +274,21 @@ export async function findMcaById(id, homeId) {
 export async function upsertMca(homeId, data) {
   const id = data.id || `mca-${randomUUID()}`;
   const now = new Date().toISOString();
+  const residentId = data.resident_id || await resolveResidentId(homeId, data.resident_name, pool);
   const { rows } = await pool.query(
     `INSERT INTO mca_assessments (
-       id, home_id, resident_name, assessment_date, assessor,
+       id, home_id, resident_name, resident_id, assessment_date, assessor,
        decision_area, lacks_capacity, best_interest_decision,
        next_review_date, notes, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (home_id, id) DO UPDATE SET
-       resident_name=$3,assessment_date=$4,assessor=$5,
-       decision_area=$6,lacks_capacity=$7,best_interest_decision=$8,
-       next_review_date=$9,notes=$10,updated_at=$11,deleted_at=NULL
+       resident_name=$3,resident_id=$4,assessment_date=$5,assessor=$6,
+       decision_area=$7,lacks_capacity=$8,best_interest_decision=$9,
+       next_review_date=$10,notes=$11,updated_at=$12,deleted_at=NULL
      RETURNING ${MCA_COLS}`,
     [
-      id, homeId, data.resident_name || null, data.assessment_date || null,
+      id, homeId, data.resident_name || null, residentId,
+      data.assessment_date || null,
       data.assessor || null, data.decision_area || null,
       data.lacks_capacity ?? false, data.best_interest_decision || null,
       data.next_review_date || null, data.notes || null, now,
@@ -283,7 +299,7 @@ export async function upsertMca(homeId, data) {
 
 // Column name whitelist for dynamic SQL — MCA
 const ALLOWED_MCA_COLUMNS = new Set([
-  'resident_name', 'assessment_date', 'assessor',
+  'resident_name', 'resident_id', 'assessment_date', 'assessor',
   'decision_area', 'lacks_capacity', 'best_interest_decision',
   'next_review_date', 'notes',
 ]);

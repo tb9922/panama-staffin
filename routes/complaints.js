@@ -17,6 +17,7 @@ const complaintBodySchema = z.object({
   date:                dateSchema,
   raised_by:           z.string().max(100).nullable().optional(),
   raised_by_name:      z.string().max(200).nullable().optional(),
+  resident_id:         z.number().int().positive().nullable().optional(),
   category:            z.string().max(100).nullable().optional(),
   title:               z.string().min(1).max(500),
   description:         z.string().max(10000).nullable().optional(),

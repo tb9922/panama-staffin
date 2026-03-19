@@ -134,6 +134,14 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
   return withTransaction(async (client) => {
     const existing = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
     if (!existing) return null;
+
+    // Validate resident belongs to this home if resident_id is being changed
+    const residentChanged = 'resident_id' in data && data.resident_id != null && data.resident_id !== existing.resident_id;
+    if (residentChanged) {
+      const newResident = await financeRepo.findResidentById(data.resident_id, homeId, client);
+      if (!newResident) throw Object.assign(new Error('Resident not found in this home'), { statusCode: 400 });
+    }
+
     // Recalculate totals if lines provided
     if (data.lines) {
       await financeRepo.deleteInvoiceLines(id, homeId, client);
@@ -152,8 +160,13 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
     const invoice = await financeRepo.updateInvoice(id, homeId, data, client, version);
     if (invoice === null) return null;
 
+    // Recalculate balance for old resident
     if (existing.resident_id) {
       await financeRepo.recalculateResidentBalance(existing.resident_id, homeId, client);
+    }
+    // If resident changed, also recalculate balance for the new resident
+    if (residentChanged) {
+      await financeRepo.recalculateResidentBalance(data.resident_id, homeId, client);
     }
 
     const savedLines = await financeRepo.findInvoiceLines(id, homeId, client);

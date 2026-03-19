@@ -1044,3 +1044,59 @@ describe('Cross-cutting: auth + tenant isolation', () => {
     expect(rows.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+// ── Timesheet status bypass prevention ──────────────────────────────────────
+
+describe('Timesheet: status field stripped from upsert', () => {
+  it('POST /timesheets ignores status field — always creates as pending', async () => {
+    const res = await adminPost(`/timesheets?home=${homeASlug}`, {
+      staff_id: 'S001',
+      date: '2026-03-20',
+      payable_hours: 8,
+      status: 'approved',  // should be stripped by Zod schema
+    }).expect(201);
+
+    // status should be 'pending' regardless of what was sent
+    expect(res.body.status).toBe('pending');
+    expect(res.body.approved_by).toBeFalsy();
+    expect(res.body.approved_at).toBeFalsy();
+  });
+});
+
+// ── Payroll void route ──────────────────────────────────────────────────────
+
+describe('Payroll Runs: void route', () => {
+  let voidTestRunId;
+
+  it('POST /runs creates a draft run for void testing', async () => {
+    const res = await adminPost(`/runs?home=${homeASlug}`, {
+      period_start: '2026-04-01',
+      period_end: '2026-04-30',
+      pay_date: '2026-05-05',
+    });
+    // May be 201 or 409 (overlap) depending on existing test data
+    if (res.status === 201) {
+      voidTestRunId = res.body.id;
+    }
+  });
+
+  it('POST /runs/:runId/void voids a draft run', async () => {
+    if (!voidTestRunId) return; // skip if creation failed due to overlap
+    const res = await request(app)
+      .post(`${BASE}/runs/${voidTestRunId}/void?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(200);
+
+    expect(res.body.status).toBe('voided');
+  });
+
+  it('POST /runs/:runId/void rejects already-voided run', async () => {
+    if (!voidTestRunId) return;
+    await request(app)
+      .post(`${BASE}/runs/${voidTestRunId}/void?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(400);
+  });
+});

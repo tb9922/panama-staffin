@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as assessmentRepo from '../repositories/assessmentRepo.js';
+import * as assessmentService from '../services/assessmentService.js';
 import * as auditService from '../services/auditService.js';
 import { zodError } from '../errors.js';
 
@@ -11,33 +12,42 @@ const router = Router();
 
 const createSchema = z.object({
   engine: z.enum(['cqc', 'gdpr']),
-  engine_version: z.string().max(10).default('v1'),
   window_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   window_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  overall_score: z.number().int().min(0).max(100),
-  band: z.string().max(30),
-  result: z.record(z.unknown()),
-  input_hash: z.string().max(64).optional(),
 });
 
 const signOffSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
-// POST /api/assessment/snapshot?home=X — compute + persist a snapshot
+// POST /api/assessment/snapshot?home=X — server-authoritative: compute + persist a snapshot
 router.post('/snapshot', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    // Compute input_hash for deduplication — prevents identical snapshots
-    const hashInput = JSON.stringify({ engine: parsed.data.engine, result: parsed.data.result });
+
+    // Server computes the score — client no longer sends overall_score, band, or result
+    const computed = await assessmentService.computeSnapshot(
+      req.home.id, parsed.data.engine, parsed.data.window_from, parsed.data.window_to
+    );
+    if (!computed) return res.status(500).json({ error: 'Failed to compute snapshot' });
+
+    // Compute input_hash for deduplication — includes window dates so different periods aren't deduped
+    const hashInput = JSON.stringify({ engine: parsed.data.engine, window_from: parsed.data.window_from || null, window_to: parsed.data.window_to || null, result: computed.result });
     const input_hash = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 64);
+
     const snapshot = await assessmentRepo.create(req.home.id, {
-      ...parsed.data,
+      engine: parsed.data.engine,
+      engine_version: computed.engine_version,
+      window_from: parsed.data.window_from,
+      window_to: parsed.data.window_to,
+      overall_score: computed.overall_score,
+      band: computed.band,
+      result: computed.result,
       computed_by: req.user.username,
       input_hash,
     });
-    await auditService.log('assessment_snapshot', req.home.slug, req.user.username, `engine=${parsed.data.engine} score=${parsed.data.overall_score}`);
+    await auditService.log('assessment_snapshot', req.home.slug, req.user.username, `engine=${parsed.data.engine} score=${computed.overall_score}`);
     res.status(201).json(snapshot);
   } catch (err) {
     // Unique constraint on (home_id, engine, input_hash) — duplicate snapshot

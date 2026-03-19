@@ -3,6 +3,7 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
+import ResidentPicker from '../components/ResidentPicker.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -483,8 +484,15 @@ export default function IncidentTracker() {
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Person Name</label>
-                    <input type="text" className={INPUT.base} value={form.person_affected_name} onChange={e => setForm({ ...form, person_affected_name: e.target.value })} />
+                    {form.person_affected === 'resident' ? (
+                      <ResidentPicker label="Resident" value={form.resident_id}
+                        onChange={(id, resident) => setForm({ ...form, resident_id: id, person_affected_name: resident?.resident_name || form.person_affected_name })} />
+                    ) : (
+                      <>
+                        <label className={INPUT.label}>Person Name</label>
+                        <input type="text" className={INPUT.base} value={form.person_affected_name} onChange={e => setForm({ ...form, person_affected_name: e.target.value })} />
+                      </>
+                    )}
                   </div>
                 </div>
 

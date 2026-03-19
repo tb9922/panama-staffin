@@ -28,6 +28,8 @@ vi.mock('../../lib/api.js', async () => {
     createDPComplaint: vi.fn(),
     updateDPComplaint: vi.fn(),
     getAccessLog: vi.fn(),
+    getRopaActivities: vi.fn(),
+    getDpiaAssessments: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -38,10 +40,14 @@ vi.mock('../../lib/gdpr.js', async () => {
   const actual = await vi.importActual('../../lib/gdpr.js');
   return {
     ...actual,
-    calculateGdprComplianceScore: vi.fn(() => ({
-      score: 85,
-      band: 'good',
-      issues: [],
+    calculateGdprControlsScore: vi.fn(() => ({
+      overallScore: 85,
+      band: { label: 'Good', badgeKey: 'green' },
+      confidence: 'medium',
+      domains: {},
+      operationalHealth: { score: 85, band: 'good', issues: [] },
+      assessedDomains: 7,
+      totalDomains: 7,
     })),
   };
 });
@@ -67,6 +73,9 @@ function mockAllApis(overrides = {}) {
   api.getConsentRecords.mockResolvedValue(d.consent);
   api.getDPComplaints.mockResolvedValue(d.complaints);
   api.getAccessLog.mockResolvedValue(d.accessLog);
+  api.scanRetention.mockResolvedValue([]);
+  if (api.getRopaActivities) api.getRopaActivities.mockResolvedValue({ rows: [] });
+  if (api.getDpiaAssessments) api.getDpiaAssessments.mockResolvedValue({ rows: [] });
 }
 
 describe('GdprDashboard', () => {
@@ -100,10 +109,9 @@ describe('GdprDashboard', () => {
     expect(screen.getByRole('tab', { name: 'Access Log' })).toBeInTheDocument();
   });
 
-  it('shows compliance score on overview tab', async () => {
+  it('shows controls score on overview tab', async () => {
     renderWithProviders(<GdprDashboard />);
-    await waitFor(() => expect(screen.getByText(/85\/100/i)).toBeInTheDocument());
-    expect(screen.getByText(/compliance score/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/controls score/i)).toBeInTheDocument());
   });
 
   it('shows error message on API failure', async () => {

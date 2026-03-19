@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getPayrollRuns, createPayrollRun, getCurrentHome } from '../lib/api.js';
+import { getPayrollRuns, createPayrollRun, voidPayrollRun, getCurrentHome } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -13,6 +13,7 @@ const STATUS_BADGE = {
   approved:   BADGE.green,
   exported:   BADGE.purple,
   locked:     BADGE.gray,
+  voided:     BADGE.red,
 };
 
 const STATUS_LABEL = {
@@ -21,6 +22,7 @@ const STATUS_LABEL = {
   approved:   'Approved',
   exported:   'Exported',
   locked:     'Locked',
+  voided:     'Voided',
 };
 
 const FREQ_LABEL = {
@@ -176,9 +178,16 @@ export default function PayrollDashboard() {
                     </td>
                     <td className={TABLE.td + ' text-gray-500 text-xs'}>{run.exported_at ? run.exported_at.slice(0, 10) : '—'}</td>
                     <td className={TABLE.td}>
-                      <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>
-                        View
-                      </button>
+                      <div className="flex gap-1">
+                        <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>View</button>
+                        {canEdit && ['draft', 'calculated'].includes(run.status) && (
+                          <button className={`${BTN.danger} ${BTN.sm}`} onClick={async () => {
+                            if (!confirm('Void this payroll run? This cannot be undone.')) return;
+                            try { await voidPayrollRun(homeSlug, run.id); load(); }
+                            catch (e) { alert(e.message); }
+                          }}>Void</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

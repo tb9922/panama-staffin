@@ -14,6 +14,7 @@ const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{
 
 const dolsBodySchema = z.object({
   resident_name:          z.string().min(1).max(200),
+  resident_id:            z.number().int().positive().nullable().optional(),
   dob:                    dateSchema.optional(),
   room_number:            z.string().max(50).nullable().optional(),
   application_type:       z.enum(['dols', 'lps']).optional(),
@@ -35,6 +36,7 @@ const dolsUpdateSchema = dolsBodySchema.partial().extend({
 
 const mcaBodySchema = z.object({
   resident_name:          z.string().min(1).max(200),
+  resident_id:            z.number().int().positive().nullable().optional(),
   assessment_date:        dateSchema,
   assessor:               z.string().max(200).nullable().optional(),
   decision_area:          z.string().max(500).nullable().optional(),

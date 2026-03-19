@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import StaffPicker from '../components/StaffPicker.jsx';
+import ResidentPicker from '../components/ResidentPicker.jsx';
 import {
   getDataRequests, createDataRequest, updateDataRequest, gatherRequestData, executeErasure,
   getDataBreaches, createDataBreach, updateDataBreach, assessBreach,
@@ -9,13 +11,14 @@ import {
   getConsentRecords, createConsentRecord, updateConsentRecord,
   getDPComplaints, createDPComplaint, updateDPComplaint,
   getAccessLog, getCurrentHome, getLoggedInUser,
-  createSnapshot, getSnapshots, signOffSnapshot, } from '../lib/api.js';
+  getRopaActivities, getDpiaAssessments,
+  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot, } from '../lib/api.js';
 import {
   REQUEST_TYPES, BREACH_SEVERITIES, RISK_TO_RIGHTS, LEGAL_BASES,
   DP_COMPLAINT_CATEGORIES, DATA_CATEGORIES,
   calculateDeadline, daysUntilDeadline, isOverdue,
-  calculateGdprComplianceScore, getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
-  ENGINE_VERSION,
+  calculateGdprControlsScore,
+  getStatusBadgeKey, getSeverityBadgeKey, formatRequestType,
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -33,7 +36,6 @@ const TABS = [
 export default function GdprDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
-  const canEditSnapshots = canWrite('compliance');
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,19 +43,28 @@ export default function GdprDashboard() {
   // Data state
   const [requests, setRequests] = useState([]);
   const [breaches, setBreaches] = useState([]);
-  const [gdprSnapshots, setGdprSnapshots] = useState([]);
-  const [snapshotSaving, setSnapshotSaving] = useState(false);
   const [retention, setRetention] = useState([]);
   const [retentionScan, setRetentionScan] = useState(null);
   const [consent, setConsent] = useState([]);
   const [complaints, setComplaints] = useState([]);
   const [accessLogData, setAccessLogData] = useState([]);
+  const [ropaData, setRopaData] = useState([]);
+  const [dpiaData, setDpiaData] = useState([]);
 
   // Modal state
   const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'complaint'
   const [form, setForm] = useState({});
 
   const [saving, setSaving] = useState(false);
+
+  // ICO decision-record state
+  const [decisionBreach, setDecisionBreach] = useState(null); // breach object for decision modal
+  const [decisionForm, setDecisionForm] = useState({ manual_decision: false, decision_rationale: '' });
+
+  // Snapshot state
+  const [gdprSnapshots, setGdprSnapshots] = useState([]);
+  const [viewingGdprSnapshot, setViewingGdprSnapshot] = useState(null);
+  const [showGdprSnapshots, setShowGdprSnapshots] = useState(false);
 
   // Erasure confirmation state
   const [erasureConfirm, setErasureConfirm] = useState(null); // request id to erase
@@ -66,13 +77,16 @@ export default function GdprDashboard() {
     if (!home) return;
     setLoading(true);
     try {
-      const [req, br, ret, con, comp, acc] = await Promise.all([
+      const [req, br, ret, con, comp, acc, ropa, dpia, retScan] = await Promise.all([
         getDataRequests(home),
         getDataBreaches(home),
-        getRetentionSchedule(),
+        getRetentionSchedule().catch(() => []),
         getConsentRecords(home),
         getDPComplaints(home),
-        getAccessLog(200),
+        getAccessLog(200).catch(() => []),  // admin-only — graceful fallback for non-admin
+        getRopaActivities(home).catch(() => ({ rows: [] })),
+        getDpiaAssessments(home).catch(() => ({ rows: [] })),
+        scanRetention(home).catch(() => []),  // auto-scan on load for accurate live score
       ]);
       setRequests(req);
       setBreaches(br);
@@ -80,6 +94,9 @@ export default function GdprDashboard() {
       setConsent(con);
       setComplaints(comp);
       setAccessLogData(acc);
+      setRopaData(ropa?.rows || []);
+      setDpiaData(dpia?.rows || []);
+      setRetentionScan(retScan);
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -90,11 +107,36 @@ export default function GdprDashboard() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load GDPR snapshot history
-  useEffect(() => {
+  const loadGdprSnapshots = useCallback(async () => {
     if (!home) return;
-    getSnapshots(home, 'gdpr').then(setGdprSnapshots).catch(() => {});
+    try {
+      const result = await getSnapshots(home, 'gdpr');
+      setGdprSnapshots(Array.isArray(result) ? result : []);
+    } catch (e) { console.warn('Failed to load GDPR snapshots:', e.message); setGdprSnapshots([]); }
   }, [home]);
+
+  useEffect(() => { loadGdprSnapshots(); }, [loadGdprSnapshots]);
+
+  async function handleCreateGdprSnapshot() {
+    if (saving) return;
+    setSaving(true);
+    try { await createSnapshot(home, 'gdpr'); loadGdprSnapshots(); }
+    catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleViewGdprSnapshot(id) {
+    try { const snap = await getSnapshot(home, id); setViewingGdprSnapshot(snap); }
+    catch (e) { setError(e.message); }
+  }
+
+  async function handleSignOffGdprSnapshot(id) {
+    try {
+      await signOffSnapshot(home, id, '');
+      loadGdprSnapshots();
+      if (viewingGdprSnapshot?.id === id) { const snap = await getSnapshot(home, id); setViewingGdprSnapshot(snap); }
+    } catch (e) { setError(e.message); }
+  }
 
   function closeModal() { setShowModal(null); setForm({}); }
 
@@ -166,6 +208,32 @@ export default function GdprDashboard() {
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
+  function openDecisionModal(breach) {
+    setDecisionBreach(breach);
+    setDecisionForm({
+      manual_decision: breach.manual_decision ?? breach.recommended_ico_notification ?? false,
+      decision_rationale: breach.decision_rationale || '',
+    });
+  }
+
+  async function handleSaveDecision() {
+    if (saving || !decisionBreach) return;
+    setSaving(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await updateDataBreach(home, decisionBreach.id, {
+        manual_decision: decisionForm.manual_decision,
+        decision_by: getLoggedInUser()?.username || 'admin',
+        decision_at: today,
+        decision_rationale: decisionForm.decision_rationale,
+        ico_notifiable: decisionForm.manual_decision,
+        _version: decisionBreach.version,
+      });
+      setDecisionBreach(null);
+      load();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  }
+
   async function handleGatherData(id) {
     if (saving) return;
     setSaving(true);
@@ -229,40 +297,10 @@ export default function GdprDashboard() {
 
   // ── Compliance Score ─────────────────────────────────────────────────────
 
-  const compliance = calculateGdprComplianceScore(requests, breaches, complaints, retentionScan);
-  const bandColors = { good: 'green', adequate: 'blue', requires_improvement: 'amber', inadequate: 'red' };
-
-  async function handleTakeGdprSnapshot() {
-    if (snapshotSaving) return;
-    setSnapshotSaving(true);
-    try {
-      await createSnapshot(home, {
-        engine: 'gdpr',
-        engine_version: ENGINE_VERSION,
-        overall_score: compliance.score,
-        band: compliance.band,
-        result: { issues: compliance.issues, retentionScanned: retentionScan != null },
-      });
-      const updated = await getSnapshots(home, 'gdpr');
-      setGdprSnapshots(updated);
-    } catch (e) {
-      alert(e.message || 'Failed to save snapshot');
-    } finally {
-      setSnapshotSaving(false);
-    }
-  }
-
-  async function handleGdprSignOff(snapshotId) {
-    const notes = window.prompt('Sign-off notes (optional):');
-    if (notes === null) return;
-    try {
-      await signOffSnapshot(home, snapshotId, notes || undefined);
-      const updated = await getSnapshots(home, 'gdpr');
-      setGdprSnapshots(updated);
-    } catch (e) {
-      alert(e.message || 'Sign-off failed');
-    }
-  }
+  // Use the same 7-domain controls model that snapshots use, so live view matches saved snapshots
+  const controlsScore = calculateGdprControlsScore({ requests, breaches, complaints, retentionScan, consent, ropa: ropaData, dpia: dpiaData });
+  const compliance = controlsScore.operationalHealth; // backward compat for issues list
+  const bandColors = { Good: 'green', Adequate: 'blue', 'Requires Improvement': 'amber', Inadequate: 'red' };
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -275,6 +313,7 @@ export default function GdprDashboard() {
           <h1 className={PAGE.title}>GDPR & Data Protection</h1>
           <p className={PAGE.subtitle}>UK GDPR compliance — data requests, breaches, retention, consent</p>
         </div>
+        {canEdit && <button onClick={handleCreateGdprSnapshot} disabled={saving} className={`${BTN.secondary} ${BTN.sm}`}>Save Snapshot</button>}
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
@@ -296,6 +335,91 @@ export default function GdprDashboard() {
       {showModal === 'breach' && renderBreachModal()}
       {showModal === 'consent' && renderConsentModal()}
       {showModal === 'complaint' && renderComplaintModal()}
+
+      {/* ICO Decision Record Modal */}
+      {decisionBreach && (
+        <Modal isOpen={true} onClose={() => setDecisionBreach(null)} title="ICO Notification Decision" size="md">
+          <div className="space-y-4">
+            <div className="p-3 rounded bg-gray-50 text-sm">
+              <div className="font-medium text-gray-700">{decisionBreach.title}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                Severity: {decisionBreach.severity} | Risk: {decisionBreach.risk_to_rights} | Affected: {decisionBreach.individuals_affected}
+              </div>
+              {decisionBreach.recommended_ico_notification != null && (
+                <div className="mt-2">
+                  <span className="text-xs font-medium text-gray-600">AI Assessment: </span>
+                  <span className={decisionBreach.recommended_ico_notification ? BADGE.red : BADGE.green}>
+                    {decisionBreach.recommended_ico_notification ? 'ICO notification recommended' : 'ICO notification not required'}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={decisionForm.manual_decision}
+                  onChange={e => setDecisionForm({ ...decisionForm, manual_decision: e.target.checked })}
+                  className="rounded border-gray-300" />
+                <span className={INPUT.label + ' mb-0'}>Notify the ICO about this breach</span>
+              </label>
+            </div>
+            <div>
+              <label className={INPUT.label}>Decision Rationale</label>
+              <textarea className={INPUT.base} rows={3} value={decisionForm.decision_rationale}
+                onChange={e => setDecisionForm({ ...decisionForm, decision_rationale: e.target.value })}
+                placeholder="Record the reasoning behind this decision for audit purposes..." />
+            </div>
+          </div>
+          <div className={MODAL.footer}>
+            <button className={BTN.secondary} onClick={() => setDecisionBreach(null)}>Cancel</button>
+            <button className={BTN.primary} onClick={handleSaveDecision} disabled={saving}>
+              {saving ? 'Saving...' : 'Record Decision'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* GDPR Snapshot Viewing Modal */}
+      {viewingGdprSnapshot && (
+        <Modal isOpen={true} onClose={() => setViewingGdprSnapshot(null)} title={`GDPR Snapshot — ${viewingGdprSnapshot.computed_at?.slice(0, 10)}`} size="xl">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className={CARD.padded}><div className="text-xs text-gray-500">Score</div><div className="text-2xl font-bold">{viewingGdprSnapshot.overall_score}%</div></div>
+              <div className={CARD.padded}><div className="text-xs text-gray-500">Band</div><div className="text-lg font-semibold">{viewingGdprSnapshot.band}</div></div>
+              <div className={CARD.padded}><div className="text-xs text-gray-500">Engine</div><div className="text-lg">{viewingGdprSnapshot.engine_version}</div></div>
+              <div className={CARD.padded}><div className="text-xs text-gray-500">Signed Off</div><div className="text-lg">{viewingGdprSnapshot.signed_off_by || 'Pending'}</div></div>
+            </div>
+            {viewingGdprSnapshot.result?.domains && (
+              <div>
+                <div className="text-sm font-semibold text-gray-600 mb-2">ICO Domain Scores</div>
+                <div className="space-y-2">
+                  {Object.entries(viewingGdprSnapshot.result.domains).map(([id, d]) => (
+                    <div key={id} className="flex items-center gap-3">
+                      <div className="w-40 text-sm text-gray-700">{d.label}</div>
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div className={`h-2 rounded-full ${d.score >= 90 ? 'bg-green-500' : d.score >= 70 ? 'bg-blue-500' : d.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ width: `${d.score}%` }} />
+                      </div>
+                      <div className="w-12 text-right text-sm font-medium">{d.score}%</div>
+                      <span className={BADGE[d.band?.badgeKey || 'gray']}>{d.confidence || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {viewingGdprSnapshot.result?.operationalHealth && (
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">Operational Health:</span> {viewingGdprSnapshot.result.operationalHealth.score}/100
+                {viewingGdprSnapshot.result.operationalHealth.issues?.length > 0 && (
+                  <span className="text-red-500 ml-2">({viewingGdprSnapshot.result.operationalHealth.issues.length} issues)</span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className={MODAL.footer}>
+            <button className={BTN.secondary} onClick={() => setViewingGdprSnapshot(null)}>Close</button>
+          </div>
+        </Modal>
+      )}
 
       {/* Erasure Confirmation Modal */}
       <Modal isOpen={!!erasureConfirm} onClose={() => { setErasureConfirm(null); setErasureInput(''); }} title="Confirm Permanent Erasure" size="sm">
@@ -333,54 +457,45 @@ export default function GdprDashboard() {
 
     return (
       <div className="space-y-6">
-        {/* Compliance Score */}
+        {/* Controls Score (7-domain ICO framework) */}
         <div className={CARD.padded}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Compliance Score</h2>
-            <div className="flex items-center gap-2">
-              {canEditSnapshots && (
-                <button onClick={handleTakeGdprSnapshot} disabled={snapshotSaving} className={`${BTN.ghost} ${BTN.xs}`}>
-                  {snapshotSaving ? 'Saving...' : 'Take Snapshot'}
-                </button>
-              )}
-              <span className={BADGE[bandColors[compliance.band] || 'gray']}>
-                {compliance.score}/100 — {compliance.band.replace(/_/g, ' ')}
-              </span>
-            </div>
+            <h2 className="text-lg font-semibold">GDPR Controls Score</h2>
+            <span className={BADGE[bandColors[controlsScore.band?.label] || 'gray']}>
+              {controlsScore.overallScore}/100 — {controlsScore.band?.label || 'Unknown'}
+            </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
             <div className={`h-3 rounded-full transition-all ${
-              compliance.score >= 90 ? 'bg-green-500' : compliance.score >= 70 ? 'bg-blue-500' : compliance.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
-            }`} style={{ width: `${compliance.score}%` }} />
+              controlsScore.overallScore >= 90 ? 'bg-green-500' : controlsScore.overallScore >= 70 ? 'bg-blue-500' : controlsScore.overallScore >= 50 ? 'bg-amber-500' : 'bg-red-500'
+            }`} style={{ width: `${controlsScore.overallScore}%` }} />
           </div>
-          {compliance.issues.length > 0 && (
-            <ul className="text-sm text-gray-600 space-y-1">
-              {compliance.issues.map((issue, i) => <li key={i} className="flex items-center gap-2"><span className="text-red-500">!</span> {issue}</li>)}
-            </ul>
-          )}
-        </div>
-
-        {/* Snapshot History */}
-        {gdprSnapshots.length > 0 && (
-          <div className={`${CARD.padded} mb-4`}>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h3>
-            <div className="space-y-1">
-              {gdprSnapshots.slice(0, 5).map(s => (
-                <div key={s.id} className="flex items-center justify-between text-xs text-gray-600 py-1 border-b border-gray-50">
-                  <span>{new Date(s.computed_at).toLocaleDateString('en-GB')} — {s.overall_score}/100 ({s.band})</span>
-                  <div className="flex items-center gap-2">
-                    {s.signed_off_by
-                      ? <span className={BADGE.green}>Signed off by {s.signed_off_by}</span>
-                      : canEditSnapshots && s.computed_by !== getLoggedInUser()?.username && (
-                        <button onClick={() => handleGdprSignOff(s.id)} className={`${BTN.ghost} ${BTN.xs}`}>Sign Off</button>
-                      )
-                    }
+          {/* Per-domain breakdown */}
+          {controlsScore.domains && (
+            <div className="space-y-2 mt-3">
+              {Object.entries(controlsScore.domains).map(([id, d]) => (
+                <div key={id} className="flex items-center gap-3">
+                  <div className="w-36 text-xs text-gray-600 truncate">{d.label}</div>
+                  <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                    <div className={`h-1.5 rounded-full ${d.score >= 90 ? 'bg-green-500' : d.score >= 70 ? 'bg-blue-500' : d.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${d.score}%` }} />
                   </div>
+                  <div className="w-10 text-right text-xs font-medium">{d.score}%</div>
+                  <span className={`text-[10px] ${BADGE[d.confidence === 'high' ? 'green' : d.confidence === 'medium' ? 'amber' : 'gray']}`}>{d.confidence}</span>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+          {/* Operational issues from legacy scorer */}
+          {compliance.issues.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="text-xs font-semibold text-gray-500 mb-1">Operational Issues</div>
+              <ul className="text-sm text-gray-600 space-y-1">
+                {compliance.issues.map((issue, i) => <li key={i} className="flex items-center gap-2"><span className="text-red-500">!</span> {issue}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -403,6 +518,39 @@ export default function GdprDashboard() {
             <p className="text-2xl font-bold">{consent.length}</p>
             <p className="text-sm text-gray-400">{consent.filter(c => c.withdrawn).length} withdrawn</p>
           </div>
+        </div>
+
+        {/* Snapshot History */}
+        <div>
+          <button onClick={() => setShowGdprSnapshots(!showGdprSnapshots)} className={`${BTN.ghost} ${BTN.sm} mb-2`}>
+            {showGdprSnapshots ? 'Hide' : 'Show'} Snapshot History ({gdprSnapshots.length})
+          </button>
+          {showGdprSnapshots && gdprSnapshots.length > 0 && (
+            <div className={CARD.flush}>
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr><th className={TABLE.th}>Date</th><th className={TABLE.th}>Score</th><th className={TABLE.th}>Band</th><th className={TABLE.th}>Engine</th><th className={TABLE.th}>Sign-off</th><th className={TABLE.th}>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {gdprSnapshots.map(s => (
+                    <tr key={s.id} className={TABLE.tr}>
+                      <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
+                      <td className={TABLE.td}>{s.overall_score}%</td>
+                      <td className={TABLE.td}><span className={BADGE[s.band === 'Good' ? 'green' : s.band === 'Adequate' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
+                      <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
+                      <td className={TABLE.td}>{s.signed_off_by ? <span className={BADGE.green}>{s.signed_off_by}</span> : <span className={BADGE.gray}>Pending</span>}</td>
+                      <td className={TABLE.td}>
+                        <div className="flex gap-1">
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewGdprSnapshot(s.id)}>View</button>
+                          {!s.signed_off_by && canEdit && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOffGdprSnapshot(s.id)}>Sign Off</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -491,12 +639,14 @@ export default function GdprDashboard() {
                     <td className={TABLE.td}>
                       {b.ico_notifiable ? (
                         b.ico_notified ? <span className={BADGE.green}>Notified</span> : <span className={BADGE.red}>Required</span>
-                      ) : <span className={BADGE.gray}>N/A</span>}
+                      ) : b.ico_notifiable === false ? <span className={BADGE.gray}>Not Required</span> : <span className={BADGE.gray}>Not Assessed</span>}
+                      {b.decision_at && <><br /><span className="text-[10px] text-gray-400">Decision by {b.decision_by}</span></>}
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadgeKey(b.status)]}>{b.status}</span></td>
                     <td className={TABLE.td}>
                       {canEdit && <div className="flex gap-1 flex-wrap">
                         <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleAssessBreach(b.id)}>Assess</button>
+                        {b.ico_notifiable != null && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openDecisionModal(b)}>Decision</button>}
                         {b.status === 'open' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'contained')}>Contain</button>}
                         {b.status === 'contained' && <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'resolved')}>Resolve</button>}
                         {b.status === 'resolved' && <button className={BTN.success + ' ' + BTN.xs} onClick={() => handleUpdateStatus('breach', b.id, 'closed')}>Close</button>}
@@ -683,13 +833,16 @@ export default function GdprDashboard() {
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Subject ID / Name</label>
-              <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} placeholder="e.g. S001 or name" />
+              {form.subject_type === 'resident' ? (
+                <ResidentPicker label="Resident" required value={form.subject_id}
+                  onChange={(id, resident) => setForm({ ...form, subject_id: id ? String(id) : '', subject_name: resident?.resident_name || '' })} />
+              ) : (
+                <StaffPicker label="Staff Member" required value={form.subject_id}
+                  onChange={val => {
+                    setForm({ ...form, subject_id: val });
+                  }} />
+              )}
             </div>
-          </div>
-          <div>
-            <label className={INPUT.label}>Subject Name</label>
-            <input className={INPUT.base} value={form.subject_name || ''} onChange={e => setForm({ ...form, subject_name: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

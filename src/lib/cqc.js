@@ -1,6 +1,4 @@
 // CQC Compliance Evidence — Scoring Engine & Evidence Aggregation
-// Bump ENGINE_VERSION when scoring logic, weights, or banding changes.
-export const ENGINE_VERSION = 'v1';
 
 import { formatDate, parseDate, addDays, getStaffForDay, isCareRole, isWorkingShift } from './rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from './escalation.js';
@@ -18,6 +16,12 @@ import { calculatePolicyCompliancePct } from './policyReview.js';
 import { calculateSpeakUpCulture } from './whistleblowing.js';
 import { calculateDolsCompliancePct } from './dols.js';
 import { calculateCareCertCompletionPct } from './careCertificate.js';
+
+// ── Engine Version ──────────────────────────────────────────────────────────
+// Bump when the scoring model changes materially (metric weights, banding thresholds,
+// aggregation method). Embedded in calculateComplianceScore return value so snapshots
+// record which engine produced them.
+export const ENGINE_VERSION = 'v2';
 
 // ── Quality Statements ──────────────────────────────────────────────────────
 
@@ -238,39 +242,73 @@ export const QUALITY_STATEMENTS = [
 
 // ── Metric Definitions ──────────────────────────────────────────────────────
 
+// Each metric is assigned to a CQC key question. Per-question scores are computed
+// as weighted averages within the question, then the overall band uses CQC's
+// limiting-judgement aggregation rules (see applyLimitingJudgement below).
 export const METRIC_DEFINITIONS = [
-  // Existing metrics (rebalanced weights)
-  { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.12, available: true },
-  { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.12, available: true },
-  { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.08, available: true },
-  { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.07, available: true },
-  { id: 'cqcNotifications',        label: 'CQC Notifications on Time',    weight: 0.07, available: true },
-  { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.07, available: true },
-  { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.05, available: true },
-  { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.05, available: true },
-  { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.04, available: true },
-  { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.04, available: true },
-  // New metrics from 8 modules
-  { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.05, available: true },
-  { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.05, available: true },
-  { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.05, available: true },
-  { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.03, available: true },
-  { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.03, available: true },
-  { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.03, available: true },
-  { id: 'satisfactionScore',       label: 'Satisfaction Score',           weight: 0.03, available: true },
-  { id: 'speakUpCulture',          label: 'Speak Up Culture',             weight: 0.02, available: true },
+  // ── Safe (Reg 12, 13, 15, 18, 19) ──────────────────────────────────────────
+  { id: 'staffingFillRate',        label: 'Staffing Fill Rate %',         weight: 0.12, question: 'safe',       available: true },
+  { id: 'agencyDependency',        label: 'Agency Dependency %',          weight: 0.08, question: 'safe',       available: true },
+  { id: 'incidentResponseTime',    label: 'Incident Response Time',       weight: 0.07, question: 'safe',       available: true },
+  { id: 'cqcNotifications',        label: 'CQC Notifications on Time',    weight: 0.07, question: 'safe',       available: true },
+  { id: 'fireDrillCompliance',     label: 'Fire Drill Compliance',        weight: 0.04, question: 'safe',       available: true },
+  { id: 'maintenanceCompliancePct',label: 'Maintenance Compliance %',     weight: 0.05, question: 'safe',       available: true },
+  { id: 'ipcAuditCompliance',      label: 'IPC Audit Compliance %',       weight: 0.05, question: 'safe',       available: true },
+  // ── Effective (Reg 9, 17, 18) ───────────────────────────────────────────────
+  { id: 'trainingCompliance',      label: 'Training Compliance %',        weight: 0.12, question: 'effective',  available: true },
+  { id: 'supervisionCompletion',   label: 'Supervision Completion %',     weight: 0.07, question: 'effective',  available: true },
+  { id: 'careCertCompletion',      label: 'Care Certificate Completion',  weight: 0.05, question: 'effective',  available: true },
+  { id: 'appraisalCompletion',     label: 'Appraisal Completion %',       weight: 0.04, question: 'effective',  available: true },
+  // ── Caring (Reg 9, 10, 11, 13) ─────────────────────────────────────────────
+  { id: 'dolsCompliancePct',       label: 'DoLS Compliance %',            weight: 0.03, question: 'caring',     available: true },
+  { id: 'satisfactionScore',       label: 'Satisfaction Score',           weight: 0.03, question: 'caring',     available: true },
+  // ── Responsive (Reg 9, 16) ─────────────────────────────────────────────────
+  { id: 'complaintResolutionRate', label: 'Complaint Resolution Rate',    weight: 0.05, question: 'responsive', available: true },
+  // ── Well-Led (Reg 17) ──────────────────────────────────────────────────────
+  { id: 'staffTurnover',           label: 'Staff Turnover Rate %',        weight: 0.05, question: 'well-led',   available: true },
+  { id: 'riskManagementScore',     label: 'Risk Management Score',        weight: 0.03, question: 'well-led',   available: true },
+  { id: 'policyCompliancePct',     label: 'Policy Compliance %',          weight: 0.03, question: 'well-led',   available: true },
+  { id: 'speakUpCulture',          label: 'Speak Up Culture',             weight: 0.02, question: 'well-led',   available: true },
 ];
+
+// CQC key questions for grouping
+export const KEY_QUESTIONS = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
 
 // ── Score Banding ───────────────────────────────────────────────────────────
 
-// CQC 4-point rating scale. Note: this is an internal readiness indicator,
-// not a prediction of CQC's assessment (which uses professional judgement).
+// CQC 4-point rating scale. Used for both per-question and overall scores.
 export const SCORE_BANDS = [
   { min: 90, label: 'Outstanding',            color: 'green',  badgeKey: 'green'  },
   { min: 75, label: 'Good',                   color: 'blue',   badgeKey: 'blue'   },
   { min: 50, label: 'Requires Improvement',   color: 'amber',  badgeKey: 'amber'  },
   { min: 0,  label: 'Inadequate',             color: 'red',    badgeKey: 'red'    },
 ];
+
+// ── Limiting Judgement ──────────────────────────────────────────────────────
+// CQC overall rating aggregation rules (confirmed from CQC guidance):
+// - Outstanding:          2+ Outstanding + remaining all Good
+// - Good:                 No Inadequate AND max 1 Requires Improvement
+// - Requires Improvement: 2+ Requires Improvement
+// - Inadequate:           2+ Inadequate
+
+export function applyLimitingJudgement(questionBands) {
+  const counts = { Outstanding: 0, Good: 0, 'Requires Improvement': 0, Inadequate: 0 };
+  for (const qb of Object.values(questionBands)) {
+    counts[qb.label] = (counts[qb.label] || 0) + 1;
+  }
+  const total = Object.values(questionBands).length;
+
+  // Inadequate: 2+ key questions rated Inadequate
+  if (counts.Inadequate >= 2) return SCORE_BANDS[3]; // Inadequate
+  // Requires Improvement: 2+ key questions rated RI, OR 1 Inadequate + 1+ RI
+  if (counts['Requires Improvement'] >= 2 || (counts.Inadequate >= 1 && counts['Requires Improvement'] >= 1)) return SCORE_BANDS[2];
+  // Outstanding: 2+ Outstanding AND rest all Good
+  if (counts.Outstanding >= 2 && counts.Outstanding + counts.Good === total) return SCORE_BANDS[0];
+  // Good: no Inadequate AND max 1 RI
+  if (counts.Inadequate === 0 && counts['Requires Improvement'] <= 1) return SCORE_BANDS[1];
+  // Default: Requires Improvement
+  return SCORE_BANDS[2];
+}
 
 export function getScoreBand(score) {
   return SCORE_BANDS.find(b => score >= b.min) || SCORE_BANDS[SCORE_BANDS.length - 1];
@@ -531,8 +569,7 @@ export function calculateTrainingTrend(data, asOfDate) {
   return { currentPct, pastPct, trend };
 }
 
-// ── Provenance Metadata ─────────────────────────────────────────────────────
-// Per-metric source tracking, assumptions, and confidence derivation.
+// ── Per-metric Provenance, Confidence, and Evidence Summaries ────────────────
 
 const METRIC_PROVENANCE = {
   trainingCompliance:      { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Training types from config trusted'], exclusions: [] },
@@ -555,25 +592,19 @@ const METRIC_PROVENANCE = {
   speakUpCulture:          { source_modules: ['whistleblowing'], evidence_category: 'feedback', assumptions: ['Anonymous concerns included'], exclusions: ['Protection rate N/A when all anonymous'] },
 };
 
-/** Derive confidence level from data completeness and recency. */
-function deriveConfidence(metricId, raw, detail, data, dateRange) {
-  // Not evidenced: metric returned default/empty
+function deriveConfidence(metricId, raw, detail, data) {
   if (raw == null || (typeof raw === 'number' && isNaN(raw))) return 'not_evidenced';
-
-  // Check data availability for key metrics
-  const staff = data?.staff || [];
-  const activeStaff = staff.filter(s => s.active !== false);
-
+  const activeStaff = (data?.staff || []).filter(s => s.active !== false);
   switch (metricId) {
     case 'trainingCompliance':
     case 'supervisionCompletion':
     case 'appraisalCompletion':
-      return activeStaff.length === 0 ? 'not_evidenced' : raw >= 0 ? 'high' : 'not_evidenced';
+      return activeStaff.length === 0 ? 'not_evidenced' : 'high';
     case 'staffingFillRate':
-      return detail?.totalSlots > 0 ? 'high' : 'not_evidenced';
+      return (detail?.totalSlots || 0) > 0 ? 'high' : 'not_evidenced';
     case 'incidentResponseTime':
     case 'cqcNotifications':
-      return (detail?.total || 0) > 0 ? 'high' : 'medium'; // no incidents = inferred compliance
+      return (detail?.total || 0) > 0 ? 'high' : 'medium';
     case 'complaintResolutionRate':
       return (detail?.total || 0) > 0 ? 'high' : 'medium';
     case 'satisfactionScore':
@@ -583,12 +614,11 @@ function deriveConfidence(metricId, raw, detail, data, dateRange) {
     case 'ipcAuditCompliance':
       return (detail?.totalAudits || 0) >= 4 ? 'high' : (detail?.totalAudits || 0) > 0 ? 'medium' : 'not_evidenced';
     case 'maintenanceCompliancePct':
-      return (detail?.total || 0) > 0 ? 'high' : 'not_evidenced';
     case 'riskManagementScore':
     case 'policyCompliancePct':
       return (detail?.total || 0) > 0 ? 'high' : 'not_evidenced';
     case 'dolsCompliancePct':
-      return (detail?.active || detail?.total || 0) > 0 ? 'high' : 'medium'; // no DoLS = inferred
+      return (detail?.active || detail?.total || 0) > 0 ? 'high' : 'medium';
     case 'speakUpCulture':
       return (detail?.totalConcerns || 0) > 0 ? 'high' : 'medium';
     default:
@@ -596,7 +626,6 @@ function deriveConfidence(metricId, raw, detail, data, dateRange) {
   }
 }
 
-/** Build a human-readable evidence summary for a metric. */
 function buildEvidenceSummary(metricId, raw, detail, dateRange) {
   const days = dateRange?.days || 28;
   switch (metricId) {
@@ -608,7 +637,7 @@ function buildEvidenceSummary(metricId, raw, detail, dateRange) {
     case 'complaintResolutionRate': return `${detail?.resolved || 0}/${detail?.total || 0} complaints resolved`;
     case 'ipcAuditCompliance': return `${detail?.totalAudits || 0} audits, avg score ${detail?.avgScore || 0}%`;
     case 'careCertCompletion': return `${detail?.completed || 0}/${detail?.total || 0} certificates completed`;
-    default: return `${raw}%`;
+    default: return `${raw ?? 0}%`;
   }
 }
 
@@ -691,7 +720,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
   const speakUp = calculateSpeakUpCulture(data, fromStr, toStr);
   metrics.speakUpCulture = { raw: speakUp.score, score: speakUp.score, detail: speakUp };
 
-  // Enrich every metric with provenance fields
+  // Enrich every metric with provenance, evidence summary, and confidence
   for (const [id, metric] of Object.entries(metrics)) {
     const prov = METRIC_PROVENANCE[id] || {};
     const metricDef = METRIC_DEFINITIONS.find(m => m.id === id);
@@ -701,35 +730,62 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
     metric.evidence_summary = buildEvidenceSummary(id, metric.raw, metric.detail, dateRange);
     metric.assumptions = prov.assumptions || [];
     metric.exclusions = prov.exclusions || [];
-    metric.confidence = deriveConfidence(id, metric.raw, metric.detail, data, dateRange);
+    metric.confidence = deriveConfidence(id, metric.raw, metric.detail, data);
   }
 
-  // Sum available weights and normalize
+  // ── Per-question scoring ─────────────────────────────────────────────────
   const availableMetrics = METRIC_DEFINITIONS.filter(m => m.available);
   const unavailableMetrics = METRIC_DEFINITIONS.filter(m => !m.available);
   const totalWeight = availableMetrics.reduce((s, m) => s + m.weight, 0);
 
+  // Compute weighted average per key question
+  const questionScores = {};
+  for (const q of KEY_QUESTIONS) {
+    const qMetrics = availableMetrics.filter(m => m.question === q);
+    if (qMetrics.length === 0) { questionScores[q] = { score: 0, band: SCORE_BANDS[3], metrics: [] }; continue; }
+    const qWeight = qMetrics.reduce((s, m) => s + m.weight, 0);
+    let qSum = 0;
+    for (const m of qMetrics) {
+      const result = metrics[m.id];
+      if (result) qSum += result.score * (m.weight / qWeight);
+    }
+    const qScore = Math.round(qSum);
+    questionScores[q] = { score: qScore, band: getScoreBand(qScore), metrics: qMetrics.map(m => m.id) };
+  }
+
+  // Overall weighted score (kept for backward compat + numerical display)
   let weightedSum = 0;
   for (const m of availableMetrics) {
     const result = metrics[m.id];
-    if (result) {
-      const normalizedWeight = m.weight / totalWeight;
-      weightedSum += result.score * normalizedWeight;
-    }
+    if (result) weightedSum += result.score * (m.weight / totalWeight);
   }
-
   const overallScore = Math.round(weightedSum);
-  const band = getScoreBand(overallScore);
+
+  // CQC limiting-judgement: overall band determined by key question band distribution
+  const questionBands = {};
+  for (const q of KEY_QUESTIONS) questionBands[q] = questionScores[q].band;
+  const band = applyLimitingJudgement(questionBands);
+
+  // Identify the limiting question(s) — which question(s) pulled the overall band down
+  const limitingQuestions = KEY_QUESTIONS.filter(q => {
+    const qBand = SCORE_BANDS.indexOf(questionScores[q].band);
+    const overallBand = SCORE_BANDS.indexOf(band);
+    return qBand >= overallBand && questionScores[q].band.label !== 'Outstanding';
+  }).filter(q => questionScores[q].band.label === band.label || SCORE_BANDS.indexOf(questionScores[q].band) > SCORE_BANDS.indexOf(band));
 
   // Overall confidence: worst confidence across all metrics
   const CONFIDENCE_ORDER = ['not_evidenced', 'low', 'medium', 'high'];
   const overallConfidence = Object.values(metrics).reduce((worst, m) => {
     const idx = CONFIDENCE_ORDER.indexOf(m.confidence);
     const worstIdx = CONFIDENCE_ORDER.indexOf(worst);
-    return idx < worstIdx ? m.confidence : worst;
+    return idx !== -1 && idx < worstIdx ? m.confidence : worst;
   }, 'high');
 
-  return { overallScore, band, confidence: overallConfidence, metrics, availableMetrics, unavailableMetrics, availableWeight: totalWeight };
+  return {
+    engine_version: ENGINE_VERSION, overallScore, band, confidence: overallConfidence,
+    metrics, questionScores, limitingQuestions, availableMetrics, unavailableMetrics,
+    availableWeight: totalWeight,
+  };
 }
 
 // ── Evidence Aggregation Per Statement ──────────────────────────────────────

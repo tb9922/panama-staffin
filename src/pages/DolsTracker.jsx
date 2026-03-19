@@ -3,6 +3,7 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
+import ResidentPicker from '../components/ResidentPicker.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getDols, createDols, updateDols, deleteDols,
@@ -15,7 +16,7 @@ import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const EMPTY_DOLS_FORM = {
-  resident_name: '', dob: '', room_number: '',
+  resident_name: '', resident_id: null, dob: '', room_number: '',
   application_type: 'dols', application_date: '',
   authorised: false, authorisation_date: '', expiry_date: '',
   authorisation_number: '', authorising_authority: '',
@@ -25,7 +26,7 @@ const EMPTY_DOLS_FORM = {
 };
 
 const EMPTY_MCA_FORM = {
-  resident_name: '', assessment_date: '', assessor: '',
+  resident_name: '', resident_id: null, assessment_date: '', assessor: '',
   decision_area: '', lacks_capacity: false, best_interest_decision: '',
   next_review_date: '', notes: '',
 };
@@ -112,6 +113,8 @@ export default function DolsTracker() {
     }
     setForm({
       resident_name: dol.resident_name || '',
+      resident_id: dol.resident_id || null,
+      _version: dol.version,
       dob: dol.dob || '',
       room_number: dol.room_number || '',
       application_type: dol.application_type || 'dols',
@@ -168,6 +171,8 @@ export default function DolsTracker() {
     setEditingId(mca.id);
     setForm({
       resident_name: mca.resident_name || '',
+      resident_id: mca.resident_id || null,
+      _version: mca.version,
       assessment_date: mca.assessment_date || '',
       assessor: mca.assessor || '',
       decision_area: mca.decision_area || '',
@@ -438,9 +443,8 @@ export default function DolsTracker() {
               {/* Resident Info */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className={INPUT.label}>Resident Name *</label>
-                  <input type="text" className={INPUT.base} value={form.resident_name}
-                    onChange={e => setForm({ ...form, resident_name: e.target.value })} />
+                  <ResidentPicker label="Resident" required value={form.resident_id}
+                    onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 {canEdit && <div>
                   <label className={INPUT.label}>Date of Birth</label>
@@ -529,11 +533,21 @@ export default function DolsTracker() {
               </div>
 
               {/* Review */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={INPUT.label}>Last Reviewed</label>
                   <input type="date" className={INPUT.base} value={form.reviewed_date}
                     onChange={e => setForm({ ...form, reviewed_date: e.target.value })} />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Review Status</label>
+                  <select className={INPUT.select} value={form.review_status}
+                    onChange={e => setForm({ ...form, review_status: e.target.value })}>
+                    <option value="">Not set</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
                 <div>
                   <label className={INPUT.label}>Next Review Date</label>
@@ -572,9 +586,8 @@ export default function DolsTracker() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Resident Name *</label>
-                  <input type="text" className={INPUT.base} value={form.resident_name}
-                    onChange={e => setForm({ ...form, resident_name: e.target.value })} />
+                  <ResidentPicker label="Resident" required value={form.resident_id}
+                    onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Assessment Date *</label>

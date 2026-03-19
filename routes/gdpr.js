@@ -143,6 +143,12 @@ router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAc
     if (!idP.success) return res.status(400).json({ error: 'Invalid request ID' });
     const request = await gdprService.findRequestById(idP.data, req.home.id);
     if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request.identity_verified) {
+      return res.status(400).json({ error: 'Identity must be verified before gathering personal data' });
+    }
+    if (request.subject_type === 'resident' && !request.subject_name?.trim()) {
+      return res.status(400).json({ error: 'Resident name is required for resident data gathering. Update the request with the resident name before gathering.' });
+    }
     const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, req.home.id, null, request.subject_name);
     await auditService.log('sar_gather', req.home.slug, req.user.username,
       `Gathered ${request.subject_type} data for ${request.subject_id}`);
@@ -163,12 +169,21 @@ router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireHomeA
     if (!request.identity_verified) {
       return res.status(400).json({ error: 'Identity must be verified before erasure' });
     }
-    if (request.subject_type !== 'staff') {
-      return res.status(400).json({ error: 'Automated erasure only supported for staff subjects' });
+    if (request.subject_type === 'resident' && !request.subject_name?.trim()) {
+      return res.status(400).json({ error: 'Resident name is required for resident erasure. Update the request with the resident name before executing.' });
     }
-    const result = await gdprService.executeErasure(
-      request.subject_id, req.home.id, idP.data, req.user.username, req.home.slug
-    );
+    let result;
+    if (request.subject_type === 'staff') {
+      result = await gdprService.executeErasure(
+        request.subject_id, req.home.id, idP.data, req.user.username, req.home.slug
+      );
+    } else if (request.subject_type === 'resident') {
+      result = await gdprService.executeResidentErasure(
+        request.subject_id, req.home.id, idP.data, req.user.username, req.home.slug, request.subject_name
+      );
+    } else {
+      return res.status(400).json({ error: `Unsupported subject type: ${request.subject_type}` });
+    }
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -202,11 +217,25 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findBreachById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Breach not found' });
+    // Require rationale when human decision overrides the AI recommendation
+    if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
+        && parsed.data.manual_decision !== existing.recommended_ico_notification
+        && !parsed.data.decision_rationale?.trim()) {
+      return res.status(400).json({ error: 'Decision rationale is required when overriding the ICO notification recommendation' });
+    }
     const version = parsed.data._version != null ? parsed.data._version : null;
     const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_breach_update', req.home.slug, req.user.username, { id: idP.data, changes });
+    // Additional audit entry for ICO decision overrides
+    if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
+        && parsed.data.manual_decision !== existing.recommended_ico_notification) {
+      await auditService.log('breach_ico_override', req.home.slug, req.user.username, {
+        id: idP.data, recommended: existing.recommended_ico_notification,
+        decision: parsed.data.manual_decision, rationale: parsed.data.decision_rationale,
+      });
+    }
     res.json(result);
   } catch (err) { next(err); }
 });
@@ -235,7 +264,8 @@ router.post('/breaches/:id/assess', writeRateLimiter, requireAuth, requireHomeAc
 // ── Retention Schedule ───────────────────────────────────────────────────────
 
 // GET /api/gdpr/retention — schedule + optional scan
-router.get('/retention', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+// Retention schedule is global (not per-home), but gated by GDPR module access.
+router.get('/retention', readRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
     if (req.query.scan === 'true') {
       if (!req.query.home) return res.status(400).json({ error: 'home parameter required for scan' });

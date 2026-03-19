@@ -96,7 +96,7 @@ const timesheetBodySchema = z.object({
   snap_minutes_saved: z.number().optional().default(0),
   break_minutes:   z.number().int().nonnegative().optional().default(0),
   payable_hours:   z.number().nonnegative().nullable().optional(),
-  status:          z.enum(['pending', 'approved', 'disputed']).optional(),
+  // status deliberately excluded — set only via dedicated approve/dispute routes
   notes:           z.string().max(1000).nullable().optional(),
 });
 
@@ -379,6 +379,24 @@ router.post('/runs/:runId/approve', writeRateLimiter, requireAuth, requireHomeAc
     const run = await payrollRunRepo.findById(runIdP.data, req.home.id);
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', action: 'approve' });
     dispatchEvent(req.home.id, 'payroll_run.approved', { runId: runIdP.data, homeSlug: req.home.slug, approvedBy: req.user.username });
+    res.json(run);
+  } catch (err) { next(err); }
+});
+
+// POST /api/payroll/runs/:runId/void?home=X — void a draft/calculated run to unblock overlap
+router.post('/runs/:runId/void', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+  try {
+    const runIdP = runIdSchema.safeParse(req.params.runId);
+    if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
+    const existing = await payrollRunRepo.findById(runIdP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Run not found' });
+    if (!['draft', 'calculated'].includes(existing.status)) {
+      return res.status(400).json({ error: `Cannot void a run with status "${existing.status}". Only draft or calculated runs can be voided.` });
+    }
+    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const run = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, null, version);
+    if (run === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    await auditService.log('payroll_void', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', previousStatus: existing.status });
     res.json(run);
   } catch (err) { next(err); }
 });

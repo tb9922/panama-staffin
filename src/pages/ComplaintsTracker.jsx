@@ -5,6 +5,7 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
+import ResidentPicker from '../components/ResidentPicker.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   DEFAULT_COMPLAINT_CATEGORIES, getComplaintStats, getSurveyStats,
@@ -23,7 +24,7 @@ const TABS = [
 ];
 
 const EMPTY_FORM = {
-  date: '', raised_by: 'resident', raised_by_name: '', category: '',
+  date: '', raised_by: 'resident', raised_by_name: '', resident_id: null, category: '',
   title: '', description: '',
   acknowledged_date: '', response_deadline: '', status: 'open',
   investigator: '', investigation_notes: '',
@@ -456,15 +457,27 @@ export default function ComplaintsTracker() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={INPUT.label}>Raised By</label>
-                      <select value={form.raised_by} onChange={e => setForm({ ...form, raised_by: e.target.value })}
+                      <select value={form.raised_by}
+                        onChange={e => setForm({ ...form, raised_by: e.target.value, resident_id: null, raised_by_name: '' })}
                         className={INPUT.select}>
                         {RAISED_BY_TYPES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className={INPUT.label}>Name</label>
-                      <input value={form.raised_by_name} onChange={e => setForm({ ...form, raised_by_name: e.target.value })}
-                        className={INPUT.base} placeholder="Person's name" />
+                      {form.raised_by === 'resident' ? (
+                        <ResidentPicker label="Resident" value={form.resident_id}
+                          onChange={(id, resident) => setForm({
+                            ...form,
+                            resident_id: id,
+                            raised_by_name: resident?.resident_name || form.raised_by_name,
+                          })} />
+                      ) : (
+                        <>
+                          <label className={INPUT.label}>Name</label>
+                          <input value={form.raised_by_name} onChange={e => setForm({ ...form, raised_by_name: e.target.value })}
+                            className={INPUT.base} placeholder="Person's name" />
+                        </>
+                      )}
                     </div>
                   </div>
                   <div>

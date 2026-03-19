@@ -63,9 +63,10 @@ export async function findById(id, homeId, client) {
   return shape(rows[0]);
 }
 
-export async function signOff(id, homeId, signedOffBy, notes) {
+export async function signOff(id, homeId, signedOffBy, notes, client) {
+  const conn = client || pool;
   // Prevent self-sign-off: computed_by must differ (NULL computed_by is allowed to be signed off)
-  const { rows } = await pool.query(
+  const { rows } = await conn.query(
     `UPDATE assessment_snapshots
      SET signed_off_by = $3, signed_off_at = NOW(), sign_off_notes = $4
      WHERE id = $1 AND home_id = $2 AND signed_off_by IS NULL

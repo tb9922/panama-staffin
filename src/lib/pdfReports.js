@@ -397,13 +397,16 @@ export function generateStaffPDF(data) {
 }
 
 // CQC Compliance Evidence Pack PDF
-export function generateEvidencePackPDF(data, dateRangeDays = 28) {
+export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = null) {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const today = formatDate(new Date());
   const dateRange = getDateRange(dateRangeDays);
-  const score = calculateComplianceScore(data, dateRange, today);
-  const homeName = data.config.home_name || 'Care Home';
-  const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
+  // Use snapshot result if provided, otherwise compute live
+  const score = snapshot?.result || calculateComplianceScore(data, dateRange, today);
+  const homeName = data.config?.home_name || 'Care Home';
+  const periodLabel = snapshot
+    ? `Snapshot: ${snapshot.computed_at?.slice(0, 10)} (${snapshot.engine_version})${snapshot.signed_off_by ? ` \u2014 Signed off by ${snapshot.signed_off_by}` : ''}`
+    : `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
 
   // ── Page 1: Cover & Summary ──────────────────────────────────────────────
   let y = addHeader(doc, 'CQC Compliance Evidence Pack', periodLabel, homeName);
@@ -1163,18 +1166,20 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28) {
 
 // ── Board Pack PDF ──────────────────────────────────────────────────────────
 
-export function generateBoardPackPDF(data, dateRangeDays = 28) {
+export function generateBoardPackPDF(data, dateRangeDays = 28, snapshot = null) {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const today = formatDate(new Date());
   const dateRange = getDateRange(dateRangeDays);
-  const homeName = data.config.home_name || 'Care Home';
-  const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
+  const homeName = data.config?.home_name || 'Care Home';
+  const periodLabel = snapshot
+    ? `Snapshot: ${snapshot.computed_at?.slice(0, 10)} (${snapshot.engine_version})${snapshot.signed_off_by ? ` \u2014 Signed off by ${snapshot.signed_off_by}` : ''}`
+    : `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`;
 
   // ── Page 1: Executive Summary ─────────────────────────────────────────────
   let y = addHeader(doc, 'Board Pack — Executive Summary', periodLabel, homeName);
 
-  // CQC compliance score
-  const score = calculateComplianceScore(data, dateRange, today);
+  // CQC compliance score — use snapshot if provided, otherwise compute live
+  const score = snapshot?.result || calculateComplianceScore(data, dateRange, today);
   const bandLabel = score.band.label;
   const scoreColor = score.band.color === 'green' ? [22, 163, 74] : score.band.color === 'blue' ? [37, 99, 235] : score.band.color === 'amber' ? [217, 119, 6] : [220, 38, 38];
 

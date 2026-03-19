@@ -133,10 +133,10 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
-- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 111 migrations)
+- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 117 migrations)
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 2,317+ tests across 120 files (unit + integration + page), all passing
+- **Testing**: Vitest — 2,392+ tests across 126 files (unit + integration + page), all passing
 
 ## Architecture
 
@@ -281,7 +281,7 @@ Each user has a **per-home role** assigned via `user_home_roles` table (migratio
 
 ## Data Model
 
-Data is stored in PostgreSQL (111 migrations). The logical shape per home:
+Data is stored in PostgreSQL (117 migrations). The logical shape per home:
 
 ```js
 {
