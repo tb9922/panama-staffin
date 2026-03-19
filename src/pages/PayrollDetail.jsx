@@ -72,7 +72,11 @@ export default function PayrollDetail() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getSchedulingData(h).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+    let cancelled = false;
+    getSchedulingData(h)
+      .then(d => { if (!cancelled) setSchedData(d); })
+      .catch(e => { if (!cancelled) setError(e.message || 'Failed to load'); });
+    return () => { cancelled = true; };
   }, [homeSlug]);
 
   // staffMap from scheduling API for name/role lookup

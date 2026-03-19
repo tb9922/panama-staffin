@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
@@ -58,6 +58,7 @@ export default function CQCEvidence() {
 
   useEffect(() => {
     if (!homeSlug) return;
+    let cancelled = false;
     // CQC scoring needs up to 365 days of overrides for the 1-year view
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
@@ -78,6 +79,7 @@ export default function CQCEvidence() {
       getDols(homeSlug).catch(e => { console.warn('Failed to load DoLS:', e.message); return { dols: [], mcaAssessments: [] }; }),
       getCareCertData(homeSlug).catch(e => { console.warn('Failed to load care cert:', e.message); return { careCert: {} }; }),
     ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
+      if (cancelled) return;
       setModuleData({
         config: sched.config,
         staff: sched.staff,
@@ -99,8 +101,9 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(e => setError(e.message || 'Failed to load CQC data'))
-      .finally(() => setLoading(false));
+    }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
@@ -112,6 +115,8 @@ export default function CQCEvidence() {
 function CQCEvidenceInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
+  const isMounted = useRef(true);
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
@@ -133,12 +138,12 @@ function CQCEvidenceInner({ data }) {
     try {
       const home = getCurrentHome();
       const result = await getCqcEvidence(home);
-      setEvidence(result.evidence || []);
+      if (isMounted.current) setEvidence(result.evidence || []);
     } catch (err) {
       // Non-fatal: evidence list stays empty rather than breaking the whole page
-      console.error('Failed to load CQC evidence:', err);
+      if (isMounted.current) console.error('Failed to load CQC evidence:', err);
     } finally {
-      setEvidenceLoading(false);
+      if (isMounted.current) setEvidenceLoading(false);
     }
   }, []);
 
@@ -147,12 +152,15 @@ function CQCEvidenceInner({ data }) {
   const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
     if (!home) return;
-    setSnapshotLoading(true);
+    if (isMounted.current) setSnapshotLoading(true);
     try {
       const result = await getSnapshots(home, 'cqc');
-      setSnapshots(Array.isArray(result) ? result : []);
-    } catch (e) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
-    finally { setSnapshotLoading(false); }
+      if (isMounted.current) setSnapshots(Array.isArray(result) ? result : []);
+    } catch (e) {
+      if (isMounted.current) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
+    } finally {
+      if (isMounted.current) setSnapshotLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadSnapshots(); }, [loadSnapshots]);

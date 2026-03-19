@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
@@ -56,6 +56,7 @@ export default function IncidentTracker() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const editingIdRef = useRef(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [activeTab, setActiveTab] = useState('details');
   const [isFrozen, setIsFrozen] = useState(false);
@@ -132,6 +133,7 @@ export default function IncidentTracker() {
   }
 
   function openEdit(inc) {
+    editingIdRef.current = inc.id;
     setEditingId(inc.id);
     setIsFrozen(!!inc.frozen_at);
     setAddenda([]);
@@ -174,9 +176,12 @@ export default function IncidentTracker() {
     });
     setActiveTab(inc.frozen_at ? 'addenda' : 'details');
     setShowModal(true);
-    // Load addenda in background
+    // Load addenda in background — guard against stale response if user switches incidents rapidly
     const home = getCurrentHome();
-    if (home) getIncidentAddenda(home, inc.id).then(setAddenda).catch(e => console.warn('Failed to load addenda:', e.message));
+    const loadedForId = inc.id;
+    if (home) getIncidentAddenda(home, loadedForId)
+      .then(a => { if (editingIdRef.current === loadedForId) setAddenda(a); })
+      .catch(e => console.warn('Failed to load addenda:', e.message));
   }
 
   async function handleFreeze() {
