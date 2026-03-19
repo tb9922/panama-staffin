@@ -268,7 +268,7 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
 }
 
 // Swap validator matching Excel DAILY_STATUS swap checker
-export function validateSwap(fromStaff, toStaff, date, overrides, config, training) {
+export function validateSwap(fromStaff, toStaff, date, overrides, config, training, asOfDate = null) {
   const issues = [];
 
   // Self-swap guard
@@ -313,7 +313,7 @@ export function validateSwap(fromStaff, toStaff, date, overrides, config, traini
   // Compare expiry date strings directly to avoid BST midnight edge cases.
   if (training) {
     const staffTraining = training[toStaff.id] || {};
-    const today = formatDate(new Date());
+    const today = asOfDate ? (typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate)) : formatDate(date);
     const expiredTypes = [];
     const missingTypes = [];
     for (const typeId of BLOCKING_TRAINING_TYPES) {
