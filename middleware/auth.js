@@ -85,12 +85,22 @@ export async function requireHomeAccess(req, res, next) {
     return res.status(404).json({ error: 'Home not found' });
   }
 
-  // Platform admins bypass per-home role check — they have implicit home_manager access
+  // Platform admins bypass per-home role check — they have implicit home_manager access.
+  // Re-verify from DB — JWT claim may be stale (admin demoted after last login).
   if (req.user.is_platform_admin) {
-    req.home = home;
-    req.homeRole = 'home_manager';
-    req.staffId = null;
-    return next();
+    try {
+      const dbUser = await findUserByUsername(req.user.username);
+      if (dbUser?.is_platform_admin) {
+        req.home = home;
+        req.homeRole = 'home_manager';
+        req.staffId = null;
+        return next();
+      }
+      // Stale claim — clear it and fall through to per-home role check
+      req.user.is_platform_admin = false;
+    } catch {
+      req.user.is_platform_admin = false;
+    }
   }
 
   // Resolve per-home role from user_home_roles
