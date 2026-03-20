@@ -145,8 +145,8 @@ export async function upsert(homeId, data) {
       data.reported_by || null, data.reported_at || now, now,
     ]
   );
-  // Auto-resolve resident_id for resident-related complaints
-  if (rows[0] && data.raised_by_name && !data.resident_id) {
+  // Auto-resolve resident_id for resident-related complaints (only when raised_by=resident)
+  if (rows[0] && data.raised_by === 'resident' && data.raised_by_name && !data.resident_id) {
     const { rows: fr } = await pool.query(
       `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`,
       [homeId, data.raised_by_name]

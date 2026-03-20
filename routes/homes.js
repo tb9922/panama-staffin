@@ -5,6 +5,7 @@ import * as homeService from '../services/homeService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
+import { findByUsername as findUserByUsername } from '../repositories/userRepo.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { homeConfigSchema } from '../lib/zodHelpers.js';
@@ -19,9 +20,15 @@ const configBodySchema = z.object({
 router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     // Platform admins see all homes with home_manager access
+    // Re-verify from DB — JWT claim may be stale (admin demoted after last login)
     if (req.user.is_platform_admin) {
-      const homes = await homeService.listHomes();
-      return res.json(homes.map(h => ({ ...h, roleId: 'home_manager', staffId: null })));
+      const dbUser = await findUserByUsername(req.user.username).catch(() => null);
+      if (dbUser?.is_platform_admin) {
+        const homes = await homeService.listHomes();
+        return res.json(homes.map(h => ({ ...h, roleId: 'home_manager', staffId: null })));
+      }
+      // Stale claim — clear and fall through to per-home role lookup
+      req.user.is_platform_admin = false;
     }
 
     // Regular users: single joined query returns homes + role

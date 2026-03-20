@@ -416,9 +416,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
       await payrollRunRepo.updateLine(line.id, homeId, {
         ...acc,
-        nmw_compliant:   nmwCompliant,
-        nmw_lowest_rate: nmwLowest === Infinity ? null : round2(nmwLowest),
-        notes:           notesParts.length > 0 ? notesParts.join('; ') : null,
+        nmw_compliant:     nmwCompliant,
+        nmw_lowest_rate:   nmwLowest === Infinity ? null : round2(nmwLowest),
+        notes:             notesParts.length > 0 ? notesParts.join('; ') : null,
+        tax_code:          taxCodeRow?.tax_code || null,
+        student_loan_plan: taxCodeRow?.student_loan_plan || null,
       }, client);
 
       await payrollRunRepo.updateLineDeductions(line.id, homeId, {

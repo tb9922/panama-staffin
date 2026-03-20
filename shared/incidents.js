@@ -78,10 +78,11 @@ export const CQC_NOTIFICATION_TYPES = [
 ];
 
 export const RIDDOR_CATEGORIES = [
-  { id: 'death',                name: 'Death',                      deadlineDays: 0 },
-  { id: 'specified_injury',     name: 'Specified Injury',           deadlineDays: 0 },
-  { id: 'over_7_day',           name: 'Over 7-day Incapacitation',  deadlineDays: 15 },
-  { id: 'dangerous_occurrence', name: 'Dangerous Occurrence',       deadlineDays: 0 },
+  { id: 'death',                  name: 'Death',                        deadlineDays: 0 },  // 0 = immediate (by end of next day)
+  { id: 'specified_injury',       name: 'Specified Injury',             deadlineDays: 0 },
+  { id: 'over_7_day',             name: 'Over 7-day Incapacitation',    deadlineDays: 15 },
+  { id: 'dangerous_occurrence',   name: 'Dangerous Occurrence',         deadlineDays: 0 },
+  { id: 'occupational_disease',   name: 'Occupational Disease',         deadlineDays: 15 },
 ];
 
 export const PERSON_AFFECTED_TYPES = [

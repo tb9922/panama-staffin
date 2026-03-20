@@ -99,6 +99,7 @@ export async function createInvoiceWithLines(homeId, data, username) {
     const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
     const adjustments = parseFloat(data.adjustments) || 0;
     const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
+    if (totalAmount < 0) throw Object.assign(new Error('Invoice total cannot be negative after adjustments'), { statusCode: 400 });
 
     const invoice = await financeRepo.createInvoice(homeId, {
       ...data,
@@ -149,6 +150,7 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
       const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
       const adjustments = parseFloat(data.adjustments ?? existing.adjustments) || 0;
       const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
+      if (totalAmount < 0) throw Object.assign(new Error('Invoice total cannot be negative after adjustments'), { statusCode: 400 });
       data.subtotal = subtotal;
       data.total_amount = totalAmount;
       data.balance_due = Math.round((totalAmount - (existing.amount_paid || 0)) * 100) / 100;
@@ -401,7 +403,7 @@ export async function updatePaymentSchedule(id, homeId, data, version) {
 
 export async function processScheduledPayment(scheduleId, homeId, username) {
   return withTransaction(async (client) => {
-    const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId, client);
+    const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId, client, true);
     if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
     if (schedule.on_hold) throw Object.assign(new Error('Payment schedule is on hold'), { statusCode: 400 });
     const expense = await financeRepo.createExpense(homeId, {

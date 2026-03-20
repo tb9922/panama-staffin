@@ -116,7 +116,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
         staffCount: body.staff.length,
         warningCount: warnings.length,
       });
-    } catch { /* validation/audit failure must not surface after response */ }
+    } catch (auditErr) { logger.error({ err: auditErr?.message }, 'Post-save audit/validation failed'); }
   } catch (err) {
     next(err);
   }

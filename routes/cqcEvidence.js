@@ -13,7 +13,7 @@ const idSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 
 const evidenceBodySchema = z.object({
-  quality_statement: z.string().min(1).max(20).regex(/^(S[1-8]|E[1-6]|C[1-3]|R[1-5]|WL[1-7])$/),
+  quality_statement: z.string().min(1).max(20).regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-5]|WL([1-9]|10))$/),
   type:              z.enum(['quantitative', 'qualitative']),
   title:             z.string().min(1).max(500),
   description:       z.string().max(10000).nullable().optional(),

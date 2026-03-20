@@ -31,13 +31,13 @@ const incidentBodySchema = z.object({
   medical_attention:          z.boolean().optional(),
   hospital_attendance:        z.boolean().optional(),
   cqc_notifiable:             z.boolean().optional(),
-  cqc_notification_type:      optEnum('death', 'serious_injury', 'abuse_allegation', 'police', 'deprivation_of_liberty', 'seclusion_restraint', 'other'),
-  cqc_notification_deadline:  z.union([z.enum(['immediate', '72h']), dateSchema]).optional(),
+  cqc_notification_type:      optEnum('death', 'serious_injury', 'abuse_allegation', 'police', 'unauthorised_absence', 'deprivation_of_liberty', 'seclusion_restraint', 'other'),
+  cqc_notification_deadline:  z.enum(['without_delay', 'immediate', '72h']).nullable().optional(),
   cqc_notified:               z.boolean().optional(),
   cqc_notified_date:          dateSchema.optional(),
   cqc_reference:              z.string().max(200).nullable().optional(),
   riddor_reportable:          z.boolean().optional(),
-  riddor_category:            optEnum('death', 'specified_injury', 'over_7_day', 'dangerous_occurrence'),
+  riddor_category:            optEnum('death', 'specified_injury', 'over_7_day', 'dangerous_occurrence', 'occupational_disease'),
   riddor_reported:            z.boolean().optional(),
   riddor_reported_date:       dateSchema.optional(),
   riddor_reference:           z.string().max(200).nullable().optional(),
@@ -142,9 +142,15 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     );
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await incidentRepo.findById(idParsed.data, req.home.id);
-    if (!existing) return res.status(404).json({ error: 'Incident not found or frozen' });
+    if (!existing) return res.status(404).json({ error: 'Incident not found' });
     const version = parsed.data._version != null ? parsed.data._version : null;
-    const incident = await incidentRepo.update(idParsed.data, req.home.id, updates, version);
+    let incident;
+    try {
+      incident = await incidentRepo.update(idParsed.data, req.home.id, updates, version);
+    } catch (e) {
+      if (e.status === 403) return res.status(403).json({ error: e.message });
+      throw e;
+    }
     if (incident === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

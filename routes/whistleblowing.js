@@ -19,7 +19,7 @@ const concernBodySchema = z.object({
   category:                 z.enum(['malpractice', 'bullying', 'safety', 'compliance', 'other']),
   description:              z.string().max(10000).nullable().optional(),
   severity:                 z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  status:                   z.string().max(50).nullable().optional(),
+  status:                   z.enum(['registered', 'investigating', 'resolved', 'closed']).nullable().optional(),
   acknowledgement_date:     dateSchema.optional(),
   investigator:             z.string().max(200).nullable().optional(),
   investigation_start_date: dateSchema.optional(),
@@ -91,7 +91,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const existing = await whistleblowingRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const version = parsed.data._version != null ? parsed.data._version : null;
-    const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, parsed.data, version);
+    const updateData = { ...parsed.data };
+    // Prevent de-anonymisation: never overwrite raised_by_role on anonymous concerns
+    if (existing.anonymous) delete updateData.raised_by_role;
+    const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, updateData, version);
     if (concern === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

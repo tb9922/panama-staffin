@@ -65,10 +65,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         conn.query(
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
-        // Name-based queries use pre-resolved staffName (no subquery).
-        // Scope to current home — SAR is per-home, not cross-tenant.
+        // access_log has no home_id column (global table) — filter by user_name only.
+        // All homes' access entries for this user are included in the SAR per Article 15.
         staffName
-          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 AND home_id = $2 ORDER BY ts DESC LIMIT 500`, [staffName, homeId])
+          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 ORDER BY ts DESC LIMIT 500`, [staffName])
           : { rows: [] },
         // Staff appears in incident staff_involved JSONB array
         conn.query(
@@ -316,6 +316,18 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               ? `SELECT * FROM complaints WHERE home_id = $1 AND (resident_id = $2 OR raised_by_name = $3) AND deleted_at IS NULL`
               : `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
             residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
+          // Post-freeze addenda on incidents involving this resident (Article 15 completeness)
+          conn.query(
+            residentPk
+              ? `SELECT ia.* FROM incident_addenda ia
+                 JOIN incidents i ON i.id = ia.incident_id AND i.home_id = ia.home_id
+                 WHERE ia.home_id = $1 AND (i.resident_id = $2 OR i.person_affected_name = $3) AND i.deleted_at IS NULL
+                 ORDER BY ia.created_at ASC`
+              : `SELECT ia.* FROM incident_addenda ia
+                 JOIN incidents i ON i.id = ia.incident_id AND i.home_id = ia.home_id
+                 WHERE ia.home_id = $1 AND i.person_affected_name = $2 AND i.deleted_at IS NULL
+                 ORDER BY ia.created_at ASC`,
+            residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
         );
       }
       const results = await Promise.all(queries);
@@ -336,6 +348,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           finance_invoice_chase: results[8].rows,
           incidents: results[9]?.rows || [],
           complaints: results[10]?.rows || [],
+          incident_addenda: results[11]?.rows || [],
         },
       };
     }
@@ -533,13 +546,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
 
     // Anonymise access/audit log entries for this staff member.
     // access_log.home_id is always NULL — cannot scope by home.
-    // Only redact if staff name is unique across all homes to prevent cross-tenant impact.
+    // Only redact if no OTHER staff member (across all homes) shares the same display name,
+    // to prevent cross-tenant access log destruction. Note: staff.name for this record was
+    // already anonymised earlier in this transaction, so the exclusion predicate is
+    // explicit for clarity and future-ordering safety.
     if (originalName) {
       const { rows: nameCount } = await client.query(
-        `SELECT COUNT(DISTINCT home_id) AS cnt FROM staff WHERE name = $1`,
-        [originalName]
+        `SELECT COUNT(*) AS cnt FROM staff WHERE name = $1 AND NOT (home_id = $2 AND id = $3)`,
+        [originalName, homeId, staffId]
       );
-      if (nameCount[0]?.cnt <= 1) {
+      if (parseInt(nameCount[0]?.cnt, 10) === 0) {
         await client.query(
           `UPDATE access_log SET user_name = '[REDACTED]' WHERE user_name = $1`,
           [originalName]
@@ -760,6 +776,26 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
       );
     }
 
+    // Anonymise incident_addenda content BEFORE anonymising incidents — the subquery
+    // below uses person_affected_name which must still hold the original name at this point.
+    if (residentPk) {
+      await client.query(
+        `UPDATE incident_addenda SET content = '[REDACTED]'
+         WHERE home_id = $1 AND incident_id IN (
+           SELECT id FROM incidents WHERE home_id = $1
+           AND (resident_id = $2 OR person_affected_name = $3) AND deleted_at IS NULL
+         )`,
+        [homeId, residentPk, matchName]);
+    } else {
+      await client.query(
+        `UPDATE incident_addenda SET content = '[REDACTED]'
+         WHERE home_id = $1 AND incident_id IN (
+           SELECT id FROM incidents WHERE home_id = $1
+           AND person_affected_name = $2 AND deleted_at IS NULL
+         )`,
+        [homeId, matchName]);
+    }
+
     // Anonymise incidents where resident was the affected person — use FK when available
     if (residentPk) {
       await client.query(
@@ -936,15 +972,21 @@ export function assessBreachRisk(breachData) {
 
   const icoNotifiable = riskLevel !== 'low';
 
-  // ICO deadline: 72 hours from discovery
-  const discoveredDate = new Date(breachData.discovered_date);
-  const icoDeadline = new Date(discoveredDate.getTime() + 72 * 60 * 60 * 1000);
+  // ICO deadline: 72 hours from discovery (UK GDPR Article 33).
+  // Append Z to date-only strings so they parse as UTC, not local time (BST-safe).
+  const discoveredRaw = breachData.discovered_date;
+  const discoveredDate = discoveredRaw
+    ? new Date(discoveredRaw.length === 10 ? discoveredRaw + 'T00:00:00Z' : discoveredRaw)
+    : null;
+  const icoDeadline = discoveredDate && !isNaN(discoveredDate.getTime())
+    ? new Date(discoveredDate.getTime() + 72 * 60 * 60 * 1000)
+    : null;
 
   return {
     score,
     riskLevel,
     icoNotifiable,
-    icoDeadline: icoDeadline.toISOString(),
+    icoDeadline: icoDeadline ? icoDeadline.toISOString() : null,
     specialCategoryDataInvolved: specialCats.length > 0,
     factors: {
       severity: sevScore,

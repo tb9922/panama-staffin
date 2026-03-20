@@ -90,7 +90,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (parsed.data.status === 'approved' && existing.status !== 'completed') {
       return res.status(400).json({ error: 'DPIA must be completed before it can be approved' });
     }
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const rawV = parseInt(req.body._version, 10);
+    const version = Number.isFinite(rawV) ? rawV : null;
     const result = await dpiaRepo.update(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('dpia_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });

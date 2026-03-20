@@ -128,9 +128,8 @@ router.delete('/attachments/:id', requireAuth, requireHomeAccess, requireModule(
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
     const att = await hrRepo.deleteAttachment(id, req.home.id);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    // Delete file from disk (best effort)
-    const filePath = path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name);
-    await unlink(filePath).catch(() => {});
+    // Physical file retained on disk — only removed during GDPR retention purge.
+    // Deleting on soft-delete would destroy evidence still referenced in the audit trail.
     await auditService.log('hr_attachment_delete', req.home.slug, req.user.username, { id, caseType: att.case_type, caseId: att.case_id });
     res.json({ deleted: true });
   } catch (err) { next(err); }

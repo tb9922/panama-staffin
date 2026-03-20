@@ -567,8 +567,8 @@ const taxCodeBodySchema = z.object({
 // GET /api/payroll/tax-codes?home=X
 router.get('/tax-codes', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    let codes = await taxRepo.listTaxCodesByHome(req.home.id);
     if (requireStaffLink(req, res, 'payroll')) return;
+    let codes = await taxRepo.listTaxCodesByHome(req.home.id);
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
       codes = codes.filter(c => c.staff_id === req.staffId);
     }
@@ -622,8 +622,8 @@ const enrolmentBodySchema = z.object({
 // GET /api/payroll/pensions?home=X
 router.get('/pensions', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
-    let enrolments = await pensionRepo.listEnrolmentsByHome(req.home.id);
     if (requireStaffLink(req, res, 'payroll')) return;
+    let enrolments = await pensionRepo.listEnrolmentsByHome(req.home.id);
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
       enrolments = enrolments.filter(e => e.staff_id === req.staffId);
     }

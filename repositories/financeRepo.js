@@ -747,10 +747,10 @@ export async function findPaymentSchedules(homeId, { onHold, dueBefore, limit = 
   return { rows: rows.map(shapeSchedule), total };
 }
 
-export async function findPaymentScheduleById(id, homeId, client) {
+export async function findPaymentScheduleById(id, homeId, client, forUpdate = false) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    `SELECT ${SCHEDULE_COLS} FROM finance_payment_schedule WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
+  const sql = `SELECT ${SCHEDULE_COLS} FROM finance_payment_schedule WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
+  const { rows } = await conn.query(sql, [id, homeId]);
   return shapeSchedule(rows[0]);
 }
 

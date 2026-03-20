@@ -60,7 +60,10 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     // Strip resident DoB for non-admin users (GDPR special category — not needed for care delivery)
     const isAdmin = req.homeRole === 'home_manager' || req.homeRole === 'deputy_manager';
     const dols = isAdmin ? dolsResult.rows : dolsResult.rows.map(({ dob: _dob, ...rest }) => rest);
-    const mcaAssessments = mcaResult.rows;
+    // Strip Article 9 mental-capacity fields for non-manager roles
+    const mcaAssessments = isAdmin
+      ? mcaResult.rows
+      : mcaResult.rows.map(({ lacks_capacity: _lc, best_interest_decision: _bid, ...rest }) => rest);
     res.json({ dols, mcaAssessments, _total: dolsResult.total });
   } catch (err) { next(err); }
 });

@@ -27,7 +27,7 @@ function calcSkillPoints(staffList) {
 
 // Coverage calculation for a shift period (early/late/night)
 export function calculateCoverage(staffForDay, period, config) {
-  const mins = config.minimum_staffing[period];
+  const mins = config?.minimum_staffing?.[period] ?? { heads: 0, skill_points: 0 };
   let relevantStaff;
   if (period === 'early') {
     relevantStaff = staffForDay.filter(s => isCareRole(s.role) && isEarlyShift(s.shift));

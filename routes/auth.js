@@ -85,6 +85,7 @@ router.post('/logout', requireAuth, async (req, res) => {
     const expiresAt = new Date(req.user.exp * 1000);
     await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt).catch(() => {});
   }
+  auditService.log('logout', '-', req.user.username, null).catch(() => {});
   res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   // Also clear old path=/api cookie from pre-existing sessions
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });

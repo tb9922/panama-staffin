@@ -81,7 +81,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await ropaRepo.findById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const rawV = parseInt(req.body._version, 10);
+    const version = Number.isFinite(rawV) ? rawV : null;
     const result = await ropaRepo.update(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('ropa_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });

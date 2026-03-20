@@ -20,7 +20,7 @@ const policyBodySchema = z.object({
   last_reviewed:          dateSchema.optional(),
   next_review_due:        dateSchema.optional(),
   review_frequency_months: z.coerce.number().int().min(1).max(60).nullable().optional(),
-  status:                 z.string().max(50).nullable().optional(),
+  status:                 z.enum(['current', 'under_review', 'due', 'overdue', 'not_reviewed']).nullable().optional(),
   reviewed_by:            z.string().max(200).nullable().optional(),
   approved_by:            z.string().max(200).nullable().optional(),
   changes:                z.array(z.object({

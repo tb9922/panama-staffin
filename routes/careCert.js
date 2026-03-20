@@ -63,8 +63,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = careCertCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const { staffId, start_date, supervisor } = parsed.data;
-    // Calculate expected_completion: start_date + 12 weeks
-    const start = new Date(start_date);
+    // Calculate expected_completion: start_date + 12 weeks (UTC prevents BST off-by-one)
+    const start = new Date(start_date + 'T00:00:00Z');
     const expected = new Date(start);
     expected.setUTCDate(expected.getUTCDate() + 84); // 12 weeks
     const record = {

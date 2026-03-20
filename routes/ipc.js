@@ -28,7 +28,7 @@ const ipcBodySchema = z.object({
     assigned_to:    z.string().max(200).nullable().optional(),
     due_date:       dateSchema.optional(),
     completed_date: dateSchema.optional(),
-    status:         z.string().max(50).nullable().optional(),
+    status:         z.enum(['open', 'in_progress', 'completed', 'overdue']).nullable().optional(),
   })).max(100).optional(),
   outbreak:           z.object({
     suspected:          z.boolean().optional(),
@@ -38,7 +38,7 @@ const ipcBodySchema = z.object({
     affected_residents: z.coerce.number().int().min(0).nullable().optional(),
     measures:           z.string().max(5000).nullable().optional(),
     end_date:           dateSchema.optional(),
-    status:             z.string().max(50).nullable().optional(),
+    status:             z.enum(['suspected', 'confirmed', 'contained', 'resolved']).nullable().optional(),
   }).nullable().optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });

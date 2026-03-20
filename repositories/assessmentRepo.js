@@ -14,7 +14,7 @@ function shape(row) {
     computed_at: row.computed_at,
     window_from: row.window_from,
     window_to: row.window_to,
-    overall_score: row.overall_score,
+    overall_score: row.overall_score != null ? parseFloat(row.overall_score) : null,
     band: row.band,
     result: row.result,
     computed_by: row.computed_by,

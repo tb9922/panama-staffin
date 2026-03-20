@@ -31,12 +31,12 @@ const riskBodySchema = z.object({
     description:    z.string().max(2000),
     owner:          z.string().max(200).nullable().optional(),
     due_date:       dateSchema.optional(),
-    status:         z.string().max(50).nullable().optional(),
+    status:         z.enum(['open', 'in_progress', 'completed', 'overdue']).nullable().optional(),
     completed_date: dateSchema.optional(),
   })).max(100).optional(),
   last_reviewed:        dateSchema.optional(),
   next_review:          dateSchema.optional(),
-  status:               z.string().max(50).nullable().optional(),
+  status:               z.enum(['open', 'mitigated', 'accepted', 'closed']).nullable().optional(),
 });
 const riskUpdateSchema = riskBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
