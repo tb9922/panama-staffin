@@ -5,7 +5,26 @@
  */
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 const { Pool } = pg;
+
+// Load .env so DB credentials are available (mirrors config.js loader pattern)
+try {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const envContent = fs.readFileSync(path.join(__dirname, '../.env'), 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const raw = trimmed.slice(eq + 1).trim();
+    const val = raw.replace(/^(['"])(.*)\1$/, '$2');
+    if (key && !(key in process.env)) process.env[key] = val;
+  }
+} catch { /* .env is optional */ }
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -91,12 +110,19 @@ async function seed() {
     console.log('E2E seed data created successfully');
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Seed failed:', err.message);
-    process.exit(1);
+    throw err;
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-seed();
+// Default export for Playwright globalSetup; also runnable standalone.
+export default async function globalSetup() {
+  await seed();
+}
+
+// Run directly: node scripts/seed-e2e.js
+if (process.argv[1].endsWith('seed-e2e.js')) {
+  seed().catch(err => { console.error('Seed failed:', err.message); process.exit(1); });
+}

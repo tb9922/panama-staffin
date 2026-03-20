@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
+  globalSetup: './scripts/seed-e2e.js',
   testDir: 'tests/e2e',
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
