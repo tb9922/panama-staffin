@@ -314,11 +314,11 @@ export async function upsert(homeId, data) {
        msp_wishes_recorded, msp_outcome_preferences, msp_person_involved,
        investigation_status, investigation_start_date, investigation_lead,
        investigation_review_date, root_cause, lessons_learned, investigation_closed_date,
-       corrective_actions, reported_by, reported_at, updated_at
+       corrective_actions, resident_id, reported_by, reported_at, updated_at
      ) VALUES (
        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-       $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51
+       $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
      )
      ON CONFLICT (home_id, id) DO UPDATE SET
        date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
@@ -333,7 +333,7 @@ export async function upsert(homeId, data) {
        msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
        investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
        investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
-       corrective_actions=$48,reported_by=$49,reported_at=$50,updated_at=$51,
+       corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
        deleted_at=NULL
      WHERE incidents.frozen_at IS NULL
      RETURNING ${INCIDENT_COLS}`,
@@ -360,6 +360,7 @@ export async function upsert(homeId, data) {
       data.investigation_lead || null, data.investigation_review_date || null,
       data.root_cause || null, data.lessons_learned || null, data.investigation_closed_date || null,
       JSON.stringify(data.corrective_actions || []),
+      data.resident_id ?? null,
       data.reported_by || null, data.reported_at || now, now,
     ]
   );
@@ -390,7 +391,7 @@ const ALLOWED_COLUMNS = new Set([
   'msp_wishes_recorded', 'msp_outcome_preferences', 'msp_person_involved',
   'investigation_status', 'investigation_start_date', 'investigation_lead',
   'investigation_review_date', 'root_cause', 'lessons_learned', 'investigation_closed_date',
-  'corrective_actions',
+  'corrective_actions', 'resident_id',
 ]);
 
 // Fields that need JSON.stringify before binding

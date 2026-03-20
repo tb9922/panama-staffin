@@ -24,6 +24,7 @@ const incidentBodySchema = z.object({
   description:                z.string().max(10000).nullable().optional(),
   person_affected:            z.string().max(100).nullable().optional(),
   person_affected_name:       z.string().max(200).nullable().optional(),
+  resident_id:                z.number().int().positive().nullable().optional(),
   staff_involved:             z.array(z.string().max(20)).max(100).optional(),
   immediate_action:           z.string().max(5000).nullable().optional(),
   medical_attention:          z.boolean().optional(),
