@@ -11,9 +11,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assessment_snapshots_dedup
   WHERE input_hash IS NOT NULL;
 
 -- Ensure window_from <= window_to when both are set
-ALTER TABLE assessment_snapshots
-  ADD CONSTRAINT chk_assessment_window_order
-  CHECK (window_from IS NULL OR window_to IS NULL OR window_from <= window_to);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'chk_assessment_window_order'
+      AND conrelid = 'assessment_snapshots'::regclass
+  ) THEN
+    ALTER TABLE assessment_snapshots
+      ADD CONSTRAINT chk_assessment_window_order
+      CHECK (window_from IS NULL OR window_to IS NULL OR window_from <= window_to);
+  END IF;
+END $$;
 
 -- DOWN
 ALTER TABLE assessment_snapshots DROP CONSTRAINT IF EXISTS chk_assessment_window_order;

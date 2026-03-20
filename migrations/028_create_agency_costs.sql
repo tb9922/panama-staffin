@@ -5,7 +5,7 @@
 --          and drive the "Zero Agency" dashboard metric.
 -- Agency staff are NOT on payroll — costs are tracked here for P&L, not wage calculation.
 
-CREATE TABLE agency_providers (
+CREATE TABLE IF NOT EXISTS agency_providers (
   id          SERIAL PRIMARY KEY,
   home_id     INTEGER NOT NULL REFERENCES homes(id),
   name        VARCHAR(200) NOT NULL,
@@ -16,9 +16,9 @@ CREATE TABLE agency_providers (
   created_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agency_providers_home ON agency_providers(home_id);
+CREATE INDEX IF NOT EXISTS idx_agency_providers_home ON agency_providers(home_id);
 
-CREATE TABLE agency_shifts (
+CREATE TABLE IF NOT EXISTS agency_shifts (
   id           SERIAL PRIMARY KEY,
   home_id      INTEGER NOT NULL REFERENCES homes(id),
   agency_id    INTEGER NOT NULL REFERENCES agency_providers(id),
@@ -34,8 +34,8 @@ CREATE TABLE agency_shifts (
   created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agency_shifts_home_date ON agency_shifts(home_id, date);
-CREATE INDEX idx_agency_shifts_home_period ON agency_shifts(home_id, date, reconciled);
+CREATE INDEX IF NOT EXISTS idx_agency_shifts_home_date ON agency_shifts(home_id, date);
+CREATE INDEX IF NOT EXISTS idx_agency_shifts_home_period ON agency_shifts(home_id, date, reconciled);
 
 -- DOWN
 DROP TABLE IF EXISTS agency_shifts;

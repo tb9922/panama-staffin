@@ -7,7 +7,7 @@
 -- Status machine: pending → approved/disputed → (payroll approve) → locked
 -- locked entries cannot be edited without admin override.
 
-CREATE TABLE timesheet_entries (
+CREATE TABLE IF NOT EXISTS timesheet_entries (
   id                  SERIAL PRIMARY KEY,
   home_id             INTEGER NOT NULL REFERENCES homes(id),
   staff_id            VARCHAR(20) NOT NULL,
@@ -34,9 +34,9 @@ CREATE TABLE timesheet_entries (
 );
 
 -- Primary lookup: daily attendance view (all staff for a date)
-CREATE INDEX idx_ts_home_date   ON timesheet_entries(home_id, date);
+CREATE INDEX IF NOT EXISTS idx_ts_home_date   ON timesheet_entries(home_id, date);
 -- Secondary: payroll period query + status filtering
-CREATE INDEX idx_ts_home_period ON timesheet_entries(home_id, date, status);
+CREATE INDEX IF NOT EXISTS idx_ts_home_period ON timesheet_entries(home_id, date, status);
 
 -- DOWN
 DROP TABLE IF EXISTS timesheet_entries;

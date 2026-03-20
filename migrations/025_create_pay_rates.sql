@@ -5,7 +5,7 @@
 -- applies_to: 'night'|'weekend_sat'|'weekend_sun'|'bank_holiday'|'sleep_in'|'overtime'|'on_call'
 -- effective_to NULL = current rule. Enhancements stack additively.
 
-CREATE TABLE pay_rate_rules (
+CREATE TABLE IF NOT EXISTS pay_rate_rules (
   id             SERIAL PRIMARY KEY,
   home_id        INTEGER NOT NULL REFERENCES homes(id),
   name           VARCHAR(100) NOT NULL,
@@ -20,14 +20,14 @@ CREATE TABLE pay_rate_rules (
 );
 
 -- Partial index: fast lookup of active rules per home (effective_to IS NULL = current)
-CREATE INDEX idx_pay_rules_home_active ON pay_rate_rules(home_id) WHERE effective_to IS NULL;
+CREATE INDEX IF NOT EXISTS idx_pay_rules_home_active ON pay_rate_rules(home_id) WHERE effective_to IS NULL;
 
 -- nmw_rates: National Minimum/Living Wage rates by effective date and age bracket.
 -- Seeded with 2025-04-01 and 2026-04-01 rates. Add future years here.
 -- Lookup: SELECT ... WHERE effective_from <= $date AND age_bracket = $bracket
 --          ORDER BY effective_from DESC LIMIT 1
 
-CREATE TABLE nmw_rates (
+CREATE TABLE IF NOT EXISTS nmw_rates (
   id             SERIAL PRIMARY KEY,
   effective_from DATE NOT NULL,
   age_bracket    VARCHAR(20) NOT NULL,  -- '21+' | '18-20' | '16-17' | 'apprentice'

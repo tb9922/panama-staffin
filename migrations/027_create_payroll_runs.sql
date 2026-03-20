@@ -6,7 +6,7 @@
 -- NMW compliance is tracked per line and per shift (effective_hourly_rate).
 -- Approval is blocked if any payroll_line.nmw_compliant = false.
 
-CREATE TABLE payroll_runs (
+CREATE TABLE IF NOT EXISTS payroll_runs (
   id                  SERIAL PRIMARY KEY,
   home_id             INTEGER NOT NULL REFERENCES homes(id),
   period_start        DATE NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE payroll_runs (
   UNIQUE(home_id, period_start, period_end)
 );
 
-CREATE TABLE payroll_lines (
+CREATE TABLE IF NOT EXISTS payroll_lines (
   id                       SERIAL PRIMARY KEY,
   payroll_run_id           INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
   staff_id                 VARCHAR(20) NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE payroll_lines (
 
 -- payroll_line_shifts: per-shift detail row. Immutable once created (recalculate = delete + recreate).
 -- enhancements_json: [{type, applies_to, rate_type, amount, enhancementAmount}] for payslip breakdown.
-CREATE TABLE payroll_line_shifts (
+CREATE TABLE IF NOT EXISTS payroll_line_shifts (
   id                    SERIAL PRIMARY KEY,
   payroll_line_id       INTEGER NOT NULL REFERENCES payroll_lines(id) ON DELETE CASCADE,
   date                  DATE NOT NULL,
@@ -73,9 +73,9 @@ CREATE TABLE payroll_line_shifts (
   effective_hourly_rate NUMERIC(8,2) NOT NULL
 );
 
-CREATE INDEX idx_payroll_runs_home   ON payroll_runs(home_id);
-CREATE INDEX idx_payroll_lines_run   ON payroll_lines(payroll_run_id);
-CREATE INDEX idx_payroll_shifts_line ON payroll_line_shifts(payroll_line_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_runs_home   ON payroll_runs(home_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_lines_run   ON payroll_lines(payroll_run_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_shifts_line ON payroll_line_shifts(payroll_line_id);
 
 -- DOWN
 DROP TABLE IF EXISTS payroll_line_shifts;
