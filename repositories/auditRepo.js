@@ -25,12 +25,12 @@ export async function getRecent(limit = 100) {
 export async function countOlderThan(days, homeSlug) {
   const { rows } = homeSlug
     ? await pool.query(
-        `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1 AND home_slug = $2`,
+        `SELECT COUNT(*)::int AS count FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1 AND home_slug = $2`,
         [days, homeSlug])
     : await pool.query(
-        `SELECT COUNT(*) FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
+        `SELECT COUNT(*)::int AS count FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
         [days]);
-  return parseInt(rows[0].count, 10);
+  return rows[0].count;
 }
 
 export async function purgeOlderThan(days, homeSlug, client) {

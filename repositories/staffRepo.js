@@ -168,7 +168,7 @@ export async function upsertOne(homeId, staff, client) {
     [
       staff.id, homeId, staff.name, staff.role || null, staff.team || null,
       staff.pref || null,
-      staff.skill != null ? staff.skill : null,
+      staff.skill ?? 1,
       staff.hourly_rate != null ? staff.hourly_rate : null,
       staff.active !== false,
       staff.wtr_opt_out === true,
