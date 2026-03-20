@@ -151,7 +151,7 @@ describe('shared/roles.js', () => {
     it('hr_officer can write hr and staff', () => {
       expect(hasModuleAccess('hr_officer', 'hr', 'write')).toBe(true);
       expect(hasModuleAccess('hr_officer', 'staff', 'write')).toBe(true);
-      expect(hasModuleAccess('hr_officer', 'finance', 'read')).toBe(false);
+      expect(hasModuleAccess('hr_officer', 'finance', 'read')).toBe(true);
     });
 
     it('shift_coordinator can write scheduling only', () => {

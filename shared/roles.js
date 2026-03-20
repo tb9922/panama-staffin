@@ -28,7 +28,7 @@ export const ROLES = {
   training_lead: {
     label: 'Training Lead',
     canManageUsers: false,
-    modules: { scheduling: 'read', staff: 'write', hr: 'none', compliance: 'write', governance: 'read', finance: 'none', payroll: 'none', gdpr: 'none', reports: 'read', config: 'none' },
+    modules: { scheduling: 'read', staff: 'write', hr: 'none', compliance: 'write', governance: 'read', finance: 'read', payroll: 'none', gdpr: 'none', reports: 'read', config: 'none' },
   },
   finance_officer: {
     label: 'Finance Officer',
@@ -38,7 +38,7 @@ export const ROLES = {
   hr_officer: {
     label: 'HR Officer',
     canManageUsers: false,
-    modules: { scheduling: 'read', staff: 'write', hr: 'write', compliance: 'none', governance: 'none', finance: 'none', payroll: 'none', gdpr: 'read', reports: 'read', config: 'none' },
+    modules: { scheduling: 'read', staff: 'write', hr: 'write', compliance: 'none', governance: 'none', finance: 'read', payroll: 'none', gdpr: 'read', reports: 'read', config: 'none' },
   },
   shift_coordinator: {
     label: 'Shift Coordinator',

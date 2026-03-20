@@ -18,10 +18,10 @@ const MCA_COLS = `id, home_id, resident_name, resident_id, assessment_date, asse
 async function resolveResidentId(homeId, residentName, conn) {
   if (!residentName) return null;
   const { rows } = await conn.query(
-    `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+    `SELECT id FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`,
     [homeId, residentName]
   );
-  return rows[0]?.id || null;
+  return rows.length === 1 ? rows[0].id : null;
 }
 
 function shapeDolsRow(row) {
