@@ -84,9 +84,12 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
   // If staff hasn't started yet, nothing accrued
   if (effectiveStart > d) {
     const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+    // Pro-rata based on their actual working portion of the leave year
+    const futureMonths = monthsBetween(effectiveStart, addDays(leaveYear.end, 1));
+    const futureProRata = round1(annualEntitlementHours * (futureMonths / 12));
     return {
       contractHours, annualEntitlementHours, carryoverHours, totalEntitlementHours,
-      proRataEntitlementHours: annualEntitlementHours,
+      proRataEntitlementHours: futureProRata,
       accruedHours: carryoverHours, usedHours, remainingHours: round1(carryoverHours - usedHours),
       yearRemainingHours: round1(totalEntitlementHours - usedHours),
       leaveYear, isProRata, missingContractHours,
