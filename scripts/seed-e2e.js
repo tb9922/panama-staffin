@@ -78,6 +78,15 @@ async function seed() {
       ON CONFLICT (username, home_id) DO NOTHING
     `, [homeId]);
 
+    // Seed one resident for ResidentPicker E2E tests (idempotent — checks existence first)
+    await client.query(`
+      INSERT INTO finance_residents (home_id, resident_name, room_number, care_type, weekly_fee, funding_type, status, created_by)
+      SELECT $1, 'Test Resident', '101', 'residential', 800, 'self_funded', 'active', 'seed-e2e'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM finance_residents WHERE home_id = $1 AND resident_name = 'Test Resident' AND deleted_at IS NULL
+      )
+    `, [homeId]);
+
     await client.query('COMMIT');
     console.log('E2E seed data created successfully');
   } catch (err) {

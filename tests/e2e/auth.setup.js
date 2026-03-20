@@ -43,15 +43,19 @@ function buildState(loginResponse, setCookieHeaders) {
     ],
     origins: [{
       origin: 'http://localhost:5173',
-      localStorage: [{
-        name: 'user',
-        value: JSON.stringify({
-          username: loginResponse.username,
-          role: loginResponse.role,
-          displayName: loginResponse.displayName || '',
-          isPlatformAdmin: loginResponse.isPlatformAdmin || false,
-        }),
-      }],
+      localStorage: [
+        {
+          name: 'user',
+          value: JSON.stringify({
+            username: loginResponse.username,
+            role: loginResponse.role,
+            displayName: loginResponse.displayName || '',
+            isPlatformAdmin: loginResponse.isPlatformAdmin || false,
+          }),
+        },
+        // Ensure E2E tests use the seeded home, not the first alphabetical home.
+        { name: 'currentHome', value: 'e2e-test-home' },
+      ],
     }],
   };
 }

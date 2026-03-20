@@ -32,6 +32,7 @@ describe('DataContext', () => {
   beforeEach(() => {
     api.loadHomes.mockReset();
     api.setCurrentHome.mockReset();
+    localStorage.clear();
     // Reset the useAuth mock to a fresh logout spy per test
     useAuth.mockReturnValue({
       user: { username: 'admin', role: 'admin' },

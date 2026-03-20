@@ -19,7 +19,8 @@ export function DataProvider({ children }) {
     loadHomes()
       .then(h => {
         setHomes(h);
-        const firstHome = h[0]?.id || 'default';
+        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('currentHome') : null;
+        const firstHome = (saved && h.find(x => x.id === saved)) ? saved : (h[0]?.id || 'default');
         setActiveHome(firstHome);
         setCurrentHome(firstHome);
       })
@@ -33,6 +34,7 @@ export function DataProvider({ children }) {
   const switchHome = useCallback((homeId) => {
     setActiveHome(homeId);
     setCurrentHome(homeId);
+    try { localStorage.setItem('currentHome', homeId); } catch { /* ignore */ }
   }, []);
 
   const refreshHomes = useCallback(async () => {

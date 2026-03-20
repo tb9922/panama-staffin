@@ -10,7 +10,7 @@ test.describe('Authentication', () => {
     await page.getByPlaceholder('Enter password').fill('admin123');
     await page.getByRole('button', { name: 'Sign In' }).click();
 
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('login with wrong password shows error', async ({ page }) => {
@@ -35,13 +35,13 @@ test.describe('Authentication', () => {
     await page.getByPlaceholder('Enter username').fill('admin');
     await page.getByPlaceholder('Enter password').fill('admin123');
     await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
 
     // Refresh
     await page.reload();
 
     // Should still be on dashboard, not login
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByPlaceholder('Enter username')).not.toBeVisible();
   });
 
@@ -51,7 +51,7 @@ test.describe('Authentication', () => {
     await page.getByPlaceholder('Enter username').fill('admin');
     await page.getByPlaceholder('Enter password').fill('admin123');
     await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
 
     // Click logout
     await page.getByRole('button', { name: 'Logout' }).click();

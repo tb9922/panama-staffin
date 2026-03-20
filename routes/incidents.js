@@ -13,6 +13,8 @@ import { dispatchEvent } from '../services/webhookService.js';
 const router = Router();
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+// Converts empty strings to null so optional enum fields tolerate unset form values from the frontend.
+const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
 const addendumSchema = z.object({ content: z.string().min(1).max(5000) });
 
 const incidentBodySchema = z.object({
@@ -24,19 +26,18 @@ const incidentBodySchema = z.object({
   description:                z.string().max(10000).nullable().optional(),
   person_affected:            z.string().max(100).nullable().optional(),
   person_affected_name:       z.string().max(200).nullable().optional(),
-  resident_id:                z.number().int().positive().nullable().optional(),
   staff_involved:             z.array(z.string().max(20)).max(100).optional(),
   immediate_action:           z.string().max(5000).nullable().optional(),
   medical_attention:          z.boolean().optional(),
   hospital_attendance:        z.boolean().optional(),
   cqc_notifiable:             z.boolean().optional(),
-  cqc_notification_type:      z.enum(['death', 'serious_injury', 'abuse_allegation', 'police', 'deprivation_of_liberty', 'seclusion_restraint', 'other']).nullable().optional(),
+  cqc_notification_type:      optEnum('death', 'serious_injury', 'abuse_allegation', 'police', 'deprivation_of_liberty', 'seclusion_restraint', 'other'),
   cqc_notification_deadline:  z.union([z.enum(['immediate', '72h']), dateSchema]).optional(),
   cqc_notified:               z.boolean().optional(),
   cqc_notified_date:          dateSchema.optional(),
   cqc_reference:              z.string().max(200).nullable().optional(),
   riddor_reportable:          z.boolean().optional(),
-  riddor_category:            z.enum(['death', 'specified_injury', 'over_7_day', 'dangerous_occurrence']).nullable().optional(),
+  riddor_category:            optEnum('death', 'specified_injury', 'over_7_day', 'dangerous_occurrence'),
   riddor_reported:            z.boolean().optional(),
   riddor_reported_date:       dateSchema.optional(),
   riddor_reference:           z.string().max(200).nullable().optional(),
@@ -58,8 +59,8 @@ const incidentBodySchema = z.object({
   police_contact_date:        dateSchema.optional(),
   msp_wishes_recorded:        z.boolean().optional(),
   msp_outcome_preferences:    z.string().max(5000).nullable().optional(),
-  msp_person_involved:        z.string().max(200).nullable().optional(),
-  investigation_status:       z.enum(['open', 'under_review', 'closed']).optional(),
+  msp_person_involved:        z.boolean().optional(),
+  investigation_status:       optEnum('open', 'under_review', 'closed'),
   investigation_start_date:   dateSchema.optional(),
   investigation_lead:         z.string().max(200).nullable().optional(),
   investigation_review_date:  dateSchema.optional(),

@@ -53,7 +53,7 @@ export default function DolsTracker() {
   const today = useLiveDate();
   const homeSlug = getCurrentHome();
   const isMounted = useRef(true);
-  useEffect(() => { return () => { isMounted.current = false; }; }, []);
+  useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;

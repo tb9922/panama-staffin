@@ -118,7 +118,7 @@ function CQCEvidenceInner({ data }) {
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const isMounted = useRef(true);
-  useEffect(() => { return () => { isMounted.current = false; }; }, []);
+  useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);

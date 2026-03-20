@@ -28,12 +28,13 @@ test.describe('Scheduling — Roster', () => {
 test.describe('Scheduling — Daily Status', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/day');
-    // Wait for the page to load — look for the coverage section
-    await expect(page.getByText(/early/i)).toBeVisible({ timeout: 15_000 });
+    // Wait for the coverage section heading — use first() to avoid strict mode violation
+    // when CoverageAlertBanner also contains 'early' text.
+    await expect(page.getByText(/early/i).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows coverage periods', async ({ page }) => {
-    await expect(page.getByText(/early/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/early/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('staff list is visible', async ({ page }) => {

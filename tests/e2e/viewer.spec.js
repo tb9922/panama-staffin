@@ -11,13 +11,13 @@ test.describe('Viewer Role Restrictions', () => {
 
   test('viewer cannot see Finance nav section', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Finance' })).not.toBeVisible();
   });
 
   test('viewer cannot see HR nav section', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'HR & People' })).not.toBeVisible();
   });
 
