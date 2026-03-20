@@ -97,11 +97,12 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        // HR module — TUPE: employees JSONB array has no guaranteed staff_id field.
-        // We filter on home_id only and return home-level TUPE records. TUPE data is
-        // relatively non-sensitive (employer/transferor details) and contains no health
-        // or special-category data. The SAR response notes this is home-scoped.
-        conn.query(`SELECT * FROM hr_tupe_transfers WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]),
+        // HR module — TUPE: not auto-included in SAR. The employees JSONB field has no
+        // guaranteed staff_id, so reliable subject-scoped filtering is not possible.
+        // Including all home-level TUPE records would over-disclose other employees' data
+        // (UK GDPR Recital 63 — must not adversely affect others' rights/freedoms).
+        // A data controller note is included in the response; manual review is required.
+        Promise.resolve({ rows: [] }),
         // HR module — DBS/RTW renewals
         conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — case notes authored by this staff member (pre-resolved name)
@@ -206,7 +207,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           hr_flexible_working: hrFlexWorking.rows,
           hr_edi_records: hrEdi.rows,
           hr_tupe_transfers: hrTupe.rows,
-          tupe_note: 'TUPE records are home-level only; verify manually if subject was involved in a transfer',
+          tupe_note: 'TUPE records are excluded from automated SAR to prevent over-disclosure of other employees\' data. Please review hr_tupe_transfers manually for any transfers involving this subject.',
           hr_rtw_dbs_renewals: hrRenewals.rows,
           hr_case_notes: dedupeById([...hrCaseNotes.rows, ...hrCaseNotesOnCases.rows]),
           onboarding: onboarding.rows,
@@ -633,6 +634,26 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Clear free-text fields from retained HR records before pseudonymisation takes effect.
+    // Structure/dates are kept for legal/audit reasons; free-text may contain special-category data.
+    await client.query(
+      `UPDATE hr_contracts SET notes = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE hr_family_leave SET notes = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE hr_flexible_working SET reason = NULL, notes = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE hr_rtw_dbs_renewals SET notes = NULL, dbs_certificate_number = '[REDACTED]'
+       WHERE home_id = $1 AND staff_id = $2 AND dbs_certificate_number IS NOT NULL`,
+      [homeId, staffId]
+    );
+
     // Deliberately retained with staff_id linkage (pseudonymised via staff.name → [REDACTED]):
     // - timesheet_entries: operational hours data, retained per PAYE Regulations 2003 (6 years)
     // - payroll_lines/payroll_runs: salary records, retained per PAYE Regulations 2003 (6 years)
@@ -640,8 +661,9 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
     // - shift_overrides: dates/shift codes retained as operational data, reason cleared above
-    // - hr_contracts, hr_family_leave, hr_flexible_working: retained per Limitation Act (6 years)
-    // - hr_rtw_dbs_renewals: retained for compliance audit trail
+    // - hr_contracts, hr_family_leave, hr_flexible_working: structure/dates retained per Limitation
+    //   Act (6 years); free-text notes/reason cleared above
+    // - hr_rtw_dbs_renewals: retained for compliance audit trail; notes/DBS cert number cleared above
 
     // Mark the request as completed
     if (requestId) {
@@ -974,12 +996,5 @@ export async function getAccessLog({ limit = 100, offset = 0, homeSlugs } = {}) 
   if (!homeSlugs || homeSlugs.length === 0) {
     return gdprRepo.getAccessLog({ limit, offset });
   }
-  const { rows } = await pool.query(
-    `SELECT al.* FROM access_log al
-     JOIN homes h ON h.id = al.home_id AND h.deleted_at IS NULL
-     WHERE h.slug = ANY($1)
-     ORDER BY al.ts DESC LIMIT $2 OFFSET $3`,
-    [homeSlugs, limit, offset]
-  );
-  return rows;
+  return gdprRepo.getAccessLogByHomeSlugs(homeSlugs, { limit, offset });
 }

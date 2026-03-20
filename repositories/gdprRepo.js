@@ -45,6 +45,19 @@ export async function getAccessLog({ limit = 100, offset = 0 } = {}, client) {
   return rows.map(shapeAccessLog);
 }
 
+export async function getAccessLogByHomeSlugs(homeSlugs, { limit = 100, offset = 0 } = {}, client) {
+  const conn = client || pool;
+  const qualifiedCols = ACCESS_LOG_COLS.split(',').map(c => `al.${c.trim()}`).join(', ');
+  const { rows } = await conn.query(
+    `SELECT ${qualifiedCols} FROM access_log al
+     JOIN homes h ON h.id = al.home_id AND h.deleted_at IS NULL
+     WHERE h.slug = ANY($1)
+     ORDER BY al.ts DESC LIMIT $2 OFFSET $3`,
+    [homeSlugs, limit, offset]
+  );
+  return rows.map(shapeAccessLog);
+}
+
 export async function purgeAccessLog(days, client) {
   const conn = client || pool;
   const { rowCount } = await conn.query(
