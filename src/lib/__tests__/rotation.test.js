@@ -195,9 +195,14 @@ describe('isBankHoliday', () => {
 // ── getStaffForDay — BH auto-upgrade ──────────────────────────────────────────
 
 describe('getStaffForDay — bank holiday upgrade', () => {
+  // Good Friday 2025 (2025-04-18) is at cycle day 102 % 14 = 4, which is a
+  // working day for both Day A and Night A (pattern index 4 = 1). Using this
+  // instead of Christmas (cycle day 3 = index 3 = 0 = OFF for both teams),
+  // which would make the bank-holiday upgrade assertions vacuously pass.
+  const BH_DATE = '2025-04-18';
   const config = {
     cycle_start_date: '2025-01-06',
-    bank_holidays: [{ date: '2025-12-25', name: 'Christmas Day' }],
+    bank_holidays: [{ date: BH_DATE, name: 'Good Friday' }],
     shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
     minimum_staffing: { early: { heads: 2, skill_points: 2 }, late: { heads: 2, skill_points: 2 }, night: { heads: 1, skill_points: 1 } },
     agency_rate_day: 22, agency_rate_night: 25,
@@ -207,34 +212,30 @@ describe('getStaffForDay — bank holiday upgrade', () => {
   const staffNightA = { id: 'S2', name: 'Bob', team: 'Night A', role: 'Night Carer', skill: 1, hourly_rate: 13.5, active: true };
 
   it('upgrades day shifts to BH-D on bank holiday', () => {
-    // 2025-12-25 is Christmas — cycle day = getCycleDay('2025-12-25', '2025-01-06')
-    const result = getStaffForDay([staffDayA], '2025-12-25', {}, config);
+    // BH_DATE is cycle day 4 = working day for Day A — assertion is unconditional
+    const result = getStaffForDay([staffDayA], BH_DATE, {}, config);
     const alice = result.find(s => s.id === 'S1');
-    // Alice is Day A — if working that day, should be BH-D
-    if (alice.shift !== 'OFF') {
-      expect(alice.shift).toBe('BH-D');
-    }
+    expect(alice.shift).toBe('BH-D');
   });
 
   it('upgrades night shifts to BH-N on bank holiday', () => {
-    const result = getStaffForDay([staffNightA], '2025-12-25', {}, config);
+    // BH_DATE is cycle day 4 = working day for Night A — assertion is unconditional
+    const result = getStaffForDay([staffNightA], BH_DATE, {}, config);
     const bob = result.find(s => s.id === 'S2');
-    if (bob.shift !== 'OFF') {
-      expect(bob.shift).toBe('BH-N');
-    }
+    expect(bob.shift).toBe('BH-N');
   });
 
   it('does not upgrade shifts on a normal day', () => {
-    const result = getStaffForDay([staffDayA], '2025-12-24', {}, config);
+    const result = getStaffForDay([staffDayA], '2025-04-17', {}, config); // day before Good Friday — not a BH
     const alice = result.find(s => s.id === 'S1');
     expect(['E', 'OFF']).toContain(alice.shift); // E or OFF depending on cycle day — never BH-D
     expect(alice.shift).not.toBe('BH-D');
   });
 
   it('does not upgrade agency shifts on bank holiday', () => {
-    const overrides = { '2025-12-25': { S3: { shift: 'AG-E' } } };
+    const overrides = { [BH_DATE]: { S3: { shift: 'AG-E' } } };
     const agencyStaff = [{ id: 'S3', name: 'Agency', team: 'Agency', role: 'Carer', skill: 0.5, hourly_rate: 22, active: true }];
-    const result = getStaffForDay(agencyStaff, '2025-12-25', overrides, config);
+    const result = getStaffForDay(agencyStaff, BH_DATE, overrides, config);
     const ag = result.find(s => s.id === 'S3');
     expect(ag?.shift).toBe('AG-E'); // no upgrade for agency
   });

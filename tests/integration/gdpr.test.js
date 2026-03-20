@@ -256,8 +256,7 @@ describe('SAR Gather — /requests/:id/gather', () => {
     sarRequestId = res.body.id;
   });
 
-  // Skipped: staff SAR query references user_home_roles.user_id which does not exist yet
-  it.skip('POST gather returns personal data for staff subject', async () => {
+  it('POST gather returns personal data for staff subject', async () => {
     const res = await request(app)
       .post(`${BASE}/requests/${sarRequestId}/gather?home=${homeASlug}`)
       .set('Authorization', `Bearer ${adminToken}`)

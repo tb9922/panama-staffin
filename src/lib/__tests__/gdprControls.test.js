@@ -129,17 +129,17 @@ describe('calculateGdprControlsScore', () => {
   });
 
   it('caps overall at Requires Improvement if any domain is Inadequate', () => {
-    // Create a scenario where one domain is clearly inadequate
+    // 5 overdue SARs, all other domains at zero data
     const past = new Date();
     past.setDate(past.getDate() - 10);
     const result = calculateGdprControlsScore({
       requests: Array(5).fill({ status: 'received', deadline: past.toISOString().slice(0, 10) }),
       breaches: [], complaints: [], retentionScan: [], consent: [],
     });
-    // rights_management should be low (many overdue), dragging overall down
-    if (result.domains.rights_management.band.label === 'Inadequate') {
-      expect(result.band.label).not.toBe('Good');
-    }
+    // rights_management: 0% completion, all overdue → must be Inadequate
+    expect(result.domains.rights_management.band.label).toBe('Inadequate');
+    // overall must not reach Good or Adequate when any domain is Inadequate (cap rule)
+    expect(['Good', 'Adequate']).not.toContain(result.band.label);
   });
 
   it('includes confidence per domain', () => {

@@ -452,10 +452,7 @@ describe('CRUD: consent records', () => {
 
 // ── gatherPersonalData: staff ────────────────────────────────────────────────
 
-// Staff SAR queries reference user_home_roles.user_id which does not exist yet
-// (table has 'username' column — needs migration to add user_id FK).
-// Skip until the schema migration lands.
-describe.skip('gatherPersonalData: staff', () => {
+describe('gatherPersonalData: staff', () => {
   let result;
 
   beforeAll(async () => {
@@ -538,9 +535,9 @@ describe.skip('gatherPersonalData: staff', () => {
 
 // ── gatherPersonalData: resident ─────────────────────────────────────────────
 
-// Resident SAR queries beds/bed_transitions with a string subject_id but
-// resident_id is INTEGER. Skipped until the service resolves the type mismatch.
-describe.skip('gatherPersonalData: resident', () => {
+// resident_id in finance_residents is cast via id::text in the service query,
+// so a string subject_id is handled correctly.
+describe('gatherPersonalData: resident', () => {
   it('returns dols and mca for resident by ID', async () => {
     const result = await gdprService.gatherPersonalData('resident', 'dols-gdpr-001', homeA, null, 'Margaret Resident');
     expect(result.subject_type).toBe('resident');
@@ -824,8 +821,7 @@ describe('assessBreachRisk', () => {
 // ── Cross-home Isolation ─────────────────────────────────────────────────────
 
 describe('cross-home isolation', () => {
-  // Skipped: staff SAR query references user_home_roles.user_id which does not exist yet
-  it.skip('gatherPersonalData for home B does not return home A data', async () => {
+  it('gatherPersonalData for home B does not return home A data', async () => {
     // Same staff ID exists in both homes — data must be scoped
     const result = await gdprService.gatherPersonalData('staff', 'gdpr-S001', homeB);
     expect(result.data.staff).toHaveLength(1);

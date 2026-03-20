@@ -236,20 +236,22 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       }
 
       const queries = [
-        // Prefer resident_id FK when available, fall back to resident_name
+        // Prefer resident_id FK when available, fall back to resident_name.
+        // Null params with unknown type cause PG "could not determine data type" errors,
+        // so use separate query strings with reindexed params for each branch.
         subjectName
           ? conn.query(
               residentPk
                 ? `SELECT * FROM dols WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
-                : `SELECT * FROM dols WHERE home_id = $1 AND resident_name = $3 AND deleted_at IS NULL`,
-              residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName])
+                : `SELECT * FROM dols WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`,
+              residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName])
           : { rows: [] },
         subjectName
           ? conn.query(
               residentPk
                 ? `SELECT * FROM mca_assessments WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
-                : `SELECT * FROM mca_assessments WHERE home_id = $1 AND resident_name = $3 AND deleted_at IS NULL`,
-              residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName])
+                : `SELECT * FROM mca_assessments WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`,
+              residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName])
           : { rows: [] },
         // Finance: resident record, invoices, fee changes, invoice lines, payment schedule, chase
         subjectName
@@ -291,12 +293,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE fi.home_id = $1 AND fr.resident_name = $2 AND fi.deleted_at IS NULL`,
               [homeId, subjectName])
           : { rows: [] },
-        subjectName
-          ? conn.query(
-              `SELECT ps.* FROM finance_payment_schedule ps
-               JOIN finance_residents fr ON fr.id = ps.resident_id AND fr.home_id = $1
-               WHERE fr.resident_name = $2 AND ps.deleted_at IS NULL`, [homeId, subjectName])
-          : { rows: [] },
+        // finance_payment_schedule is AP (supplier schedules) — no resident_id column.
+        // Not included in resident SAR.
         subjectName
           ? conn.query(
               `SELECT ic.* FROM finance_invoice_chase ic
@@ -311,13 +309,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           conn.query(
             residentPk
               ? `SELECT * FROM incidents WHERE home_id = $1 AND (resident_id = $2 OR person_affected_name = $3) AND deleted_at IS NULL`
-              : `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $3 AND deleted_at IS NULL`,
-            residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName]),
+              : `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
+            residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
           conn.query(
             residentPk
               ? `SELECT * FROM complaints WHERE home_id = $1 AND (resident_id = $2 OR raised_by_name = $3) AND deleted_at IS NULL`
-              : `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $3 AND deleted_at IS NULL`,
-            residentPk ? [homeId, residentPk, subjectName] : [homeId, null, subjectName]),
+              : `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
+            residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
         );
       }
       const results = await Promise.all(queries);
@@ -335,10 +333,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           bed_transitions: results[5].rows,
           finance_fee_changes: results[6].rows,
           finance_invoice_lines: results[7].rows,
-          finance_payment_schedule: results[8].rows,
-          finance_invoice_chase: results[9].rows,
-          incidents: results[10]?.rows || [],
-          complaints: results[11]?.rows || [],
+          finance_invoice_chase: results[8].rows,
+          incidents: results[9]?.rows || [],
+          complaints: results[10]?.rows || [],
         },
       };
     }
