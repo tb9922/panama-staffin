@@ -239,6 +239,55 @@ export async function upsertYTD(homeId, staffId, taxYear, increments, client) {
 }
 
 /**
+ * Batch-increment YTD totals for all staff in one INSERT ... ON CONFLICT.
+ * Called ONLY from approveRun. Replaces N sequential upsertYTD calls.
+ * @param {number} homeId
+ * @param {number} taxYear
+ * @param {Array<{staff_id, gross_pay, taxable_pay, ...}>} rows
+ * @param {object} client - transaction client (required)
+ */
+export async function upsertYTDBatch(homeId, taxYear, rows, client) {
+  if (!rows.length) return;
+  const conn = client || pool;
+  const valueParts = [];
+  const params = [];
+  for (const r of rows) {
+    const base = params.length;
+    const { gross_pay=0, taxable_pay=0, tax_deducted=0, employee_ni=0, employer_ni=0,
+            student_loan=0, pension_employee=0, pension_employer=0,
+            holiday_pay=0, ssp_amount=0, net_pay=0 } = r;
+    params.push(homeId, r.staff_id, taxYear,
+      gross_pay, taxable_pay, tax_deducted,
+      employee_ni, employer_ni, student_loan,
+      pension_employee, pension_employer,
+      holiday_pay, ssp_amount, net_pay);
+    const s = n => `$${base + n}`;
+    valueParts.push(`(${s(1)},${s(2)},${s(3)},${s(4)},${s(5)},${s(6)},${s(7)},${s(8)},${s(9)},${s(10)},${s(11)},${s(12)},${s(13)},${s(14)},NOW())`);
+  }
+  await conn.query(
+    `INSERT INTO payroll_ytd
+       (home_id, staff_id, tax_year, gross_pay, taxable_pay, tax_deducted,
+        employee_ni, employer_ni, student_loan, pension_employee, pension_employer,
+        holiday_pay, ssp_amount, net_pay, updated_at)
+     VALUES ${valueParts.join(', ')}
+     ON CONFLICT (home_id, staff_id, tax_year) DO UPDATE SET
+       gross_pay        = payroll_ytd.gross_pay        + EXCLUDED.gross_pay,
+       taxable_pay      = payroll_ytd.taxable_pay      + EXCLUDED.taxable_pay,
+       tax_deducted     = payroll_ytd.tax_deducted     + EXCLUDED.tax_deducted,
+       employee_ni      = payroll_ytd.employee_ni      + EXCLUDED.employee_ni,
+       employer_ni      = payroll_ytd.employer_ni      + EXCLUDED.employer_ni,
+       student_loan     = payroll_ytd.student_loan     + EXCLUDED.student_loan,
+       pension_employee = payroll_ytd.pension_employee + EXCLUDED.pension_employee,
+       pension_employer = payroll_ytd.pension_employer + EXCLUDED.pension_employer,
+       holiday_pay      = payroll_ytd.holiday_pay      + EXCLUDED.holiday_pay,
+       ssp_amount       = payroll_ytd.ssp_amount       + EXCLUDED.ssp_amount,
+       net_pay          = payroll_ytd.net_pay          + EXCLUDED.net_pay,
+       updated_at       = NOW()`,
+    params,
+  );
+}
+
+/**
  * Batch-fetch YTD totals for multiple staff in a single query.
  * Replaces N sequential getYTD calls.
  */

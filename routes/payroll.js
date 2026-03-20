@@ -133,8 +133,8 @@ const agencyShiftBodySchema = z.object({
 router.get('/rates', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     if (blockOwnDataRole(req, res, 'payroll')) return;
-    // Seed defaults if none exist yet (idempotent)
-    await payrollService.seedDefaultRulesIfNeeded(req.home.id);
+    // Seed defaults if none exist yet (idempotent, wrapped in transaction for atomicity)
+    await withTransaction((client) => payrollService.seedDefaultRulesIfNeeded(req.home.id, client));
 
     const rules = await payRateRulesRepo.findActiveByHome(req.home.id);
     res.json(rules);
@@ -393,17 +393,25 @@ router.post('/runs/:runId/void', writeRateLimiter, requireAuth, requireHomeAcces
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
-    const existing = await payrollRunRepo.findById(runIdP.data, req.home.id);
-    if (!existing) return res.status(404).json({ error: 'Run not found' });
-    if (!['draft', 'calculated'].includes(existing.status)) {
-      return res.status(400).json({ error: `Cannot void a run with status "${existing.status}". Only draft or calculated runs can be voided.` });
-    }
     const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
-    const run = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, null, version);
-    if (run === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
-    await auditService.log('payroll_void', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', previousStatus: existing.status });
+    const run = await withTransaction(async (client) => {
+      const existing = await payrollRunRepo.findByIdForUpdate(runIdP.data, req.home.id, client);
+      if (!existing) { const e = new Error('Run not found'); e.status = 404; throw e; }
+      if (!['draft', 'calculated'].includes(existing.status)) {
+        const e = new Error(`Cannot void a run with status "${existing.status}". Only draft or calculated runs can be voided.`);
+        e.status = 400;
+        throw e;
+      }
+      const updated = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, client, version);
+      if (updated === null) { const e = new Error('Record was modified by another user. Please refresh and try again.'); e.status = 409; throw e; }
+      return updated;
+    });
+    await auditService.log('payroll_void', req.home.slug, req.user.username, { id: runIdP.data, entity: 'run', action: 'void' });
     res.json(run);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 });
 
 // GET /api/payroll/runs/:runId/export?home=X&format=sage|xero|generic — CSV download

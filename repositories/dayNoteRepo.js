@@ -5,12 +5,13 @@ import { pool, toDateStr } from '../db.js';
  * { "YYYY-MM-DD": "note text" }
  * @param {number} homeId
  */
-export async function findByHome(homeId, fromDate, toDate) {
+export async function findByHome(homeId, fromDate, toDate, client) {
+  const conn = client || pool;
   let sql = 'SELECT date, note FROM day_notes WHERE home_id = $1';
   const params = [homeId];
   if (fromDate) { params.push(fromDate); sql += ` AND date >= $${params.length}`; }
   if (toDate) { params.push(toDate); sql += ` AND date <= $${params.length}`; }
-  const { rows } = await pool.query(sql, params);
+  const { rows } = await conn.query(sql, params);
   const result = {};
   for (const row of rows) {
     const dateStr = toDateStr(row.date);

@@ -278,7 +278,9 @@ function validateRisks(data, warnings, todayStr) {
   let critical = 0, overdueReviews = 0, overdueActions = 0;
   for (const risk of data.risk_register) {
     if (risk.status === 'closed') continue;
-    if ((risk.likelihood || 1) * (risk.impact || 1) >= 16) critical++;
+    const rl = risk.residual_likelihood || risk.likelihood || 1;
+    const ri = risk.residual_impact    || risk.impact    || 1;
+    if (rl * ri >= 16) critical++;
     if (risk.next_review && risk.next_review < todayStr) overdueReviews++;
     for (const action of (risk.actions || [])) {
       if (action.status !== 'completed' && action.due_date && action.due_date < todayStr) overdueActions++;

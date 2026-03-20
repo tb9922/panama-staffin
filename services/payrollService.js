@@ -494,24 +494,25 @@ export async function approveRun(runId, homeId, homeSlug, username) {
     const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
-    // Write YTD increments for each staff member (upsert — adds to existing YTD)
-    for (const l of lines) {
+    // Write YTD increments for all staff in a single batch INSERT ... ON CONFLICT
+    const ytdRows = lines.map(l => {
       const grossWithExtras = round2((l.gross_pay || 0) + (l.holiday_pay || 0) + (l.ssp_amount || 0));
-      const taxablePay = round2(grossWithExtras - (l.pension_employee || 0));
-      await taxRepo.upsertYTD(homeId, l.staff_id, taxYear, {
+      return {
+        staff_id:         l.staff_id,
         gross_pay:        grossWithExtras,
-        taxable_pay:      taxablePay,
-        tax_deducted:     l.tax_deducted || 0,
-        employee_ni:      l.employee_ni  || 0,
-        employer_ni:      l.employer_ni  || 0,
-        student_loan:     l.student_loan || 0,
+        taxable_pay:      round2(grossWithExtras - (l.pension_employee || 0)),
+        tax_deducted:     l.tax_deducted     || 0,
+        employee_ni:      l.employee_ni      || 0,
+        employer_ni:      l.employer_ni      || 0,
+        student_loan:     l.student_loan     || 0,
         pension_employee: l.pension_employee || 0,
         pension_employer: l.pension_employer || 0,
-        holiday_pay:      l.holiday_pay  || 0,
-        ssp_amount:       l.ssp_amount   || 0,
-        net_pay:          l.net_pay      || 0,
-      }, client);
-    }
+        holiday_pay:      l.holiday_pay      || 0,
+        ssp_amount:       l.ssp_amount       || 0,
+        net_pay:          l.net_pay          || 0,
+      };
+    });
+    await taxRepo.upsertYTDBatch(homeId, taxYear, ytdRows, client);
 
     // Mark YTD as applied so re-approval cannot double-count
     await payrollRunRepo.markYtdApplied(runId, homeId, client);
@@ -591,7 +592,7 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
       await payrollRunRepo.updateStatus(runId, homeId, 'exported', {
         exported_at: true,
         export_format: format,
-      }, client);
+      }, client, run.version);
     }
 
     await auditRepo.log('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`, client);
