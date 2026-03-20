@@ -129,6 +129,8 @@ export async function resetPassword(userId, newPassword, _actorUsername) {
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userRepo.updatePassword(userId, hash);
+  // Clear lockout so the user can immediately log in with the new password
+  await userRepo.resetFailedLogin(target.username);
 
   // Revoke all existing tokens — forces re-login with new password
   await authService.revokeUser(target.username);
