@@ -509,18 +509,20 @@ describe('calculateStaffTurnover', () => {
     expect(result.leavers).toBe(0);
   });
 
-  it('counts leavers in date range', () => {
+  it('counts leavers in date range (annualised)', () => {
     const data = {
       staff: [
         makeStaff({ leaving_date: '2025-03-15', active: false }),
         makeStaff({ id: 'S002', name: 'Bob' }),
       ],
     };
+    // 181 days (Jan 1 – Jun 30 inclusive). 1 leaver / 2 headcount × (365/181) ≈ 101%
     const dateRange = { from: new Date('2025-01-01'), to: new Date('2025-06-30') };
     const result = calculateStaffTurnover(data, dateRange);
     expect(result.leavers).toBe(1);
     expect(result.avgHeadcount).toBe(2);
-    expect(result.pct).toBe(50);
+    expect(result.pct).toBe(101);
+    expect(result.periodDays).toBe(181);
   });
 
   it('excludes leavers outside date range', () => {

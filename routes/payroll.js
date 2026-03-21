@@ -388,20 +388,43 @@ router.post('/runs/:runId/approve', writeRateLimiter, requireAuth, requireHomeAc
   } catch (err) { next(err); }
 });
 
-// POST /api/payroll/runs/:runId/void?home=X — void a draft/calculated run to unblock overlap
+// POST /api/payroll/runs/:runId/void?home=X — void a run
+// draft/calculated: simple status update
+// approved/exported: reverses YTD and HMRC liability before voiding (see payrollService.voidApprovedRun)
+// locked: not voidable
 router.post('/runs/:runId/void', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     const rawV = parseInt(req.body._version, 10);
     const version = Number.isFinite(rawV) ? rawV : null;
+
+    // Peek at the run status without locking to decide routing
+    const peek = await payrollRunRepo.findById(runIdP.data, req.home.id);
+    if (!peek) return res.status(404).json({ error: 'Run not found' });
+
+    if (['approved', 'exported'].includes(peek.status)) {
+      // Approved/exported: full reversal via service (handles YTD + HMRC in one transaction)
+      const run = await payrollService.voidApprovedRun(
+        runIdP.data, req.home.id, req.home.slug, req.user.username, version,
+      );
+      return res.json(run);
+    }
+
+    if (!['draft', 'calculated'].includes(peek.status)) {
+      return res.status(400).json({
+        error: `Cannot void a run with status "${peek.status}". Only draft, calculated, approved, or exported runs can be voided.`,
+      });
+    }
+
+    // Draft/calculated: simple status transition, no YTD/HMRC to reverse
     const run = await withTransaction(async (client) => {
       const existing = await payrollRunRepo.findByIdForUpdate(runIdP.data, req.home.id, client);
       if (!existing) { const e = new Error('Run not found'); e.status = 404; throw e; }
       if (!['draft', 'calculated'].includes(existing.status)) {
-        const e = new Error(`Cannot void a run with status "${existing.status}". Only draft or calculated runs can be voided.`);
-        e.status = 400;
-        throw e;
+        // Race: status changed between peek and lock — re-route to 400
+        const e = new Error(`Run status changed to "${existing.status}". Please refresh and try again.`);
+        e.status = 409; throw e;
       }
       const updated = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, client, version);
       if (updated === null) { const e = new Error('Record was modified by another user. Please refresh and try again.'); e.status = 409; throw e; }

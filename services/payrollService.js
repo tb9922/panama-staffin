@@ -558,6 +558,77 @@ export async function approveRun(runId, homeId, homeSlug, username) {
   });
 }
 
+// ── Void Approved Run ──────────────────────────────────────────────────────────
+
+/**
+ * Void a payroll run that was approved (ytd_applied = true).
+ * Reverses the YTD increments and subtracts the HMRC liability that were accumulated
+ * during approveRun. The run is then marked as 'voided' and ytd_applied = false.
+ *
+ * Called from POST /api/payroll/runs/:runId/void when the run is in 'approved' or
+ * 'exported' status. Simple draft/calculated voids are handled inline in the route.
+ */
+export async function voidApprovedRun(runId, homeId, homeSlug, username, version) {
+  return withTransaction(async (client) => {
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (!['approved', 'exported'].includes(run.status)) {
+      const e = new ValidationError(`voidApprovedRun called on run with status "${run.status}"`);
+      throw e;
+    }
+
+    const taxYear  = getTaxYear(new Date(run.period_end));
+    const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
+    const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
+
+    if (run.ytd_applied && lines.length > 0) {
+      // Reverse the YTD increments for each staff member
+      const ytdRows = lines.map(l => {
+        const grossWithExtras = round2((l.gross_pay || 0) + (l.holiday_pay || 0) + (l.ssp_amount || 0));
+        return {
+          staff_id:         l.staff_id,
+          gross_pay:        grossWithExtras,
+          taxable_pay:      round2(grossWithExtras - (l.pension_employee || 0)),
+          tax_deducted:     l.tax_deducted     || 0,
+          employee_ni:      l.employee_ni      || 0,
+          employer_ni:      l.employer_ni      || 0,
+          student_loan:     l.student_loan     || 0,
+          pension_employee: l.pension_employee || 0,
+          pension_employer: l.pension_employer || 0,
+          holiday_pay:      l.holiday_pay      || 0,
+          ssp_amount:       l.ssp_amount       || 0,
+          net_pay:          l.net_pay          || 0,
+        };
+      });
+      await taxRepo.subtractYTDBatch(homeId, taxYear, ytdRows, client);
+
+      // Reverse the HMRC liability accumulation for this tax month
+      const totals = lines.reduce((acc, l) => ({
+        paye:   round2(acc.paye   + (l.tax_deducted || 0)),
+        emp_ni: round2(acc.emp_ni + (l.employee_ni  || 0)),
+        er_ni:  round2(acc.er_ni  + (l.employer_ni  || 0)),
+      }), { paye: 0, emp_ni: 0, er_ni: 0 });
+
+      await hmrcRepo.subtractLiability(homeId, taxYear, taxMonth, {
+        total_paye:        totals.paye,
+        total_employee_ni: totals.emp_ni,
+        total_employer_ni: totals.er_ni,
+        total_due:         round2(totals.paye + totals.emp_ni + totals.er_ni),
+      }, client);
+
+      await payrollRunRepo.markYtdUnapplied(runId, homeId, client);
+    }
+
+    const updated = await payrollRunRepo.updateStatus(runId, homeId, 'voided', null, client, version);
+    if (updated === null) {
+      throw new ValidationError('Record was modified by another user. Please refresh and try again.');
+    }
+
+    await auditRepo.log('payroll_void', homeSlug, username, `Run ID ${runId} (approved → voided, YTD reversed)`, client);
+    return updated;
+  });
+}
+
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
 /**
@@ -606,22 +677,28 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
 // ── Holiday Daily Rate ────────────────────────────────────────────────────────
 
 /**
- * Holiday daily rate: contracted rate per working day.
+ * Holiday daily rate per Bear Scotland v Fulton / Harpur Trust v Brazel (2022).
  *
- * Business decision: use (contract_hours / 5) × hourly_rate rather than a 52-week
- * lookback average. For a small care home this gives predictable, consistent holiday
- * pay without OT weeks inflating the rate. Managers can adjust hourly_rate if needed.
+ * Uses a 52-week reference period (ERA 1996 s.224 as amended by EWR 2020): average
+ * weekly gross pay over the last 52 weeks with pay, divided by 5 working days.
+ * This correctly includes night enhancements, OT premiums, and bank holiday uplifts
+ * that are part of "normal remuneration" and must be reflected in holiday pay.
  *
- * Note: Harpur Trust v Brazel (2022) requires including regular overtime in holiday pay
- * for part-year workers. This simplified approach is acceptable for full-time care staff
- * on fixed contracts but may need revisiting for zero-hours or variable-hours workers.
+ * Fallback to (contract_hours / 5) × hourly_rate when no payroll history exists
+ * (e.g. new starters on their first run).
  */
 async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, config, staff) {
   if (!staff) return 0;
   const contractHours = parseFloat(staff.contract_hours);
   if (!contractHours || contractHours <= 0) return 0;
   const hourlyRate = parseFloat(staff.hourly_rate) || 0;
-  return round2((contractHours / 5) * hourlyRate);
+  const fallback = round2((contractHours / 5) * hourlyRate);
+
+  const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);
+  if (!avg) return fallback;
+
+  const avgWeeklyPay = round2(avg.total_gross / avg.weeks_with_pay);
+  return round2(avgWeeklyPay / 5);
 }
 
 // ── Payslip Assembly ──────────────────────────────────────────────────────────

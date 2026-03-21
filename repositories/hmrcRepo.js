@@ -65,6 +65,27 @@ export async function upsertLiability(homeId, taxYear, taxMonth, data, client) {
   return shapeRow(rows[0]);
 }
 
+/**
+ * Subtract amounts from an HMRC liability when an approved payroll run is voided.
+ * Totals are floored at 0 — negative liability would indicate a data inconsistency
+ * but should not be propagated to the UI.
+ * No-ops if no liability row exists for this home/year/month.
+ */
+export async function subtractLiability(homeId, taxYear, taxMonth, amounts, client) {
+  const conn = client || pool;
+  await conn.query(
+    `UPDATE hmrc_liabilities
+     SET total_paye         = GREATEST(0, total_paye         - $4),
+         total_employee_ni  = GREATEST(0, total_employee_ni  - $5),
+         total_employer_ni  = GREATEST(0, total_employer_ni  - $6),
+         total_due          = GREATEST(0, total_due          - $7),
+         updated_at         = NOW()
+     WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3`,
+    [homeId, taxYear, taxMonth,
+     amounts.total_paye, amounts.total_employee_ni, amounts.total_employer_ni, amounts.total_due],
+  );
+}
+
 export async function markPaid(id, homeId, paidDate, paidReference, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

@@ -288,6 +288,43 @@ export async function upsertYTDBatch(homeId, taxYear, rows, client) {
 }
 
 /**
+ * Batch-subtract YTD amounts for all staff in a voided payroll run.
+ * Totals are floored at 0 — going negative would indicate inconsistent data.
+ * Rows that don't exist are silently ignored (nothing to reverse).
+ * Called ONLY from the void-approved-run path in routes/payroll.js.
+ */
+export async function subtractYTDBatch(homeId, taxYear, rows, client) {
+  if (!rows.length) return;
+  const conn = client || pool;
+  for (const r of rows) {
+    const { gross_pay=0, taxable_pay=0, tax_deducted=0, employee_ni=0, employer_ni=0,
+            student_loan=0, pension_employee=0, pension_employer=0,
+            holiday_pay=0, ssp_amount=0, net_pay=0 } = r;
+    await conn.query(
+      `UPDATE payroll_ytd SET
+         gross_pay        = GREATEST(0, gross_pay        - $4),
+         taxable_pay      = GREATEST(0, taxable_pay      - $5),
+         tax_deducted     = GREATEST(0, tax_deducted     - $6),
+         employee_ni      = GREATEST(0, employee_ni      - $7),
+         employer_ni      = GREATEST(0, employer_ni      - $8),
+         student_loan     = GREATEST(0, student_loan     - $9),
+         pension_employee = GREATEST(0, pension_employee - $10),
+         pension_employer = GREATEST(0, pension_employer - $11),
+         holiday_pay      = GREATEST(0, holiday_pay      - $12),
+         ssp_amount       = GREATEST(0, ssp_amount       - $13),
+         net_pay          = GREATEST(0, net_pay          - $14),
+         updated_at       = NOW()
+       WHERE home_id = $1 AND staff_id = $2 AND tax_year = $3`,
+      [homeId, r.staff_id, taxYear,
+       gross_pay, taxable_pay, tax_deducted,
+       employee_ni, employer_ni, student_loan,
+       pension_employee, pension_employer,
+       holiday_pay, ssp_amount, net_pay],
+    );
+  }
+}
+
+/**
  * Batch-fetch YTD totals for multiple staff in a single query.
  * Replaces N sequential getYTD calls.
  */

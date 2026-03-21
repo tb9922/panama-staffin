@@ -590,8 +590,13 @@ export function calculateStaffTurnover(data, dateRange) {
   const leavers = staff.filter(s => s.leaving_date && s.leaving_date >= fromStr && s.leaving_date <= toStr);
   const activeAtStart = staff.filter(s => s.active !== false || (s.leaving_date && s.leaving_date >= fromStr));
   const avgHeadcount = activeAtStart.length || 1;
-  const pct = Math.round((leavers.length / avgHeadcount) * 100);
-  return { pct, leavers: leavers.length, avgHeadcount };
+  // Annualise: raw count over a short window (e.g. 28 days) is not comparable to CQC benchmarks
+  // which use annual turnover figures. Multiply by (365 / periodDays) to get annualised rate.
+  const fromDate = new Date(fromStr + 'T00:00:00Z');
+  const toDate = new Date(toStr + 'T00:00:00Z');
+  const periodDays = Math.max(1, Math.round((toDate - fromDate) / 86400000) + 1);
+  const annualisedPct = Math.round((leavers.length / avgHeadcount) * (365 / periodDays) * 100);
+  return { pct: annualisedPct, leavers: leavers.length, avgHeadcount, periodDays };
 }
 
 export function calculateTrainingTrend(data, asOfDate) {

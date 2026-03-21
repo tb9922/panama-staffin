@@ -109,8 +109,8 @@ export async function create(homeId, run, client) {
 const VALID_TRANSITIONS = {
   draft: ['calculated', 'voided'],
   calculated: ['draft', 'approved', 'voided'],
-  approved: ['exported', 'locked'],
-  exported: ['locked'],
+  approved: ['exported', 'locked', 'voided'],  // voided triggers YTD+HMRC reversal in service
+  exported: ['locked', 'voided'],              // voided after export also reverses YTD+HMRC
   locked: [],
   voided: [],
 };
@@ -174,6 +174,15 @@ export async function markYtdApplied(runId, homeId, client) {
   const conn = client || pool;
   await conn.query(
     `UPDATE payroll_runs SET ytd_applied = true, updated_at = NOW() WHERE id = $1 AND home_id = $2`,
+    [runId, homeId],
+  );
+}
+
+/** Clear the ytd_applied flag when an approved run is voided and YTD has been reversed. */
+export async function markYtdUnapplied(runId, homeId, client) {
+  const conn = client || pool;
+  await conn.query(
+    `UPDATE payroll_runs SET ytd_applied = false, updated_at = NOW() WHERE id = $1 AND home_id = $2`,
     [runId, homeId],
   );
 }
@@ -461,4 +470,36 @@ export async function getSSPDaysByRun(runId, homeId, client) {
     [runId, homeId],
   );
   return rows.map(r => ({ staff_id: r.staff_id, ssp_days: parseInt(r.ssp_days, 10) }));
+}
+
+/**
+ * Compute average weekly gross pay for a staff member over the 52 weeks (364 days)
+ * prior to referenceDate, across all approved/exported/locked runs.
+ * Only gross_pay is included — holiday_pay and ssp_amount are excluded as they are
+ * not "normal remuneration" for the purposes of the reference period.
+ * Returns null when no history exists (caller should fall back to contracted rate).
+ * Used for holiday pay calculation per Bear Scotland v Fulton / ERA 1996 s.224.
+ */
+export async function findAverageWeeklyPay(homeId, staffId, referenceDate, client) {
+  const conn = client || pool;
+  const refStr = typeof referenceDate === 'string' ? referenceDate : referenceDate.toISOString().slice(0, 10);
+  const { rows } = await conn.query(
+    `SELECT COALESCE(SUM(pl.gross_pay), 0)::numeric AS total_gross,
+            COUNT(DISTINCT DATE_TRUNC('week', pr.period_start::date)::date)::int AS weeks_with_pay
+     FROM payroll_lines pl
+     JOIN payroll_runs pr ON pr.id = pl.payroll_run_id AND pr.home_id = pl.home_id
+     WHERE pl.home_id = $1
+       AND pl.staff_id = $2
+       AND pr.status IN ('approved', 'exported', 'locked')
+       AND pr.period_end < $3
+       AND pr.period_end >= ($3::date - INTERVAL '364 days')`,
+    [homeId, staffId, refStr],
+  );
+  const row = rows[0];
+  const weeksWithPay = parseInt(row?.weeks_with_pay || 0, 10);
+  if (weeksWithPay < 1) return null;
+  return {
+    total_gross: parseFloat(row.total_gross),
+    weeks_with_pay: weeksWithPay,
+  };
 }
