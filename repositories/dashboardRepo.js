@@ -71,6 +71,7 @@ export async function getComplaintCounts(homeId) {
        COUNT(*) FILTER (
          WHERE acknowledged_date IS NULL
            AND date < CURRENT_DATE - INTERVAL '2 days'
+           AND status NOT IN ('resolved', 'closed')
        )::int AS unacknowledged,
        COUNT(*) FILTER (
          WHERE response_deadline < CURRENT_DATE
@@ -124,10 +125,26 @@ export async function getMaintenanceCounts(homeId, today) {
 export async function getTrainingCounts(homeId, today) {
   const { rows } = await pool.query(
     `/* dashboardRepo – getTrainingCounts */
+     WITH active_types AS (
+       SELECT jsonb_array_elements(config -> 'training_types') AS t
+       FROM homes WHERE id = $1
+     )
      SELECT
-       COUNT(*) FILTER (WHERE tr.expiry < $2)::int AS expired,
+       COUNT(*) FILTER (
+         WHERE tr.expiry < $2
+           AND EXISTS (
+             SELECT 1 FROM active_types
+             WHERE t->>'id' = tr.training_type_id
+               AND (t->>'active')::boolean IS NOT FALSE
+           )
+       )::int AS expired,
        COUNT(*) FILTER (
          WHERE tr.expiry >= $2 AND tr.expiry <= ($2::date + INTERVAL '30 days')
+           AND EXISTS (
+             SELECT 1 FROM active_types
+             WHERE t->>'id' = tr.training_type_id
+               AND (t->>'active')::boolean IS NOT FALSE
+           )
        )::int AS expiring_soon
      FROM training_records tr
      JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
@@ -363,6 +380,7 @@ export async function getWhistleblowingCounts(homeId) {
        COUNT(*) FILTER (
          WHERE acknowledgement_date IS NULL
            AND date_raised < CURRENT_DATE - INTERVAL '3 days'
+           AND status NOT IN ('resolved', 'closed')
        )::int AS unacknowledged
      FROM whistleblowing_concerns
      WHERE home_id = $1 AND deleted_at IS NULL`,

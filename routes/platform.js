@@ -88,7 +88,7 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
     const home = await withTransaction(async (client) => {
       const created = await homeRepo.create(slug, name, config, client);
       await userHomeRepo.assignRole(req.user.username, created.id, 'home_manager', null, 'system', client);
-      await auditService.log('home_create', slug, req.user.username, { name });
+      await auditService.log('home_create', slug, req.user.username, { name }, client);
       return created;
     });
 
@@ -123,7 +123,7 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
       await homeRepo.updateConfig(id.data, mergedConfig, client);
       await auditService.log('home_update', home.slug, req.user.username, {
         changes: { name, registered_beds, care_type },
-      });
+      }, client);
 
       return { ok: true };
     });
@@ -162,7 +162,7 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
       await userHomeRepo.revokeAllRolesForHome(id.data, client);
       await auditService.log('home_delete', home.slug, req.user.username, {
         usersRevoked: revokedUsers,
-      });
+      }, client);
 
       return { ok: true };
     });

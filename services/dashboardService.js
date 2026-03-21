@@ -157,12 +157,14 @@ export async function getDashboardSummary(homeId) {
   ]);
 
   const modules = {};
+  const failedModules = [];
   MODULE_KEYS.forEach((key, i) => {
     if (results[i].status === 'fulfilled') {
       modules[key] = results[i].value;
     } else {
       logger.error({ homeId, module: key, err: results[i].reason?.message }, 'Dashboard query failed');
       modules[key] = DEFAULTS[key];
+      failedModules.push(key);
     }
   });
 
@@ -173,5 +175,5 @@ export async function getDashboardSummary(homeId) {
 
   logger.info({ homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
 
-  return { modules, alerts, weekActions };
+  return { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
 }

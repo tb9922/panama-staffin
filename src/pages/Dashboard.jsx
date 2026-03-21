@@ -213,6 +213,13 @@ function DashboardInner({ schedData }) {
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
+      {/* Degraded data warning — shown when one or more module queries failed */}
+      {summary?._degraded && (
+        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800 print:hidden">
+          Some dashboard data could not be loaded ({summary._failedModules.join(', ')}). Displayed counts may be incomplete.
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl p-5 mb-6 flex items-center justify-between shadow-lg shadow-blue-900/20">
         <div>

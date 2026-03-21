@@ -1,12 +1,17 @@
 import * as auditRepo from '../repositories/auditRepo.js';
 import logger from '../logger.js';
 
-export async function log(action, homeSlug, username, details) {
-  try {
-    await auditRepo.log(action, homeSlug, username, details);
-  } catch (err) {
-    // Audit failures must never block the primary operation.
-    logger.error({ action, homeSlug, username, err: err.message }, 'audit write failure');
+export async function log(action, homeSlug, username, details, client) {
+  if (client) {
+    // Inside a transaction — propagate errors so the caller's transaction rolls back.
+    await auditRepo.log(action, homeSlug, username, details, client);
+  } else {
+    try {
+      await auditRepo.log(action, homeSlug, username, details);
+    } catch (err) {
+      // Audit failures must never block the primary operation outside a transaction.
+      logger.error({ action, homeSlug, username, err: err.message }, 'audit write failure');
+    }
   }
 }
 
