@@ -26,7 +26,7 @@ const dolsBodySchema = z.object({
   authorising_authority:  z.string().max(200).nullable().optional(),
   restrictions:           z.array(z.string().max(500)).max(50).optional(),
   reviewed_date:          dateSchema.optional(),
-  review_status:          z.string().max(50).nullable().optional(),
+  review_status:          z.enum(['pending', 'in_progress', 'completed']).nullable().optional(),
   next_review_date:       dateSchema.optional(),
   notes:                  z.string().max(5000).nullable().optional(),
 });
