@@ -25,10 +25,10 @@ vi.mock('../../lib/excel.js', () => ({
 import * as api from '../../lib/api.js';
 
 const MOCK_STATS = {
-  open_disciplinary: 2,
-  open_grievance: 1,
-  open_performance: 0,
-  pending_flex: 3,
+  disciplinary_open: 2,
+  grievance_open: 1,
+  performance_open: 0,
+  flex_working_pending: 3,
   active_warnings: 4,
 };
 
@@ -36,17 +36,17 @@ const MOCK_WARNINGS = [
   {
     staff_id: 'S001',
     staff_name: 'Alice Smith',
-    type: 'Disciplinary',
+    case_type: 'disciplinary',
     outcome: 'first_written',
-    expiry_date: '2026-12-01',
+    warning_expiry_date: '2026-12-01',
     case_id: 'DISC-001',
   },
   {
     staff_id: 'S002',
     staff_name: 'Bob Jones',
-    type: 'Disciplinary',
+    case_type: 'disciplinary',
     outcome: 'final_written',
-    expiry_date: '2027-06-01',
+    warning_expiry_date: '2027-06-01',
     case_id: 'DISC-002',
   },
 ];

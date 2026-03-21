@@ -40,8 +40,8 @@ export default function HrDashboard() {
       name: 'Warnings',
       headers: ['Staff ID', 'Staff Name', 'Warning Type', 'Outcome', 'Expiry Date', 'Case ID'],
       rows: warnings.map(w => [
-        w.staff_id, w.staff_name, w.type, w.outcome,
-        w.expiry_date || '', w.case_id || '',
+        w.staff_id, w.staff_name, w.case_type, w.outcome,
+        w.warning_expiry_date || '', w.case_id || '',
       ]),
     }]);
   }
@@ -70,10 +70,10 @@ export default function HrDashboard() {
     if (!stats) return <div className={CARD.padded}><p className="text-gray-400">No stats available</p></div>;
 
     const cards = [
-      { label: 'Open Disciplinary', value: stats.open_disciplinary ?? 0, color: stats.open_disciplinary > 0 ? 'text-amber-600' : '' },
-      { label: 'Open Grievance', value: stats.open_grievance ?? 0, color: stats.open_grievance > 0 ? 'text-amber-600' : '' },
-      { label: 'Active Performance', value: stats.open_performance ?? 0, color: stats.open_performance > 0 ? 'text-amber-600' : '' },
-      { label: 'Pending Flex Working', value: stats.pending_flex ?? 0, color: stats.pending_flex > 0 ? 'text-blue-600' : '' },
+      { label: 'Open Disciplinary', value: stats.disciplinary_open ?? 0, color: stats.disciplinary_open > 0 ? 'text-amber-600' : '' },
+      { label: 'Open Grievance', value: stats.grievance_open ?? 0, color: stats.grievance_open > 0 ? 'text-amber-600' : '' },
+      { label: 'Active Performance', value: stats.performance_open ?? 0, color: stats.performance_open > 0 ? 'text-amber-600' : '' },
+      { label: 'Pending Flex Working', value: stats.flex_working_pending ?? 0, color: stats.flex_working_pending > 0 ? 'text-blue-600' : '' },
     ];
 
     return (
@@ -132,11 +132,11 @@ export default function HrDashboard() {
                     <tr key={w.case_id || `${w.staff_id}-${w.expiry_date}`} className={TABLE.tr}>
                       <td className={TABLE.tdMono}>{w.staff_id}</td>
                       <td className={TABLE.td}>{w.staff_name || '—'}</td>
-                      <td className={TABLE.td}>{w.type || '—'}</td>
+                      <td className={TABLE.td}>{w.case_type || '—'}</td>
                       <td className={TABLE.td}>
                         <span className={BADGE[level?.badgeKey || 'gray']}>{level?.name || w.outcome || '—'}</span>
                       </td>
-                      <td className={TABLE.td}>{w.expiry_date || '—'}</td>
+                      <td className={TABLE.td}>{w.warning_expiry_date || '—'}</td>
                       <td className={TABLE.tdMono}>{w.case_id || '—'}</td>
                     </tr>
                   );

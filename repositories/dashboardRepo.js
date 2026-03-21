@@ -8,32 +8,43 @@ export async function getIncidentCounts(homeId) {
   const [{ rows }, { rows: actionRows }] = await Promise.all([
     pool.query(
       `/* dashboardRepo – getIncidentCounts */
+       WITH home_bh AS (
+         SELECT (bh ->> 'date') AS bh_date
+         FROM homes,
+              jsonb_array_elements(COALESCE(config -> 'bank_holidays', '[]'::jsonb)) AS bh
+         WHERE homes.id = $1
+       )
        SELECT
-         COUNT(*) FILTER (WHERE investigation_status != 'closed')::int AS open,
+         COUNT(*) FILTER (WHERE i.investigation_status != 'closed')::int AS open,
          COUNT(*) FILTER (
-           WHERE cqc_notifiable = true
-             AND cqc_notified = false
-             AND cqc_notification_deadline < NOW()
+           WHERE i.cqc_notifiable = true
+             AND i.cqc_notified = false
+             AND i.cqc_notification_deadline < NOW()
          )::int AS cqc_overdue,
          COUNT(*) FILTER (
-           WHERE riddor_reportable = true
-             AND riddor_reported = false
-             AND CASE riddor_category
-               WHEN 'death' THEN date + INTERVAL '1 day'
-               WHEN 'specified_injury' THEN date + INTERVAL '1 day'
-               WHEN 'dangerous_occurrence' THEN date + INTERVAL '1 day'
-               WHEN 'over_7_day' THEN date + INTERVAL '15 days'
-               ELSE date + INTERVAL '1 day'
+           WHERE i.riddor_reportable = true
+             AND i.riddor_reported = false
+             AND CASE i.riddor_category
+               WHEN 'death' THEN i.date + INTERVAL '1 day'
+               WHEN 'specified_injury' THEN i.date + INTERVAL '1 day'
+               WHEN 'dangerous_occurrence' THEN i.date + INTERVAL '1 day'
+               WHEN 'over_7_day' THEN i.date + INTERVAL '15 days'
+               ELSE i.date + INTERVAL '1 day'
              END < CURRENT_DATE
          )::int AS riddor_overdue,
          COUNT(*) FILTER (
-           WHERE duty_of_candour_applies = true
-             AND candour_notification_date IS NULL
-             -- 10 working days ≈ 14 calendar days; exact check uses isDutyOfCandourOverdue in app layer
-             AND date < CURRENT_DATE - INTERVAL '14 days'
+           WHERE i.duty_of_candour_applies = true
+             AND i.candour_notification_date IS NULL
+             -- CQC Reg 16: 10 working days (Mon–Fri, excluding bank holidays)
+             AND (
+               SELECT COUNT(d)
+               FROM generate_series(i.date::date + 1, CURRENT_DATE - 1, '1 day') AS d
+               WHERE EXTRACT(DOW FROM d) NOT IN (0, 6)
+                 AND d::date::text NOT IN (SELECT bh_date FROM home_bh)
+             ) >= 10
          )::int AS doc_overdue
-       FROM incidents
-       WHERE home_id = $1 AND deleted_at IS NULL`,
+       FROM incidents i
+       WHERE i.home_id = $1 AND i.deleted_at IS NULL`,
       [homeId]
     ),
     pool.query(
@@ -264,7 +275,7 @@ export async function getIpcCounts(homeId) {
       `/* dashboardRepo – getIpcCounts */
        SELECT
          COUNT(*) FILTER (
-           WHERE outbreak->>'status' IN ('suspected', 'confirmed', 'contained')
+           WHERE outbreak->>'status' IN ('suspected', 'confirmed')
          )::int AS active_outbreaks,
          (SELECT overall_score FROM ipc_audits
           WHERE home_id = $1 AND deleted_at IS NULL

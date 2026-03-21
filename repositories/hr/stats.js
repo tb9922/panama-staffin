@@ -14,7 +14,7 @@ export async function getHrStats(homeId, client) {
        GROUP BY status`, [homeId]),
     conn.query(
       `SELECT status, COUNT(*) as c FROM hr_performance_cases
-       WHERE home_id = $1 AND deleted_at IS NULL AND status != 'closed'
+       WHERE home_id = $1 AND deleted_at IS NULL AND status NOT IN ('closed','withdrawn')
        GROUP BY status`, [homeId]),
     getActiveWarnings(homeId, conn),
     conn.query(
