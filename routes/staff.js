@@ -8,6 +8,7 @@ import * as overrideRepo from '../repositories/overrideRepo.js';
 import { withTransaction } from '../db.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
+import { checkNLWViolation } from '../services/validationService.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -56,7 +57,10 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       return staffRepo.upsertOne(req.home.id, data, client);
     });
     await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: data.id });
-    res.status(201).json(staff);
+    const warnings = [];
+    const nlwWarning = checkNLWViolation(staff, req.home.config);
+    if (nlwWarning) warnings.push(nlwWarning);
+    res.status(201).json(warnings.length > 0 ? { ...staff, warnings } : staff);
   } catch (err) { next(err); }
 });
 
@@ -76,7 +80,10 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     }
     const changes = diffFields(existing, staff);
     await auditService.log('staff_update', req.home.slug, req.user.username, { staff_id: idParsed.data, changes });
-    res.json(staff);
+    const warnings = [];
+    const nlwWarning = checkNLWViolation(staff, req.home.config);
+    if (nlwWarning) warnings.push(nlwWarning);
+    res.json(warnings.length > 0 ? { ...staff, warnings } : staff);
   } catch (err) { next(err); }
 });
 

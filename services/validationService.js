@@ -358,6 +358,21 @@ function validateCareCertificate(data, warnings) {
   if (overdue > 0) warnings.push(`Care Certificate: ${overdue} staff exceeding 12-week completion target`);
 }
 
+/**
+ * Check a single staff member against the NLW/NMW minimum.
+ * Returns a warning string if below minimum, null if compliant.
+ * Suitable for point-of-mutation checks in staff.js (avoids loading full data object).
+ */
+export function checkNLWViolation(staff, config) {
+  if (staff.active === false) return null;
+  if (staff.hourly_rate == null) return null;
+  const { rate, label } = getMinimumWageRate(staff.date_of_birth, config);
+  if (Number(staff.hourly_rate) < rate) {
+    return `${staff.name}: rate £${Number(staff.hourly_rate).toFixed(2)} is below ${label} £${rate.toFixed(2)}`;
+  }
+  return null;
+}
+
 // Thin orchestrator — calls each domain validator in turn
 export function validateAll(data) {
   const warnings = [];

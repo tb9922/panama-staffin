@@ -117,6 +117,73 @@ const VALID_SHIFTS = [
 ];
 const shiftSchema = z.enum(VALID_SHIFTS);
 
+// Shifts that require care staff to have valid mandatory training
+const WORKING_SHIFTS_FOR_TRAINING_CHECK = new Set([
+  'E', 'L', 'EL', 'N',
+  'OC-E', 'OC-L', 'OC-EL', 'OC-N',
+  'AG-E', 'AG-L', 'AG-EL', 'AG-N',
+  'BH-D', 'BH-N',
+]);
+const TRAINING_BLOCKING_CARE_ROLES = new Set([
+  'Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer',
+]);
+const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
+
+/**
+ * Check whether a working shift assignment is blocked by expired / missing mandatory training.
+ * Returns a warning string if a blocking type is expired or not started, null if compliant.
+ *
+ * Only fires for care staff roles and working shifts. Does NOT block the save itself —
+ * the caller decides whether to 400 (enforce_training_blocking) or 200+warnings.
+ *
+ * Uses one DB query: joins staff + training_records for the 3 blocking types.
+ */
+async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, client) {
+  if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(shift)) return null;
+  const trainingTypes = config?.training_types;
+  if (!trainingTypes?.length) return null;
+
+  const conn = client || pool;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Get staff role/name + latest expiry per blocking type in a single query.
+  // NULL expiry (never-expiring training) is mapped to '9999-12-31' so it never triggers blocking.
+  const { rows } = await conn.query(
+    `SELECT s.role, s.name,
+            tr.training_type_id,
+            MAX(CASE WHEN tr.expiry IS NULL THEN '9999-12-31' ELSE tr.expiry::text END) AS latest_expiry
+     FROM staff s
+     LEFT JOIN training_records tr
+       ON tr.staff_id = s.id AND tr.home_id = s.home_id
+       AND tr.training_type_id = ANY($3) AND tr.deleted_at IS NULL
+       AND tr.completed IS NOT NULL
+     WHERE s.home_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
+     GROUP BY s.role, s.name, tr.training_type_id`,
+    [homeId, staffId, BLOCKING_TRAINING_TYPE_IDS],
+  );
+
+  if (!rows.length) return null; // unknown/agency staff — skip
+  const { role, name } = rows[0];
+  if (!TRAINING_BLOCKING_CARE_ROLES.has(role)) return null;
+
+  // Map typeId → latest_expiry (only for rows with an actual training_type_id)
+  const expiryMap = new Map(
+    rows.filter(r => r.training_type_id).map(r => [r.training_type_id, r.latest_expiry]),
+  );
+
+  const blocked = [];
+  for (const typeId of BLOCKING_TRAINING_TYPE_IDS) {
+    const t = trainingTypes.find(tt => tt.id === typeId && tt.active !== false);
+    if (!t) continue; // type not configured for this home
+    if (t.roles && !t.roles.includes(role)) continue; // doesn't apply to this role
+    const expiry = expiryMap.get(typeId);
+    if (!expiry || expiry < todayStr) blocked.push(t.name || typeId);
+  }
+
+  if (!blocked.length) return null;
+  return `${name}: expired or missing critical training: ${blocked.join(', ')}`;
+}
+
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
@@ -214,6 +281,12 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
       }
     }
 
+    // Training-blocking check for working shifts — runs before upsert
+    const trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config);
+    if (trainingWarning && req.home.config?.enforce_training_blocking) {
+      return res.status(400).json({ error: trainingWarning });
+    }
+
     let computedALHours = null;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
@@ -245,7 +318,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
       ...(computedALHours != null && { al_hours: computedALHours }),
     });
     dispatchEvent(req.home.id, 'override.created', { date, staffId, shift });
-    res.json({ ok: true });
+    res.json(trainingWarning ? { ok: true, warnings: [trainingWarning] } : { ok: true });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
     next(err);
@@ -303,8 +376,22 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       }
     }
 
-    // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
+    // Training-blocking check for all working shifts in the batch (before transaction)
     const overrides = parsed.data.overrides;
+    const trainingWarnings = [];
+    for (const o of overrides) {
+      if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
+      const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config);
+      if (w) {
+        if (req.home.config?.enforce_training_blocking) {
+          return res.status(400).json({ error: w });
+        }
+        // Deduplicate — same staff member may appear multiple times in a bulk fill
+        if (!trainingWarnings.includes(w)) trainingWarnings.push(w);
+      }
+    }
+
+    // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
     await withTransaction(async (client) => {
       const alOverrides = overrides.filter(o => o.shift === 'AL');
       if (alOverrides.length > 0) {
@@ -337,7 +424,11 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       count: parsed.data.overrides.length,
       ...(alCount > 0 && { al_count: alCount, al_hours_total: totalALHours }),
     });
-    res.json({ ok: true, count: parsed.data.overrides.length });
+    res.json({
+      ok: true,
+      count: parsed.data.overrides.length,
+      ...(trainingWarnings.length > 0 && { warnings: trainingWarnings }),
+    });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
     next(err);
