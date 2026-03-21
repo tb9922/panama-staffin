@@ -393,7 +393,8 @@ router.post('/runs/:runId/void', writeRateLimiter, requireAuth, requireHomeAcces
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
-    const version = req.body._version != null ? parseInt(req.body._version, 10) : null;
+    const rawV = parseInt(req.body._version, 10);
+    const version = Number.isFinite(rawV) ? rawV : null;
     const run = await withTransaction(async (client) => {
       const existing = await payrollRunRepo.findByIdForUpdate(runIdP.data, req.home.id, client);
       if (!existing) { const e = new Error('Run not found'); e.status = 404; throw e; }

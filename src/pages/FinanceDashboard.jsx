@@ -27,7 +27,7 @@ export default function FinanceDashboard() {
 
   const datesReversed = period.from > period.to;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     if (!home || datesReversed) return;
     setLoading(true);
     try {
@@ -35,14 +35,19 @@ export default function FinanceDashboard() {
         getFinanceDashboard(home, period.from, period.to),
         getFinanceAlerts(home),
       ]);
+      if (signal?.cancelled) return;
       setDashboard(d);
       setAlerts(Array.isArray(a) ? a : []);
       setError(null);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+    } catch (e) { if (!signal?.cancelled) setError(e.message); }
+    finally { if (!signal?.cancelled) setLoading(false); }
   }, [home, period.from, period.to, datesReversed]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const signal = { cancelled: false };
+    load(signal);
+    return () => { signal.cancelled = true; };
+  }, [load]);
 
   async function handleExport() {
     if (!dashboard) return;

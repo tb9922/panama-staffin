@@ -97,7 +97,7 @@ export async function revokeAllForUser(username, scope = 'user', client) {
  * @param {string} username
  */
 export async function clearForUser(username) {
-  await pool.query("DELETE FROM token_denylist WHERE username = $1 AND scope != 'admin'", [username]);
+  await pool.query("DELETE FROM token_denylist WHERE username = $1 AND scope = 'user'", [username]);
 }
 
 /**

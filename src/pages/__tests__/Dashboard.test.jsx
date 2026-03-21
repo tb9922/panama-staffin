@@ -164,17 +164,16 @@ describe('Dashboard', () => {
     expect(screen.getByText('Annual proj:')).toBeInTheDocument();
   });
 
-  // 9. Viewer sees restricted Cost Summary
-  it('viewer sees "Admin access required" in place of cost figures', async () => {
+  // 9. Viewer with finance read access sees cost figures (gated on canRead('finance'), not canWrite)
+  it('viewer with finance read access sees cost summary figures', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
-      expect(screen.getByText('Cost Summary')).toBeInTheDocument()
+      expect(screen.getByText('Cost Summary (28-day)')).toBeInTheDocument()
     );
-    expect(screen.getByText('Admin access required')).toBeInTheDocument();
-    // Financial figures should not appear
-    expect(screen.queryByText('This cycle:')).not.toBeInTheDocument();
+    expect(screen.getByText('This cycle:')).toBeInTheDocument();
+    expect(screen.getByText('Monthly proj:')).toBeInTheDocument();
   });
 
   // 10. API error surfaces an error message

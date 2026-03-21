@@ -270,8 +270,8 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = setHomeRoleSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const user = await userRepo.findById(id.data);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await userRepo.findByIdAtHome(id.data, req.home.id);
+    if (!user) return res.status(404).json({ error: 'User not found at this home' });
 
     // Cannot modify your own roles
     if (user.username === req.user.username) {

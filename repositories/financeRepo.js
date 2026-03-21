@@ -632,6 +632,7 @@ export async function getMonthlyIncomeTrend(homeId, months, client) {
             COALESCE(SUM(amount_paid), 0) AS received
      FROM finance_invoices
      WHERE home_id = $1 AND deleted_at IS NULL
+       AND status NOT IN ('void', 'credited')
        AND COALESCE(issue_date, created_at::date) >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);
@@ -644,7 +645,7 @@ export async function getMonthlyExpenseTrend(homeId, months, client) {
     `SELECT TO_CHAR(expense_date, 'YYYY-MM') AS month,
             COALESCE(SUM(gross_amount), 0) AS total
      FROM finance_expenses
-     WHERE home_id = $1 AND deleted_at IS NULL AND status != 'void'
+     WHERE home_id = $1 AND deleted_at IS NULL AND status NOT IN ('void', 'rejected')
        AND expense_date >= (CURRENT_DATE - make_interval(months => $2))
      GROUP BY month ORDER BY month`,
     [homeId, months]);

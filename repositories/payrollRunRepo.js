@@ -118,9 +118,9 @@ const VALID_TRANSITIONS = {
 export async function updateStatus(runId, homeId, status, extra, client, version) {
   const conn = client || pool;
 
-  // Validate transition if we can read current status
+  // Validate transition — lock the row to prevent concurrent transitions
   const { rows: [current] } = await conn.query(
-    'SELECT status FROM payroll_runs WHERE id = $1 AND home_id = $2', [runId, homeId]
+    'SELECT status FROM payroll_runs WHERE id = $1 AND home_id = $2 FOR UPDATE', [runId, homeId]
   );
   if (current && VALID_TRANSITIONS[current.status] && !VALID_TRANSITIONS[current.status].includes(status)) {
     const err = new Error(`Invalid status transition: ${current.status} → ${status}`);

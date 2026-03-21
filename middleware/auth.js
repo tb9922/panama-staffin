@@ -127,7 +127,7 @@ export function requireModule(moduleId, level = 'read') {
     // Platform admins bypass module checks — only if requireHomeAccess already ran and
     // re-verified the DB claim (indicated by req.homeRole being set).
     // This prevents a stale JWT claim from bypassing checks on routes that skip requireHomeAccess.
-    if (req.user.is_platform_admin && req.homeRole !== undefined) return next();
+    if (req.user.is_platform_admin && req.homeRole != null) return next();
 
     if (!hasModuleAccess(req.homeRole, moduleId, level)) {
       return res.status(403).json({ error: `Insufficient permissions for ${moduleId}` });
@@ -142,7 +142,7 @@ export function requireModule(moduleId, level = 'read') {
  */
 export function requireHomeManager(req, res, next) {
   // Same guard as requireModule — only bypass if requireHomeAccess already re-verified the claim
-  if (req.user.is_platform_admin && req.homeRole !== undefined) return next();
+  if (req.user.is_platform_admin && req.homeRole != null) return next();
   const role = ROLES[req.homeRole];
   if (!role?.canManageUsers) {
     return res.status(403).json({ error: 'Home Manager role required' });

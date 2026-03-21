@@ -273,9 +273,18 @@ export default function GdprDashboard() {
     if (saving) return;
     setSaving(true);
     try {
-      if (type === 'request') await updateDataRequest(home, id, { status });
-      else if (type === 'breach') await updateDataBreach(home, id, { status });
-      else if (type === 'complaint') await updateDPComplaint(home, id, { status });
+      // Include _version for optimistic concurrency (matches handleSaveDecision pattern)
+      let record;
+      if (type === 'request') {
+        record = requests.find(r => r.id === id);
+        await updateDataRequest(home, id, { status, _version: record?.version });
+      } else if (type === 'breach') {
+        record = breaches.find(b => b.id === id);
+        await updateDataBreach(home, id, { status, _version: record?.version });
+      } else if (type === 'complaint') {
+        record = complaints.find(c => c.id === id);
+        await updateDPComplaint(home, id, { status, _version: record?.version });
+      }
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -672,7 +681,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Retention Schedule</h2>
-          <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleRunRetentionScan}>Run Scan</button>
+          {canEdit && <button className={BTN.secondary + ' ' + BTN.sm} onClick={handleRunRetentionScan}>Run Scan</button>}
         </div>
         <div className={CARD.flush}>
           <div className={TABLE.wrapper}>

@@ -76,8 +76,9 @@ function DashboardInner({ schedData }) {
   const overrides = schedData.overrides;
   const training = schedData.training || {};
 
-  const { canWrite } = useData();
+  const { canWrite, canRead } = useData();
   const canEdit = canWrite('scheduling');
+  const canViewFinance = canRead('finance');
   const navigate = useNavigate();
   // Reactive today — updates at midnight so shift-handover coverage is never stale
   const [today, setToday] = useState(() => new Date());
@@ -279,8 +280,8 @@ function DashboardInner({ schedData }) {
           </div>
         </div>
 
-        {/* Cost Summary (admin only) */}
-        {canEdit ? (
+        {/* Cost Summary (finance readers) */}
+        {canViewFinance ? (
         <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/costs')}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
           <div className="space-y-3">

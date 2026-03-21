@@ -87,7 +87,10 @@ export function getRiskStats(risks, asOfDate) {
     if (risk.status === 'closed') continue;
     total++;
 
-    const score = risk.risk_score || getRiskScore(risk.likelihood, risk.impact);
+    const score = risk.residual_risk
+      ?? (risk.residual_likelihood && risk.residual_impact ? risk.residual_likelihood * risk.residual_impact : null)
+      ?? risk.risk_score
+      ?? getRiskScore(risk.likelihood, risk.impact);
     if (score >= 16) critical++;
     else if (score >= 10) high++;
 

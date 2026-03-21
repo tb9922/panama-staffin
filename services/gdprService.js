@@ -65,10 +65,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         conn.query(
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
-        // access_log has no home_id column (global table) — filter by user_name only.
+        // access_log has no home_id column (global table) — user_name stores the login username.
+        // Resolve username from users table (matching by display_name or username) then query.
         // All homes' access entries for this user are included in the SAR per Article 15.
         staffName
-          ? conn.query(`SELECT * FROM access_log WHERE user_name = $1 ORDER BY ts DESC LIMIT 500`, [staffName])
+          ? conn.query(
+              `SELECT * FROM access_log WHERE user_name = $1
+                 OR user_name IN (SELECT username FROM users WHERE display_name = $1)
+               ORDER BY ts DESC LIMIT 500`, [staffName])
           : { rows: [] },
         // Staff appears in incident staff_involved JSONB array
         conn.query(
@@ -535,6 +539,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
 
+    // Anonymise incidents where this staff member was the affected person
+    if (originalName) {
+      await client.query(
+        `UPDATE incidents SET person_affected_name = $1, witnesses = '[]'::jsonb
+         WHERE home_id = $2 AND deleted_at IS NULL
+           AND person_affected_name = $3 AND person_affected = 'staff'`,
+        [anon, homeId, originalName]
+      );
+    }
+
     // Anonymise incident addenda authored by this staff member (post-freeze notes)
     if (originalName) {
       await client.query(
@@ -797,27 +811,37 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     }
 
     // Anonymise incidents where resident was the affected person — use FK when available
+    // Clear all free-text narrative fields that may contain the resident's name
     if (residentPk) {
       await client.query(
-        `UPDATE incidents SET person_affected_name = $1
+        `UPDATE incidents SET person_affected_name = $1,
+           description = '[Redacted — subject erasure]', immediate_action = '[Redacted]',
+           root_cause = '[Redacted]', lessons_learned = '[Redacted]', witnesses = '[]'::jsonb
          WHERE home_id = $2 AND (resident_id = $3 OR person_affected_name = $4) AND deleted_at IS NULL`,
         [anon, homeId, residentPk, matchName]);
     } else {
       await client.query(
-        `UPDATE incidents SET person_affected_name = $1
+        `UPDATE incidents SET person_affected_name = $1,
+           description = '[Redacted — subject erasure]', immediate_action = '[Redacted]',
+           root_cause = '[Redacted]', lessons_learned = '[Redacted]', witnesses = '[]'::jsonb
          WHERE home_id = $2 AND person_affected_name = $3 AND deleted_at IS NULL`,
         [anon, homeId, matchName]);
     }
 
     // Anonymise complaints raised by or about the resident — use FK when available
+    // Clear all free-text narrative fields that may contain the resident's name
     if (residentPk) {
       await client.query(
-        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
+        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]',
+           investigation_notes = '[Redacted]', resolution = '[Redacted]',
+           root_cause = '[Redacted]', improvements = '[Redacted]', lessons_learned = '[Redacted]'
          WHERE home_id = $2 AND (resident_id = $3 OR raised_by_name = $4) AND deleted_at IS NULL`,
         [anon, homeId, residentPk, matchName]);
     } else {
       await client.query(
-        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]'
+        `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]',
+           investigation_notes = '[Redacted]', resolution = '[Redacted]',
+           root_cause = '[Redacted]', improvements = '[Redacted]', lessons_learned = '[Redacted]'
          WHERE home_id = $2 AND raised_by_name = $3 AND deleted_at IS NULL`,
         [anon, homeId, matchName]);
     }

@@ -93,7 +93,10 @@ router.post('/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, async
     });
 
     res.status(201).json({ id: home.id, slug: home.slug, name });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A home with that slug already exists' });
+    next(err);
+  }
 });
 
 // PUT /api/platform/homes/:id — update a home

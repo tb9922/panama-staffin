@@ -121,7 +121,7 @@ export async function sync(homeId, incidentsArr, client) {
         inc.candour_recipient || null, inc.police_involved ?? false,
         inc.police_reference || null, inc.police_contact_date || null,
         inc.msp_wishes_recorded ?? false, inc.msp_outcome_preferences || null,
-        inc.msp_person_involved ?? false,
+        inc.msp_person_involved ?? null,
         inc.investigation_status ?? 'open', inc.investigation_start_date || null,
         inc.investigation_lead || null, inc.investigation_review_date || null,
         inc.root_cause || null, inc.lessons_learned || null, inc.investigation_closed_date || null,
