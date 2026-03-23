@@ -138,7 +138,9 @@ export async function getTrainingCounts(homeId, today) {
     `/* dashboardRepo – getTrainingCounts */
      WITH active_types AS (
        SELECT jsonb_array_elements(config -> 'training_types') AS t
-       FROM homes WHERE id = $1
+       FROM homes
+       WHERE id = $1
+         AND jsonb_typeof(config -> 'training_types') = 'array'
      ),
      latest_records AS (
        SELECT DISTINCT ON (tr.staff_id, tr.training_type_id)

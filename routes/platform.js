@@ -7,6 +7,7 @@ import { withTransaction } from '../db.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as auditService from '../services/auditService.js';
+import * as authService from '../services/authService.js';
 import { DEFAULT_TRAINING_TYPES } from '../shared/training.js';
 
 const router = Router();
@@ -167,11 +168,22 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
         usersRevoked: revokedUsers,
       }, client);
 
-      return { ok: true };
+      return { ok: true, revokedUsers };
     });
 
     if (result.error) return res.status(result.status).json({ error: result.error });
-    res.json(result);
+
+    // Revoke JWTs for affected users so they can't continue using stale tokens.
+    // Exclude self — the requester's token must remain valid to receive this response.
+    // Done outside the transaction — deny-list writes are independent.
+    if (result.revokedUsers?.length) {
+      for (const username of result.revokedUsers) {
+        if (username === req.user.username) continue;
+        await authService.revokeUser(username).catch(() => {});
+      }
+    }
+
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

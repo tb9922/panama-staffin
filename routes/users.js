@@ -323,14 +323,14 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       return res.status(400).json({ error: 'Cannot modify your own role assignments' });
     }
 
-    const currentRoles = await userHomeRepo.findRolesForUser(user.username);
-
-    // Build old roles map and final desired set for audit diff
-    const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
-    const finalDesiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
-
     let needsRevoke = false;
     await withTransaction(async (client) => {
+      // Read current roles inside transaction for a consistent pre-change snapshot.
+      // Outside-transaction reads can race with concurrent role assignments.
+      const currentRoles = await userHomeRepo.findRolesForUser(user.username, client);
+      const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
+      const finalDesiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
+
       const finalHomeIds = new Set();
       for (const { homeId, roleId } of parsed.data.roles) {
         await userHomeRepo.assignRole(user.username, homeId, roleId, null, req.user.username, client);

@@ -219,7 +219,11 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     // a high-earner's entire period income falls in the basic-rate band (under-deduction).
     const taxableThisPeriod = Math.max(0, grossPay - periodAllowance);
     const annualTaxDue = computeTax(taxableThisPeriod * periodsInYear, taxBands, parsedCode);
-    const tax = Math.max(0, round2(annualTaxDue / periodsInYear));
+    let tax = Math.max(0, round2(annualTaxDue / periodsInYear));
+    // HMRC Regulation 22: K code 50% cap applies on W1/M1 basis too
+    if (parsedCode.type === 'k_code') {
+      tax = Math.min(tax, round2(grossPay * 0.50));
+    }
     return { tax, taxableIncome: round2(taxableThisPeriod), isRefund: false };
   }
 

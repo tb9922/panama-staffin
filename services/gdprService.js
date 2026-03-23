@@ -50,6 +50,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         payrollLineShifts, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
+        // Operational tables matched by name (no staff FK)
+        agencyShifts, complaintSurveys,
       ] = await Promise.all([
         conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -245,6 +247,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           consent_records: consentRecords.rows,
           data_requests: dataRequests.rows,
           dp_complaints: dpComplaints.rows,
+          // Operational tables matched by name (no staff FK)
+          agency_shifts: agencyShifts.rows,
+          complaint_surveys: complaintSurveys.rows,
         },
       };
     }
@@ -696,8 +701,9 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     if (originalName) {
       await client.query(
         `UPDATE audit_log SET details = REPLACE(details, $1, $2)
-         WHERE home_slug = $3 AND details LIKE '%' || $1 || '%'`,
-        [originalName, anon, homeSlug]
+         WHERE (home_slug = $3 OR (home_slug IS NULL AND $3 IS NULL))
+           AND details LIKE '%' || $1 || '%'`,
+        [originalName, anon, homeSlug || null]
       );
     }
 
@@ -763,6 +769,28 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // - hr_contracts, hr_family_leave, hr_flexible_working: structure/dates retained per Limitation
     //   Act (6 years); free-text notes/reason cleared above
     // - hr_rtw_dbs_renewals: retained for compliance audit trail; notes/DBS cert number cleared above
+
+    // Anonymise linked user account (Article 17 — display_name is personal data).
+    // Removes home-level role access and deactivates the account to prevent future logins.
+    // username is preserved (it is the login identifier, not the subject's full name).
+    if (originalName) {
+      const { rows: linkedUsers } = await client.query(
+        `SELECT u.username FROM users u
+         WHERE (u.display_name = $1 OR u.username = $1)
+           AND EXISTS (SELECT 1 FROM user_home_roles uhr WHERE uhr.username = u.username AND uhr.home_id = $2)`,
+        [originalName, homeId]
+      );
+      for (const { username: linkedUsername } of linkedUsers) {
+        await client.query(
+          `UPDATE users SET display_name = $1, active = false WHERE username = $2`,
+          [anon, linkedUsername]
+        );
+        await client.query(
+          `DELETE FROM user_home_roles WHERE username = $1 AND home_id = $2`,
+          [linkedUsername, homeId]
+        );
+      }
+    }
 
     // Mark the request as completed
     if (requestId) {

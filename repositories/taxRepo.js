@@ -289,7 +289,11 @@ export async function upsertYTDBatch(homeId, taxYear, rows, client) {
 
 /**
  * Batch-subtract YTD amounts for all staff in a voided payroll run.
- * Totals are floored at 0 — going negative would indicate inconsistent data.
+ * Most fields are floored at 0 (they cannot legitimately go negative).
+ * tax_deducted and net_pay are NOT floored — both can be legitimately negative:
+ *   - tax_deducted goes negative when a refund period has already been approved
+ *   - net_pay can go negative when deductions exceed gross
+ * Clamping either to 0 would corrupt subsequent cumulative PAYE calculations.
  * Rows that don't exist are silently ignored (nothing to reverse).
  * Called ONLY from the void-approved-run path in routes/payroll.js.
  */
@@ -304,7 +308,7 @@ export async function subtractYTDBatch(homeId, taxYear, rows, client) {
       `UPDATE payroll_ytd SET
          gross_pay        = GREATEST(0, gross_pay        - $4),
          taxable_pay      = GREATEST(0, taxable_pay      - $5),
-         tax_deducted     = GREATEST(0, tax_deducted     - $6),
+         tax_deducted     = tax_deducted - $6,
          employee_ni      = GREATEST(0, employee_ni      - $7),
          employer_ni      = GREATEST(0, employer_ni      - $8),
          student_loan     = GREATEST(0, student_loan     - $9),
@@ -312,7 +316,7 @@ export async function subtractYTDBatch(homeId, taxYear, rows, client) {
          pension_employer = GREATEST(0, pension_employer - $11),
          holiday_pay      = GREATEST(0, holiday_pay      - $12),
          ssp_amount       = GREATEST(0, ssp_amount       - $13),
-         net_pay          = GREATEST(0, net_pay          - $14),
+         net_pay          = net_pay - $14,
          updated_at       = NOW()
        WHERE home_id = $1 AND staff_id = $2 AND tax_year = $3`,
       [homeId, r.staff_id, taxYear,

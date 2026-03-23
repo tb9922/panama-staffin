@@ -303,7 +303,7 @@ function DashboardInner({ schedData }) {
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="text-gray-600 text-sm">Agency %:</span>
-              <span className={agencyPct <= (config.agency_target_pct || 0.05) * 100 ? BADGE.green : BADGE.red}>
+              <span className={agencyPct <= (config.agency_target_pct ?? 0.05) * 100 ? BADGE.green : BADGE.red}>
                 {agencyPct.toFixed(1)}%
               </span>
             </div>

@@ -59,8 +59,9 @@ export async function removeRole(username, homeId, client) {
  * @param {string} username
  * @returns {Promise<Array<{home_id: number, role_id: string, staff_id: string|null}>>}
  */
-export async function findRolesForUser(username) {
-  const { rows } = await pool.query(
+export async function findRolesForUser(username, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT home_id, role_id, staff_id FROM user_home_roles WHERE username = $1`,
     [username]
   );

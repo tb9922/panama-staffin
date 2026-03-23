@@ -144,7 +144,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     // Include staff who were active during any part of the period.
     // A carer deactivated mid-period still needs paying for days worked.
     const activeStaff = allStaff.filter(s =>
-      s.active || (s.leaving_date && s.leaving_date >= run.period_start)
+      (s.active || (s.leaving_date && s.leaving_date >= run.period_start)) &&
+      (!s.start_date || s.start_date <= run.period_end)
     );
 
     // Pre-load SSP configs once for the run (pick the right row per date inside the loop)
@@ -266,7 +267,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
           hours = getDefaultShiftHours(shift, home.config);
         }
 
-        if (!hours || hours <= 0) continue;
+        if (hours == null || hours < 0) continue;
 
         const isBH = isBankHoliday(date, home.config);
         const result = calculateShiftPay(shift, date, s, rules, home.config, !!sleep_in, isBH, hours);
@@ -355,7 +356,10 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // P45: add previous employment figures for mid-year starters on cumulative basis.
       // Only applies on first run of the tax year (priorYTD is zero) and only on cumulative
       // basis — W1/M1 treats each period standalone so previous employment is irrelevant.
-      const hasPriorRuns = (priorYTD.gross_pay || 0) > 0 || (priorYTD.tax_deducted || 0) > 0;
+      // hasPriorRuns: true if a YTD row exists (upsertYTDBatch always creates a row on approve,
+      // even for zero-pay runs). Checking YTD values is unreliable — a zero-pay first run would
+      // have all zeros yet still counts as "prior run" for P45 injection purposes.
+      const hasPriorRuns = ytdMap.has(s.id);
       const p45Pay = parseFloat(taxCodeRow?.previous_pay) || 0;
       const p45Tax = parseFloat(taxCodeRow?.previous_tax) || 0;
       const p45Basis = taxCodeRow?.basis || 'cumulative';
