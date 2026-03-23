@@ -53,6 +53,18 @@ if (process.env.ALLOWED_ORIGIN === '*') {
   process.exit(1);
 }
 
+// ENCRYPTION_KEY — optional (only required if webhooks with secrets are used), but if set
+// it must be exactly 64 hex chars (32 bytes for AES-256-GCM). Catch format errors at
+// startup rather than at first webhook delivery in production.
+if (process.env.ENCRYPTION_KEY) {
+  if (process.env.ENCRYPTION_KEY.length !== 64 || !/^[0-9a-fA-F]+$/.test(process.env.ENCRYPTION_KEY)) {
+    console.error('FATAL: ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes for AES-256-GCM).');
+    console.error(`Got ${process.env.ENCRYPTION_KEY.length} characters.`);
+    console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    process.exit(1);
+  }
+}
+
 export const config = {
   // ── Server ──────────────────────────────────────────────────────────────────
   port: parseInt(process.env.PORT || '3001', 10),

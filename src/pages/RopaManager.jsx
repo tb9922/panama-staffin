@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
@@ -25,7 +25,7 @@ export default function RopaManager() {
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -37,7 +37,7 @@ export default function RopaManager() {
 
   const [filterStatus, setFilterStatus] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!home) return;
     setLoading(true); setError(null);
     try {
@@ -45,9 +45,9 @@ export default function RopaManager() {
       setItems(data.rows || []); setTotal(data.total || 0);
     } catch (e) { setError(e.message || 'Failed to load'); }
     finally { setLoading(false); }
-  }
+  }, [home, filterStatus]);
 
-  useEffect(() => { load(); }, [home, filterStatus]);
+  useEffect(() => { load(); }, [load]);
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_FORM }); setFormError(''); setShowModal(true); }
   function openEdit(item) {
@@ -126,8 +126,11 @@ export default function RopaManager() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={canEdit ? 6 : 5} className="text-center py-8 text-gray-400">No processing activities recorded</td></tr>}
-              {items.map(item => (
+              {loading ? (
+                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty} role="status">Loading…</td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No processing activities recorded</td></tr>
+              ) : items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
                     <div className="font-medium">{item.purpose}</div>

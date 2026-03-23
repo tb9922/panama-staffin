@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -23,7 +23,7 @@ export default function DpiaManager() {
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -33,7 +33,7 @@ export default function DpiaManager() {
   const [formError, setFormError] = useState('');
   useDirtyGuard(showModal);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!home) return;
     setLoading(true); setError(null);
     try {
@@ -41,9 +41,9 @@ export default function DpiaManager() {
       setItems(data.rows || []); setTotal(data.total || 0);
     } catch (e) { setError(e.message || 'Failed to load'); }
     finally { setLoading(false); }
-  }
+  }, [home]);
 
-  useEffect(() => { load(); }, [home]);
+  useEffect(() => { load(); }, [load]);
 
   function openNew() { setEditing(null); setForm({ ...EMPTY_FORM }); setFormError(''); setShowModal(true); }
   function openEdit(item) {
@@ -111,8 +111,11 @@ export default function DpiaManager() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={canEdit ? 5 : 4} className="text-center py-8 text-gray-400">No DPIAs recorded</td></tr>}
-              {items.map(item => (
+              {loading ? (
+                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty} role="status">Loading…</td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty}>No DPIAs recorded</td></tr>
+              ) : items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
                     <div className="font-medium">{item.title}</div>
