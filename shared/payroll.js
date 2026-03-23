@@ -161,8 +161,8 @@ export function calculateEnhancement(rule, hours, baseRate) {
  *   { hours, basePay, enhancements, totalEnhancement, total, effectiveRate }
  *   enhancements: [{ type, ruleName, rateType, amount, enhancementAmount }]
  */
-export function calculateShiftPay(shift, date, staff, rules, config, isSleepIn, isBankHoliday) {
-  const hours = getDefaultShiftHours(shift, config);
+export function calculateShiftPay(shift, date, staff, rules, config, isSleepIn, isBankHoliday, hoursOverride) {
+  const hours = hoursOverride != null ? hoursOverride : getDefaultShiftHours(shift, config);
   const baseRate = parseFloat(staff.hourly_rate) || 0;
   const basePay = round2(hours * baseRate);
 

@@ -139,30 +139,36 @@ export async function getTrainingCounts(homeId, today) {
      WITH active_types AS (
        SELECT jsonb_array_elements(config -> 'training_types') AS t
        FROM homes WHERE id = $1
+     ),
+     latest_records AS (
+       SELECT DISTINCT ON (tr.staff_id, tr.training_type_id)
+              tr.staff_id, tr.training_type_id, tr.expiry
+       FROM training_records tr
+       JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
+       WHERE tr.home_id = $1
+         AND tr.deleted_at IS NULL
+         AND s.deleted_at IS NULL AND s.active = true
+         AND tr.expiry IS NOT NULL
+       ORDER BY tr.staff_id, tr.training_type_id, tr.expiry DESC
      )
      SELECT
        COUNT(*) FILTER (
-         WHERE tr.expiry < $2
+         WHERE lr.expiry < $2
            AND EXISTS (
              SELECT 1 FROM active_types
-             WHERE t->>'id' = tr.training_type_id
+             WHERE t->>'id' = lr.training_type_id
                AND (t->>'active')::boolean IS NOT FALSE
            )
        )::int AS expired,
        COUNT(*) FILTER (
-         WHERE tr.expiry >= $2 AND tr.expiry <= ($2::date + INTERVAL '30 days')
+         WHERE lr.expiry >= $2 AND lr.expiry <= ($2::date + INTERVAL '30 days')
            AND EXISTS (
              SELECT 1 FROM active_types
-             WHERE t->>'id' = tr.training_type_id
+             WHERE t->>'id' = lr.training_type_id
                AND (t->>'active')::boolean IS NOT FALSE
            )
        )::int AS expiring_soon
-     FROM training_records tr
-     JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
-     WHERE tr.home_id = $1
-       AND tr.deleted_at IS NULL
-       AND s.deleted_at IS NULL AND s.active = true
-       AND tr.expiry IS NOT NULL`,
+     FROM latest_records lr`,
     [homeId, today]
   );
   const r = rows[0];
@@ -558,7 +564,8 @@ export async function getBedAlerts(homeId, today) {
        FROM beds b
        INNER JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = $1
        WHERE b.home_id = $1 AND b.status = 'occupied'
-         AND fr.status IN ('discharged', 'deceased')`,
+         AND fr.status IN ('discharged', 'deceased')
+         AND fr.deleted_at IS NULL`,
       [homeId]
     ),
   ]);

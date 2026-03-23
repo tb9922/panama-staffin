@@ -44,7 +44,9 @@ export async function updateResident(id, homeId, data, username, version) {
         }, client);
         logger.info({ homeId, residentId: id, oldFee, newFee }, 'Fee change recorded');
       }
-      return financeRepo.updateResident(id, homeId, data, client, version);
+      const updated = await financeRepo.updateResident(id, homeId, data, client, version);
+      if (updated === null) throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+      return updated;
     });
   }
 
@@ -126,6 +128,11 @@ export async function createInvoiceWithLines(homeId, data, username) {
 }
 
 export async function updateInvoice(id, homeId, data) {
+  const existing = await financeRepo.findInvoiceById(id, homeId);
+  if (!existing) return null;
+  if (existing.status === 'void' || existing.status === 'credited') {
+    throw Object.assign(new Error(`Cannot update a ${existing.status} invoice`), { statusCode: 400 });
+  }
   const result = await financeRepo.updateInvoice(id, homeId, data);
   if (result) logger.info({ homeId, invoiceId: id, fields: Object.keys(data) }, 'Invoice updated');
   return result;
@@ -151,16 +158,23 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
       const adjustments = parseFloat(data.adjustments ?? existing.adjustments) || 0;
       const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
       if (totalAmount < 0) throw Object.assign(new Error('Invoice total cannot be negative after adjustments'), { statusCode: 400 });
+      const amountPaid = existing.amount_paid || 0;
+      if (totalAmount < amountPaid) {
+        throw Object.assign(
+          new Error(`Invoice total (£${totalAmount.toFixed(2)}) cannot be less than amount already paid (£${amountPaid.toFixed(2)})`),
+          { statusCode: 400 }
+        );
+      }
       data.subtotal = subtotal;
       data.total_amount = totalAmount;
-      data.balance_due = Math.round((totalAmount - (existing.amount_paid || 0)) * 100) / 100;
+      data.balance_due = Math.round((totalAmount - amountPaid) * 100) / 100;
       for (const line of lines) {
         await financeRepo.createInvoiceLine(id, homeId, line, client);
       }
     }
 
     const invoice = await financeRepo.updateInvoice(id, homeId, data, client, version);
-    if (invoice === null) return null;
+    if (invoice === null) throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
 
     // Recalculate balance for old resident
     if (existing.resident_id) {
@@ -369,14 +383,16 @@ export async function findChasesByInvoice(invoiceId, homeId) {
 }
 
 export async function createChase(homeId, data, username) {
-  const invoice = await financeRepo.findInvoiceById(data.invoice_id, homeId);
-  if (!invoice) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 });
-  if (invoice.status === 'paid' || invoice.status === 'void' || invoice.status === 'credited') {
-    throw Object.assign(new Error(`Cannot chase a ${invoice.status} invoice`), { statusCode: 400 });
-  }
-  const chase = await financeRepo.createChase(homeId, { ...data, created_by: username });
-  logger.info({ homeId, invoiceId: data.invoice_id, chaseId: chase.id, method: chase.method }, 'Chase recorded');
-  return chase;
+  return withTransaction(async (client) => {
+    const invoice = await financeRepo.findInvoiceById(data.invoice_id, homeId, client, { forUpdate: true });
+    if (!invoice) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 });
+    if (invoice.status === 'paid' || invoice.status === 'void' || invoice.status === 'credited') {
+      throw Object.assign(new Error(`Cannot chase a ${invoice.status} invoice`), { statusCode: 400 });
+    }
+    const chase = await financeRepo.createChase(homeId, { ...data, created_by: username }, client);
+    logger.info({ homeId, invoiceId: data.invoice_id, chaseId: chase.id, method: chase.method }, 'Chase recorded');
+    return chase;
+  });
 }
 
 // ── Payment Schedule ─────────────────────────────────────────────────────────

@@ -269,7 +269,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         if (!hours || hours <= 0) continue;
 
         const isBH = isBankHoliday(date, home.config);
-        const result = calculateShiftPay(shift, date, s, rules, home.config, !!sleep_in, isBH);
+        const result = calculateShiftPay(shift, date, s, rules, home.config, !!sleep_in, isBH, hours);
 
         // NMW compliance check
         const nmw = checkNMWCompliance(s, date, result.total, result.hours, nmwRates);
@@ -352,6 +352,22 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // YTD: read from approved runs only — never written here (written in approveRun)
       const priorYTD = ytdMap.get(s.id) || ZERO_YTD;
 
+      // P45: add previous employment figures for mid-year starters on cumulative basis.
+      // Only applies on first run of the tax year (priorYTD is zero) and only on cumulative
+      // basis — W1/M1 treats each period standalone so previous employment is irrelevant.
+      const hasPriorRuns = (priorYTD.gross_pay || 0) > 0 || (priorYTD.tax_deducted || 0) > 0;
+      const p45Pay = parseFloat(taxCodeRow?.previous_pay) || 0;
+      const p45Tax = parseFloat(taxCodeRow?.previous_tax) || 0;
+      const p45Basis = taxCodeRow?.basis || 'cumulative';
+      const effectiveYTD = (p45Pay > 0 || p45Tax > 0) && !hasPriorRuns && p45Basis !== 'w1m1'
+        ? {
+            ...priorYTD,
+            gross_pay:    round2((priorYTD.gross_pay    || 0) + p45Pay),
+            taxable_pay:  round2((priorYTD.taxable_pay  || priorYTD.gross_pay || 0) + p45Pay),
+            tax_deducted: round2((priorYTD.tax_deducted || 0) + p45Tax),
+          }
+        : priorYTD;
+
       // Tax bands and NI rates: cached by country/category (same for most staff)
       const country = parsedCode.country;
       if (!taxBandsCache.has(country)) {
@@ -407,8 +423,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
       // PAYE on gross MINUS pension employee contribution (Net Pay Arrangement).
       // Use taxable_pay from YTD (pension-reduced) for cumulative consistency.
+      // effectiveYTD includes P45 previous employment figures for mid-year starters.
       const grossForPAYE = round2(grossForTax - pensionEmployee);
-      const payeYTD = { ...priorYTD, gross_pay: priorYTD.taxable_pay ?? priorYTD.gross_pay ?? 0 };
+      const payeYTD = { ...effectiveYTD, gross_pay: effectiveYTD.taxable_pay ?? effectiveYTD.gross_pay ?? 0 };
       const { tax, isRefund: _isRefund } = calculatePAYE(grossForPAYE, parsedCode, payPeriod, periodsInYear, payeYTD, taxBands);
       const taxDeducted = round2(tax); // may be negative (refund) — passed through to net pay
 

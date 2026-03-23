@@ -237,8 +237,14 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
   const taxThisPeriod = round2(totalTaxOnCumulative - priorTaxPaid);
   const isRefund = taxThisPeriod < 0;
 
+  // HMRC Regulation 22: K code tax deduction capped at 50% of gross pay per period.
+  // Prevents K code from reducing net pay below half of gross in any one pay period.
+  const cappedTax = parsedCode.type === 'k_code' && taxThisPeriod > 0
+    ? Math.min(taxThisPeriod, round2(grossPay * 0.50))
+    : taxThisPeriod;
+
   return {
-    tax: round2(taxThisPeriod), // may be negative for refund — HMRC requires refunds through payroll
+    tax: round2(cappedTax), // may be negative for refund — HMRC requires refunds through payroll
     taxableIncome: round2(Math.max(0, grossPay - periodAllowance)),
     isRefund,
   };

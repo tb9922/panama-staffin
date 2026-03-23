@@ -145,5 +145,6 @@ export async function isDenied(jti, username) {
     );
     return rows.length > 0;
   }
-  return false;
+  // Neither jti nor username — cannot determine status; deny by default (defense-in-depth)
+  return true;
 }
