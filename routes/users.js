@@ -47,7 +47,15 @@ const setRolesSchema = z.object({
   roles: z.array(z.object({
     homeId: z.number().int().positive(),
     roleId: z.enum(ROLE_IDS),
-  })),
+  })).superRefine((roles, ctx) => {
+    const seen = new Set();
+    roles.forEach((r, i) => {
+      if (seen.has(r.homeId)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Duplicate homeId: ${r.homeId}`, path: [i, 'homeId'] });
+      }
+      seen.add(r.homeId);
+    });
+  }),
 });
 
 const setHomeRoleSchema = z.object({

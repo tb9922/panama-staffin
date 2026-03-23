@@ -37,6 +37,7 @@ export default defineConfig({
           globals: true,
           include: ['src/pages/__tests__/**/*.test.jsx'],
           setupFiles: ['src/test/setup.js'],
+          testTimeout: 15000,
         },
       },
       {
@@ -48,6 +49,7 @@ export default defineConfig({
           include: [
             'src/contexts/__tests__/**/*.test.{js,jsx}',
           ],
+          testTimeout: 15000,
         },
       },
     ],

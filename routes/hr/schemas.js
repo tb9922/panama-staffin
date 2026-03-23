@@ -3,7 +3,11 @@ import { z } from 'zod';
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
 export const idSchema = z.coerce.number().int().positive();
-export const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+export const dateSchema = z.preprocess(
+  v => v === '' ? null : v,
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()
+    .refine(v => v === null || !isNaN(Date.parse(v + 'T00:00:00Z')), 'Invalid date')
+);
 export const staffIdSchema = z.string().min(1).max(20);
 export const caseTypeSchema = z.enum([
   'disciplinary', 'grievance', 'performance', 'rtw_interview',

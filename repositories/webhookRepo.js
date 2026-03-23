@@ -177,7 +177,32 @@ export async function markDeliverySucceeded(id, statusCode, responseMs) {
 
 export async function markDeliveryFailed(id) {
   await pool.query(
-    `UPDATE webhook_deliveries SET status = 'failed', next_retry_at = NULL WHERE id = $1`,
+    `UPDATE webhook_deliveries SET status = 'failed', next_retry_at = NULL, locked_at = NULL WHERE id = $1`,
     [id]
   );
+}
+
+export async function markDeliveryInProgress(id) {
+  await pool.query(
+    `UPDATE webhook_deliveries SET status = 'in_progress', locked_at = NOW() WHERE id = $1`,
+    [id]
+  );
+}
+
+/**
+ * Reset deliveries stuck in 'in_progress' for more than 10 minutes back to
+ * 'pending_retry' so the next poll can reattempt them. Handles the case where
+ * the process crashed during an HTTP fetch after marking the row in_progress.
+ */
+export async function rescueStuckInProgress() {
+  const { rowCount } = await pool.query(
+    `UPDATE webhook_deliveries
+     SET status = 'pending_retry',
+         retry_count = retry_count + 1,
+         next_retry_at = NOW(),
+         locked_at = NULL
+     WHERE status = 'in_progress'
+       AND locked_at < NOW() - INTERVAL '10 minutes'`
+  );
+  return rowCount;
 }

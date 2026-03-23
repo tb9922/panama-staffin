@@ -79,7 +79,7 @@ export default function AbsenceManager() {
         getHrRtwInterviews(home, { limit: LIMIT, offset: rtwOffset }),
         getHrOhReferrals(home, { limit: LIMIT, offset: ohOffset }),
       ]);
-      setSummary((sum || []).sort((a, b) => (b.score || 0) - (a.score || 0)));
+      setSummary([...(sum || [])].sort((a, b) => (b.score || 0) - (a.score || 0)));
       setRtwList(rtwRes?.rows || []);
       setRtwTotal(rtwRes?.total || 0);
       setOhList(ohRes?.rows || []);
