@@ -115,6 +115,7 @@ export default function StaffRegister() {
     setEditing(s.id);
     setEditingRow({ ...s });
     setRowError(null);
+    setRowWarning(null);
   }
 
   function updateEditingRow(field, value) {
@@ -159,6 +160,7 @@ export default function StaffRegister() {
     setEditing(null);
     setEditingRow(null);
     setRowError(null);
+    setRowWarning(null);
   }
 
   async function addStaff() {
@@ -175,7 +177,8 @@ export default function StaffRegister() {
       setNewStaff({ ...EMPTY_STAFF });
       setShowAdd(false);
       setRefreshKey(k => k + 1);
-      if (result?.warnings?.length) setRowWarning({ id: 'add', msgs: result.warnings });
+      // Use the DB-assigned staff ID so the warning banner appears under the new row in the table.
+      if (result?.warnings?.length) setRowWarning({ id: result.id, msgs: result.warnings });
     } catch (e) {
       setRowError({ id: 'add', msg: e.message });
     } finally {

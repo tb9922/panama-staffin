@@ -319,6 +319,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                JOIN finance_residents fr ON fr.id = fi.resident_id AND fr.home_id = fi.home_id
                WHERE fi.home_id = $1 AND fr.resident_name = $2`, [homeId, subjectName])
           : { rows: [] },
+        // GDPR module own tables — consent records and data requests by subject_id
+        conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        // DP complaints matched by resident name (dp_complaints has no resident_id FK)
+        subjectName
+          ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
+          : { rows: [] },
       ];
       // Name-based queries for incidents/complaints
       if (subjectName) {
@@ -363,9 +370,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           finance_fee_changes: results[6].rows,
           finance_invoice_lines: results[7].rows,
           finance_invoice_chase: results[8].rows,
-          incidents: results[9]?.rows || [],
-          complaints: results[10]?.rows || [],
-          incident_addenda: results[11]?.rows || [],
+          // GDPR module own tables (indices 9-11, always present)
+          consent_records: results[9].rows,
+          data_requests: results[10].rows,
+          dp_complaints: results[11].rows,
+          // Incident/complaint queries pushed conditionally (indices 12-14)
+          incidents: results[12]?.rows || [],
+          complaints: results[13]?.rows || [],
+          incident_addenda: results[14]?.rows || [],
         },
       };
     }
@@ -895,6 +907,25 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
       await client.query(
         `UPDATE finance_invoice_chase SET notes = NULL WHERE invoice_id IN (SELECT id FROM finance_invoices WHERE home_id = $1 AND resident_id = $2)`,
         [homeId, residentPk]);
+    }
+
+    // Anonymise GDPR module own tables where resident was the subject
+    await client.query(
+      `UPDATE consent_records SET subject_name = $2, notes = NULL
+       WHERE home_id = $1 AND subject_id = $3 AND deleted_at IS NULL`,
+      [homeId, anon, subjectId]
+    );
+    await client.query(
+      `UPDATE data_requests SET subject_name = $2, notes = NULL
+       WHERE home_id = $1 AND subject_id = $3 AND deleted_at IS NULL`,
+      [homeId, anon, subjectId]
+    );
+    if (matchName) {
+      await client.query(
+        `UPDATE dp_complaints SET complainant_name = $2, description = '[REDACTED]'
+         WHERE home_id = $1 AND complainant_name = $3 AND deleted_at IS NULL`,
+        [homeId, anon, matchName]
+      );
     }
 
     // Mark the request as completed

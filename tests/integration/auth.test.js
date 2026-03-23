@@ -133,7 +133,7 @@ describe('POST /api/login', () => {
   it('rejects unknown username with same 401 message (anti-enumeration)', async () => {
     const res = await request(app)
       .post('/api/login')
-      .send({ username: 'nonexistent-user-xyz', password: 'anything' })
+      .send({ username: 'nonexistent-user-xyz', password: 'anything123' })
       .expect(401);
 
     expect(res.body.error).toBe('Invalid credentials');

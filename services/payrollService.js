@@ -625,6 +625,22 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
         total_due:         round2(totals.paye + totals.emp_ni + totals.er_ni),
       }, client);
 
+      // Reverse SSP weeks that were incremented during approval — prevents
+      // premature 28-week cap triggers when a run is voided and recalculated.
+      const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
+      for (const { staff_id, ssp_days } of sspDaysByStaff) {
+        if (ssp_days <= 0) continue;
+        const sickPeriod = await sspRepo.getActiveSickPeriod(
+          homeId, staff_id, run.period_start, run.period_end, client,
+        );
+        if (!sickPeriod) continue;
+        const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
+        const weeksToSubtract = round2(ssp_days / qualDaysPerWeek);
+        await sspRepo.updateSickPeriod(sickPeriod.id, homeId, {
+          ssp_weeks_paid: Math.max(0, round2((sickPeriod.ssp_weeks_paid || 0) - weeksToSubtract)),
+        }, client);
+      }
+
       await payrollRunRepo.markYtdUnapplied(runId, homeId, client);
     }
 
@@ -706,8 +722,9 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
   const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);
   if (!avg) return fallback;
 
-  // ERA 1996 s.224: average weekly pay = total gross over reference period / 52
-  const avgWeeklyPay = round2(avg.total_gross / 52);
+  // ERA 1996 s.224: average weekly pay = total gross / actual weeks with pay (capped at 52).
+  // divisor_weeks is ≥1 (guaranteed by GREATEST(1,...) in the repo query).
+  const avgWeeklyPay = round2(avg.total_gross / avg.divisor_weeks);
   return round2(avgWeeklyPay / 5);
 }
 

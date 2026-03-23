@@ -485,7 +485,10 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   const refStr = typeof referenceDate === 'string' ? referenceDate : referenceDate.toISOString().slice(0, 10);
   const { rows } = await conn.query(
     `SELECT COALESCE(SUM(pl.gross_pay), 0)::numeric AS total_gross,
-            COUNT(DISTINCT pl.payroll_run_id)::int AS run_count
+            COUNT(*)::int AS run_count,
+            LEAST(52, GREATEST(1, ROUND(
+              SUM(pr.period_end::date - pr.period_start::date + 1) / 7.0
+            )))::int AS divisor_weeks
      FROM payroll_lines pl
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pr.home_id = $1
@@ -498,6 +501,8 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   const row = rows[0];
   const runCount = parseInt(row?.run_count || 0, 10);
   if (runCount < 1) return null;
-  // ERA 1996 s.224: divide by 52 weeks regardless of pay frequency
-  return { total_gross: parseFloat(row.total_gross) };
+  // ERA 1996 s.224: divide by actual weeks with pay (capped at 52), not always 52.
+  // New starters with fewer than 52 weeks of history get a fair average, not one
+  // artificially deflated by dividing by 52 when only a few weeks of data exist.
+  return { total_gross: parseFloat(row.total_gross), divisor_weeks: parseInt(row.divisor_weeks, 10) };
 }

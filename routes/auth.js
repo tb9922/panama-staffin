@@ -17,7 +17,8 @@ const loginLimiter = rateLimit({
   max: config.nodeEnv === 'test' ? 1000 : 30,
   keyGenerator: (req) => {
     const ip = ipKeyGenerator(req.ip);
-    const username = req.body?.username || '';
+    // Truncate to 100 chars to prevent memory exhaustion from attacker-supplied long strings
+    const username = (req.body?.username || '').slice(0, 100);
     return `login:${ip}:${username}`;
   },
   standardHeaders: true,
@@ -27,7 +28,7 @@ const loginLimiter = rateLimit({
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username required'),
-  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+  password: z.string().min(10, 'Password must be at least 10 characters').max(200),
 });
 
 router.post('/', loginLimiter, async (req, res, next) => {

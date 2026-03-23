@@ -209,8 +209,10 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     ? parsedCode.annualAllowance / periodsInYear
     : 0;
 
-  if (basis === 'w1m1' || parsedCode.type === '0t') {
+  if (basis === 'w1m1') {
     // Week1/Month1: treat each period as standalone — no YTD
+    // Note: 0T is NOT forced to W1/M1 — it can be issued on a cumulative basis.
+    // W1/M1 basis is indicated only via the tax_codes.basis DB field (set by manager).
     const taxableThisPeriod = Math.max(0, grossPay - periodAllowance);
     const totalTaxDue = computeTax(taxableThisPeriod, taxBands, parsedCode);
     const tax = Math.max(0, round2(totalTaxDue));

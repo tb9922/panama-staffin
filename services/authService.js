@@ -25,8 +25,11 @@ export async function loadDenyList() {
 export async function login(username, password) {
   // Try database-backed users first
   let dbUser = null;
-  try { dbUser = await userRepo.findByUsername(username); } catch {
-    // Table may not exist pre-migration — fall through to env-var config
+  try { dbUser = await userRepo.findByUsername(username); } catch (err) {
+    // Only fall through when the users table doesn't exist yet (pre-migration state).
+    // Any other error (DB down, timeout, pool exhausted) must propagate so auth is
+    // never silently bypassed — env-var users skip lockout and deny-list checks.
+    if (err.code !== '42P01') throw err;
   }
 
   if (dbUser) {

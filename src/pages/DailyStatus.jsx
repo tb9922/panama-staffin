@@ -95,12 +95,13 @@ export default function DailyStatus() {
   // Cleanup debounce timer on unmount
   useEffect(() => () => clearTimeout(noteTimerRef.current), []);
 
-  // Reset lock prompt state when navigating to a different date
+  // Reset lock prompt state and override warnings when navigating to a different date
   useEffect(() => {
     setShowLockPrompt(false);
     setLockPin('');
     setLockError('');
     setPendingAction(null);
+    setOverrideWarnings([]);
   }, [dateStr]);
 
   const staffForDay = useMemo(() => {
