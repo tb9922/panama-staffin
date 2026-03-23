@@ -184,7 +184,7 @@ describe('Finance: invoices', () => {
 
   it('generates sequential invoice numbers', async () => {
     const num1 = await financeRepo.getNextInvoiceNumber(homeA, 'INV-2601');
-    expect(num1).toBe('INV-2601-001');
+    expect(num1).toBe('INV-2601-000001');
   });
 
   it('creates an invoice with version=1', async () => {

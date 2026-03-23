@@ -201,6 +201,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       let nmwLowest = Infinity;
       const nmwWarnings = [];
       const shiftDetails = []; // collect for batch INSERT
+      // SSP weeks accumulated within this run per sick-period ID (enforces mid-run cap)
+      const sspRunWeeks = new Map();
 
       for (const date of dates) {
         // Skip dates after staff left (deactivated mid-period leavers)
@@ -230,11 +232,17 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
             const staffPeriods = sickPeriodsMap.get(s.id) || [];
             const sickPeriod = staffPeriods.find(p => p.start_date <= date && (!p.end_date || p.end_date >= date)) || null;
             if (sickPeriod) {
-              const r = calculateSSP(sickPeriod, date, sspConfig);
+              // Combine stored weeks with those already accumulated this run (cap enforcement)
+              const runWeeksKey = sickPeriod.id;
+              const weeksThisRun = sspRunWeeks.get(runWeeksKey) || 0;
+              const periodWithCap = { ...sickPeriod, ssp_weeks_paid: (sickPeriod.ssp_weeks_paid || 0) + weeksThisRun };
+              const r = calculateSSP(periodWithCap, date, sspConfig);
               if (r.eligible) {
                 acc.ssp_days += r.sspDays;
                 sspAmount = r.sspAmount;
                 acc.ssp_amount = round2(acc.ssp_amount + sspAmount);
+                const qualDays = sickPeriod.qualifying_days_per_week || 5;
+                sspRunWeeks.set(runWeeksKey, round2(weeksThisRun + r.sspDays / qualDays));
               }
             }
           }
@@ -478,7 +486,8 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       );
     }
 
-    await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client, run.version);
+    const approved = await payrollRunRepo.updateStatus(runId, homeId, 'approved', { approved_by: username }, client, run.version);
+    if (!approved) throw new ValidationError('Run was modified concurrently. Please refresh and try again.');
 
     // Lock all approved timesheets for the period (prevents further edits)
     await timesheetRepo.lockByPeriod(homeId, run.period_start, run.period_end, client);
@@ -697,7 +706,8 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
   const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);
   if (!avg) return fallback;
 
-  const avgWeeklyPay = round2(avg.total_gross / avg.weeks_with_pay);
+  // ERA 1996 s.224: average weekly pay = total gross over reference period / 52
+  const avgWeeklyPay = round2(avg.total_gross / 52);
   return round2(avgWeeklyPay / 5);
 }
 

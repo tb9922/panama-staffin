@@ -335,11 +335,11 @@ export async function getNextInvoiceNumber(homeId, prefix, client) {
      WHERE home_id = $1 AND invoice_number LIKE $2
      ORDER BY invoice_number DESC LIMIT 1`,
     [homeId, `${prefix}%`]);
-  if (rows.length === 0) return `${prefix}-001`;
+  if (rows.length === 0) return `${prefix}-000001`;
   const last = rows[0].invoice_number;
   const seq = parseInt(last.split('-').pop(), 10);
-  if (isNaN(seq)) return `${prefix}-001`;
-  return `${prefix}-${String(seq + 1).padStart(3, '0')}`;
+  if (isNaN(seq)) return `${prefix}-000001`;
+  return `${prefix}-${String(seq + 1).padStart(6, '0')}`;
 }
 
 export async function createInvoice(homeId, data, client) {

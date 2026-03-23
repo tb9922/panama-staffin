@@ -49,7 +49,7 @@ const residentBodySchema = z.object({
   last_fee_review: dateSchema.nullable().optional(),
   next_fee_review: dateSchema.nullable().optional(),
   status: z.enum(['active', 'discharged', 'deceased', 'suspended']).optional(),
-  notes: z.string().nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
   _fee_change_reason: z.string().max(500).optional(),
 });
 
@@ -78,7 +78,7 @@ const invoiceBodySchema = z.object({
   issue_date: dateSchema.nullable().optional(),
   due_date: dateSchema.nullable().optional(),
   status: z.enum(['draft', 'sent', 'partially_paid', 'paid', 'overdue', 'void', 'credited']).optional(),
-  notes: z.string().nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
   lines: z.array(invoiceLineSchema).optional(),
 });
 
@@ -116,7 +116,7 @@ const expenseBodySchema = z.object({
   payment_reference: z.string().max(100).nullable().optional(),
   recurring: z.boolean().optional(),
   recurrence_frequency: z.enum(['weekly', 'monthly', 'quarterly', 'annually']).nullable().optional(),
-  notes: z.string().nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 // Strip status from update — status changes only via dedicated approve/reject routes
@@ -130,9 +130,9 @@ const chaseBodySchema = z.object({
   chase_date: dateSchema,
   method: z.enum(['email', 'phone', 'letter', 'in_person', 'other']),
   contact_name: z.string().max(200).nullable().optional(),
-  outcome: z.string().nullable().optional(),
+  outcome: z.string().max(2000).nullable().optional(),
   next_action_date: dateSchema.nullable().optional(),
-  notes: z.string().nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 // ── Payment Schedule Schemas ─────────────────────────────────────────────────
@@ -150,8 +150,8 @@ const paymentScheduleBodySchema = z.object({
   next_due: dateSchema,
   auto_approve: z.boolean().optional(),
   on_hold: z.boolean().optional(),
-  hold_reason: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  hold_reason: z.string().max(2000).nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({

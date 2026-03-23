@@ -48,6 +48,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         onboarding, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
         payrollLineShifts, userAccount, userHomeRoles,
+        // GDPR module own tables — the subject may be the requester or consent giver
+        consentRecords, dataRequests, dpComplaints,
       ] = await Promise.all([
         conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -177,6 +179,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                JOIN users u ON u.username = uhr.username
                WHERE (u.display_name = $1 OR u.username = $1) AND uhr.home_id = $2`, [staffName, homeId])
           : { rows: [] },
+        // GDPR module own tables — consent records and data requests where subject is this staff member
+        conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        // DP complaints where this staff member is the complainant (matched by name)
+        staffName
+          ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, staffName])
+          : { rows: [] },
       ]);
 
       return {
@@ -224,6 +233,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           payroll_line_shifts: payrollLineShifts.rows,
           user_account: userAccount.rows,
           user_home_roles: userHomeRoles.rows,
+          // GDPR module own tables
+          consent_records: consentRecords.rows,
+          data_requests: dataRequests.rows,
+          dp_complaints: dpComplaints.rows,
         },
       };
     }
@@ -583,6 +596,27 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         `UPDATE handover_entries SET author = '[REDACTED]', content = '[REDACTED]'
          WHERE home_id = $1 AND author = $2`,
         [homeId, originalName]
+      );
+    }
+
+    // Anonymise consent records where this staff member was the subject
+    await client.query(
+      `UPDATE consent_records SET subject_name = $2, notes = NULL
+       WHERE home_id = $1 AND subject_id = $3 AND deleted_at IS NULL`,
+      [homeId, anon, staffId]
+    );
+    // Anonymise data requests where this staff member was the subject
+    await client.query(
+      `UPDATE data_requests SET subject_name = $2, notes = NULL
+       WHERE home_id = $1 AND subject_id = $3 AND deleted_at IS NULL`,
+      [homeId, anon, staffId]
+    );
+    // Anonymise DP complaints where this staff member was the complainant (matched by name)
+    if (originalName) {
+      await client.query(
+        `UPDATE dp_complaints SET complainant_name = $2, description = '[REDACTED]'
+         WHERE home_id = $1 AND complainant_name = $3 AND deleted_at IS NULL`,
+        [homeId, anon, originalName]
       );
     }
 

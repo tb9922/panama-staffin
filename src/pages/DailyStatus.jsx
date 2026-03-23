@@ -34,6 +34,7 @@ export default function DailyStatus() {
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [overrideWarnings, setOverrideWarnings] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const [modal, setModal] = useState(null);
@@ -144,8 +145,10 @@ export default function DailyStatus() {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    setOverrideWarnings([]);
     try {
-      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra });
+      const result = await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra });
+      if (result?.warnings?.length) setOverrideWarnings(result.warnings);
       await loadData();
     } catch (e) {
       setError(e.message);
@@ -466,6 +469,13 @@ export default function DailyStatus() {
           <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
         </div>
       </div>
+
+      {/* Training-blocking warnings from last override save */}
+      {overrideWarnings.length > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm text-amber-800 print:hidden" role="status">
+          {overrideWarnings.map((w, i) => <div key={i}>{w}</div>)}
+        </div>
+      )}
 
       {/* Past-date lock prompt */}
       {showLockPrompt && (

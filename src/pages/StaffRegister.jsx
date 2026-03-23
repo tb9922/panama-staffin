@@ -41,6 +41,7 @@ export default function StaffRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [rowError, setRowError] = useState(null); // { id, msg }
+  const [rowWarning, setRowWarning] = useState(null); // { id, msgs: string[] }
 
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterActive, setFilterActive] = useState('active');
@@ -135,16 +136,18 @@ export default function StaffRegister() {
     if (!editingRow) { setEditing(null); return; }
     setSaving(true);
     setRowError(null);
+    setRowWarning(null);
     try {
       const cleaned = {
         ...editingRow,
         start_date: editingRow.start_date || null,
         leaving_date: editingRow.leaving_date || null,
       };
-      await updateStaffMember(homeSlug, editingRow.id, cleaned);
+      const result = await updateStaffMember(homeSlug, editingRow.id, cleaned);
       setEditing(null);
       setEditingRow(null);
       setRefreshKey(k => k + 1);
+      if (result?.warnings?.length) setRowWarning({ id: editingRow.id, msgs: result.warnings });
     } catch (e) {
       setRowError({ id: editingRow.id, msg: e.message });
     } finally {
@@ -166,11 +169,13 @@ export default function StaffRegister() {
     };
     setSaving(true);
     setRowError(null);
+    setRowWarning(null);
     try {
-      await createStaff(homeSlug, staffEntry);
+      const result = await createStaff(homeSlug, staffEntry);
       setNewStaff({ ...EMPTY_STAFF });
       setShowAdd(false);
       setRefreshKey(k => k + 1);
+      if (result?.warnings?.length) setRowWarning({ id: 'add', msgs: result.warnings });
     } catch (e) {
       setRowError({ id: 'add', msg: e.message });
     } finally {
@@ -301,10 +306,15 @@ export default function StaffRegister() {
       </div>
 
       {/* Add Staff Modal */}
-      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); }} title="Add New Staff" size="md">
+      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setRowError(null); setRowWarning(null); }} title="Add New Staff" size="md">
             {rowError?.id === 'add' && (
               <div id="add-staff-error" className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm mb-3" role="alert">
                 {rowError.msg}
+              </div>
+            )}
+            {rowWarning?.id === 'add' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800 text-sm mb-3" role="status">
+                {rowWarning.msgs.join(' | ')}
               </div>
             )}
             <div className="space-y-3">
@@ -440,6 +450,7 @@ export default function StaffRegister() {
               if (!r) return null;
               const stats = staffStats[s.id];
               const rErr = rowError?.id === s.id ? rowError.msg : null;
+              const rWarn = rowWarning?.id === s.id ? rowWarning.msgs : null;
               return (
                 <Fragment key={s.id}>
                   <tr className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
@@ -640,6 +651,13 @@ export default function StaffRegister() {
                     <tr key={`${s.id}-err`}>
                       <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
                         {rErr}
+                      </td>
+                    </tr>
+                  )}
+                  {rWarn && (
+                    <tr key={`${s.id}-warn`}>
+                      <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs border-b border-amber-100">
+                        {rWarn.join(' | ')}
                       </td>
                     </tr>
                   )}

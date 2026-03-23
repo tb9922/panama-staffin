@@ -78,15 +78,16 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
   const carryover = parseFloat(staff.al_carryover) || 0;
   const totalEntitlement = annualEntitlement + carryover;
 
-  // Sum hours already used in leave year
-  // Fetch stored hours + dates of legacy (NULL al_hours) rows for per-day derivation
+  // Sum hours already used in leave year, excluding the current date being upserted
+  // (prevents double-counting when editing an existing AL booking on the same date)
   const { rows: alRows } = await conn.query(
     `SELECT COALESCE(SUM(al_hours), 0)::numeric AS total_hours,
             ARRAY_AGG(date::text) FILTER (WHERE al_hours IS NULL) AS null_dates
      FROM shift_overrides
      WHERE home_id = $1 AND staff_id = $2 AND shift = 'AL'
-       AND date >= $3 AND date <= $4`,
-    [homeId, staffId, leaveYear.startStr, leaveYear.endStr]
+       AND date >= $3 AND date <= $4
+       AND date != $5`,
+    [homeId, staffId, leaveYear.startStr, leaveYear.endStr, date]
   );
   let hoursUsed = parseFloat(alRows[0].total_hours) || 0;
   // Legacy bookings without al_hours: derive from scheduled shift (matches frontend)
@@ -281,13 +282,8 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
       }
     }
 
-    // Training-blocking check for working shifts — runs before upsert
-    const trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config);
-    if (trainingWarning && req.home.config?.enforce_training_blocking) {
-      return res.status(400).json({ error: trainingWarning });
-    }
-
     let computedALHours = null;
+    let trainingWarning = null;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
       await withTransaction(async (client) => {
@@ -305,8 +301,14 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
         }, client);
       });
     } else {
-      // Non-AL shifts: al_hours should be null — wrap in transaction for atomicity
+      // Non-AL shifts: training check + upsert in one transaction (prevents TOCTOU)
       await withTransaction(async (client) => {
+        trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config, client);
+        if (trainingWarning && req.home.config?.enforce_training_blocking) {
+          const err = new Error(trainingWarning);
+          err.isTrainingBlock = true;
+          throw err;
+        }
         await overrideRepo.upsertOne(req.home.id, date, staffId, {
           shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours: null,
         }, client);
@@ -321,6 +323,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     res.json(trainingWarning ? { ok: true, warnings: [trainingWarning] } : { ok: true });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
+    if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
@@ -376,26 +379,28 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       }
     }
 
-    // Training-blocking check for all working shifts in the batch (before transaction)
+    // Validate + upsert in a single transaction (atomicity, batch-aware AL counts, training TOCTOU fix)
     const overrides = parsed.data.overrides;
     const trainingWarnings = [];
-    for (const o of overrides) {
-      if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
-      const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config);
-      if (w) {
-        if (req.home.config?.enforce_training_blocking) {
-          return res.status(400).json({ error: w });
-        }
-        // Deduplicate — same staff member may appear multiple times in a bulk fill
-        if (!trainingWarnings.includes(w)) trainingWarnings.push(w);
-      }
-    }
-
-    // Validate + upsert in a single transaction (B2: atomicity, B1: batch-aware AL counts)
     await withTransaction(async (client) => {
+      // Training-blocking check inside transaction (prevents TOCTOU between check and write)
+      for (const o of overrides) {
+        if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
+        const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config, client);
+        if (w) {
+          if (req.home.config?.enforce_training_blocking) {
+            const err = new Error(w);
+            err.isTrainingBlock = true;
+            throw err;
+          }
+          // Deduplicate — same staff member may appear multiple times in a bulk fill
+          if (!trainingWarnings.includes(w)) trainingWarnings.push(w);
+        }
+      }
+
       const alOverrides = overrides.filter(o => o.shift === 'AL');
       if (alOverrides.length > 0) {
-        const batchCtx = { dayAL: {}, staffAL: {}, staffALHours: {} };
+        const batchCtx = { dayAL: {}, staffALHours: {} };
         for (const o of alOverrides) {
           const result = await validateALOverride(req.home.id, req.home.config, o.date, o.staffId, batchCtx, client);
           if (result.error) {
@@ -407,7 +412,6 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
           o.al_hours = result.al_hours;
           // Track in-batch counts so subsequent items see accumulated state
           batchCtx.dayAL[o.date] = (batchCtx.dayAL[o.date] ?? 0) + 1;
-          batchCtx.staffAL[o.staffId] = (batchCtx.staffAL[o.staffId] ?? 0) + 1;
           batchCtx.staffALHours[o.staffId] = (batchCtx.staffALHours[o.staffId] ?? 0) + result.al_hours;
         }
       }
@@ -431,6 +435,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
     });
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
+    if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

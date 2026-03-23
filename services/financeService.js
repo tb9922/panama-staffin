@@ -81,14 +81,14 @@ export async function findInvoiceById(id, homeId) {
 }
 
 export async function createInvoiceWithLines(homeId, data, username) {
-  // Validate resident is active if specified
-  if (data.resident_id) {
-    const resident = await financeRepo.findResidentById(data.resident_id, homeId);
-    if (!resident) throw Object.assign(new Error('Resident not found'), { statusCode: 400 });
-    if (resident.status !== 'active') throw Object.assign(new Error('Cannot create invoice for non-active resident'), { statusCode: 400 });
-  }
-
   return withTransaction(async (client) => {
+    // Validate resident inside transaction to prevent TOCTOU race
+    if (data.resident_id) {
+      const resident = await financeRepo.findResidentById(data.resident_id, homeId, client);
+      if (!resident) throw Object.assign(new Error('Resident not found'), { statusCode: 400 });
+      if (resident.status !== 'active') throw Object.assign(new Error('Cannot create invoice for non-active resident'), { statusCode: 400 });
+    }
+
     // Generate invoice number atomically
     const now = new Date();
     const prefix = `INV-${String(now.getUTCFullYear()).slice(2)}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
