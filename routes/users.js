@@ -299,19 +299,17 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const oldRoles = await userHomeRepo.findRolesForUser(user.username);
     const oldHomeRole = oldRoles.find(r => r.home_id === req.home.id);
 
-    let changed = false;
-    await withTransaction(async (client) => {
-      await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username, client);
-      changed = !oldHomeRole || oldHomeRole.role_id !== parsed.data.roleId;
-      if (changed) {
-        await auditService.log('user_roles_update', req.home.slug, req.user.username, {
-          userId: id.data, username: user.username,
-          changes: [{ homeId: req.home.id, from: oldHomeRole?.role_id || null, to: parsed.data.roleId }],
-        }, client);
-      }
-    });
-    // Force re-login so JWT reflects new permissions — outside transaction (deny-list is independent)
-    if (changed) await authService.revokeUser(user.username);
+    await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username);
+
+    const changed = !oldHomeRole || oldHomeRole.role_id !== parsed.data.roleId;
+    if (changed) {
+      await auditService.log('user_roles_update', req.home.slug, req.user.username, {
+        userId: id.data, username: user.username,
+        changes: [{ homeId: req.home.id, from: oldHomeRole?.role_id || null, to: parsed.data.roleId }],
+      });
+      // No token revocation needed: per-home roles are read from DB on every authenticated
+      // request via requireHomeAccess, so the JWT claim is never trusted for per-home role checks.
+    }
 
     res.json({ ok: true, roleId: parsed.data.roleId });
   } catch (err) { next(err); }
@@ -362,15 +360,12 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
         }
       }
 
-      if (changes.length > 0) {
-        await auditService.log('user_roles_update', '-', req.user.username, {
-          userId: id.data, username: user.username, changes,
-        }, client);
-        needsRevoke = true;
-      }
-    });
-    // Force re-login so JWT reflects new permissions — outside transaction (deny-list is independent)
-    if (needsRevoke) await authService.revokeUser(user.username);
+    if (changes.length > 0) {
+      await auditService.log('user_roles_update', '-', req.user.username, {
+        userId: id.data, username: user.username, changes,
+      });
+      // No token revocation needed — per-home roles are DB-checked on every request.
+    }
 
     res.json({ ok: true, roles: parsed.data.roles });
   } catch (err) { next(err); }

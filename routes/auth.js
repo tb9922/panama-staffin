@@ -17,8 +17,8 @@ const loginLimiter = rateLimit({
   max: config.nodeEnv === 'test' ? 1000 : 30,
   keyGenerator: (req) => {
     const ip = ipKeyGenerator(req.ip);
-    // Truncate to 100 chars to prevent memory exhaustion from attacker-supplied long strings
-    const username = (req.body?.username || '').slice(0, 100);
+    // Normalise to lowercase + truncate to prevent memory exhaustion
+    const username = (req.body?.username || '').toLowerCase().slice(0, 100);
     return `login:${ip}:${username}`;
   },
   standardHeaders: true,
