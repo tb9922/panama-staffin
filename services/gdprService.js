@@ -186,6 +186,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         staffName
           ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, staffName])
           : { rows: [] },
+        // Agency shifts where this staff member was the worker (matched by name — no staff FK)
+        staffName
+          ? conn.query(`SELECT * FROM agency_shifts WHERE home_id = $1 AND worker_name = $2`, [homeId, staffName])
+          : { rows: [] },
+        // Complaint surveys conducted by this staff member (matched by name — no staff FK)
+        staffName
+          ? conn.query(`SELECT * FROM complaint_surveys WHERE home_id = $1 AND conducted_by = $2 AND deleted_at IS NULL`, [homeId, staffName])
+          : { rows: [] },
       ]);
 
       return {
@@ -659,6 +667,23 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Anonymise agency_shifts where this staff member was the worker (no staff FK — name match)
+    if (originalName) {
+      await client.query(
+        `UPDATE agency_shifts SET worker_name = $1 WHERE home_id = $2 AND worker_name = $3`,
+        [anon, homeId, originalName]
+      );
+    }
+
+    // Anonymise complaint_surveys conducted by this staff member (no staff FK — name match)
+    if (originalName) {
+      await client.query(
+        `UPDATE complaint_surveys SET conducted_by = $1
+         WHERE home_id = $2 AND conducted_by = $3 AND deleted_at IS NULL`,
+        [anon, homeId, originalName]
+      );
+    }
+
     // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
     await client.query(
       `UPDATE shift_overrides SET reason = NULL WHERE home_id = $1 AND staff_id = $2`,
@@ -666,12 +691,13 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     );
 
     // Redact audit_log entries containing this staff member's name in details.
-    // audit_log.details is TEXT (not JSONB) — replace name references.
+    // Scoped to this home's slug to prevent cross-tenant collateral redaction
+    // (common names like "John Smith" must not redact audit entries at other homes).
     if (originalName) {
       await client.query(
         `UPDATE audit_log SET details = REPLACE(details, $1, $2)
-         WHERE details LIKE '%' || $1 || '%'`,
-        [originalName, anon]
+         WHERE home_slug = $3 AND details LIKE '%' || $1 || '%'`,
+        [originalName, anon, homeSlug]
       );
     }
 

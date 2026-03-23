@@ -36,8 +36,10 @@ export async function getAllSSPConfigs(client) {
 /**
  * Get the active sick period overlapping a date range for a staff member.
  * Returns the most recently opened period where start_date <= toDate AND (end_date IS NULL OR end_date >= fromDate).
+ * Pass forUpdate: true (and a transaction client) to lock the row — required when
+ * reading ssp_weeks_paid before updating it (prevents lost-update race on approve/void).
  */
-export async function getActiveSickPeriod(homeId, staffId, fromDate, toDate, client) {
+export async function getActiveSickPeriod(homeId, staffId, fromDate, toDate, client, { forUpdate = false } = {}) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT ${SICK_PERIOD_COLS} FROM sick_periods
@@ -45,7 +47,7 @@ export async function getActiveSickPeriod(homeId, staffId, fromDate, toDate, cli
        AND start_date <= $3
        AND (end_date IS NULL OR end_date >= $4)
      ORDER BY start_date DESC
-     LIMIT 1`,
+     LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [homeId, staffId, toDate, fromDate]
   );
   return rows[0] ? shapePeriod(rows[0]) : null;

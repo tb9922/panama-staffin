@@ -169,8 +169,9 @@ export async function findHomeSlugsForUser(username) {
  * Get all usernames with a role at a home.
  * Used to capture affected users in audit before revoking.
  */
-export async function findUsernamesForHome(homeId) {
-  const { rows } = await pool.query(
+export async function findUsernamesForHome(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     'SELECT username FROM user_home_roles WHERE home_id = $1',
     [homeId]
   );

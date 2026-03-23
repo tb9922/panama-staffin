@@ -550,8 +550,10 @@ export async function approveRun(runId, homeId, homeSlug, username) {
     const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
     for (const { staff_id, ssp_days } of sspDaysByStaff) {
       if (ssp_days <= 0) continue;
+      // FOR UPDATE prevents a concurrent approval for an overlapping period from
+      // reading the same ssp_weeks_paid value and causing a lost-update race.
       const sickPeriod = await sspRepo.getActiveSickPeriod(
-        homeId, staff_id, run.period_start, run.period_end, client,
+        homeId, staff_id, run.period_start, run.period_end, client, { forUpdate: true },
       );
       if (!sickPeriod) continue;
       const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
@@ -647,8 +649,10 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
       const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
       for (const { staff_id, ssp_days } of sspDaysByStaff) {
         if (ssp_days <= 0) continue;
+        // FOR UPDATE locks the row to prevent a concurrent approval from reading
+        // the same ssp_weeks_paid value before this void decrements it.
         const sickPeriod = await sspRepo.getActiveSickPeriod(
-          homeId, staff_id, run.period_start, run.period_end, client,
+          homeId, staff_id, run.period_start, run.period_end, client, { forUpdate: true },
         );
         if (!sickPeriod) continue;
         const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;

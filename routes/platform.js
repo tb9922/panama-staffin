@@ -158,8 +158,8 @@ router.delete('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin,
         return { status: 400, error: 'Cannot delete the last home' };
       }
 
-      // Capture affected users before revoking
-      const revokedUsers = await userHomeRepo.findUsernamesForHome(id.data);
+      // Capture affected users before revoking (using transaction client to see consistent state)
+      const revokedUsers = await userHomeRepo.findUsernamesForHome(id.data, client);
 
       await homeRepo.softDelete(id.data, client);
       await userHomeRepo.revokeAllRolesForHome(id.data, client);

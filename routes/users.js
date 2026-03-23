@@ -127,10 +127,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireHomeMa
       // Assign role at this home (defaults to viewer if no specific role requested)
       const effectiveRole = homeRoleId || 'viewer';
       await userHomeRepo.assignRole(username, req.home.id, effectiveRole, null, req.user.username, client);
+      await auditService.log('user_create', req.home.slug, req.user.username, { username, role, homeRoleId }, client);
       return created;
     });
-
-    await auditService.log('user_create', req.home.slug, req.user.username, { username, role, homeRoleId });
     res.status(201).json(user);
   } catch (err) {
     if (err.message === 'Username already exists') return res.status(409).json({ error: err.message });
@@ -241,10 +240,9 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
       for (const hid of currentIds) {
         if (!desiredIds.has(hid)) await userHomeRepo.removeRole(user.username, hid, client);
       }
-    });
-
-    await auditService.log('user_homes_update', '-', req.user.username, {
-      userId: id.data, username: user.username, homeIds: parsed.data.homeIds,
+      await auditService.log('user_homes_update', '-', req.user.username, {
+        userId: id.data, username: user.username, homeIds: parsed.data.homeIds,
+      }, client);
     });
     res.json({ ok: true, homeIds: parsed.data.homeIds });
   } catch (err) { next(err); }
@@ -293,17 +291,19 @@ router.put('/:id/roles', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const oldRoles = await userHomeRepo.findRolesForUser(user.username);
     const oldHomeRole = oldRoles.find(r => r.home_id === req.home.id);
 
-    await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username);
-
-    const changed = !oldHomeRole || oldHomeRole.role_id !== parsed.data.roleId;
-    if (changed) {
-      await auditService.log('user_roles_update', req.home.slug, req.user.username, {
-        userId: id.data, username: user.username,
-        changes: [{ homeId: req.home.id, from: oldHomeRole?.role_id || null, to: parsed.data.roleId }],
-      });
-      // Force re-login so JWT reflects new permissions
-      await authService.revokeUser(user.username);
-    }
+    let changed = false;
+    await withTransaction(async (client) => {
+      await userHomeRepo.assignRole(user.username, req.home.id, parsed.data.roleId, null, req.user.username, client);
+      changed = !oldHomeRole || oldHomeRole.role_id !== parsed.data.roleId;
+      if (changed) {
+        await auditService.log('user_roles_update', req.home.slug, req.user.username, {
+          userId: id.data, username: user.username,
+          changes: [{ homeId: req.home.id, from: oldHomeRole?.role_id || null, to: parsed.data.roleId }],
+        }, client);
+      }
+    });
+    // Force re-login so JWT reflects new permissions — outside transaction (deny-list is independent)
+    if (changed) await authService.revokeUser(user.username);
 
     res.json({ ok: true, roleId: parsed.data.roleId });
   } catch (err) { next(err); }
@@ -329,6 +329,7 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
     const oldRoleMap = new Map(currentRoles.map(r => [r.home_id, r.role_id]));
     const finalDesiredHomeIds = new Set(parsed.data.roles.map(r => r.homeId));
 
+    let needsRevoke = false;
     await withTransaction(async (client) => {
       const finalHomeIds = new Set();
       for (const { homeId, roleId } of parsed.data.roles) {
@@ -340,26 +341,28 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
           await userHomeRepo.removeRole(user.username, cr.home_id, client);
         }
       }
-    });
 
-    // Build audit diff using final desired set (after preservation)
-    const changes = [];
-    for (const { homeId, roleId } of parsed.data.roles) {
-      const oldRole = oldRoleMap.get(homeId);
-      if (oldRole !== roleId) changes.push({ homeId, from: oldRole || null, to: roleId });
-    }
-    for (const cr of currentRoles) {
-      if (!finalDesiredHomeIds.has(cr.home_id)) {
-        changes.push({ homeId: cr.home_id, from: cr.role_id, to: null });
+      // Build audit diff inside transaction so it rolls back with the role changes
+      const changes = [];
+      for (const { homeId, roleId } of parsed.data.roles) {
+        const oldRole = oldRoleMap.get(homeId);
+        if (oldRole !== roleId) changes.push({ homeId, from: oldRole || null, to: roleId });
       }
-    }
+      for (const cr of currentRoles) {
+        if (!finalDesiredHomeIds.has(cr.home_id)) {
+          changes.push({ homeId: cr.home_id, from: cr.role_id, to: null });
+        }
+      }
 
-    if (changes.length > 0) {
-      await auditService.log('user_roles_update', '-', req.user.username, {
-        userId: id.data, username: user.username, changes,
-      });
-      await authService.revokeUser(user.username);
-    }
+      if (changes.length > 0) {
+        await auditService.log('user_roles_update', '-', req.user.username, {
+          userId: id.data, username: user.username, changes,
+        }, client);
+        needsRevoke = true;
+      }
+    });
+    // Force re-login so JWT reflects new permissions — outside transaction (deny-list is independent)
+    if (needsRevoke) await authService.revokeUser(user.username);
 
     res.json({ ok: true, roles: parsed.data.roles });
   } catch (err) { next(err); }

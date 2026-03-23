@@ -210,12 +210,16 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     : 0;
 
   if (basis === 'w1m1') {
-    // Week1/Month1: treat each period as standalone — no YTD
+    // Week1/Month1: treat each period as standalone — no YTD.
     // Note: 0T is NOT forced to W1/M1 — it can be issued on a cumulative basis.
     // W1/M1 basis is indicated only via the tax_codes.basis DB field (set by manager).
+    //
+    // Annualise the period taxable income, apply the full annual band table, then
+    // de-annualise. This correctly handles higher-rate W1/M1 taxpayers — without this,
+    // a high-earner's entire period income falls in the basic-rate band (under-deduction).
     const taxableThisPeriod = Math.max(0, grossPay - periodAllowance);
-    const totalTaxDue = computeTax(taxableThisPeriod, taxBands, parsedCode);
-    const tax = Math.max(0, round2(totalTaxDue));
+    const annualTaxDue = computeTax(taxableThisPeriod * periodsInYear, taxBands, parsedCode);
+    const tax = Math.max(0, round2(annualTaxDue / periodsInYear));
     return { tax, taxableIncome: round2(taxableThisPeriod), isRefund: false };
   }
 

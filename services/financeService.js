@@ -142,6 +142,9 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
   return withTransaction(async (client) => {
     const existing = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
     if (!existing) return null;
+    if (existing.status === 'void' || existing.status === 'credited') {
+      throw Object.assign(new Error(`Cannot update a ${existing.status} invoice`), { statusCode: 400 });
+    }
 
     // Validate resident belongs to this home if resident_id is being changed
     const residentChanged = 'resident_id' in data && data.resident_id != null && data.resident_id !== existing.resident_id;
@@ -492,9 +495,17 @@ export async function rejectExpense(id, homeId, rejector, reason) {
 // ── Soft Delete ─────────────────────────────────────────────────────────────
 
 export async function softDeleteResident(id, homeId, username) {
-  const deleted = await financeRepo.softDelete('resident', id, homeId);
-  if (deleted) logger.info({ homeId, residentId: id, deletedBy: username }, 'Finance resident soft-deleted');
-  return deleted;
+  return withTransaction(async (client) => {
+    // Guard: block deletion if there are any outstanding (unpaid) invoices
+    const existing = await financeRepo.findResidentById(id, homeId, client);
+    if (!existing) return false;
+    if (parseFloat(existing.outstanding_balance || 0) > 0) {
+      throw Object.assign(new Error('Cannot delete resident with outstanding balance. Zero the balance first.'), { statusCode: 400 });
+    }
+    const deleted = await financeRepo.softDelete('resident', id, homeId, client);
+    if (deleted) logger.info({ homeId, residentId: id, deletedBy: username }, 'Finance resident soft-deleted');
+    return deleted;
+  });
 }
 
 export async function softDeleteInvoice(id, homeId, username) {
