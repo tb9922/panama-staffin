@@ -143,8 +143,9 @@ export async function getTrainingCounts(homeId, today) {
          AND jsonb_typeof(config -> 'training_types') = 'array'
      ),
      latest_records AS (
+       -- Include staff.role so role-applicability can be checked per record below.
        SELECT DISTINCT ON (tr.staff_id, tr.training_type_id)
-              tr.staff_id, tr.training_type_id, tr.expiry
+              tr.staff_id, tr.training_type_id, tr.expiry, s.role AS staff_role
        FROM training_records tr
        JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
        WHERE tr.home_id = $1
@@ -160,6 +161,8 @@ export async function getTrainingCounts(homeId, today) {
              SELECT 1 FROM active_types
              WHERE t->>'id' = lr.training_type_id
                AND (t->>'active')::boolean IS NOT FALSE
+               -- roles: null/missing = required for all staff; array = check membership
+               AND (t->>'roles' IS NULL OR t->'roles' @> to_jsonb(lr.staff_role))
            )
        )::int AS expired,
        COUNT(*) FILTER (
@@ -168,6 +171,7 @@ export async function getTrainingCounts(homeId, today) {
              SELECT 1 FROM active_types
              WHERE t->>'id' = lr.training_type_id
                AND (t->>'active')::boolean IS NOT FALSE
+               AND (t->>'roles' IS NULL OR t->'roles' @> to_jsonb(lr.staff_role))
            )
        )::int AS expiring_soon
      FROM latest_records lr`,

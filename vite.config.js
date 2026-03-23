@@ -24,6 +24,9 @@ export default defineConfig({
             'tests/**/*.test.js',
           ],
           setupFiles: ['src/test/setup.js'],
+          testTimeout: 15000,
+          // Fast bcrypt for tests — cost 4 vs production 12 (~1ms vs ~300ms per hash)
+          env: { BCRYPT_ROUNDS: '4' },
         },
       },
       {
