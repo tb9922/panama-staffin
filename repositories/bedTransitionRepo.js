@@ -68,32 +68,46 @@ export async function getMonthlyOccupancy(homeId, months = 12, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedTransitionRepo – getMonthlyOccupancy */
-     WITH month_series AS (
-       SELECT TO_CHAR(d, 'YYYY-MM') AS month
-       FROM generate_series(
-         DATE_TRUNC('month', CURRENT_DATE - make_interval(months => $2)),
-         DATE_TRUNC('month', CURRENT_DATE),
-         '1 month'
-       ) AS d
+     WITH months AS (
+       SELECT generate_series(
+         date_trunc('month', NOW()) - INTERVAL '${months - 1} months',
+         date_trunc('month', NOW()),
+         INTERVAL '1 month'
+       ) AS month_start
      ),
-     bed_counts AS (
+     bed_list AS (
+       SELECT id FROM beds WHERE home_id = $1 AND deleted_at IS NULL
+     ),
+     bed_month_status AS (
        SELECT
-         COUNT(*)::int AS total,
-         COALESCE(COUNT(*) FILTER (WHERE status = 'occupied'), 0)::int AS occupied,
-         COALESCE(COUNT(*) FILTER (WHERE status = 'decommissioned'), 0)::int AS decommissioned
-       FROM beds
-       WHERE home_id = $1
+         bl.id AS bed_id,
+         m.month_start,
+         (
+           SELECT bt2.to_status
+           FROM bed_transitions bt2
+           WHERE bt2.bed_id = bl.id
+             AND bt2.changed_at <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 second')
+           ORDER BY bt2.changed_at DESC
+           LIMIT 1
+         ) AS status_at_month_end
+       FROM bed_list bl
+       CROSS JOIN months m
      )
      SELECT
-       ms.month,
-       CASE WHEN (bc.total - bc.decommissioned) > 0
-         THEN ROUND(bc.occupied::numeric / (bc.total - bc.decommissioned) * 100, 2)
-         ELSE 100
-       END AS occupancy_rate
-     FROM month_series ms
-     CROSS JOIN bed_counts bc
-     ORDER BY ms.month`,
-    [homeId, months]
+       TO_CHAR(month_start, 'Mon YYYY') AS month,
+       COUNT(*) FILTER (WHERE status_at_month_end = 'occupied')::int AS occupied,
+       COUNT(*) FILTER (WHERE status_at_month_end = 'available')::int AS available,
+       COUNT(*) FILTER (WHERE status_at_month_end = 'reserved')::int AS reserved,
+       COUNT(*)::int AS total,
+       ROUND(
+         COUNT(*) FILTER (WHERE status_at_month_end = 'occupied')::numeric /
+         NULLIF(COUNT(*), 0) * 100,
+         1
+       ) AS occupancy_rate
+     FROM bed_month_status
+     GROUP BY month_start
+     ORDER BY month_start`,
+    [homeId]
   );
   return rows.map(r => ({ month: r.month, occupancyRate: f(r.occupancy_rate) }));
 }

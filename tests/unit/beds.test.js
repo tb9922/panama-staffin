@@ -246,8 +246,8 @@ describe('defaultReservedUntil', () => {
 
   it('returns a date 7 days in the future', () => {
     const result = defaultReservedUntil();
-    const expected = new Date();
-    expected.setDate(expected.getDate() + 7);
+    const now = new Date();
+    const expected = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7));
     expect(result).toBe(expected.toISOString().slice(0, 10));
   });
 });

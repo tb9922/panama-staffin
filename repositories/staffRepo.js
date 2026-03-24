@@ -119,6 +119,7 @@ export async function sync(homeId, staffArr, client) {
          al_carryover   = EXCLUDED.al_carryover,
          leaving_date   = EXCLUDED.leaving_date,
          updated_at     = NOW(),
+         version        = staff.version + 1,
          deleted_at     = NULL`,
       [homeId, ...values]
     );
