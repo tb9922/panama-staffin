@@ -133,6 +133,7 @@ export default function RiskRegister() {
       actions: risk.actions || [],
       last_reviewed: risk.last_reviewed || '', next_review: risk.next_review || '',
       status: risk.status || 'open',
+      _version: risk.version,
     });
     setActiveTab('details');
     setSaveError(null);
@@ -145,6 +146,7 @@ export default function RiskRegister() {
       ...form,
       risk_score: getRiskScore(form.likelihood, form.impact),
       residual_score: getRiskScore(form.residual_likelihood, form.residual_impact),
+      _version: form._version,
     };
     try {
       if (editingId) {

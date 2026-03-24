@@ -303,7 +303,8 @@ export default function GdprDashboard() {
     if (!await confirm('Withdraw this consent record? This cannot be undone.')) return;
     setSaving(true);
     try {
-      await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
+      const record = consent.find(c => c.id === id);
+      await updateConsentRecord(home, id, { withdrawn: new Date().toISOString(), _version: record?.version });
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }

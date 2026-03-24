@@ -117,6 +117,7 @@ export default function WhistleblowingTracker() {
       follow_up_completed: !!concern.follow_up_completed,
       resolution_date: concern.resolution_date || '',
       lessons_learned: concern.lessons_learned || '',
+      _version: concern.version,
     });
     setActiveTab('details');
     setSaveError(null);
@@ -127,7 +128,7 @@ export default function WhistleblowingTracker() {
     if (!form.date_raised || !form.category || !form.severity) return;
     try {
       if (editingId) {
-        await updateWhistleblowingConcern(homeSlug, editingId, form);
+        await updateWhistleblowingConcern(homeSlug, editingId, { ...form, _version: form._version });
       } else {
         await createWhistleblowingConcern(homeSlug, form);
       }
