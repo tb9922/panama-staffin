@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { config } from '../config.js';
+import { withTransaction } from '../db.js';
 import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as authService from './authService.js';
@@ -70,7 +71,7 @@ export async function createUser(username, password, role, displayName, createdB
   }
 
   if (role === 'admin') {
-    await userHomeRepo.grantAllHomesRole(username);
+    await userHomeRepo.grantAllHomesRole(username, client);
   }
 
   return user;
@@ -88,29 +89,39 @@ export async function updateUser(id, fields, actorUsername) {
     throw new Error('Cannot deactivate your own account');
   }
 
-  // Cannot deactivate or downgrade the last admin
+  // Cannot deactivate or downgrade the last admin.
+  // Use a transaction with row-level lock to prevent TOCTOU: two concurrent requests
+  // could both pass the count check and both deactivate the last admin.
   const isRemovingAdmin =
     (fields.active === false && target.role === 'admin') ||
-    (fields.role === 'viewer' && target.role === 'admin' && target.active);
+    (fields.role !== undefined && fields.role !== 'admin' && target.role === 'admin' && target.active);
 
+  let updated;
   if (isRemovingAdmin) {
-    const adminCount = await userRepo.countActiveAdmins();
-    if (adminCount <= 1) {
-      throw new Error('Cannot remove the last active admin');
-    }
+    updated = await withTransaction(async (client) => {
+      // Lock the target row so concurrent requests serialise here
+      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
+      const adminCount = await userRepo.countActiveAdmins(client);
+      if (adminCount <= 1) {
+        throw new Error('Cannot remove the last active admin');
+      }
+      return userRepo.update(id, fields, client);
+    });
+  } else {
+    updated = await userRepo.update(id, fields);
   }
 
-  const updated = await userRepo.update(id, fields);
-
-  // If deactivated, immediately revoke all tokens
+  // If deactivated, immediately revoke all tokens.
+  // Use scope='admin' so the sentinel is NOT cleared if the user somehow re-authenticates.
   if (fields.active === false) {
-    await authService.revokeUser(target.username);
+    await authService.revokeUser(target.username, 'admin');
   }
 
-  // If role changed, force re-login so new JWT has correct claims
-  // (is_platform_admin is stripped above and only settable via direct DB)
+  // If role changed, force re-login so new JWT has correct claims.
+  // Use scope='admin' so the sentinel survives clearForUser on re-login; without this,
+  // the user could log in again immediately and reactivate old JWTs with the old role.
   if (fields.role && fields.role !== target.role) {
-    await authService.revokeUser(target.username);
+    await authService.revokeUser(target.username, 'admin');
     // If upgraded to admin, grant all homes
     if (fields.role === 'admin' && fields.role !== target.role) {
       await userHomeRepo.grantAllHomesRole(target.username);
@@ -132,7 +143,11 @@ export async function resetPassword(userId, newPassword, _actorUsername) {
   // Clear lockout so the user can immediately log in with the new password
   await userRepo.resetFailedLogin(target.username);
 
-  // Revoke all existing tokens — forces re-login with new password
+  // Revoke all existing tokens — forces re-login with new password.
+  // scope='user' so clearForUser on re-login clears the sentinel and the user
+  // can log back in with the new password. The window for old-token reuse is
+  // bounded by the JWT TTL (4h); DB re-verification in requireAdmin closes
+  // any role-escalation gap for that window.
   await authService.revokeUser(target.username);
 }
 

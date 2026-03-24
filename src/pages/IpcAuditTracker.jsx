@@ -101,6 +101,7 @@ export default function IpcAuditTracker() {
       corrective_actions: audit.corrective_actions || [],
       outbreak: audit.outbreak ? { ...EMPTY_FORM.outbreak, ...audit.outbreak } : { ...EMPTY_FORM.outbreak },
       notes: audit.notes || '',
+      _version: audit.version,
     });
     setActiveTab('details');
     setSaveError(null);
@@ -115,6 +116,7 @@ export default function IpcAuditTracker() {
       overall_score: form.overall_score !== '' ? Number(form.overall_score) : null,
       compliance_pct: form.compliance_pct !== '' ? Number(form.compliance_pct) : null,
       outbreak: form.outbreak.suspected ? form.outbreak : null,
+      _version: form._version,
     };
 
     try {

@@ -164,27 +164,33 @@ describe('Account lockout', () => {
   });
 });
 
-// ── Role Change Token Revocation ────────────────────────────────────────────
+// ── Per-home Role Change: DB-checked, no token revocation ───────────────────
+//
+// Per-home roles are read from the DB on every authenticated request via
+// requireHomeAccess. There is no JWT claim for per-home roles, so revocation
+// is unnecessary — the new role takes effect immediately without invalidating
+// the existing token.
 
-describe('Role change revokes tokens', () => {
-  it('existing token is revoked when role changes', async () => {
+describe('Per-home role change takes effect without token revocation', () => {
+  it('existing token still works after per-home role changes', async () => {
     // Login as lockout user to get a token
     const loginRes = await request(app).post('/api/login').send({ username: LOCKOUT_USER, password: LOCKOUT_PW });
     expect(loginRes.status).toBe(200);
-    const viewerToken = loginRes.body.token;
+    const userToken = loginRes.body.token;
 
     // Admin changes lockout user's role at this home
-    await request(app)
+    const roleRes = await request(app)
       .put(`/api/users/${lockoutUserId}/roles`)
       .query({ home: `${TEST_PREFIX}-home` })
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ roleId: 'deputy_manager' });
+    expect(roleRes.status).toBe(200);
 
-    // Old token should now be denied
+    // Token should still be valid — per-home roles are DB-checked, not JWT-cached
     const checkRes = await request(app)
       .get('/api/homes')
-      .set('Authorization', `Bearer ${viewerToken}`);
-    expect(checkRes.status).toBe(401);
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(checkRes.status).toBe(200);
 
     // Change role back to viewer for cleanup
     await request(app)

@@ -70,7 +70,8 @@ export async function create(username, passwordHash, role, displayName, createdB
   return rows[0];
 }
 
-export async function update(id, fields) {
+export async function update(id, fields, client) {
+  const conn = client || pool;
   const sets = [];
   const vals = [];
   let idx = 1;
@@ -86,7 +87,7 @@ export async function update(id, fields) {
   sets.push(`updated_at = NOW()`);
   vals.push(id);
 
-  const { rows } = await pool.query(
+  const { rows } = await conn.query(
     `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx} RETURNING ${SAFE_COLUMNS}`,
     vals
   );
@@ -107,8 +108,9 @@ export async function updateLastLogin(username) {
   );
 }
 
-export async function countActiveAdmins() {
-  const { rows } = await pool.query(
+export async function countActiveAdmins(client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     "SELECT COUNT(*)::int AS count FROM users WHERE role = 'admin' AND active = true"
   );
   return rows[0].count;

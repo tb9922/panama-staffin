@@ -143,6 +143,7 @@ export default function StaffRegister() {
         ...editingRow,
         start_date: editingRow.start_date || null,
         leaving_date: editingRow.leaving_date || null,
+        _version: editingRow.version,
       };
       const result = await updateStaffMember(homeSlug, editingRow.id, cleaned);
       setEditing(null);

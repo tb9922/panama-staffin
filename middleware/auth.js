@@ -48,8 +48,18 @@ export async function requireAuth(req, res, next) {
   }
 }
 
-export function requireAdmin(req, res, next) {
+export async function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden — admin role required' });
+  // Re-verify role from DB — JWT claim may be stale (admin downgraded after last login).
+  // Without this, a demoted admin retains requireAdmin access for the JWT's remaining TTL.
+  try {
+    const dbUser = await findUserByUsername(req.user.username);
+    if (dbUser?.role !== 'admin' || !dbUser.active) {
+      return res.status(403).json({ error: 'Forbidden — admin role required' });
+    }
+  } catch {
+    return res.status(403).json({ error: 'Forbidden — admin role required' });
+  }
   next();
 }
 
@@ -61,7 +71,7 @@ export async function requirePlatformAdmin(req, res, next) {
   // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
   try {
     const dbUser = await findUserByUsername(req.user.username);
-    if (!dbUser?.is_platform_admin) {
+    if (!dbUser?.is_platform_admin || !dbUser.active) {
       return res.status(403).json({ error: 'Platform admin access required' });
     }
   } catch {
@@ -90,7 +100,7 @@ export async function requireHomeAccess(req, res, next) {
   if (req.user.is_platform_admin) {
     try {
       const dbUser = await findUserByUsername(req.user.username);
-      if (dbUser?.is_platform_admin) {
+      if (dbUser?.is_platform_admin && dbUser.active) {
         req.home = home;
         req.homeRole = 'home_manager';
         req.staffId = null;

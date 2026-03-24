@@ -41,6 +41,7 @@ async function fireWebhook(hook, event, payload) {
     ? payload // retries pass the original serialised body
     : JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
   const signature = crypto.createHmac('sha256', hook.secret).update(body).digest('hex');
+  const requestId = crypto.randomUUID();
   const start = Date.now();
   let statusCode = null;
   let error = null;
@@ -63,11 +64,18 @@ async function fireWebhook(hook, event, payload) {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': `sha256=${signature}`,
         'X-Webhook-Event': event,
+        'X-Webhook-Request-ID': requestId,
       },
       body,
       signal: controller.signal,
+      redirect: 'manual',
     });
     statusCode = res.status;
+    // Reject redirects — following them would bypass the pre-request SSRF validation
+    if (statusCode >= 300 && statusCode < 400) {
+      error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
+      statusCode = null;
+    }
   } catch (fetchErr) {
     error = fetchErr.message;
   } finally {
@@ -104,8 +112,18 @@ async function fireWebhook(hook, event, payload) {
 export async function processRetries() {
   let processed = 0;
   try {
+    // Rescue any rows stuck in 'in_progress' for >10 min (process crash during prior fetch)
+    const rescued = await webhookRepo.rescueStuckInProgress();
+    if (rescued > 0) {
+      logger.warn({ rescued }, 'Rescued webhook deliveries stuck in_progress');
+    }
+
     const pending = await webhookRepo.findPendingRetries(20);
     for (const delivery of pending) {
+      // Mark in_progress BEFORE the HTTP fetch so a process crash during delivery
+      // doesn't leave the row as pending_retry and cause a duplicate delivery.
+      await webhookRepo.markDeliveryInProgress(delivery.id);
+
       // Skip if webhook was deactivated since the original dispatch
       if (!delivery.active) {
         await webhookRepo.markDeliveryFailed(delivery.id);
@@ -121,6 +139,7 @@ export async function processRetries() {
         ? delivery.payload
         : JSON.stringify(delivery.payload);
       const signature = crypto.createHmac('sha256', delivery.secret).update(body).digest('hex');
+      const requestId = crypto.randomUUID();
 
       // Re-validate URL at retry time to prevent DNS rebinding SSRF
       if (await resolvedToPrivateIp(delivery.url)) {
@@ -139,11 +158,18 @@ export async function processRetries() {
             'Content-Type': 'application/json',
             'X-Webhook-Signature': `sha256=${signature}`,
             'X-Webhook-Event': delivery.event,
+            'X-Webhook-Request-ID': requestId,
           },
           body,
           signal: controller.signal,
+          redirect: 'manual',
         });
         statusCode = res.status;
+        // Reject redirects — following them would bypass the pre-request SSRF validation
+        if (statusCode >= 300 && statusCode < 400) {
+          error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
+          statusCode = null;
+        }
       } catch (fetchErr) {
         error = fetchErr.message;
       } finally {

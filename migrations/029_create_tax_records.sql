@@ -101,7 +101,7 @@ INSERT INTO ni_rates (tax_year, ni_category, rate_type, rate) VALUES
 ON CONFLICT (tax_year, ni_category, rate_type) DO NOTHING;
 
 -- Student loan repayment thresholds.
--- plan: '1' | '2' | 'PG'
+-- plan: '1' | '2' | '4' (Scotland) | 'PG'
 CREATE TABLE IF NOT EXISTS student_loan_thresholds (
   id              SERIAL PRIMARY KEY,
   tax_year        INTEGER NOT NULL,

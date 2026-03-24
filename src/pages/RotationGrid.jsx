@@ -421,7 +421,6 @@ export default function RotationGrid() {
 
   if (!schedData) return null;
 
-  let lastTeam = null;
 
   const CoverageRow = ({ label, before, after }) => {
     if (!before || !after) return null;
@@ -529,9 +528,8 @@ export default function RotationGrid() {
             </tr>
           </thead>
           <tbody>
-            {activeStaff.map(s => {
-              const showTeamHeader = s.team !== lastTeam;
-              lastTeam = s.team;
+            {activeStaff.map((s, i) => {
+              const showTeamHeader = i === 0 || activeStaff[i - 1]?.team !== s.team;
               const stats = staffStats[s.id];
               return [
                 showTeamHeader && (

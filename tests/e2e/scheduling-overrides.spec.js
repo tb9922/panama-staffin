@@ -1,3 +1,4 @@
+/* eslint-disable no-undef -- page.evaluate runs in browser context */
 import { test, expect } from '@playwright/test';
 
 // Uses pre-authenticated admin state from auth.setup.js

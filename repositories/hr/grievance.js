@@ -109,7 +109,8 @@ export async function updateGrievance(id, homeId, data, client, version) {
     }
   }
   fields.push('version = version + 1');
-  if (fields.length === 1) return findGrievanceById(id, homeId, client);
+  fields.push('updated_at = NOW()');
+  if (fields.length === 2) return findGrievanceById(id, homeId, client);
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(

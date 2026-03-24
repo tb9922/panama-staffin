@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   approved_by: '',
   changes: [],
   notes: '',
+  _version: undefined,
 };
 
 export default function PolicyReviewTracker() {
@@ -110,7 +111,7 @@ export default function PolicyReviewTracker() {
       policy_name: policy.policy_name || '',
       policy_ref: policy.policy_ref || '',
       category: policy.category || '',
-      version: policy.version || '1.0',
+      version: policy.doc_version || '1.0',
       last_reviewed: policy.last_reviewed || '',
       next_review_due: policy.next_review_due || '',
       review_frequency_months: policy.review_frequency_months || 12,
@@ -118,6 +119,7 @@ export default function PolicyReviewTracker() {
       approved_by: policy.approved_by || '',
       changes: policy.changes || [],
       notes: policy.notes || '',
+      _version: policy.version,
     });
     setSaveError(null);
     setShowModal(true);
@@ -133,7 +135,9 @@ export default function PolicyReviewTracker() {
 
     const record = {
       ...form,
+      doc_version: form.version,
       next_review_due: nextDue,
+      _version: form._version,
     };
 
     try {
@@ -157,7 +161,7 @@ export default function PolicyReviewTracker() {
     const policy = policies.find(p => p.id === editingId);
     if (!policy) return;
 
-    const oldVersion = policy.version || '1.0';
+    const oldVersion = policy.doc_version || '1.0';
 
     // Bump version: "1.0" -> "1.1", "2.3" -> "2.4"
     const parts = oldVersion.split('.');
@@ -174,10 +178,12 @@ export default function PolicyReviewTracker() {
 
     const record = {
       ...form,
+      doc_version: newVersion,
+      version: newVersion,
       last_reviewed: today,
       next_review_due: nextDue,
-      version: newVersion,
       changes: [...(policy.changes || []), newChange],
+      _version: form._version,
     };
 
     try {

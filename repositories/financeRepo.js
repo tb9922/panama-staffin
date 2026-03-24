@@ -127,10 +127,10 @@ export async function findResidentsWithBeds(homeId, { status, fundingType, searc
   return { rows: rows.map(shapeResidentWithBed), total };
 }
 
-export async function findResidentById(id, homeId, client) {
+export async function findResidentById(id, homeId, client, { forUpdate = false } = {}) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    `SELECT ${RESIDENT_COLS} FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
+  const sql = `SELECT ${RESIDENT_COLS} FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
+  const { rows } = await conn.query(sql, [id, homeId]);
   return shapeResident(rows[0]);
 }
 
@@ -194,7 +194,7 @@ export async function countActiveResidents(homeId, client) {
 
 // ── Resident Payment Tracking (system-managed) ──────────────────────────────
 
-const OUTSTANDING_STATUSES = "('sent', 'overdue', 'partially_paid')";
+const OUTSTANDING_STATUSES = ['sent', 'overdue', 'partially_paid'];
 
 export async function recalculateResidentBalance(residentId, homeId, client) {
   const conn = client || pool;
@@ -202,12 +202,12 @@ export async function recalculateResidentBalance(residentId, homeId, client) {
     UPDATE finance_residents SET outstanding_balance = COALESCE((
       SELECT SUM(balance_due) FROM finance_invoices
       WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL
-        AND status IN ${OUTSTANDING_STATUSES}
+        AND status = ANY($3::text[])
         AND balance_due > 0
     ), 0)
     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
     RETURNING outstanding_balance
-  `, [residentId, homeId]);
+  `, [residentId, homeId, OUTSTANDING_STATUSES]);
   const bal = rows[0]?.outstanding_balance;
   return bal != null ? parseFloat(bal) : 0;
 }
@@ -221,11 +221,11 @@ export async function updateResidentPaymentInfo(residentId, homeId, paymentDate,
       outstanding_balance = COALESCE((
         SELECT SUM(balance_due) FROM finance_invoices
         WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL
-          AND status IN ${OUTSTANDING_STATUSES}
+          AND status = ANY($5::text[])
           AND balance_due > 0
       ), 0)
     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
-  `, [residentId, homeId, paymentDate, paymentAmount]);
+  `, [residentId, homeId, paymentDate, paymentAmount, OUTSTANDING_STATUSES]);
 }
 
 export async function getResidentsWithOutstandingBalance(homeId, limit = 5) {

@@ -3,7 +3,11 @@ import { z } from 'zod';
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
 export const idSchema = z.coerce.number().int().positive();
-export const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+export const dateSchema = z.preprocess(
+  v => v === '' ? null : v,
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()
+    .refine(v => v === null || !isNaN(Date.parse(v + 'T00:00:00Z')), 'Invalid date')
+);
 export const staffIdSchema = z.string().min(1).max(20);
 export const caseTypeSchema = z.enum([
   'disciplinary', 'grievance', 'performance', 'rtw_interview',
@@ -449,7 +453,7 @@ export const ediBodySchema = z.object({
   access_to_work_amount: z.number().nullable().optional(),
   // Common
   description:          z.string().max(5000).nullable().optional(),
-  status:               z.string().max(50).nullable().optional(),
+  status:               z.enum(['open', 'investigating', 'resolved', 'closed', 'escalated']).nullable().optional(),
   outcome:              z.string().max(5000).nullable().optional(),
   notes:                z.string().max(5000).nullable().optional(),
 });
@@ -476,7 +480,7 @@ export const ediUpdateSchema = z.object({
   access_to_work_reference: z.string().max(200).nullable().optional(),
   access_to_work_amount: z.number().nullable().optional(),
   description:          z.string().max(5000).nullable().optional(),
-  status:               z.string().max(50).nullable().optional(),
+  status:               z.enum(['open', 'investigating', 'resolved', 'closed', 'escalated']).nullable().optional(),
   outcome:              z.string().max(5000).nullable().optional(),
   notes:                z.string().max(5000).nullable().optional(),
 });

@@ -35,7 +35,7 @@ vi.mock('../../components/StaffPicker.jsx', () => ({
 import * as api from '../../lib/api.js';
 
 const MOCK_SSP_CONFIG = {
-  weekly_rate: '116.75',
+  weekly_rate: '118.75',
   waiting_days: 0,
   max_weeks: 28,
   lel_weekly: null,

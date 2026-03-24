@@ -84,7 +84,7 @@ export default function MaintenanceTracker() {
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item });
+    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
     setSaveError(null);
     setShowModal(true);
   }
@@ -104,7 +104,7 @@ export default function MaintenanceTracker() {
 
     try {
       if (editingId) {
-        await updateMaintenanceCheck(home, editingId, saveItem);
+        await updateMaintenanceCheck(home, editingId, { ...saveItem, _version: form._version });
       } else {
         await createMaintenanceCheck(home, saveItem);
       }

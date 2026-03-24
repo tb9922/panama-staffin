@@ -2,8 +2,8 @@ import { test as setup, expect } from '@playwright/test';
 import fs from 'fs';
 
 const USERS = [
-  { username: 'admin', password: 'admin123', stateFile: '.playwright/admin-state.json' },
-  { username: 'viewer', password: 'view123', stateFile: '.playwright/viewer-state.json' },
+  { username: 'admin', password: 'admin12345', stateFile: '.playwright/admin-state.json' },
+  { username: 'viewer', password: 'viewer12345', stateFile: '.playwright/viewer-state.json' },
 ];
 
 /**

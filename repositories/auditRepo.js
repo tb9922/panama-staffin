@@ -2,9 +2,10 @@ import { pool } from '../db.js';
 
 export async function log(action, homeSlug, username, details, client) {
   const conn = client || pool;
+  const detailsValue = details != null ? JSON.stringify(details) : null;
   await conn.query(
     `INSERT INTO audit_log (action, home_slug, user_name, details) VALUES ($1,$2,$3,$4)`,
-    [action, homeSlug || null, username || null, details || null]
+    [action, homeSlug || null, username || null, detailsValue]
   );
 }
 

@@ -236,6 +236,13 @@ function DashboardInner({ schedData }) {
         </div>
       </div>
 
+      {/* Degraded data banner — shown when one or more dashboard module queries failed */}
+      {summary?._degraded && (
+        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800">
+          Some dashboard data could not be loaded ({summary._failedModules.join(', ')}). Displayed counts may be incomplete.
+        </div>
+      )}
+
       {/* Today's Coverage Gauges */}
       <div className={`${CARD.padded} mb-6 cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate(`/day/${formatDate(today)}`)}>
         <div className="flex items-center justify-between mb-4">

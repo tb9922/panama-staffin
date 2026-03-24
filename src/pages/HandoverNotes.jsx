@@ -75,7 +75,7 @@ export default function HandoverNotes() {
   }
 
   function openEdit(entry) {
-    setForm({ shift: entry.shift, category: entry.category, priority: entry.priority, content: entry.content, incident_id: entry.incident_id || '' });
+    setForm({ shift: entry.shift, category: entry.category, priority: entry.priority, content: entry.content, incident_id: entry.incident_id || '', _version: entry.version });
     setEditId(entry.id);
     setModal('edit');
   }
@@ -95,7 +95,7 @@ export default function HandoverNotes() {
         const created = await createHandoverEntry(slug, body);
         setEntries(prev => [...prev, created].sort(sortEntries));
       } else {
-        const updated = await updateHandoverEntry(slug, editId, { content: form.content.trim(), priority: form.priority });
+        const updated = await updateHandoverEntry(slug, editId, { content: form.content.trim(), priority: form.priority, _version: form._version });
         setEntries(prev => prev.map(e => e.id === editId ? updated : e));
       }
       closeModal();

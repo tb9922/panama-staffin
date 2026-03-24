@@ -199,7 +199,7 @@ export default function ComplaintsTracker() {
 
   function openEditSurvey(item) {
     setEditingSurveyId(item.id);
-    setSurveyForm({ ...EMPTY_SURVEY, ...item });
+    setSurveyForm({ ...EMPTY_SURVEY, ...item, _version: item.version });
     setSurveyError(null);
     setShowSurveyModal(true);
   }
@@ -210,7 +210,7 @@ export default function ComplaintsTracker() {
     setSaving(true);
     try {
       if (editingSurveyId) {
-        await updateComplaintSurvey(home, editingSurveyId, surveyForm);
+        await updateComplaintSurvey(home, editingSurveyId, { ...surveyForm, _version: surveyForm._version });
       } else {
         await createComplaintSurvey(home, surveyForm);
       }

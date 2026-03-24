@@ -62,8 +62,8 @@ async function seed() {
     await client.query('BEGIN');
 
     // Create test users in the users table (DB-backed auth)
-    const adminHash = await bcrypt.hash('admin123', 12);
-    const viewerHash = await bcrypt.hash('view123', 12);
+    const adminHash = await bcrypt.hash('admin12345', 12);
+    const viewerHash = await bcrypt.hash('viewer12345', 12);
 
     await client.query(`
       INSERT INTO users (username, password_hash, role, display_name, is_platform_admin)

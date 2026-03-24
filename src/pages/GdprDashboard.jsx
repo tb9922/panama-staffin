@@ -271,20 +271,15 @@ export default function GdprDashboard() {
 
   async function handleUpdateStatus(type, id, status) {
     if (saving) return;
+    const record = type === 'request' ? requests.find(r => r.id === id)
+      : type === 'breach' ? breaches.find(b => b.id === id)
+      : complaints.find(c => c.id === id);
+    const _version = record?.version;
     setSaving(true);
     try {
-      // Include _version for optimistic concurrency (matches handleSaveDecision pattern)
-      let record;
-      if (type === 'request') {
-        record = requests.find(r => r.id === id);
-        await updateDataRequest(home, id, { status, _version: record?.version });
-      } else if (type === 'breach') {
-        record = breaches.find(b => b.id === id);
-        await updateDataBreach(home, id, { status, _version: record?.version });
-      } else if (type === 'complaint') {
-        record = complaints.find(c => c.id === id);
-        await updateDPComplaint(home, id, { status, _version: record?.version });
-      }
+      if (type === 'request') await updateDataRequest(home, id, { status, _version });
+      else if (type === 'breach') await updateDataBreach(home, id, { status, _version });
+      else if (type === 'complaint') await updateDPComplaint(home, id, { status, _version });
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -303,7 +298,8 @@ export default function GdprDashboard() {
     if (!await confirm('Withdraw this consent record? This cannot be undone.')) return;
     setSaving(true);
     try {
-      await updateConsentRecord(home, id, { withdrawn: new Date().toISOString() });
+      const record = consent.find(c => c.id === id);
+      await updateConsentRecord(home, id, { withdrawn: new Date().toISOString(), _version: record?.version });
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }

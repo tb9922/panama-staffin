@@ -1,23 +1,22 @@
 import { pool } from './shared.js';
 import { getActiveWarnings } from './warnings.js';
 
-export async function getHrStats(homeId, client) {
-  const conn = client || pool;
+export async function getHrStats(homeId) {
   const [disc, grv, perf, warnings, flex] = await Promise.all([
-    conn.query(
+    pool.query(
       `SELECT status, COUNT(*) as c FROM hr_disciplinary_cases
        WHERE home_id = $1 AND deleted_at IS NULL AND status NOT IN ('closed','withdrawn')
        GROUP BY status`, [homeId]),
-    conn.query(
+    pool.query(
       `SELECT status, COUNT(*) as c FROM hr_grievance_cases
        WHERE home_id = $1 AND deleted_at IS NULL AND status NOT IN ('closed','withdrawn')
        GROUP BY status`, [homeId]),
-    conn.query(
+    pool.query(
       `SELECT status, COUNT(*) as c FROM hr_performance_cases
        WHERE home_id = $1 AND deleted_at IS NULL AND status NOT IN ('closed','withdrawn')
        GROUP BY status`, [homeId]),
-    getActiveWarnings(homeId, conn),
-    conn.query(
+    getActiveWarnings(homeId),
+    pool.query(
       `SELECT COUNT(*) as c FROM hr_flexible_working
        WHERE home_id = $1 AND deleted_at IS NULL AND decision IS NULL
          AND decision_deadline <= CURRENT_DATE + INTERVAL '14 days'`, [homeId]),
