@@ -81,16 +81,32 @@ if [ "${VERIFY_AFTER_BACKUP:-false}" = "true" ] && [ -f "./scripts/verify-backup
   echo "[$(date --iso-8601=seconds)] Restore verification passed"
 fi
 
-# ── Offsite upload (uncomment one) ────────────────────────────────────────────
+# ── Offsite upload (auto-detected from env vars) ──────────────────────────────
 
-# AWS S3:
-# aws s3 cp "${BACKUP_DIR}/${FILENAME}" "s3://panama-backups/${FILENAME}"
+if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
+  echo "[$(date --iso-8601=seconds)] Uploading DB backup to S3: ${BACKUP_S3_BUCKET}"
+  aws s3 cp "${BACKUP_DIR}/${FILENAME}" "s3://${BACKUP_S3_BUCKET}/${FILENAME}"
+  aws s3 cp "${BACKUP_DIR}/${FILENAME}.sha256" "s3://${BACKUP_S3_BUCKET}/${FILENAME}.sha256"
+  echo "[$(date --iso-8601=seconds)] S3 upload complete"
+elif [ -n "${BACKUP_SCP_TARGET:-}" ]; then
+  echo "[$(date --iso-8601=seconds)] Uploading DB backup via SCP: ${BACKUP_SCP_TARGET}"
+  scp "${BACKUP_DIR}/${FILENAME}" "${BACKUP_SCP_TARGET}/"
+  scp "${BACKUP_DIR}/${FILENAME}.sha256" "${BACKUP_SCP_TARGET}/"
+  echo "[$(date --iso-8601=seconds)] SCP upload complete"
+fi
 
-# Backblaze B2:
-# b2 upload-file panama-backups "${BACKUP_DIR}/${FILENAME}" "${FILENAME}"
+# ── Attachments backup (uploads directory) ────────────────────────────────────
 
-# SCP to NAS:
-# scp "${BACKUP_DIR}/${FILENAME}" backup@nas:/backups/panama/
+UPLOAD_DIR="${UPLOAD_DIR:-./uploads}"
+if [ -d "${UPLOAD_DIR}" ] && [ -n "${BACKUP_S3_BUCKET:-}" ]; then
+  echo "[$(date --iso-8601=seconds)] Syncing attachments to S3: ${BACKUP_S3_BUCKET}/uploads/"
+  aws s3 sync "${UPLOAD_DIR}" "s3://${BACKUP_S3_BUCKET}/uploads/" --quiet
+  echo "[$(date --iso-8601=seconds)] Attachments sync complete"
+elif [ -d "${UPLOAD_DIR}" ] && [ -n "${BACKUP_SCP_TARGET:-}" ]; then
+  echo "[$(date --iso-8601=seconds)] Syncing attachments via rsync: ${BACKUP_SCP_TARGET}/uploads/"
+  rsync -az --delete "${UPLOAD_DIR}/" "${BACKUP_SCP_TARGET}/uploads/"
+  echo "[$(date --iso-8601=seconds)] Attachments sync complete"
+fi
 
 # ── Retention — prune old local backups ───────────────────────────────────────
 

@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
@@ -57,6 +58,9 @@ import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from './repositori
 import { processRetries as processWebhookRetries } from './services/webhookService.js';
 
 const app = express();
+
+// Ensure uploads directory exists on startup (prevents ENOENT on first file upload)
+try { fs.mkdirSync(config.upload.dir, { recursive: true }); } catch { /* non-fatal */ }
 
 // Trust first proxy (nginx) so req.ip reflects the real client IP.
 // Without this, rate limiters use 127.0.0.1 for everyone behind a proxy.
