@@ -9,7 +9,6 @@ import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
-import * as authService from '../services/authService.js';
 import { ROLE_IDS, canAssignRole } from '../shared/roles.js';
 
 const router = Router();
