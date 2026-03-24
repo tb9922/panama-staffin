@@ -426,7 +426,7 @@ router.post('/runs/:runId/void', writeRateLimiter, requireAuth, requireHomeAcces
         const e = new Error(`Run status changed to "${existing.status}". Please refresh and try again.`);
         e.status = 409; throw e;
       }
-      const updated = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, client, version);
+      const updated = await payrollRunRepo.updateStatus(runIdP.data, req.home.id, 'voided', null, client, existing.version);
       if (updated === null) { const e = new Error('Record was modified by another user. Please refresh and try again.'); e.status = 409; throw e; }
       return updated;
     });

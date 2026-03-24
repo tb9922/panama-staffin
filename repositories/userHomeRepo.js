@@ -114,9 +114,11 @@ export async function revokeAllRolesForHome(homeId, client) {
 /**
  * Grant home_manager role on all existing homes (used when creating platform admin).
  * @param {string} username
+ * @param {object} [client] — optional transaction client
  */
-export async function grantAllHomesRole(username) {
-  await pool.query(
+export async function grantAllHomesRole(username, client) {
+  const conn = client || pool;
+  await conn.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
        SELECT $1, id, 'home_manager', 'system'
        FROM homes WHERE deleted_at IS NULL FOR SHARE

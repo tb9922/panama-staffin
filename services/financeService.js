@@ -29,7 +29,7 @@ export async function updateResident(id, homeId, data, username, version) {
   // Fee change requires transaction to prevent TOCTOU race
   if ('weekly_fee' in data && data.weekly_fee != null) {
     return withTransaction(async (client) => {
-      const existing = await financeRepo.findResidentById(id, homeId, client);
+      const existing = await financeRepo.findResidentById(id, homeId, client, { forUpdate: true });
       if (!existing) return null;
       const oldFee = existing.weekly_fee;
       const newFee = parseFloat(data.weekly_fee);

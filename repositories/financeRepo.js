@@ -127,10 +127,10 @@ export async function findResidentsWithBeds(homeId, { status, fundingType, searc
   return { rows: rows.map(shapeResidentWithBed), total };
 }
 
-export async function findResidentById(id, homeId, client) {
+export async function findResidentById(id, homeId, client, { forUpdate = false } = {}) {
   const conn = client || pool;
-  const { rows } = await conn.query(
-    `SELECT ${RESIDENT_COLS} FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`, [id, homeId]);
+  const sql = `SELECT ${RESIDENT_COLS} FROM finance_residents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL${forUpdate ? ' FOR UPDATE' : ''}`;
+  const { rows } = await conn.query(sql, [id, homeId]);
   return shapeResident(rows[0]);
 }
 

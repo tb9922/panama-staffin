@@ -58,7 +58,7 @@ export function decrypt(encrypted, iv, tag) {
   const key = getKey();
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
-  return decipher.update(encrypted) + decipher.final('utf8');
+  return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8');
 }
 
 /** Reset cached key — only for testing. */

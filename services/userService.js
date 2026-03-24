@@ -71,7 +71,7 @@ export async function createUser(username, password, role, displayName, createdB
   }
 
   if (role === 'admin') {
-    await userHomeRepo.grantAllHomesRole(username);
+    await userHomeRepo.grantAllHomesRole(username, client);
   }
 
   return user;
