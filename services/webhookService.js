@@ -68,8 +68,14 @@ async function fireWebhook(hook, event, payload) {
       },
       body,
       signal: controller.signal,
+      redirect: 'manual',
     });
     statusCode = res.status;
+    // Reject redirects — following them would bypass the pre-request SSRF validation
+    if (statusCode >= 300 && statusCode < 400) {
+      error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
+      statusCode = null;
+    }
   } catch (fetchErr) {
     error = fetchErr.message;
   } finally {
@@ -156,8 +162,14 @@ export async function processRetries() {
           },
           body,
           signal: controller.signal,
+          redirect: 'manual',
         });
         statusCode = res.status;
+        // Reject redirects — following them would bypass the pre-request SSRF validation
+        if (statusCode >= 300 && statusCode < 400) {
+          error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
+          statusCode = null;
+        }
       } catch (fetchErr) {
         error = fetchErr.message;
       } finally {

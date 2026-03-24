@@ -161,6 +161,38 @@ describe('webhookService', () => {
     expect(fetchSpy.mock.calls[1][0]).toBe('https://other.com/hook');
   });
 
+  it('treats HTTP redirect as failure (SSRF protection)', async () => {
+    const hook = makeHook();
+    webhookRepo.findActiveByEvent.mockResolvedValue([hook]);
+    webhookRepo.logDelivery.mockResolvedValue('del-1');
+
+    fetchSpy.mockResolvedValue({
+      status: 302,
+      headers: { get: (h) => h === 'location' ? 'http://169.254.169.254/latest/meta-data/' : null },
+    });
+
+    await dispatchEvent(42, 'incident.created', { id: 'inc-1' });
+    await new Promise(r => setTimeout(r, 50));
+
+    // Should log as failure with SSRF error, not as success
+    expect(webhookRepo.logDelivery).toHaveBeenCalledOnce();
+    const [, , , statusCode, , error, status] = webhookRepo.logDelivery.mock.calls[0];
+    expect(statusCode).toBeNull();
+    expect(error).toMatch(/redirect.*blocked.*SSRF/i);
+    expect(status).toBe('pending_retry');
+  });
+
+  it('passes redirect: manual to fetch', async () => {
+    const hook = makeHook();
+    webhookRepo.findActiveByEvent.mockResolvedValue([hook]);
+
+    await dispatchEvent(42, 'incident.created', { id: 'inc-1' });
+    await new Promise(r => setTimeout(r, 50));
+
+    const [, opts] = fetchSpy.mock.calls[0];
+    expect(opts.redirect).toBe('manual');
+  });
+
   it('logs error but does not throw when one webhook fails', async () => {
     const hook1 = makeHook({ id: 1 });
     const hook2 = makeHook({ id: 2, url: 'https://failing.com/hook' });

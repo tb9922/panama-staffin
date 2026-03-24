@@ -7,6 +7,7 @@ import * as authService from '../services/authService.js';
 import * as auditService from '../services/auditService.js';
 import * as authRepo from '../repositories/authRepo.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import logger from '../logger.js';
 
 const router = Router();
 
@@ -82,16 +83,22 @@ router.post('/', loginLimiter, async (req, res, next) => {
 // ── Logout (clear cookie) ───────────────────────────────────────────────────
 
 router.post('/logout', requireAuth, async (req, res) => {
+  let revoked = true;
   if (req.user.jti) {
     const expiresAt = new Date(req.user.exp * 1000);
-    await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt).catch(() => {});
+    try {
+      await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt);
+    } catch (err) {
+      logger.error({ jti: req.user.jti, err: err.message }, 'logout deny-list write failed');
+      revoked = false;
+    }
   }
   auditService.log('logout', '-', req.user.username, null).catch(() => {});
+  // Always clear cookies regardless of deny-list outcome (defense in depth)
   res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
-  // Also clear old path=/api cookie from pre-existing sessions
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
-  res.json({ ok: true });
+  res.json({ ok: true, revoked });
 });
 
 // ── Token revocation ──────────────────────────────────────────────────────────

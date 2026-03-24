@@ -34,10 +34,39 @@ const staffCsvRowSchema = z.object({
 const CSV_HEADERS = ['name', 'role', 'team', 'pref', 'skill', 'hourly_rate', 'start_date', 'contract_hours', 'wtr_opt_out'];
 const CSV_HEADERS_SET = new Set(CSV_HEADERS);
 
+/**
+ * Split CSV text into logical lines, respecting quoted fields that may
+ * contain embedded newlines (RFC 4180 §2.6).
+ */
+function splitCsvLines(text) {
+  const lines = [];
+  let current = '';
+  let inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+      current += ch;
+    } else if (!inQuote && (ch === '\n' || (ch === '\r' && text[i + 1] === '\n'))) {
+      if (current.trim()) lines.push(current);
+      current = '';
+      if (ch === '\r') i++; // skip \n after \r
+    } else if (!inQuote && ch === '\r') {
+      // bare \r without \n
+      if (current.trim()) lines.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) lines.push(current);
+  return lines;
+}
+
 /** RFC 4180-aware CSV parser with BOM stripping and quote handling. */
 function parseCSV(buffer) {
   const text = buffer.toString('utf-8').replace(/^\uFEFF/, '');
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  const lines = splitCsvLines(text);
   if (lines.length < 2) return { headers: [], rows: [] };
 
   const rawHeaders = splitCsvLine(lines[0]).map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
