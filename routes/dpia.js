@@ -46,7 +46,9 @@ const bodySchema = z.object({
   next_review_due: dateSchema.optional(),
   notes: z.string().max(5000).nullable().optional(),
 });
-const updateSchema = bodySchema.partial();
+const updateSchema = bodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
   try {
@@ -90,8 +92,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (parsed.data.status === 'approved' && existing.status !== 'completed') {
       return res.status(400).json({ error: 'DPIA must be completed before it can be approved' });
     }
-    const rawV = parseInt(req.body._version, 10);
-    const version = Number.isFinite(rawV) ? rawV : null;
+    const version = Number.isFinite(parsed.data._version) ? parsed.data._version : null;
     const result = await dpiaRepo.update(idP.data, req.home.id, parsed.data, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('dpia_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });

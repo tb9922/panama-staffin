@@ -19,14 +19,12 @@ const riskBodySchema = z.object({
   owner:                z.string().max(200).nullable().optional(),
   likelihood:           z.coerce.number().int().min(1).max(5).nullable().optional(),
   impact:               z.coerce.number().int().min(1).max(5).nullable().optional(),
-  inherent_risk:        z.coerce.number().int().min(1).max(25).nullable().optional(),
   controls:             z.array(z.object({
     description:   z.string().max(2000),
     effectiveness: z.string().max(100).nullable().optional(),
   })).max(100).optional(),
   residual_likelihood:  z.coerce.number().int().min(1).max(5).nullable().optional(),
   residual_impact:      z.coerce.number().int().min(1).max(5).nullable().optional(),
-  residual_risk:        z.coerce.number().int().min(1).max(25).nullable().optional(),
   actions:              z.array(z.object({
     description:    z.string().max(2000),
     owner:          z.string().max(200).nullable().optional(),
@@ -56,6 +54,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = riskBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    parsed.data.inherent_risk = (parsed.data.likelihood ?? 0) * (parsed.data.impact ?? 0);
+    parsed.data.residual_risk = (parsed.data.residual_likelihood ?? 0) * (parsed.data.residual_impact ?? 0);
     const risk = await riskRepo.upsert(req.home.id, parsed.data);
     await auditService.log('risk_create', req.home.slug, req.user.username, { id: risk?.id });
     res.status(201).json(risk);
@@ -71,6 +71,12 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await riskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    const likelihood = parsed.data.likelihood ?? existing.likelihood ?? 0;
+    const impact = parsed.data.impact ?? existing.impact ?? 0;
+    const residualLikelihood = parsed.data.residual_likelihood ?? existing.residual_likelihood ?? 0;
+    const residualImpact = parsed.data.residual_impact ?? existing.residual_impact ?? 0;
+    parsed.data.inherent_risk = likelihood * impact;
+    parsed.data.residual_risk = residualLikelihood * residualImpact;
     const version = parsed.data._version != null ? parsed.data._version : null;
     const risk = await riskRepo.update(idParsed.data, req.home.id, parsed.data, version);
     if (risk === null) {

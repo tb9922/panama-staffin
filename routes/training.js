@@ -119,7 +119,7 @@ router.put('/config/types', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return zodError(res, parsed);
     const updatedConfig = { ...req.home.config, training_types: parsed.data };
     await updateConfig(req.home.id, updatedConfig);
-    await auditService.log('training_types_update', req.home.slug, req.user.username, null);
+    await auditService.log('training_types_update', req.home.slug, req.user.username, { typeCount: parsed.data.length });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

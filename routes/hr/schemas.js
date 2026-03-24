@@ -453,7 +453,7 @@ export const ediBodySchema = z.object({
   access_to_work_amount: z.number().nullable().optional(),
   // Common
   description:          z.string().max(5000).nullable().optional(),
-  status:               z.string().max(50).nullable().optional(),
+  status:               z.enum(['open', 'investigating', 'resolved', 'closed', 'escalated']).nullable().optional(),
   outcome:              z.string().max(5000).nullable().optional(),
   notes:                z.string().max(5000).nullable().optional(),
 });
@@ -480,7 +480,7 @@ export const ediUpdateSchema = z.object({
   access_to_work_reference: z.string().max(200).nullable().optional(),
   access_to_work_amount: z.number().nullable().optional(),
   description:          z.string().max(5000).nullable().optional(),
-  status:               z.string().max(50).nullable().optional(),
+  status:               z.enum(['open', 'investigating', 'resolved', 'closed', 'escalated']).nullable().optional(),
   outcome:              z.string().max(5000).nullable().optional(),
   notes:                z.string().max(5000).nullable().optional(),
 });
