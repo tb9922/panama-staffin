@@ -329,7 +329,6 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
       return res.status(400).json({ error: 'Cannot modify your own role assignments' });
     }
 
-    let needsRevoke = false;
     await withTransaction(async (client) => {
       // Read current roles inside transaction for a consistent pre-change snapshot.
       // Outside-transaction reads can race with concurrent role assignments.
@@ -360,12 +359,12 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
         }
       }
 
-    if (changes.length > 0) {
-      await auditService.log('user_roles_update', '-', req.user.username, {
-        userId: id.data, username: user.username, changes,
-      });
-      // No token revocation needed — per-home roles are DB-checked on every request.
-    }
+      if (changes.length > 0) {
+        await auditService.log('user_roles_update', '-', req.user.username, {
+          userId: id.data, username: user.username, changes,
+        }, client);
+      }
+    });
 
     res.json({ ok: true, roles: parsed.data.roles });
   } catch (err) { next(err); }
