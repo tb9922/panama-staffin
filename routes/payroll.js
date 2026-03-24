@@ -786,6 +786,10 @@ router.put('/sick-periods/:id', writeRateLimiter, requireAuth, requireHomeAccess
 
 // ── Phase 2: HMRC Liability Tracker ──────────────────────────────────────────
 
+const voidBodySchema = z.object({
+  _version: z.number().int().nonnegative().optional(),
+});
+
 const markPaidSchema = z.object({
   paid_date:      dateSchema,
   paid_reference: z.string().max(100).nullable().optional(),
