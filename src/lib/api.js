@@ -1606,3 +1606,31 @@ export async function signOffSnapshot(homeSlug, id, notes) {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify({ notes }),
   });
 }
+
+// ── Webhooks ──────────────────────────────────────────────────────────────────
+
+export async function getWebhooks(homeSlug) {
+  return apiFetch(`${API_BASE}/webhooks?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createWebhook(homeSlug, data) {
+  return apiFetch(`${API_BASE}/webhooks?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function updateWebhook(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/webhooks/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWebhook(homeSlug, id) {
+  return apiFetch(`${API_BASE}/webhooks/${id}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+}
+
+export async function getWebhookDeliveries(homeSlug, id) {
+  return apiFetch(`${API_BASE}/webhooks/${id}/deliveries?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
