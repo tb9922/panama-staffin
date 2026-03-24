@@ -71,7 +71,7 @@ export async function requirePlatformAdmin(req, res, next) {
   // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
   try {
     const dbUser = await findUserByUsername(req.user.username);
-    if (!dbUser?.is_platform_admin) {
+    if (!dbUser?.is_platform_admin || !dbUser.active) {
       return res.status(403).json({ error: 'Platform admin access required' });
     }
   } catch {
@@ -100,7 +100,7 @@ export async function requireHomeAccess(req, res, next) {
   if (req.user.is_platform_admin) {
     try {
       const dbUser = await findUserByUsername(req.user.username);
-      if (dbUser?.is_platform_admin) {
+      if (dbUser?.is_platform_admin && dbUser.active) {
         req.home = home;
         req.homeRole = 'home_manager';
         req.staffId = null;

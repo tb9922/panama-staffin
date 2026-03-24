@@ -10,7 +10,9 @@ import { pool } from '../db.js';
  */
 export async function getHomeRole(username, homeId) {
   const { rows } = await pool.query(
-    'SELECT role_id, staff_id FROM user_home_roles WHERE username = $1 AND home_id = $2 LIMIT 1',
+    `SELECT uhr.role_id, uhr.staff_id FROM user_home_roles uhr
+     JOIN users u ON u.username = uhr.username AND u.active = true
+     WHERE uhr.username = $1 AND uhr.home_id = $2 LIMIT 1`,
     [username, homeId]
   );
   return rows[0] || null;
@@ -79,6 +81,7 @@ export async function findHomesWithRolesForUser(username) {
     `SELECT h.slug, h.name, h.config, uhr.role_id, uhr.staff_id
      FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
+     JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1
      ORDER BY h.name`,
     [username]
@@ -135,7 +138,9 @@ export async function grantAllHomesRole(username, client) {
  */
 export async function hasAccess(username, homeId) {
   const { rows } = await pool.query(
-    'SELECT 1 FROM user_home_roles WHERE username = $1 AND home_id = $2 LIMIT 1',
+    `SELECT 1 FROM user_home_roles uhr
+     JOIN users u ON u.username = uhr.username AND u.active = true
+     WHERE uhr.username = $1 AND uhr.home_id = $2 LIMIT 1`,
     [username, homeId]
   );
   return rows.length > 0;
@@ -162,6 +167,7 @@ export async function findHomeSlugsForUser(username) {
   const { rows } = await pool.query(
     `SELECT h.slug FROM user_home_roles uhr
      JOIN homes h ON h.id = uhr.home_id AND h.deleted_at IS NULL
+     JOIN users u ON u.username = uhr.username AND u.active = true
      WHERE uhr.username = $1`,
     [username]
   );
