@@ -167,6 +167,12 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireHome
     // Verify target user belongs to this home
     const targetAtHome = await userRepo.findByIdAtHome(id.data, req.home.id);
     if (!targetAtHome) return res.status(404).json({ error: 'User not found at this home' });
+    if (!req.user.is_platform_admin && targetAtHome.is_platform_admin) {
+      return res.status(403).json({ error: 'Only platform admins can manage platform admin accounts' });
+    }
+    if (!req.user.is_platform_admin && (parsed.data.active !== undefined || parsed.data.role !== undefined)) {
+      return res.status(403).json({ error: 'Only platform admins can change account status or global role' });
+    }
 
     const fields = {};
     if (parsed.data.role !== undefined) fields.role = parsed.data.role;
@@ -194,6 +200,12 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireHomeAcc
     // Verify target user belongs to this home
     const targetAtHome = await userRepo.findByIdAtHome(id.data, req.home.id);
     if (!targetAtHome) return res.status(404).json({ error: 'User not found at this home' });
+    if (!req.user.is_platform_admin) {
+      return res.status(403).json({ error: 'Only platform admins can reset user passwords' });
+    }
+    if (targetAtHome.is_platform_admin && !req.user.is_platform_admin) {
+      return res.status(403).json({ error: 'Only platform admins can manage platform admin accounts' });
+    }
 
     await userService.resetPassword(id.data, parsed.data.newPassword, req.user.username);
     await auditService.log('user_password_reset', req.home.slug, req.user.username, { userId: id.data });

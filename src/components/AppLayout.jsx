@@ -44,6 +44,26 @@ export default function AppLayout() {
     </div>
   );
 
+  if (!activeHome) return (
+    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
+      <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-6 max-w-md mx-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-amber-900 font-semibold text-lg">No Home Access</h2>
+        </div>
+        <p className="text-amber-800 text-sm">Your account is signed in, but it is not assigned to any home yet.</p>
+        <p className="text-gray-500 text-xs mt-3">Ask a platform admin to grant home access, or log out and switch accounts.</p>
+        <div className="mt-5">
+          <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.primary}>Logout</button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-slate-50">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg">Skip to content</a>
@@ -162,6 +182,7 @@ export default function AppLayout() {
                     {section.items.filter(item => {
                       if (item.platformAdminOnly) return isPlatformAdmin;
                       if (item.module) return canRead(item.module);
+                      if (section.id === 'scheduling' && homeRole === 'staff_member') return item.ownDataSafe === true;
                       return true;
                     }).map(item => (
                       <NavLink
@@ -200,7 +221,7 @@ export default function AppLayout() {
               <div className="flex flex-col items-end gap-0.5">
                 <button onClick={() => setChangePwOpen(true)}
                   className="text-[10px] text-gray-500 hover:text-blue-400 transition-colors font-medium">Password</button>
-                <button onClick={() => logout()}
+                <button onClick={() => { void logout(); }}
                   className="text-[10px] text-gray-500 hover:text-red-400 transition-colors font-medium">Logout</button>
               </div>
             </div>

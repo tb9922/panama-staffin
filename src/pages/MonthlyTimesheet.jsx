@@ -53,10 +53,6 @@ export default function MonthlyTimesheet() {
   const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
-  useEffect(() => {
-    if (!homeSlug) return;
-    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, [homeSlug]);
 
   const activeStaff = useMemo(
     () => (schedData?.staff || []).filter(s => s.active),
@@ -107,6 +103,11 @@ export default function MonthlyTimesheet() {
 
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth(year, month)).padStart(2, '0')}`;
+
+  useEffect(() => {
+    if (!homeSlug) return;
+    getSchedulingData(homeSlug, { from: monthStart, to: monthEnd }).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+  }, [homeSlug, monthStart, monthEnd]);
 
   // Fetch timesheet entries for staff + month
   const fetchEntries = useCallback(async () => {

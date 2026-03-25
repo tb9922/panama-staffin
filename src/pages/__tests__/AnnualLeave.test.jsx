@@ -3,6 +3,8 @@ import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_STAFF, MOCK_CONFIG } from '../../test/fixtures/schedulingData.js';
 import AnnualLeave from '../AnnualLeave.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
+import { addDays, formatDate, parseDate } from '../../lib/rotation.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -123,6 +125,30 @@ describe('AnnualLeave', () => {
     // The spinner is an animated div — check by class
     const spinner = document.querySelector('.animate-spin');
     expect(spinner).toBeInTheDocument();
+  });
+
+  it('loads a centered scheduling window around today', async () => {
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(getSchedulingData).toHaveBeenCalled());
+    const todayDate = parseDate('2026-03-08');
+    expect(getSchedulingData).toHaveBeenCalledWith('test-home', {
+      from: formatDate(addDays(todayDate, -200)),
+      to: formatDate(addDays(todayDate, 200)),
+    });
+  });
+
+  it('shows a restricted state for staff self-service accounts', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S001',
+    });
+    renderWithProviders(<AnnualLeave />, {
+      user: { username: 'staff', role: 'viewer' },
+    });
+    await waitFor(() => expect(screen.getByText('Annual leave planning is not available for staff self-service accounts.')).toBeInTheDocument());
+    expect(getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('displays accrual table with staff data after load', async () => {

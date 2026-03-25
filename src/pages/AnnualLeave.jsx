@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
@@ -10,6 +10,12 @@ import {
   deleteOverride,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import {
+  loadSchedulingUnlockedDates,
+  saveSchedulingUnlockedDates,
+  loadSchedulingEditLockPin,
+  saveSchedulingEditLockPin,
+} from '../lib/schedulingEditLock.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -25,8 +31,15 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+function getCenteredSchedulingRange(date, radiusDays = 200) {
+  return {
+    from: formatDate(addDays(date, -radiusDays)),
+    to: formatDate(addDays(date, radiusDays)),
+  };
+}
+
 export default function AnnualLeave() {
-  const { canWrite } = useData();
+  const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,25 +52,43 @@ export default function AnnualLeave() {
   const [bookingEnd, setBookingEnd] = useState('');
   const [bookingError, setBookingError] = useState(null);
   const [bookingMsg, setBookingMsg] = useState(null);
+  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
+  const [showLockPrompt, setShowLockPrompt] = useState(false);
+  const [lockPin, setLockPin] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
   const homeSlug = getCurrentHome();
+  const storedLockPinRef = useRef(loadSchedulingEditLockPin(homeSlug || 'default'));
+  const today = useLiveDate();
+  const isOwnDataAnnualLeave = homeRole === 'staff_member';
   const loadData = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug || isOwnDataAnnualLeave) {
+      setSchedData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const { from, to } = getCenteredSchedulingRange(parseDate(today));
     setLoading(true);
+    setError(null);
     try {
-      setSchedData(await getSchedulingData(homeSlug));
+      setSchedData(await getSchedulingData(homeSlug, { from, to }));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [homeSlug]);
+  }, [homeSlug, isOwnDataAnnualLeave, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const today = useLiveDate();
+  useEffect(() => {
+    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
+    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
+  }, [homeSlug]);
 
   const activeStaff = useMemo(() => {
     if (!schedData) return [];
@@ -80,6 +111,69 @@ export default function AnnualLeave() {
     if (!schedData) return null;
     return getLeaveYear(today, schedData.config.leave_year_start);
   }, [schedData, today]);
+
+  function getEditLockOptions(dates) {
+    if (!schedData?.config?.edit_lock_pin || !storedLockPinRef.current) return {};
+    const targetDates = Array.isArray(dates) ? dates : [dates];
+    if (targetDates.some(date => date < today && !unlockedDates.has(date))) return {};
+    return { editLockPin: storedLockPinRef.current };
+  }
+
+  function requestUnlock(dates, action) {
+    const targetDates = (Array.isArray(dates) ? dates : [dates]).filter(date => date && date < today);
+    if (!schedData?.config?.edit_lock_pin || targetDates.every(date => unlockedDates.has(date))) {
+      return true;
+    }
+    setPendingAction({ dates: targetDates, fn: action });
+    setLockPin('');
+    setLockError('');
+    setShowLockPrompt(true);
+    return false;
+  }
+
+  function handleLockedError(dates, retryFn) {
+    const targetDates = Array.isArray(dates) ? dates : [dates];
+    const nextUnlocked = new Set(unlockedDates);
+    targetDates.forEach(date => nextUnlocked.delete(date));
+    setUnlockedDates(nextUnlocked);
+    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
+    storedLockPinRef.current = '';
+    saveSchedulingEditLockPin(homeSlug || 'default', '');
+    setPendingAction({ dates: targetDates, fn: retryFn });
+    setLockPin('');
+    setLockError('');
+    setShowLockPrompt(true);
+  }
+
+  function unlockPendingDates() {
+    if (!pendingAction) return;
+    const nextUnlocked = new Set(unlockedDates);
+    pendingAction.dates.forEach(date => nextUnlocked.add(date));
+    setUnlockedDates(nextUnlocked);
+    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
+    storedLockPinRef.current = lockPin;
+    saveSchedulingEditLockPin(homeSlug || 'default', lockPin);
+    const action = pendingAction.fn;
+    setPendingAction(null);
+    setShowLockPrompt(false);
+    setLockPin('');
+    setLockError('');
+    action();
+  }
+
+  function attemptUnlock() {
+    const expectedPin = String(schedData?.config?.edit_lock_pin || '');
+    if (!expectedPin) {
+      unlockPendingDates();
+      return;
+    }
+    if (String(lockPin) === expectedPin) {
+      unlockPendingDates();
+      return;
+    }
+    setLockError('Incorrect PIN');
+    setLockPin('');
+  }
 
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
@@ -146,11 +240,16 @@ export default function AnnualLeave() {
     }
 
     if (toBook.length > 0) {
+      if (!requestUnlock(toBook.map(row => row.date), () => bookAL())) return;
       setSaving(true);
       try {
-        await bulkUpsertOverrides(getCurrentHome(), toBook);
+        await bulkUpsertOverrides(getCurrentHome(), toBook, getEditLockOptions(toBook.map(row => row.date)));
         await loadData();
       } catch (e) {
+        if (e.status === 423) {
+          handleLockedError(toBook.map(row => row.date), () => bookAL());
+          return;
+        }
         setError(e.message);
       } finally {
         setSaving(false);
@@ -164,11 +263,16 @@ export default function AnnualLeave() {
 
   // Cancel AL for a staff member on a date
   async function cancelAL(staffId, dateKey) {
+    if (!requestUnlock(dateKey, () => cancelAL(staffId, dateKey))) return;
     setSaving(true);
     try {
-      await deleteOverride(getCurrentHome(), dateKey, staffId);
+      await deleteOverride(getCurrentHome(), dateKey, staffId, getEditLockOptions(dateKey));
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateKey, () => cancelAL(staffId, dateKey));
+        return;
+      }
       setError(e.message);
     } finally {
       setSaving(false);
@@ -202,6 +306,28 @@ export default function AnnualLeave() {
     </div>
   );
 
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Annual Leave</h1>
+          <p className="text-sm text-gray-500">Select a home to view annual leave planning.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOwnDataAnnualLeave) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Annual Leave</h1>
+          <p className="text-sm text-gray-500">Annual leave planning is not available for staff self-service accounts.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (error) return (
     <div className="p-6">
       <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
@@ -228,6 +354,38 @@ export default function AnnualLeave() {
         </div>
         <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
       </div>
+
+      {showLockPrompt && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-amber-800">Past dates are locked — enter the edit PIN to continue.</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={lockPin}
+              onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+              onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
+              placeholder="PIN"
+              className={`${INPUT.sm} w-24`}
+              autoFocus
+            />
+            <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
+            <button
+              onClick={() => {
+                setShowLockPrompt(false);
+                setPendingAction(null);
+                setLockPin('');
+                setLockError('');
+              }}
+              className={`${BTN.ghost} ${BTN.sm}`}
+            >
+              Cancel
+            </button>
+            {lockError && <span className="text-xs text-red-600">{lockError}</span>}
+          </div>
+        </div>
+      )}
 
       {/* Leave year banner */}
       {leaveYear && (

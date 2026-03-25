@@ -43,16 +43,21 @@ export async function login(username, password) {
       await userRepo.incrementFailedLogin(username);
       throw new AuthenticationError('Invalid credentials');
     }
-    // Successful login — reset failed counter and clear username-based deny-list
-    // sentinels so the fresh JWT isn't blocked. Trade-off: previously-revoked tokens
-    // with remaining TTL (≤4h) could theoretically be reused, but the user is
-    // actively re-authenticating which means they're not a terminated employee.
+    // Successful login — reset failed counter and clear user-scoped deny-list
+    // sentinels so the fresh JWT isn't blocked. Durable "log everyone out"
+    // invalidation is enforced separately via users.session_version.
     await userRepo.resetFailedLogin(username);
     await authRepo.clearForUser(username);
     userRepo.updateLastLogin(username).catch(() => {});
     const jti = randomUUID();
     const token = jwt.sign(
-      { username: dbUser.username, role: dbUser.role, is_platform_admin: !!dbUser.is_platform_admin, jti },
+      {
+        username: dbUser.username,
+        role: dbUser.role,
+        is_platform_admin: !!dbUser.is_platform_admin,
+        session_version: dbUser.session_version || 0,
+        jti,
+      },
       config.jwtSecret,
       { expiresIn: config.jwtExpiresIn }
     );

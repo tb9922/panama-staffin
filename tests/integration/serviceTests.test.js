@@ -7,7 +7,7 @@
  * Requires: PostgreSQL running with all migrations applied.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { pool } from '../../db.js';
 import * as dashboardService from '../../services/dashboardService.js';
 import * as homeService from '../../services/homeService.js';
@@ -67,6 +67,14 @@ async function cleanup() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('dashboardService', () => {
+  beforeEach(() => {
+    if (homeId) dashboardService.invalidateDashboardCache(homeId);
+  });
+
+  afterEach(() => {
+    if (homeId) dashboardService.invalidateDashboardCache(homeId);
+  });
+
   it('returns modules and alerts for an empty home', async () => {
     const result = await dashboardService.getDashboardSummary(homeId);
 

@@ -7,12 +7,12 @@ test.describe('Dashboard', () => {
     await page.goto('/');
   });
 
-  test('renders dashboard heading', async ({ page }) => {
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+  test('renders home header', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'E2E Test Home' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows coverage section', async ({ page }) => {
-    await expect(page.getByText(/Coverage/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Today's Coverage/i })).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows staffing summary', async ({ page }) => {
@@ -20,7 +20,7 @@ test.describe('Dashboard', () => {
   });
 
   test('sidebar navigation is visible', async ({ page }) => {
-    await expect(page.getByText('Dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
     // Check nav group buttons exist in sidebar
     await expect(page.getByRole('button', { name: 'Scheduling' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Staff$/ })).toBeVisible();

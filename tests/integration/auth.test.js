@@ -16,12 +16,14 @@ import { app } from '../../server.js';
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
 const ADMIN_USER = 'auth-test-admin';
+const MANAGER_USER = 'auth-test-manager';
 const VIEWER_USER = 'auth-test-viewer';
 const ADMIN_PW = 'TestAdmin!2025x';
+const MANAGER_PW = 'TestManager!2025x';
 const VIEWER_PW = 'TestViewer!2025x';
 
-let adminToken, viewerToken;
-let adminUserId, viewerUserId;
+let adminToken, managerToken, viewerToken;
+let adminUserId, managerUserId, viewerUserId;
 let homeAId, homeBId;
 
 beforeAll(async () => {
@@ -44,11 +46,17 @@ beforeAll(async () => {
 
   // Create test users — admin is platform admin + home_manager at home A
   const adminHash = await bcrypt.hash(ADMIN_PW, 4);
+  const managerHash = await bcrypt.hash(MANAGER_PW, 4);
   const viewerHash = await bcrypt.hash(VIEWER_PW, 4);
   const { rows: [au] } = await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
      VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup', true) RETURNING id`,
     [ADMIN_USER, adminHash]
+  );
+  const { rows: [mu] } = await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'viewer', true, 'Test Manager', 'test-setup') RETURNING id`,
+    [MANAGER_USER, managerHash]
   );
   const { rows: [vu] } = await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
@@ -56,13 +64,20 @@ beforeAll(async () => {
     [VIEWER_USER, viewerHash]
   );
   adminUserId = au.id;
+  managerUserId = mu.id;
   viewerUserId = vu.id;
 
-  // Assign RBAC roles — admin as home_manager at both homes, viewer as viewer at home A
+  // Assign RBAC roles — admin as home_manager at both homes, manager as home_manager at home A,
+  // viewer as viewer at home A
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
      VALUES ($1, $2, 'home_manager', 'test-setup'), ($1, $3, 'home_manager', 'test-setup')`,
     [ADMIN_USER, homeAId, homeBId]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup')`,
+    [MANAGER_USER, homeAId]
   );
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
@@ -119,6 +134,17 @@ describe('POST /api/login', () => {
     expect(res.body.token).toBeDefined();
     expect(res.body.role).toBe('viewer');
     viewerToken = res.body.token;
+  });
+
+  it('returns token for valid home manager credentials', async () => {
+    const res = await request(app)
+      .post('/api/login')
+      .send({ username: MANAGER_USER, password: MANAGER_PW })
+      .expect(200);
+
+    expect(res.body.token).toBeDefined();
+    expect(res.body.role).toBe('viewer');
+    managerToken = res.body.token;
   });
 
   it('rejects wrong password with 401 and generic message', async () => {
@@ -399,7 +425,27 @@ describe('User management (CRUD)', () => {
     expect(res.body.display_name).toBe('Updated Name');
   });
 
-  it('home_manager can deactivate user at their home', async () => {
+  it('non-platform home_manager can update display name at their home', async () => {
+    const res = await request(app)
+      .put(`/api/users/${viewerUserId}`)
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ displayName: 'Manager Updated Name' })
+      .expect(200);
+
+    expect(res.body.display_name).toBe('Manager Updated Name');
+  });
+
+  it('non-platform home_manager cannot deactivate user at their home', async () => {
+    await request(app)
+      .put(`/api/users/${viewerUserId}`)
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ active: false })
+      .expect(403);
+  });
+
+  it('platform admin can deactivate user at their home', async () => {
     const res = await request(app)
       .put(`/api/users/${createdUserId}`)
       .query({ home: 'auth-test-home-a' })
@@ -478,7 +524,7 @@ describe('User management (CRUD)', () => {
 
 describe('Password management', () => {
   it('user can change own password', async () => {
-    // Login, change password, login with new password
+    const oldToken = viewerToken;
     const newPw = 'ChangedViewer!2025';
 
     await request(app)
@@ -492,6 +538,11 @@ describe('Password management', () => {
       .post('/api/login')
       .send({ username: VIEWER_USER, password: newPw })
       .expect(200);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${oldToken}`)
+      .expect(401);
 
     viewerToken = res.body.token;
 
@@ -522,6 +573,7 @@ describe('Password management', () => {
 
   it('home_manager can reset another user password', async () => {
     const resetPw = 'ResetViewer!2025';
+    const oldToken = viewerToken;
 
     await request(app)
       .post(`/api/users/${viewerUserId}/reset-password`)
@@ -535,6 +587,12 @@ describe('Password management', () => {
       .post('/api/login')
       .send({ username: VIEWER_USER, password: resetPw })
       .expect(200);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${oldToken}`)
+      .expect(401);
+
     viewerToken = res.body.token;
 
     // Reset back to original
@@ -550,6 +608,15 @@ describe('Password management', () => {
       .send({ username: VIEWER_USER, password: VIEWER_PW })
       .expect(200);
     viewerToken = res2.body.token;
+  });
+
+  it('non-platform home_manager cannot reset another user password', async () => {
+    await request(app)
+      .post(`/api/users/${viewerUserId}/reset-password`)
+      .query({ home: 'auth-test-home-a' })
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ newPassword: 'BlockedReset!2025' })
+      .expect(403);
   });
 });
 

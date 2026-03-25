@@ -130,6 +130,7 @@ function renderViewer(entries) {
 describe('MonthlyTimesheet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
   });
@@ -146,6 +147,17 @@ describe('MonthlyTimesheet', () => {
     api.getTimesheetPeriod.mockResolvedValue([]);
     renderWithProviders(<MonthlyTimesheet />);
     expect(screen.getByText('Loading data...')).toBeInTheDocument();
+  });
+
+  it('loads scheduling data for the visible payroll month only', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 2, 8)));
+    renderAdmin();
+    await vi.runAllTimersAsync();
+    expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
+      from: '2026-03-01',
+      to: '2026-03-31',
+    });
   });
 
   it('stays on loading screen when scheduling data fails', async () => {

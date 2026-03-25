@@ -5,7 +5,7 @@ import { MODAL, INPUT, BTN } from '../../lib/design.js';
 import { upsertTrainingRecord, deleteTrainingRecord } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 
-export default function TrainingRecordModal({ isOpen, onClose, staffId, staffName, typeId, typeName, type, existing, homeSlug, staff, onSaved }) {
+export default function TrainingRecordModal({ isOpen, onClose, staffId, staffName, typeId, typeName, type, existing, homeSlug, staff, onSaved, readOnly = false }) {
   const today = formatDate(new Date());
 
   const initForm = () => ({
@@ -36,7 +36,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   const requiredLevel = type && staffMember ? getRequiredLevel(type, staffMember.role) : null;
 
   async function handleSave() {
-    if (!form.completed) return;
+    if (readOnly || !form.completed) return;
     setSaving(true);
     setError(null);
     try {
@@ -61,6 +61,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   }
 
   async function handleDelete() {
+    if (readOnly) return;
     if (!confirm('Remove this training record?')) return;
     setSaving(true);
     setError(null);
@@ -76,7 +77,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={existing ? 'Edit Training' : 'Record Training'} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={readOnly ? 'View Training Record' : existing ? 'Edit Training' : 'Record Training'} size="lg">
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -91,7 +92,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={INPUT.label}>Completion Date</label>
-            <input type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} />
+            <input type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} disabled={readOnly} />
           </div>
           <div>
             <label className={INPUT.label}>Expiry Date (auto)</label>
@@ -102,12 +103,13 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={INPUT.label}>Trainer / Provider</label>
-            <input type="text" value={form.trainer} onChange={e => setForm({ ...form, trainer: e.target.value })}
-              className={INPUT.base} placeholder="Name or organisation" />
+              <input type="text" value={form.trainer} onChange={e => setForm({ ...form, trainer: e.target.value })}
+                disabled={readOnly}
+                className={INPUT.base} placeholder="Name or organisation" />
           </div>
           <div>
             <label className={INPUT.label}>Method</label>
-            <select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} className={INPUT.select}>
+              <select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} className={INPUT.select} disabled={readOnly}>
               {TRAINING_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
@@ -115,7 +117,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         {typeLevels && (
           <div>
             <label className={INPUT.label}>Level Achieved</label>
-            <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className={INPUT.select}>
+            <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className={INPUT.select} disabled={readOnly}>
               <option value="">Select level...</option>
               {typeLevels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
@@ -127,30 +129,35 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         <div>
           <label className={INPUT.label}>Certificate Reference</label>
           <input type="text" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}
+            disabled={readOnly}
             className={INPUT.base} placeholder="e.g. FS-2025-042" />
         </div>
         <div>
           <label className={INPUT.label}>Evidence File Reference</label>
           <input type="text" value={form.evidence_ref} onChange={e => setForm({ ...form, evidence_ref: e.target.value })}
+            disabled={readOnly}
             className={INPUT.base} placeholder="e.g. /training/fire-safety/JS-2025.pdf" />
           <p className="text-[10px] text-gray-400 mt-0.5">File path or reference for offline evidence management</p>
         </div>
         <div>
           <label className={INPUT.label}>Notes</label>
           <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            disabled={readOnly}
             className={INPUT.base} placeholder="Optional notes" />
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
       <div className={MODAL.footer}>
-        {existing && (
+        {existing && !readOnly && (
           <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Remove</button>
         )}
         <button onClick={onClose} className={BTN.ghost}>Cancel</button>
-        <button onClick={handleSave} disabled={!form.completed || saving}
-          className={`${BTN.primary} disabled:opacity-50`}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        {!readOnly && (
+          <button onClick={handleSave} disabled={!form.completed || saving}
+            className={`${BTN.primary} disabled:opacity-50`}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        )}
       </div>
     </Modal>
   );

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { updateFinanceResident } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
@@ -17,6 +18,7 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
   const [error, setError] = useState(null);
 
   const hasBed = resident.bed != null;
+  const bedManagerUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
 
   async function handleDischarge() {
     setSubmitting(true);
@@ -46,7 +48,7 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
       {hasBed && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
           This resident is in Room {resident.bed.room_number}. Discharging does <strong>not</strong> free the bed automatically.{' '}
-          <a href="/beds" className="text-blue-600 underline font-medium">Update in Bed Manager &rarr;</a>
+          <Link to={bedManagerUrl} className="text-blue-600 underline font-medium">Update in Bed Manager &rarr;</Link>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import BedManager from '../BedManager.jsx';
@@ -14,6 +14,8 @@ vi.mock('../../lib/api.js', async () => {
     getBedSummary: vi.fn(),
     getBedHistory: vi.fn(),
     createBed: vi.fn(),
+    updateBed: vi.fn(),
+    deleteBed: vi.fn(),
     transitionBedStatus: vi.fn(),
     revertBedTransition: vi.fn(),
     moveBedResident: vi.fn(),
@@ -43,7 +45,7 @@ const MOCK_BEDS = [
     floor: '1',
     status: 'occupied',
     resident_name: 'Mrs Joan Smith',
-    occupied_since: '2025-06-01',
+    status_since: '2025-06-01',
     updated_at: '2026-03-01T00:00:00Z',
   },
   {
@@ -54,7 +56,7 @@ const MOCK_BEDS = [
     floor: '1',
     status: 'available',
     resident_name: null,
-    occupied_since: null,
+    status_since: null,
     updated_at: '2026-03-01T00:00:00Z',
   },
   {
@@ -65,7 +67,7 @@ const MOCK_BEDS = [
     floor: '2',
     status: 'hospital_hold',
     resident_name: 'Mr Thomas',
-    occupied_since: '2025-11-15',
+    status_since: '2025-11-15',
     updated_at: '2026-03-01T00:00:00Z',
   },
 ];
@@ -121,6 +123,12 @@ describe('BedManager', () => {
     expect(screen.getByText('Mr Thomas')).toBeInTheDocument();
   });
 
+  it('labels the room name column clearly', async () => {
+    renderWithProviders(<BedManager />);
+    await waitFor(() => expect(screen.getByText('Room Name')).toBeInTheDocument());
+    expect(screen.getByText('Resident')).toBeInTheDocument();
+  });
+
   it('shows Add Bed button for admins', async () => {
     renderWithProviders(<BedManager />);
     await waitFor(() => expect(screen.getByRole('button', { name: /add bed/i })).toBeInTheDocument());
@@ -142,9 +150,86 @@ describe('BedManager', () => {
     expect(screen.getByText('Room Type')).toBeInTheDocument();
   });
 
+  it('opens the edit modal and saves bed metadata changes', async () => {
+    const user = userEvent.setup();
+    api.updateBed.mockResolvedValue({
+      ...MOCK_BEDS[0],
+      room_name: 'Bluebell Suite',
+      floor: 'Ground',
+      notes: 'Refreshed room details',
+    });
+
+    renderWithProviders(<BedManager />);
+
+    await waitFor(() => expect(screen.getByLabelText('Edit bed 101')).toBeInTheDocument());
+    await user.click(screen.getByLabelText('Edit bed 101'));
+
+    const dialog = screen.getByRole('dialog', { name: /edit bed - room 101/i });
+
+    const roomNameInput = within(dialog).getByDisplayValue('Bluebell');
+    await user.clear(roomNameInput);
+    await user.type(roomNameInput, 'Bluebell Suite');
+
+    const floorInput = within(dialog).getByDisplayValue('1');
+    await user.clear(floorInput);
+    await user.type(floorInput, 'Ground');
+
+    const textboxes = within(dialog).getAllByRole('textbox');
+    const notesInput = textboxes[textboxes.length - 1];
+    await user.type(notesInput, 'Refreshed room details');
+
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(api.updateBed).toHaveBeenCalledWith('test-home', 'bed-1', {
+      room_number: '101',
+      room_name: 'Bluebell Suite',
+      room_type: 'single',
+      floor: 'Ground',
+      notes: 'Refreshed room details',
+      clientUpdatedAt: '2026-03-01T00:00:00Z',
+    }));
+  });
+
+  it('shows delete action only for available beds and deletes after confirmation', async () => {
+    const user = userEvent.setup();
+    api.deleteBed.mockResolvedValue({ ok: true });
+
+    renderWithProviders(<BedManager />);
+
+    await waitFor(() => expect(screen.getByLabelText('Delete bed 102')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Delete bed 101')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Delete bed 102'));
+    const dialog = screen.getByRole('dialog', { name: /delete bed - room 102/i });
+
+    await user.click(within(dialog).getByRole('button', { name: /^Delete Bed$/i }));
+
+    await waitFor(() => expect(api.deleteBed).toHaveBeenCalledWith(
+      'test-home',
+      'bed-2',
+      '2026-03-01T00:00:00Z',
+    ));
+  });
+
   it('shows error banner on API failure', async () => {
     api.getBeds.mockRejectedValue(new Error('Database error'));
     renderWithProviders(<BedManager />);
     await waitFor(() => expect(screen.getByText('Database error')).toBeInTheDocument());
+  });
+
+  it('keeps resident handoff context from the Residents page', async () => {
+    const user = userEvent.setup();
+    api.getFinanceResidents.mockResolvedValue({
+      rows: [{ id: 42, resident_name: 'Mrs Alice Walker' }],
+    });
+
+    renderWithProviders(<BedManager />, { route: '/beds?residentId=42' });
+
+    await waitFor(() => expect(screen.getByText(/assign a bed for/i)).toBeInTheDocument());
+    expect(screen.getByText(/Mrs Alice Walker/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Admit' }));
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('42'));
   });
 });

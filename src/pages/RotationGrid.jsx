@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
   getScheduledShift, isCareRole, isAgencyShift, isOTShift,
@@ -20,6 +20,12 @@ import {
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
+import {
+  loadSchedulingUnlockedDates,
+  saveSchedulingUnlockedDates,
+  loadSchedulingEditLockPin,
+  saveSchedulingEditLockPin,
+} from '../lib/schedulingEditLock.js';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -81,37 +87,39 @@ function parseLocalDate(str) {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
+function getMonthSchedulingRange(monthDates, radiusDays = 200) {
+  const anchor = monthDates[Math.floor(monthDates.length / 2)] || new Date();
+  return {
+    from: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - radiusDays))),
+    to: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + radiusDays))),
+  };
+}
+
 export default function RotationGrid() {
-  const { canWrite } = useData();
+  const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
   const { confirm, ConfirmDialog } = useConfirm();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [overrideWarnings, setOverrideWarnings] = useState([]);
 
   const [filterTeam, setFilterTeam] = useState('All');
   const [editing, setEditing] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [bulkModal, setBulkModal] = useState(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
+  const [showLockPrompt, setShowLockPrompt] = useState(false);
+  const [lockPin, setLockPin] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const homeSlug = getCurrentHome();
+  const storedLockPinRef = useRef(loadSchedulingEditLockPin(homeSlug || 'default'));
+  const isOwnDataRoster = homeRole === 'staff_member';
   useDirtyGuard(!!editing || !!bulkModal);
-
-  const loadData = useCallback(async () => {
-    if (!homeSlug) return;
-    setLoading(true);
-    try {
-      setSchedData(await getSchedulingData(homeSlug));
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [homeSlug]);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   // Dynamic calendar month dates
   const { monthDates, monthLabel } = useMemo(() => {
@@ -121,6 +129,32 @@ export default function RotationGrid() {
     const label = target.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     return { monthDates: dates, monthLabel: label };
   }, [monthOffset]);
+
+  const loadData = useCallback(async () => {
+    if (!homeSlug || isOwnDataRoster) {
+      setSchedData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const { from, to } = getMonthSchedulingRange(monthDates);
+    setLoading(true);
+    setError(null);
+    try {
+      setSchedData(await getSchedulingData(homeSlug, { from, to }));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [homeSlug, isOwnDataRoster, monthDates]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
+    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
+  }, [homeSlug]);
 
   const activeStaff = useMemo(() => {
     if (!schedData) return [];
@@ -294,17 +328,93 @@ export default function RotationGrid() {
     };
   }, [editing, schedData, monthDates]);
 
+  function isDateLocked(dateStr) {
+    return !!(schedData?.config?.edit_lock_pin) && dateStr < formatDate(new Date()) && !unlockedDates.has(dateStr);
+  }
+
+  function getEditLockOptions(dates) {
+    if (!schedData?.config?.edit_lock_pin || !storedLockPinRef.current) return {};
+    const targetDates = Array.isArray(dates) ? dates : [dates];
+    if (targetDates.some(date => date < formatDate(new Date()) && !unlockedDates.has(date))) return {};
+    return { editLockPin: storedLockPinRef.current };
+  }
+
+  function relockDates(dates, clearPin = false) {
+    const targetDates = Array.isArray(dates) ? dates : [dates];
+    const nextUnlocked = new Set(unlockedDates);
+    targetDates.forEach(date => nextUnlocked.delete(date));
+    setUnlockedDates(nextUnlocked);
+    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
+    if (clearPin) {
+      storedLockPinRef.current = '';
+      saveSchedulingEditLockPin(homeSlug || 'default', '');
+    }
+  }
+
+  function requestUnlock(dates, action) {
+    const targetDates = (Array.isArray(dates) ? dates : [dates]).filter(Boolean);
+    if (!targetDates.some(date => isDateLocked(date))) {
+      action();
+      return;
+    }
+    setPendingAction({ dates: targetDates, fn: action });
+    setLockPin('');
+    setLockError('');
+    setShowLockPrompt(true);
+  }
+
+  function handleLockedError(dates, retryFn) {
+    relockDates(dates, true);
+    setPendingAction({ dates: Array.isArray(dates) ? dates : [dates], fn: retryFn });
+    setLockPin('');
+    setLockError('');
+    setShowLockPrompt(true);
+  }
+
+  function unlockPendingDates() {
+    if (!pendingAction) return;
+    const unlockValue = String(lockPin || schedData?.config?.edit_lock_pin || '');
+    const nextUnlocked = new Set(unlockedDates);
+    pendingAction.dates.forEach(date => nextUnlocked.add(date));
+    setUnlockedDates(nextUnlocked);
+    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
+    storedLockPinRef.current = unlockValue;
+    saveSchedulingEditLockPin(homeSlug || 'default', unlockValue);
+    const action = pendingAction.fn;
+    setPendingAction(null);
+    setShowLockPrompt(false);
+    setLockPin('');
+    setLockError('');
+    action();
+  }
+
+  function attemptUnlock() {
+    const expectedPin = String(schedData?.config?.edit_lock_pin || '');
+    if (!expectedPin) {
+      unlockPendingDates();
+      return;
+    }
+    if (String(lockPin) === expectedPin) {
+      unlockPendingDates();
+      return;
+    }
+    setLockError('Incorrect PIN');
+    setLockPin('');
+  }
+
   function openEditor(staffId, dateStr) {
-    const existingOverride = schedData.overrides[dateStr]?.[staffId];
-    const actual = existingOverride?.shift;
-    const staff = schedData.staff.find(s => s.id === staffId);
-    const date = parseLocalDate(dateStr);
-    const cycleDay = getCycleDay(date, schedData.config.cycle_start_date);
-    const scheduled = getScheduledShift(staff, cycleDay, date);
-    const currentShift = actual || scheduled;
-    setEditing({
-      staffId, dateStr, currentShift, proposedShift: currentShift,
-      replacesStaffId: existingOverride?.replaces_staff_id || null,
+    requestUnlock(dateStr, () => {
+      const existingOverride = schedData.overrides[dateStr]?.[staffId];
+      const actual = existingOverride?.shift;
+      const staff = schedData.staff.find(s => s.id === staffId);
+      const date = parseLocalDate(dateStr);
+      const cycleDay = getCycleDay(date, schedData.config.cycle_start_date);
+      const scheduled = getScheduledShift(staff, cycleDay, date);
+      const currentShift = actual || scheduled;
+      setEditing({
+        staffId, dateStr, currentShift, proposedShift: currentShift,
+        replacesStaffId: existingOverride?.replaces_staff_id || null,
+      });
     });
   }
 
@@ -323,18 +433,28 @@ export default function RotationGrid() {
       ? editing.replacesStaffId : undefined;
 
     setSaving(true);
+    setOverrideWarnings([]);
     try {
       if (proposedShift === scheduled) {
-        await deleteOverride(getCurrentHome(), dateStr, staffId);
+        await deleteOverride(getCurrentHome(), dateStr, staffId, getEditLockOptions(dateStr));
       } else {
-        await upsertOverride(getCurrentHome(), {
-          date: dateStr, staffId, shift: proposedShift,
-          reason: 'Manual edit', source: 'manual',
-          ...(replacesId && { replaces_staff_id: replacesId }),
-        });
+        const result = await upsertOverride(
+          getCurrentHome(),
+          {
+            date: dateStr, staffId, shift: proposedShift,
+            reason: 'Manual edit', source: 'manual',
+            ...(replacesId && { replaces_staff_id: replacesId }),
+          },
+          getEditLockOptions(dateStr),
+        );
+        if (result?.warnings?.length) setOverrideWarnings(result.warnings);
       }
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => openEditor(staffId, dateStr));
+        return;
+      }
       setError(e.message);
     } finally {
       setSaving(false);
@@ -358,10 +478,16 @@ export default function RotationGrid() {
     }
     if (sickRows.length === 0) { setBulkModal(null); return; }
     setSaving(true);
+    setOverrideWarnings([]);
     try {
-      await bulkUpsertOverrides(getCurrentHome(), sickRows);
+      const result = await bulkUpsertOverrides(getCurrentHome(), sickRows, getEditLockOptions(sickRows.map(row => row.date)));
+      if (result?.warnings?.length) setOverrideWarnings(result.warnings);
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(sickRows.map(row => row.date), () => bulkSickWeek(staffId, startDateStr));
+        return;
+      }
       setError(e.message);
     } finally {
       setSaving(false);
@@ -375,9 +501,13 @@ export default function RotationGrid() {
     const lastOfMonth = formatDate(monthDates[monthDates.length - 1]);
     setSaving(true);
     try {
-      await revertMonthOverrides(getCurrentHome(), firstOfMonth, lastOfMonth);
+      await revertMonthOverrides(getCurrentHome(), firstOfMonth, lastOfMonth, getEditLockOptions(firstOfMonth));
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(firstOfMonth, () => setBulkModal({ type: 'revert-all' }));
+        return;
+      }
       setError(e.message);
     } finally {
       setSaving(false);
@@ -412,6 +542,28 @@ export default function RotationGrid() {
       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Roster</h1>
+          <p className="text-sm text-gray-500">Select a home to view the roster.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOwnDataRoster) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Roster</h1>
+          <p className="text-sm text-gray-500">Roster management is not available for staff self-service accounts.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) return (
     <div className="p-6">
@@ -474,13 +626,19 @@ export default function RotationGrid() {
           <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
           {/* Month Navigation */}
           <div className="flex items-center gap-1">
-            <button onClick={() => setMonthOffset(monthOffset - 1)}
+            <button
+              aria-label="Previous month"
+              onClick={() => setMonthOffset(monthOffset - 1)}
               className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&larr;</button>
             {monthOffset !== 0 && (
-              <button onClick={() => setMonthOffset(0)}
+              <button
+                aria-label="Current month"
+                onClick={() => setMonthOffset(0)}
                 className={`${BTN.ghost} ${BTN.xs} text-blue-600 transition-colors duration-150`}>Current</button>
             )}
-            <button onClick={() => setMonthOffset(monthOffset + 1)}
+            <button
+              aria-label="Next month"
+              onClick={() => setMonthOffset(monthOffset + 1)}
               className={`${BTN.ghost} ${BTN.xs} transition-colors duration-150`}>&rarr;</button>
           </div>
           <span className="text-sm font-medium text-gray-600">{monthLabel}</span>
@@ -502,6 +660,47 @@ export default function RotationGrid() {
           <span className="text-xs text-gray-500">{activeStaff.length} staff</span>
         </div>
       </div>
+
+      {overrideWarnings.length > 0 && (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="font-medium mb-1">Training warnings</div>
+          <ul className="list-disc pl-5 space-y-1">
+            {overrideWarnings.map((warning, idx) => <li key={idx}>{warning}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {showLockPrompt && (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-amber-800">Past dates are locked — enter the edit PIN to continue.</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={lockPin}
+              onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+              onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
+              placeholder="PIN"
+              className={`${INPUT.sm} w-24`}
+              autoFocus
+            />
+            <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
+            <button
+              onClick={() => {
+                setShowLockPrompt(false);
+                setPendingAction(null);
+                setLockPin('');
+                setLockError('');
+              }}
+              className={`${BTN.ghost} ${BTN.sm}`}
+            >
+              Cancel
+            </button>
+            {lockError && <span className="text-xs text-red-600">{lockError}</span>}
+          </div>
+        </div>
+      )}
 
       <div className={`${CARD.flush} overflow-x-auto`}>
         <table className="text-[11px] border-collapse">
@@ -544,7 +743,7 @@ export default function RotationGrid() {
                       if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role))
                         blockReasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
                       if (schedData.config.enforce_training_blocking && isCareRole(s.role))
-                        blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, formatDate(new Date())));
+                        blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, formatDate(monthDates[monthDates.length - 1] || new Date())));
                       return (
                         <div className="truncate max-w-[110px]" title={`${s.name} (${s.role})${blockReasons.length > 0 ? '\n! ' + blockReasons.join(', ') : ''}`}>
                           {s.name}

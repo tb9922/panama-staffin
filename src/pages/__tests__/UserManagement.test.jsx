@@ -115,6 +115,19 @@ describe('UserManagement', () => {
     expect(screen.getByRole('button', { name: /create user/i })).toBeInTheDocument();
   });
 
+  it('hides reset password action for non-platform admins', async () => {
+    renderWithProviders(<UserManagement />);
+    await waitFor(() => expect(screen.getByText('admin')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /reset pw/i })).not.toBeInTheDocument();
+  });
+
+  it('shows reset password action for platform admins', async () => {
+    api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin', isPlatformAdmin: true });
+    renderWithProviders(<UserManagement />);
+    await waitFor(() => expect(screen.getByText('admin')).toBeInTheDocument());
+    expect(screen.getAllByRole('button', { name: /reset pw/i }).length).toBeGreaterThan(0);
+  });
+
   it('shows error message on API failure', async () => {
     api.listUsersForHome.mockRejectedValue(new Error('Auth required'));
     renderWithProviders(<UserManagement />);

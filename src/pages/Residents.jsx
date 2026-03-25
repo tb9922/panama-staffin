@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
 import {
@@ -156,29 +157,30 @@ export default function Residents() {
       ) : (
         <ResidentTable
           residents={residents}
-          canEdit={canEdit}
+          isAdmin={canEdit}
           onEdit={setEditResident}
           onDischarge={setDischargeResident}
           onAdmit={() => setShowAdmit(true)}
         />
       )}
 
-      {showAdmit && (
-        <ResidentAdmitModal
-          home={home}
-          onClose={() => setShowAdmit(false)}
-          onSaved={() => {
-            load();
-            showToast(<>Resident admitted. <a href="/beds" className="underline font-medium">Assign a bed in Bed Manager &rarr;</a></>, 10000);
-          }}
-        />
-      )}
+        {showAdmit && (
+          <ResidentAdmitModal
+            home={home}
+            onClose={() => setShowAdmit(false)}
+            onSaved={(resident) => {
+              load();
+              const bedUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
+              showToast(<>Resident admitted. <Link to={bedUrl} className="underline font-medium">Assign a bed in Bed Manager &rarr;</Link></>, 10000);
+            }}
+          />
+        )}
 
       {editResident && (
         <ResidentEditModal
           home={home}
           resident={editResident}
-          canEdit={canEdit}
+          isAdmin={canEdit}
           onClose={() => setEditResident(null)}
           onSaved={load}
         />
@@ -189,13 +191,14 @@ export default function Residents() {
           home={home}
           resident={dischargeResident}
           onClose={() => setDischargeResident(null)}
-          onSaved={(hadBed, roomNumber) => {
-            load();
-            if (hadBed) {
-              showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <a href="/beds" className="underline font-medium">update in Bed Manager &rarr;</a></>, 10000);
-            } else {
-              showToast('Resident discharged.');
-            }
+            onSaved={(hadBed, roomNumber) => {
+              load();
+              if (hadBed) {
+                const bedUrl = dischargeResident?.id ? `/beds?residentId=${dischargeResident.id}` : '/beds';
+                showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <Link to={bedUrl} className="underline font-medium">update in Bed Manager &rarr;</Link></>, 10000);
+              } else {
+                showToast('Resident discharged.');
+              }
           }}
         />
       )}

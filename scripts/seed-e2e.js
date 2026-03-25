@@ -69,7 +69,11 @@ async function seed() {
       INSERT INTO users (username, password_hash, role, display_name, is_platform_admin)
       VALUES ('admin', $1, 'admin', 'Admin', true), ('viewer', $2, 'viewer', 'Viewer', false)
       ON CONFLICT (username) DO UPDATE
-        SET is_platform_admin = EXCLUDED.is_platform_admin
+        SET password_hash = EXCLUDED.password_hash,
+            role = EXCLUDED.role,
+            display_name = EXCLUDED.display_name,
+            is_platform_admin = EXCLUDED.is_platform_admin,
+            active = true
     `, [adminHash, viewerHash]);
 
     // Upsert home with config (partial unique index: homes_slug_active WHERE deleted_at IS NULL)

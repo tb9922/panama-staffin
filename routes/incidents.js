@@ -32,7 +32,7 @@ const incidentBodySchema = z.object({
   hospital_attendance:        z.boolean().optional(),
   cqc_notifiable:             z.boolean().optional(),
   cqc_notification_type:      optEnum('death', 'serious_injury', 'abuse_allegation', 'police', 'unauthorised_absence', 'deprivation_of_liberty', 'seclusion_restraint', 'other'),
-  cqc_notification_deadline:  z.enum(['without_delay', 'immediate', '72h']).nullable().optional(),
+  cqc_notification_deadline:  optEnum('without_delay', 'immediate', '72h'),
   cqc_notified:               z.boolean().optional(),
   cqc_notified_date:          dateSchema.optional(),
   cqc_reference:              z.string().max(200).nullable().optional(),

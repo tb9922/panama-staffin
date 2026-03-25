@@ -173,6 +173,81 @@ describe('bedRepo: updateStatus', () => {
 
 // ── bedTransitionRepo ─────────────────────────────────────────────────────────
 
+describe('bedService: update and delete metadata', () => {
+  it('updates bed metadata for an available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'EDIT001',
+      room_name: 'Willow',
+      room_type: 'single',
+      floor: '1',
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    const updated = await bedService.updateBed(bed.id, homeA, 'bed-test-a', {
+      room_number: 'EDIT001A',
+      room_name: 'Willow Suite',
+      room_type: 'en_suite',
+      floor: 'Ground',
+      notes: 'Updated via test',
+      clientUpdatedAt: bed.updated_at,
+    }, 'admin');
+
+    expect(updated.room_number).toBe('EDIT001A');
+    expect(updated.room_name).toBe('Willow Suite');
+    expect(updated.room_type).toBe('en_suite');
+    expect(updated.floor).toBe('Ground');
+    expect(updated.notes).toBe('Updated via test');
+  });
+
+  it('blocks room number changes for occupied beds', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'EDIT002',
+      room_type: 'single',
+      status: 'occupied',
+      resident_id: residentId,
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    await expect(bedService.updateBed(bed.id, homeA, 'bed-test-a', {
+      room_number: 'EDIT002B',
+      room_name: 'Occupied Room',
+      room_type: 'single',
+      floor: '1',
+      notes: '',
+      clientUpdatedAt: bed.updated_at,
+    }, 'admin')).rejects.toThrow(/room number can only be changed/i);
+  });
+
+  it('deletes an available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'DEL001',
+      room_type: 'single',
+      created_by: 'admin',
+    });
+
+    const deleted = await bedService.deleteBed(bed.id, homeA, 'bed-test-a', 'admin', bed.updated_at);
+    const found = await bedRepo.findById(bed.id, homeA);
+
+    expect(deleted.room_number).toBe('DEL001');
+    expect(found).toBeNull();
+  });
+
+  it('blocks deleting a non-available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'DEL002',
+      room_type: 'single',
+      status: 'maintenance',
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    await expect(bedService.deleteBed(bed.id, homeA, 'bed-test-a', 'admin', bed.updated_at))
+      .rejects.toThrow(/only available beds can be deleted/i);
+  });
+});
+
 describe('bedTransitionRepo', () => {
   let bedId;
 

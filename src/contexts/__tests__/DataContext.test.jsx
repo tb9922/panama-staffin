@@ -124,15 +124,15 @@ describe('DataContext', () => {
     consoleError.mockRestore();
   });
 
-  it('uses "default" as activeHome when homes list is empty', async () => {
+  it('uses null as activeHome when homes list is empty', async () => {
     api.loadHomes.mockResolvedValue([]);
 
     const { result } = renderHook(() => useData(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.activeHome).toBe('default');
-    expect(api.setCurrentHome).toHaveBeenCalledWith('default');
+    expect(result.current.activeHome).toBeNull();
+    expect(api.setCurrentHome).toHaveBeenCalledWith(null);
   });
 
   it('refreshHomes updates homes list', async () => {

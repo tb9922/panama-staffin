@@ -7,12 +7,13 @@
  * Requires: PostgreSQL running with migrations applied (incl. 087).
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
 import { validatePassword } from '../../services/userService.js';
+import * as authRepo from '../../repositories/authRepo.js';
 
 const TEST_PREFIX = 'lockout-test';
 const ADMIN_USER = `${TEST_PREFIX}-admin`;
@@ -199,4 +200,46 @@ describe('Per-home role change takes effect without token revocation', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ roleId: 'viewer' });
   }, 15000);
+});
+
+describe('Session and logout hardening', () => {
+  it('rejects a deactivated platform admin token on /api/homes', async () => {
+    const loginRes = await request(app).post('/api/login').send({ username: ADMIN_USER, password: ADMIN_PW });
+    expect(loginRes.status).toBe(200);
+    const staleToken = loginRes.body.token;
+
+    await pool.query('UPDATE users SET active = false WHERE username = $1', [ADMIN_USER]);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${staleToken}`)
+      .expect(401);
+
+    await pool.query('UPDATE users SET active = true WHERE username = $1', [ADMIN_USER]);
+  });
+
+  it('fails closed when logout deny-list persistence fails', async () => {
+    const spy = vi.spyOn(authRepo, 'addToDenyList').mockRejectedValueOnce(new Error('db down'));
+    try {
+      const loginRes = await request(app).post('/api/login').send({ username: LOCKOUT_USER, password: LOCKOUT_PW });
+      expect(loginRes.status).toBe(200);
+      const userToken = loginRes.body.token;
+
+      const res = await request(app)
+        .post('/api/login/logout')
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(503);
+
+      expect(res.body.error).toMatch(/logout failed/i);
+      const setCookies = res.headers['set-cookie'] || [];
+      expect(setCookies.some(cookie => cookie.startsWith('panama_token=;'))).toBe(false);
+
+      await request(app)
+        .get('/api/homes')
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

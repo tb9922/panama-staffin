@@ -4,7 +4,7 @@ const SAFE_COLUMNS = 'id, username, role, display_name, active, is_platform_admi
 
 export async function findByUsername(username) {
   const { rows } = await pool.query(
-    'SELECT id, username, password_hash, role, display_name, active, is_platform_admin, last_login_at, failed_login_count, locked_until FROM users WHERE username = $1',
+    'SELECT id, username, password_hash, role, display_name, active, is_platform_admin, last_login_at, failed_login_count, locked_until, session_version FROM users WHERE username = $1',
     [username]
   );
   return rows[0] || null;
@@ -79,6 +79,7 @@ export async function update(id, fields, client) {
   if (fields.role !== undefined)         { sets.push(`role = $${idx++}`);         vals.push(fields.role); }
   if (fields.display_name !== undefined) { sets.push(`display_name = $${idx++}`); vals.push(fields.display_name); }
   if (fields.active !== undefined)       { sets.push(`active = $${idx++}`);       vals.push(fields.active); }
+  if (fields.bump_session_version)       { sets.push('session_version = session_version + 1'); }
   // is_platform_admin is intentionally excluded: repo-level defence in depth against
   // privilege escalation. Elevation must go through a dedicated admin-only code path.
 
@@ -98,6 +99,14 @@ export async function updatePassword(id, newHash) {
   await pool.query(
     'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
     [newHash, id]
+  );
+}
+
+export async function bumpSessionVersionById(id, client) {
+  const conn = client || pool;
+  await conn.query(
+    'UPDATE users SET session_version = session_version + 1, updated_at = NOW() WHERE id = $1',
+    [id]
   );
 }
 

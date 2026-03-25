@@ -24,6 +24,49 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import {
+  loadSchedulingUnlockedDates,
+  saveSchedulingUnlockedDates,
+  loadSchedulingEditLockPin,
+  saveSchedulingEditLockPin,
+} from '../lib/schedulingEditLock.js';
+
+function getCenteredSchedulingRange(date, radiusDays = 200) {
+  return {
+    from: formatDate(addDays(date, -radiusDays)),
+    to: formatDate(addDays(date, radiusDays)),
+  };
+}
+
+const SHIFT_EDIT_OPTIONS = [
+  { value: '__scheduled__', label: 'Scheduled shift' },
+  { value: 'E', label: 'E - Early' },
+  { value: 'L', label: 'L - Late' },
+  { value: 'EL', label: 'EL - Full day' },
+  { value: 'N', label: 'N - Night' },
+  { value: 'OFF', label: 'OFF - Day off' },
+  { value: 'SICK', label: 'SICK - Sick leave' },
+  { value: 'AL', label: 'AL - Annual leave' },
+  { value: 'TRN', label: 'TRN - Training' },
+  { value: 'ADM', label: 'ADM - Admin' },
+  { value: 'OC-E', label: 'OC-E - OT early' },
+  { value: 'OC-L', label: 'OC-L - OT late' },
+  { value: 'OC-EL', label: 'OC-EL - OT full day' },
+  { value: 'OC-N', label: 'OC-N - OT night' },
+  { value: 'AG-E', label: 'AG-E - Agency early' },
+  { value: 'AG-L', label: 'AG-L - Agency late' },
+  { value: 'AG-EL', label: 'AG-EL - Agency full day' },
+  { value: 'AG-N', label: 'AG-N - Agency night' },
+];
+
+function getShiftEditReason(shift) {
+  if (shift === 'OFF') return 'Manual day off';
+  if (shift === 'TRN') return 'Training';
+  if (shift === 'ADM') return 'Admin';
+  if (shift.startsWith('OC-')) return 'OT booked';
+  if (shift.startsWith('AG-')) return 'Agency';
+  return 'Manual shift edit';
+}
 
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
@@ -39,6 +82,7 @@ export default function DailyStatus() {
 
   const [modal, setModal] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
+  const [manualShiftType, setManualShiftType] = useState('');
   const [otShiftType, setOtShiftType] = useState('OC-EL');
   const [agencyShiftType, setAgencyShiftType] = useState('');
   const [swapFrom, setSwapFrom] = useState('');
@@ -48,13 +92,7 @@ export default function DailyStatus() {
   const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
 
   // PIN unlock uses getCurrentHome() as the key to avoid timing dependency on data load
-  const [unlockedDates, setUnlockedDates] = useState(() => {
-    try {
-      const homeSlug = getCurrentHome() || 'default';
-      const stored = sessionStorage.getItem(`unlocked_${homeSlug}`);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
   const [showLockPrompt, setShowLockPrompt] = useState(false);
   const [lockPin, setLockPin] = useState('');
   const [lockError, setLockError] = useState('');
@@ -62,11 +100,13 @@ export default function DailyStatus() {
 
   const noteTimerRef = useRef(null);
   const savingRef = useRef(false);
+  const storedLockPinRef = useRef(loadSchedulingEditLockPin(getCurrentHome() || 'default'));
   useDirtyGuard(!!modal);
 
   const closeModal = useCallback(() => {
     setModal(null);
     setSelectedStaff('');
+    setManualShiftType('');
     setSwapFrom('');
     setSwapTo('');
     setAgencyShiftType('');
@@ -74,23 +114,36 @@ export default function DailyStatus() {
 
   useEscapeKey(!!modal, closeModal);
 
-  const { canWrite } = useData();
+  const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
   const homeSlug = getCurrentHome();
+  const isOwnDataDailyStatus = homeRole === 'staff_member';
 
   const loadData = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug || isOwnDataDailyStatus) {
+      setSchedData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const { from, to } = getCenteredSchedulingRange(currentDate);
     setLoading(true);
+    setError(null);
     try {
-      setSchedData(await getSchedulingData(homeSlug));
+      setSchedData(await getSchedulingData(homeSlug, { from, to }));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [homeSlug]);
+  }, [homeSlug, isOwnDataDailyStatus, currentDate]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
+    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
+  }, [homeSlug]);
 
   // Cleanup debounce timer on unmount
   useEffect(() => () => clearTimeout(noteTimerRef.current), []);
@@ -138,6 +191,32 @@ export default function DailyStatus() {
   const isPastDate = dateStr < today;
   const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!(schedData?.config?.edit_lock_pin);
 
+  function getEditLockOptions(targetDate = dateStr) {
+    if (!schedData?.config?.edit_lock_pin) return {};
+    if (targetDate >= today) return {};
+    if (!unlockedDates.has(targetDate) || !storedLockPinRef.current) return {};
+    return { editLockPin: storedLockPinRef.current };
+  }
+
+  function relockDate(targetDate = dateStr, clearPin = false) {
+    const nextUnlocked = new Set(unlockedDates);
+    nextUnlocked.delete(targetDate);
+    setUnlockedDates(nextUnlocked);
+    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
+    if (clearPin) {
+      storedLockPinRef.current = '';
+      saveSchedulingEditLockPin(homeSlug || 'default', '');
+    }
+  }
+
+  function handleLockedError(retryFn, targetDate = dateStr) {
+    relockDate(targetDate, true);
+    setPendingAction({ fn: retryFn });
+    setLockError('');
+    setLockPin('');
+    setShowLockPrompt(true);
+  }
+
   function goDay(offset) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
   }
@@ -148,10 +227,18 @@ export default function DailyStatus() {
     setSaving(true);
     setOverrideWarnings([]);
     try {
-      const result = await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra });
+      const result = await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra },
+        getEditLockOptions(dateStr),
+      );
       if (result?.warnings?.length) setOverrideWarnings(result.warnings);
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(() => applyOverride(staffId, shift, reason, source, sleepIn, replacesStaffId, extra), dateStr);
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -168,29 +255,41 @@ export default function DailyStatus() {
     setSaving(true);
     try {
       if (existing) {
-        await upsertOverride(getCurrentHome(), {
-          date: dateStr,
-          staffId,
-          shift: existing.shift,
-          reason: existing.reason,
-          source: existing.source,
-          sleep_in: !existing.sleep_in,
-          replaces_staff_id: existing.replaces_staff_id,
-          override_hours: existing.override_hours,
-        });
+        await upsertOverride(
+          getCurrentHome(),
+          {
+            date: dateStr,
+            staffId,
+            shift: existing.shift,
+            reason: existing.reason,
+            source: existing.source,
+            sleep_in: !existing.sleep_in,
+            replaces_staff_id: existing.replaces_staff_id,
+            override_hours: existing.override_hours,
+          },
+          getEditLockOptions(dateStr),
+        );
       } else {
         const s = staffForDay.find(m => m.id === staffId);
-        await upsertOverride(getCurrentHome(), {
-          date: dateStr,
-          staffId,
-          shift: s?.scheduledShift || 'OFF',
-          reason: 'Sleep in',
-          source: 'manual',
-          sleep_in: true,
-        });
+        await upsertOverride(
+          getCurrentHome(),
+          {
+            date: dateStr,
+            staffId,
+            shift: s?.scheduledShift || 'OFF',
+            reason: 'Sleep in',
+            source: 'manual',
+            sleep_in: true,
+          },
+          getEditLockOptions(dateStr),
+        );
       }
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(() => toggleSleepIn(staffId), dateStr);
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -205,9 +304,13 @@ export default function DailyStatus() {
     savingRef.current = true;
     setSaving(true);
     try {
-      await deleteOverride(getCurrentHome(), dateStr, staffId);
+      await deleteOverride(getCurrentHome(), dateStr, staffId, getEditLockOptions(dateStr));
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(() => removeOverride(staffId), dateStr);
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -228,9 +331,19 @@ export default function DailyStatus() {
 
     setSaving(true);
     try {
-      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift: 'SICK', reason: 'Sick', source: 'manual' });
+      await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId, shift: 'SICK', reason: 'Sick', source: 'manual' },
+        getEditLockOptions(dateStr),
+      );
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(() => applySickOverride(staffId), dateStr);
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
       setError(e.message);
       savingRef.current = false;
       setSaving(false);
@@ -249,14 +362,41 @@ export default function DailyStatus() {
     }
   }
 
+  async function applyManualShiftEdit() {
+    const staff = staffForDay.find(member => member.id === selectedStaff);
+    if (!staff || !manualShiftType) return;
+    if (manualShiftType === '__scheduled__') {
+      if (staff.isOverride) {
+        await removeOverride(staff.id);
+      } else {
+        closeModal();
+      }
+      return;
+    }
+    if (manualShiftType === staff.shift && !staff.isOverride) {
+      closeModal();
+      return;
+    }
+    if (manualShiftType === 'SICK') {
+      await applySickOverride(staff.id);
+      return;
+    }
+    const source = manualShiftType.startsWith('OC-')
+      ? 'ot'
+      : manualShiftType.startsWith('AG-')
+        ? 'agency'
+        : 'manual';
+    await applyOverride(staff.id, manualShiftType, getShiftEditReason(manualShiftType), source);
+  }
+
   function unlockDate() {
-    const homeSlug = getCurrentHome() || 'default';
+    const unlockValue = String(lockPin || schedData?.config?.edit_lock_pin || '');
     const newUnlocked = new Set(unlockedDates);
     newUnlocked.add(dateStr);
     setUnlockedDates(newUnlocked);
-    try {
-      sessionStorage.setItem(`unlocked_${homeSlug}`, JSON.stringify([...newUnlocked]));
-    } catch { /* quota exceeded — in-memory unlock still works */ }
+    saveSchedulingUnlockedDates(homeSlug || 'default', newUnlocked);
+    storedLockPinRef.current = unlockValue;
+    saveSchedulingEditLockPin(homeSlug || 'default', unlockValue);
     setShowLockPrompt(false);
     setLockPin('');
     setLockError('');
@@ -390,7 +530,23 @@ export default function DailyStatus() {
       <td className={`${TABLE.td} text-xs`}>{s.role}</td>
       <td className={`${TABLE.td} text-xs`}>{s.team}</td>
       <td className={TABLE.td}>
-        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => withLockCheck(() => {
+              setSelectedStaff(s.id);
+              setManualShiftType(s.isOverride ? s.shift : '__scheduled__');
+              setModal('shiftEdit');
+            })}
+            disabled={saving}
+            aria-label={`Change shift for ${s.name}`}
+            className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors duration-150 hover:opacity-80 disabled:opacity-50 ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}
+          >
+            {s.shift}
+          </button>
+        ) : (
+          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+        )}
         {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
         {s.replaces_staff_id && (() => {
           const replaced = staffForDay.find(m => m.id === s.replaces_staff_id);
@@ -428,6 +584,28 @@ export default function DailyStatus() {
       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
+          <p className="text-sm text-gray-500">Select a home to view daily status.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOwnDataDailyStatus) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
+          <p className="text-sm text-gray-500">Daily Status is not available for staff self-service accounts.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) return (
     <div className="p-6">
@@ -559,8 +737,14 @@ export default function DailyStatus() {
                 clearTimeout(noteTimerRef.current);
                 noteTimerRef.current = setTimeout(async () => {
                   try {
-                    await upsertDayNote(getCurrentHome(), dateStr, note);
+                    await upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr));
                   } catch (err) {
+                    if (err.status === 423) {
+                      handleLockedError(() => {
+                        upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr)).catch(innerErr => setError(innerErr.message));
+                      }, dateStr);
+                      return;
+                    }
                     setError(err.message);
                   }
                 }, 800);
@@ -618,7 +802,7 @@ export default function DailyStatus() {
       </div>
 
       {/* Modal */}
-      <Modal isOpen={!!modal} onClose={closeModal} title={modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'} size="sm">
+      <Modal isOpen={!!modal} onClose={closeModal} title={modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : modal === 'shiftEdit' ? 'Change Status' : 'Book Agency'} size="sm">
             {modal === 'swap' ? (
               <div className="space-y-3">
                 <div>
@@ -714,10 +898,26 @@ export default function DailyStatus() {
                             if (!a || !b) return;
                             setSaving(true);
                             try {
-                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapFrom, shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' });
-                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapTo, shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' });
+                              await upsertOverride(
+                                getCurrentHome(),
+                                { date: dateStr, staffId: swapFrom, shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' },
+                                getEditLockOptions(dateStr),
+                              );
+                              await upsertOverride(
+                                getCurrentHome(),
+                                { date: dateStr, staffId: swapTo, shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' },
+                                getEditLockOptions(dateStr),
+                              );
                               await loadData();
                             } catch (e) {
+                              if (e.status === 423) {
+                                handleLockedError(() => {
+                                  setModal('swap');
+                                  setSwapFrom(a.id);
+                                  setSwapTo(b.id);
+                                }, dateStr);
+                                return;
+                              }
                               setError(e.message);
                             } finally {
                               setSaving(false);
@@ -775,9 +975,20 @@ export default function DailyStatus() {
                     const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
                     setSaving(true);
                     try {
-                      await upsertOverride(getCurrentHome(), { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency', replaces_staff_id: gapPanelAbsentStaffId || undefined });
+                      await upsertOverride(
+                        getCurrentHome(),
+                        { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency', replaces_staff_id: gapPanelAbsentStaffId || undefined },
+                        getEditLockOptions(dateStr),
+                      );
                       await loadData();
                     } catch (e) {
+                      if (e.status === 423) {
+                        handleLockedError(() => {
+                          setModal('agency');
+                          setAgencyShiftType(agencyShiftType);
+                        }, dateStr);
+                        return;
+                      }
                       setError(e.message);
                     } finally {
                       setSaving(false);
@@ -812,6 +1023,61 @@ export default function DailyStatus() {
                   <button disabled={!selectedStaff || saving} onClick={() => toggleSleepIn(selectedStaff)}
                     className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
                 </div>
+              </div>
+            ) : modal === 'shiftEdit' ? (
+              <div className="space-y-3">
+                {(() => {
+                  const staff = staffForDay.find(member => member.id === selectedStaff);
+                  if (!staff) return null;
+                  const alAccrual = manualShiftType === 'AL'
+                    ? calculateAccrual(staff, schedData.config, schedData.overrides, currentDate)
+                    : null;
+                  const alBlocked = manualShiftType === 'AL'
+                    && (alCount >= schedData.config.max_al_same_day
+                      || alAccrual?.remainingHours <= 0
+                      || alAccrual?.missingContractHours);
+                  return (
+                    <>
+                      <div className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                        <div className="font-medium text-gray-800">{staff.name}</div>
+                        <div>Current: {staff.shift}</div>
+                        <div>Scheduled: {staff.scheduledShift}</div>
+                      </div>
+                      <select value={manualShiftType} onChange={e => setManualShiftType(e.target.value)} className={INPUT.select}>
+                        {SHIFT_EDIT_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.value === '__scheduled__' ? `${option.label} (${staff.scheduledShift})` : option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {manualShiftType === 'AL' && alCount >= schedData.config.max_al_same_day && (
+                        <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
+                      )}
+                      {manualShiftType === 'AL' && alAccrual?.missingContractHours && (
+                        <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-xl">
+                          Set contract hours in Staff Database to enable AL booking
+                        </div>
+                      )}
+                      {manualShiftType === 'AL' && !alAccrual?.missingContractHours && alAccrual && (
+                        <div className={`text-xs px-2 py-1 rounded-xl ${alAccrual.remainingHours <= 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'}`}>
+                          {alAccrual.remainingHours <= 0
+                            ? `No AL remaining (${alAccrual.accruedHours.toFixed(1)}h earned, ${alAccrual.usedHours.toFixed(1)}h used)`
+                            : `AL: ${alAccrual.remainingHours.toFixed(1)}h remaining`}
+                        </div>
+                      )}
+                      <div className={MODAL.footer}>
+                        <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
+                        <button
+                          disabled={!manualShiftType || saving || alBlocked}
+                          onClick={applyManualShiftEdit}
+                          className={`${BTN.primary} disabled:opacity-50`}
+                        >
+                          {saving ? 'Saving...' : 'Confirm'}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <div className="space-y-3">

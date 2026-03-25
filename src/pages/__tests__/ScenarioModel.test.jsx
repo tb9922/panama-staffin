@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_CONFIG, MOCK_STAFF } from '../../test/fixtures/schedulingData.js';
 import ScenarioModel from '../ScenarioModel.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -91,6 +92,20 @@ describe('ScenarioModel', () => {
       expect(screen.getByText('Connection refused')).toBeInTheDocument()
     );
     expect(screen.queryByText('Staffing Cost Scenarios')).not.toBeInTheDocument();
+  });
+
+  it('shows a restricted state for staff self-service accounts', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S001',
+    });
+    renderWithProviders(<ScenarioModel />, { user: { username: 'staff', role: 'viewer' } });
+    await waitFor(() =>
+      expect(screen.getByText('Staffing cost scenarios are not available for staff self-service accounts.')).toBeInTheDocument()
+    );
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('renders the custom what-if scenario builder with input fields', async () => {

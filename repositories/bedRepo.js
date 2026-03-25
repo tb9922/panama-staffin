@@ -2,6 +2,8 @@ import { pool } from '../db.js';
 import { ConflictError } from '../errors.js';
 
 const BED_COLS = 'id, home_id, room_number, room_name, room_type, floor, status, resident_id, status_since, hold_expires, reserved_until, booked_from, booked_until, notes, created_by, updated_by, created_at, updated_at';
+const BED_SELECT = `b.${BED_COLS.split(', ').join(', b.')},
+  fr.resident_name`;
 
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
 function ts(v) { return v instanceof Date ? v.toISOString() : v; }
@@ -19,6 +21,7 @@ function shapeBed(row) {
     floor: row.floor,
     status: row.status,
     resident_id: row.resident_id,
+    resident_name: row.resident_name || null,
     status_since: d(row.status_since),
     hold_expires: d(row.hold_expires),
     reserved_until: d(row.reserved_until),
@@ -38,9 +41,14 @@ export async function findByHome(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findByHome */
-     SELECT ${BED_COLS} FROM beds
-     WHERE home_id = $1
-     ORDER BY room_number ASC
+     SELECT ${BED_SELECT}
+     FROM beds b
+     LEFT JOIN finance_residents fr
+       ON fr.id = b.resident_id
+      AND fr.home_id = b.home_id
+      AND fr.deleted_at IS NULL
+     WHERE b.home_id = $1
+     ORDER BY b.room_number ASC
      LIMIT 200`,
     [homeId]
   );
@@ -51,8 +59,13 @@ export async function findById(bedId, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `/* bedRepo – findById */
-     SELECT ${BED_COLS} FROM beds
-     WHERE id = $1 AND home_id = $2`,
+     SELECT ${BED_SELECT}
+     FROM beds b
+     LEFT JOIN finance_residents fr
+       ON fr.id = b.resident_id
+      AND fr.home_id = b.home_id
+      AND fr.deleted_at IS NULL
+     WHERE b.id = $1 AND b.home_id = $2`,
     [bedId, homeId]
   );
   return shapeBed(rows[0]);
@@ -101,6 +114,39 @@ export async function createMany(homeId, bedsArray, client) {
   return results;
 }
 
+export async function updateDetails(bedId, homeId, data, client) {
+  const conn = client || pool;
+  try {
+    const { rows } = await conn.query(
+      `/* bedRepo – updateDetails */
+       UPDATE beds SET
+         room_number = $3,
+         room_name = $4,
+         room_type = $5,
+         floor = $6,
+         notes = $7,
+         updated_by = $8,
+         updated_at = NOW()
+       WHERE id = $1 AND home_id = $2
+       RETURNING ${BED_COLS}`,
+      [bedId, homeId,
+       data.room_number,
+       data.room_name || null,
+       data.room_type || 'single',
+       data.floor || null,
+       data.notes || null,
+       data.updated_by || null]
+    );
+    if (!rows[0]) return null;
+    return findById(bedId, homeId, conn);
+  } catch (err) {
+    if (err.code === '23505') {
+      throw new ConflictError('Room number already exists in this home');
+    }
+    throw err;
+  }
+}
+
 export async function updateStatus(bedId, homeId, statusData, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
@@ -128,6 +174,18 @@ export async function updateStatus(bedId, homeId, statusData, client) {
      statusData.booked_until || null,
      statusData.notes || null,
      statusData.updated_by || null]
+  );
+  return shapeBed(rows[0]);
+}
+
+export async function deleteById(bedId, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `/* bedRepo – deleteById */
+     DELETE FROM beds
+     WHERE id = $1 AND home_id = $2
+     RETURNING ${BED_COLS}`,
+    [bedId, homeId]
   );
   return shapeBed(rows[0]);
 }

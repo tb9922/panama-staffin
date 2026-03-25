@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES, getLabel, formatCurrency } from '../../lib/finance.js';
 import { updateFinanceResident, getFinanceFeeHistory } from '../../lib/api.js';
@@ -56,6 +57,7 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
     { id: 'fees', label: 'Fees' },
     { id: 'history', label: 'Fee History' },
   ];
+  const bedManagerUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
 
   return (
     <Modal isOpen onClose={onClose} title={resident.resident_name} size="lg">
@@ -64,12 +66,12 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
         <div className={`mb-4 p-3 rounded text-sm ${resident.bed ? 'bg-gray-50 border border-gray-200' : 'bg-amber-50 border border-amber-200'}`}>
           {resident.bed ? (
             resident.bed.status === 'hospital_hold' ? (
-              <span>&#127973; {resident.bed.room_number} ({getLabel(resident.bed.room_type, [{id:'single',label:'Single'},{id:'shared',label:'Shared'},{id:'en_suite',label:'En Suite'},{id:'nursing',label:'Nursing'},{id:'bariatric',label:'Bariatric'}])}{resident.bed.floor ? `, Floor ${resident.bed.floor}` : ''}) &mdash; Hospital Hold &nbsp;<a href="/beds" className="text-blue-600 underline">Manage in Bed Manager &rarr;</a></span>
+              <span>&#127973; {resident.bed.room_number} ({getLabel(resident.bed.room_type, [{id:'single',label:'Single'},{id:'shared',label:'Shared'},{id:'en_suite',label:'En Suite'},{id:'nursing',label:'Nursing'},{id:'bariatric',label:'Bariatric'}])}{resident.bed.floor ? `, Floor ${resident.bed.floor}` : ''}) &mdash; Hospital Hold &nbsp;<Link to={bedManagerUrl} className="text-blue-600 underline">Manage in Bed Manager &rarr;</Link></span>
             ) : (
-              <span>&#128716; {resident.bed.room_number} ({getLabel(resident.bed.room_type, [{id:'single',label:'Single'},{id:'shared',label:'Shared'},{id:'en_suite',label:'En Suite'},{id:'nursing',label:'Nursing'},{id:'bariatric',label:'Bariatric'}])}{resident.bed.floor ? `, Floor ${resident.bed.floor}` : ''}) &mdash; Occupied &nbsp;<a href="/beds" className="text-blue-600 underline">Manage in Bed Manager &rarr;</a></span>
+              <span>&#128716; {resident.bed.room_number} ({getLabel(resident.bed.room_type, [{id:'single',label:'Single'},{id:'shared',label:'Shared'},{id:'en_suite',label:'En Suite'},{id:'nursing',label:'Nursing'},{id:'bariatric',label:'Bariatric'}])}{resident.bed.floor ? `, Floor ${resident.bed.floor}` : ''}) &mdash; Occupied &nbsp;<Link to={bedManagerUrl} className="text-blue-600 underline">Manage in Bed Manager &rarr;</Link></span>
             )
           ) : (
-            <span className="text-amber-700">No bed assigned &mdash; <a href="/beds" className="text-blue-600 underline font-medium">Assign in Bed Manager &rarr;</a></span>
+            <span className="text-amber-700">No bed assigned &mdash; <Link to={bedManagerUrl} className="text-blue-600 underline font-medium">Assign in Bed Manager &rarr;</Link></span>
           )}
         </div>
       )}

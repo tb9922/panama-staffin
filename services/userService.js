@@ -81,11 +81,12 @@ export async function updateUser(id, fields, actorUsername) {
   const target = await userRepo.findById(id);
   if (!target) throw new Error('User not found');
 
+  const updateFields = { ...fields };
   // Strip is_platform_admin — only settable via direct DB or platform admin routes
-  delete fields.is_platform_admin;
+  delete updateFields.is_platform_admin;
 
   // Cannot deactivate yourself
-  if (fields.active === false && target.username === actorUsername) {
+  if (updateFields.active === false && target.username === actorUsername) {
     throw new Error('Cannot deactivate your own account');
   }
 
@@ -93,8 +94,12 @@ export async function updateUser(id, fields, actorUsername) {
   // Use a transaction with row-level lock to prevent TOCTOU: two concurrent requests
   // could both pass the count check and both deactivate the last admin.
   const isRemovingAdmin =
-    (fields.active === false && target.role === 'admin') ||
-    (fields.role !== undefined && fields.role !== 'admin' && target.role === 'admin' && target.active);
+    (updateFields.active === false && target.role === 'admin') ||
+    (updateFields.role !== undefined && updateFields.role !== 'admin' && target.role === 'admin' && target.active);
+
+  if (updateFields.active === false || (updateFields.role && updateFields.role !== target.role)) {
+    updateFields.bump_session_version = true;
+  }
 
   let updated;
   if (isRemovingAdmin) {
@@ -105,25 +110,24 @@ export async function updateUser(id, fields, actorUsername) {
       if (adminCount <= 1) {
         throw new Error('Cannot remove the last active admin');
       }
-      return userRepo.update(id, fields, client);
+      return userRepo.update(id, updateFields, client);
     });
   } else {
-    updated = await userRepo.update(id, fields);
+    updated = await userRepo.update(id, updateFields);
   }
 
-  // If deactivated, immediately revoke all tokens.
-  // Use scope='admin' so the sentinel is NOT cleared if the user somehow re-authenticates.
-  if (fields.active === false) {
-    await authService.revokeUser(target.username, 'admin');
+  // If deactivated, immediately revoke all currently-issued tokens. Fresh login is blocked
+  // by users.active, and old JWTs are durably blocked by the session_version bump above.
+  if (updateFields.active === false) {
+    await authService.revokeUser(target.username);
   }
 
-  // If role changed, force re-login so new JWT has correct claims.
-  // Use scope='admin' so the sentinel survives clearForUser on re-login; without this,
-  // the user could log in again immediately and reactivate old JWTs with the old role.
-  if (fields.role && fields.role !== target.role) {
-    await authService.revokeUser(target.username, 'admin');
+  // If role changed, force re-login so a fresh JWT is issued with the new claims.
+  // session_version makes the old token stay invalid even after the user logs back in.
+  if (updateFields.role && updateFields.role !== target.role) {
+    await authService.revokeUser(target.username);
     // If upgraded to admin, grant all homes
-    if (fields.role === 'admin' && fields.role !== target.role) {
+    if (updateFields.role === 'admin' && updateFields.role !== target.role) {
       await userHomeRepo.grantAllHomesRole(target.username);
     }
   }
@@ -140,14 +144,12 @@ export async function resetPassword(userId, newPassword, _actorUsername) {
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userRepo.updatePassword(userId, hash);
+  await userRepo.bumpSessionVersionById(userId);
   // Clear lockout so the user can immediately log in with the new password
   await userRepo.resetFailedLogin(target.username);
 
-  // Revoke all existing tokens — forces re-login with new password.
-  // scope='user' so clearForUser on re-login clears the sentinel and the user
-  // can log back in with the new password. The window for old-token reuse is
-  // bounded by the JWT TTL (4h); DB re-verification in requireAdmin closes
-  // any role-escalation gap for that window.
+  // Revoke all existing tokens — forces re-login with the new password.
+  // users.session_version keeps old JWTs invalid even after the next successful login.
   await authService.revokeUser(target.username);
 }
 
@@ -163,5 +165,6 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userRepo.updatePassword(user.id, hash);
+  await userRepo.bumpSessionVersionById(user.id);
   await authService.revokeUser(username);
 }

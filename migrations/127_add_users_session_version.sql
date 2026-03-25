@@ -1,0 +1,7 @@
+-- UP
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+
+-- DOWN
+ALTER TABLE users
+  DROP COLUMN IF EXISTS session_version;

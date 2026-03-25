@@ -16,6 +16,7 @@ import { app } from '../../server.js';
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
 const PREFIX = 'staff-test';
+const BCRYPT_ROUNDS = 4;
 const ADMIN_USER = `${PREFIX}-admin`;
 const VIEWER_USER = `${PREFIX}-viewer`;
 const ADMIN_PW = 'StaffTestAdmin!2025';
@@ -49,8 +50,8 @@ beforeAll(async () => {
   homeBId = hb.id;
 
   // Create test users
-  const adminHash = await bcrypt.hash(ADMIN_PW, 12);
-  const viewerHash = await bcrypt.hash(VIEWER_PW, 12);
+  const adminHash = await bcrypt.hash(ADMIN_PW, BCRYPT_ROUNDS);
+  const viewerHash = await bcrypt.hash(VIEWER_PW, BCRYPT_ROUNDS);
   await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'admin', true, 'Staff Test Admin', 'test-setup')`,
@@ -84,7 +85,7 @@ beforeAll(async () => {
     .send({ username: VIEWER_USER, password: VIEWER_PW })
     .expect(200);
   viewerToken = viewerRes.body.token;
-});
+}, 30000);
 
 afterAll(async () => {
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
@@ -93,7 +94,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
-});
+}, 30000);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

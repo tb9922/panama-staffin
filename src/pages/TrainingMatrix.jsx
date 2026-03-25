@@ -19,7 +19,7 @@ const TABS = [
 export default function TrainingMatrix() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
-  const canEdit = canWrite('staff');
+  const canEdit = canWrite('compliance');
   const [tab, setTab] = useState('training');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);

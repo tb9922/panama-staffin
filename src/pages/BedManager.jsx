@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BTN, CARD, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
   getCurrentHome, getBeds, getBedSummary, getBedHistory,
-  createBed, transitionBedStatus, revertBedTransition, moveBedResident,
+  createBed, updateBed as updateBedApi, deleteBed as deleteBedApi,
+  transitionBedStatus, revertBedTransition, moveBedResident,
   getFinanceResidents,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -81,9 +83,20 @@ const EMPTY_BED_FORM = {
   room_number: '', room_name: '', room_type: 'single', floor: '', notes: '',
 };
 
+function toBedForm(bed) {
+  return {
+    room_number: bed?.room_number || '',
+    room_name: bed?.room_name || '',
+    room_type: bed?.room_type || 'single',
+    floor: bed?.floor || '',
+    notes: bed?.notes || '',
+  };
+}
+
 export default function BedManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [beds, setBeds] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +105,9 @@ export default function BedManager() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ ...EMPTY_BED_FORM });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editBed, setEditBed] = useState(null);
+  const [editForm, setEditForm] = useState({ ...EMPTY_BED_FORM });
   const [showTransitionModal, setShowTransitionModal] = useState(false);
   const [transitionBed, setTransitionBed] = useState(null);
   const [transitionTarget, setTransitionTarget] = useState('');
@@ -105,11 +121,26 @@ export default function BedManager() {
   const [showRevertModal, setShowRevertModal] = useState(false);
   const [revertBed, setRevertBed] = useState(null);
   const [revertReason, setRevertReason] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Residents for picker
   const [residents, setResidents] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  useDirtyGuard(!!showAddModal || !!showTransitionModal || !!showMoveModal || !!showRevertModal);
+  useDirtyGuard(
+    !!showAddModal ||
+    !!showEditModal ||
+    !!showTransitionModal ||
+    !!showMoveModal ||
+    !!showRevertModal ||
+    !!showDeleteModal
+  );
+
+  const requestedResidentId = useMemo(() => {
+    const raw = searchParams.get('residentId');
+    const id = raw ? parseInt(raw, 10) : NaN;
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     try {
@@ -138,6 +169,15 @@ export default function BedManager() {
       setResidents(result.rows || result || []);
     } catch { /* non-critical */ }
   }, []);
+
+  useEffect(() => {
+    if (requestedResidentId) loadResidents();
+  }, [requestedResidentId, loadResidents]);
+
+  const requestedResident = useMemo(
+    () => residents.find(r => r.id === requestedResidentId) || null,
+    [residents, requestedResidentId],
+  );
 
   // Sorted beds by room number
   const sortedBeds = useMemo(() =>
@@ -184,6 +224,37 @@ export default function BedManager() {
     }
   }
 
+  function openEdit(bed) {
+    setEditBed(bed);
+    setEditForm(toBedForm(bed));
+    setShowEditModal(true);
+  }
+
+  async function handleEditBed(e) {
+    e.preventDefault();
+    if (!editBed) return;
+    setSubmitting(true);
+    try {
+      const home = getCurrentHome();
+      await updateBedApi(home, editBed.id, {
+        ...editForm,
+        clientUpdatedAt: editBed.updated_at,
+      });
+      setShowEditModal(false);
+      setEditBed(null);
+      setEditForm({ ...EMPTY_BED_FORM });
+      await load();
+    } catch (err) {
+      if (err.message.includes('409') || err.message.toLowerCase().includes('conflict')) {
+        setError('Conflict: bed details changed. Please refresh.');
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function openTransition(bed, target) {
     setTransitionBed(bed);
     setTransitionTarget(target);
@@ -194,7 +265,10 @@ export default function BedManager() {
     // releasing reservation
     if (bed.status === 'reserved' && target === 'available') meta.releaseReason = 'family_declined';
     setTransitionMeta(meta);
-    if (target === 'occupied') loadResidents();
+    if (target === 'occupied') {
+      if (requestedResidentId) meta.residentId = requestedResidentId;
+      loadResidents();
+    }
     setShowTransitionModal(true);
   }
 
@@ -206,6 +280,11 @@ export default function BedManager() {
       const data = { status: transitionTarget, clientUpdatedAt: transitionBed.updated_at, ...transitionMeta };
       if (transitionBed.status === 'available' && transitionTarget === 'occupied') data.skipReservation = true;
       await transitionBedStatus(home, transitionBed.id, data);
+      if (transitionTarget === 'occupied' && requestedResidentId && data.residentId === requestedResidentId) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('residentId');
+        setSearchParams(next, { replace: true });
+      }
       setShowTransitionModal(false);
       setTransitionBed(null);
       await load();
@@ -279,6 +358,31 @@ export default function BedManager() {
     }
   }
 
+  function openDelete(bed) {
+    setDeleteTarget(bed);
+    setShowDeleteModal(true);
+  }
+
+  async function handleDeleteBed() {
+    if (!deleteTarget) return;
+    setSubmitting(true);
+    try {
+      const home = getCurrentHome();
+      await deleteBedApi(home, deleteTarget.id, deleteTarget.updated_at);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+      await load();
+    } catch (err) {
+      if (err.message.includes('409') || err.message.toLowerCase().includes('conflict')) {
+        setError('Conflict: bed state changed. Please refresh.');
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -305,6 +409,12 @@ export default function BedManager() {
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex justify-between items-center">
           <span>{error}</span>
           <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
+
+      {requestedResidentId && (
+        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+          Assign a bed for <strong>{requestedResident?.resident_name || `resident #${requestedResidentId}`}</strong>. Choose an available bed and click <strong>Admit</strong>.
         </div>
       )}
 
@@ -352,7 +462,7 @@ export default function BedManager() {
               <thead className={TABLE.thead}>
                 <tr>
                   <th scope="col" className={TABLE.th}>Room</th>
-                  <th scope="col" className={TABLE.th}>Name</th>
+                  <th scope="col" className={TABLE.th}>Room Name</th>
                   <th scope="col" className={TABLE.th}>Floor</th>
                   <th scope="col" className={TABLE.th}>Type</th>
                   <th scope="col" className={TABLE.th}>Status</th>
@@ -374,9 +484,18 @@ export default function BedManager() {
                       </span>
                     </td>
                     <td className={TABLE.td}>{bed.resident_name || '--'}</td>
-                    <td className={TABLE.td}>{bed.occupied_since || bed.status_changed_at?.slice(0, 10) || '--'}</td>
+                    <td className={TABLE.td}>{bed.status_since || bed.occupied_since || '--'}</td>
                     <td className={TABLE.td}>
                       <div className="flex flex-wrap gap-1">
+                        {canEdit && (
+                          <button
+                            className={`${BTN.secondary} ${BTN.xs}`}
+                            aria-label={`Edit bed ${bed.room_number}`}
+                            onClick={() => openEdit(bed)}
+                          >
+                            Edit
+                          </button>
+                        )}
                         <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openHistory(bed)}>
                           History
                         </button>
@@ -397,6 +516,15 @@ export default function BedManager() {
                         {canEdit && (
                           <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openRevert(bed)}>
                             Revert
+                          </button>
+                        )}
+                        {canEdit && bed.status === 'available' && !bed.resident_id && (
+                          <button
+                            className={`${BTN.danger} ${BTN.xs}`}
+                            aria-label={`Delete bed ${bed.room_number}`}
+                            onClick={() => openDelete(bed)}
+                          >
+                            Delete
                           </button>
                         )}
                       </div>
@@ -451,6 +579,85 @@ export default function BedManager() {
       </Modal>
 
       {/* ── Transition Modal ───────────────────────────────────────────────── */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditBed(null);
+        }}
+        title={editBed ? `Edit Bed - Room ${editBed.room_number}` : 'Edit Bed'}
+      >
+        <form onSubmit={handleEditBed}>
+          <div className="space-y-4">
+            <div>
+              <label className={INPUT.label}>Room Number *</label>
+              <input
+                className={INPUT.base}
+                required
+                value={editForm.room_number}
+                disabled={!!editBed && (editBed.status !== 'available' || !!editBed.resident_id)}
+                onChange={e => setEditForm(f => ({ ...f, room_number: e.target.value }))}
+              />
+              {editBed && editBed.status !== 'available' && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Room numbers can only be changed when the bed is available.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className={INPUT.label}>Room Name</label>
+              <input
+                className={INPUT.base}
+                value={editForm.room_name}
+                onChange={e => setEditForm(f => ({ ...f, room_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Room Type</label>
+              <select
+                className={INPUT.select}
+                value={editForm.room_type}
+                onChange={e => setEditForm(f => ({ ...f, room_type: e.target.value }))}
+              >
+                {ROOM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={INPUT.label}>Floor</label>
+              <input
+                className={INPUT.base}
+                value={editForm.floor}
+                onChange={e => setEditForm(f => ({ ...f, floor: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Notes</label>
+              <textarea
+                className={INPUT.base}
+                rows={2}
+                value={editForm.notes}
+                onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className={MODAL.footer}>
+            <button
+              type="button"
+              className={BTN.secondary}
+              onClick={() => {
+                setShowEditModal(false);
+                setEditBed(null);
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className={BTN.primary} disabled={submitting}>
+              {submitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       <Modal
         isOpen={showTransitionModal}
         onClose={() => setShowTransitionModal(false)}
@@ -624,6 +831,40 @@ export default function BedManager() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setDeleteTarget(null);
+        }}
+        title={deleteTarget ? `Delete Bed - Room ${deleteTarget.room_number}` : 'Delete Bed'}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Delete this bed from the home configuration. This is only allowed for available beds and the action is audited.
+          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <strong>Room {deleteTarget?.room_number}</strong>
+            {deleteTarget?.room_name ? ` - ${deleteTarget.room_name}` : ''}
+          </div>
+        </div>
+        <div className={MODAL.footer}>
+          <button
+            type="button"
+            className={BTN.secondary}
+            onClick={() => {
+              setShowDeleteModal(false);
+              setDeleteTarget(null);
+            }}
+          >
+            Cancel
+          </button>
+          <button type="button" className={BTN.danger} disabled={submitting} onClick={handleDeleteBed}>
+            {submitting ? 'Deleting...' : 'Delete Bed'}
+          </button>
+        </div>
       </Modal>
     </div>
   );

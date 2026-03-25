@@ -89,7 +89,7 @@ describe('AuthContext', () => {
     expect(result.current.user).not.toBeNull();
 
     await act(async () => {
-      result.current.logout();
+      await result.current.logout();
     });
 
     expect(api.logout).toHaveBeenCalledTimes(1);

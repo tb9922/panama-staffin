@@ -10,6 +10,16 @@ export function getCurrentHome() {
   return currentHome;
 }
 
+function clearClientSession() {
+  currentHome = null;
+  try {
+    localStorage.removeItem('user');
+    localStorage.removeItem('currentHome');
+  } catch {
+    /* ignore */
+  }
+}
+
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/);
   return match ? match[1] : '';
@@ -35,7 +45,9 @@ async function apiFetch(url, options = {}) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
+    const err = new Error(body.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -68,17 +80,25 @@ export function getLoggedInUser() {
   }
 }
 
-export function logout() {
-  localStorage.removeItem('user');
-  // Clear HttpOnly cookie via server endpoint (fire-and-forget)
-  fetch(`${API_BASE}/login/logout`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-  }).catch(() => {});
+export async function logout(options = {}) {
+  const { forceLocal = false } = options;
+  try {
+    await apiFetch(`${API_BASE}/login/logout`, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': getCsrfToken(),
+      },
+    });
+    clearClientSession();
+    return { ok: true };
+  } catch (err) {
+    if (forceLocal || err.status === 401) {
+      clearClientSession();
+      return { ok: false, localOnly: true };
+    }
+    throw err;
+  }
 }
 
 export async function loadAuditLog(limit = 100) {
@@ -1337,42 +1357,46 @@ export async function getSchedulingData(homeSlug, { from, to } = {}) {
   return apiFetch(url, { headers: authHeaders() });
 }
 
-export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }) {
+function schedulingHeaders(editLockPin) {
+  return authHeaders(editLockPin ? { 'X-Edit-Lock-Pin': String(editLockPin) } : {});
+}
+
+export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }, { editLockPin } = {}) {
   return apiFetch(`${API_BASE}/scheduling/overrides?home=${encodeURIComponent(homeSlug)}`, {
     method: 'PUT',
-    headers: authHeaders(),
+    headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }),
   });
 }
 
-export async function deleteOverride(homeSlug, date, staffId) {
+export async function deleteOverride(homeSlug, date, staffId, { editLockPin } = {}) {
   const params = new URLSearchParams({ home: homeSlug, date, staffId });
   return apiFetch(`${API_BASE}/scheduling/overrides?${params}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: schedulingHeaders(editLockPin),
   });
 }
 
-export async function bulkUpsertOverrides(homeSlug, overrides) {
+export async function bulkUpsertOverrides(homeSlug, overrides, { editLockPin } = {}) {
   return apiFetch(`${API_BASE}/scheduling/overrides/bulk?home=${encodeURIComponent(homeSlug)}`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ overrides }),
   });
 }
 
-export async function revertMonthOverrides(homeSlug, fromDate, toDate) {
+export async function revertMonthOverrides(homeSlug, fromDate, toDate, { editLockPin } = {}) {
   const params = new URLSearchParams({ home: homeSlug, fromDate, toDate });
   return apiFetch(`${API_BASE}/scheduling/overrides/month?${params}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: schedulingHeaders(editLockPin),
   });
 }
 
-export async function upsertDayNote(homeSlug, date, note) {
+export async function upsertDayNote(homeSlug, date, note, { editLockPin } = {}) {
   return apiFetch(`${API_BASE}/scheduling/day-notes?home=${encodeURIComponent(homeSlug)}`, {
     method: 'PUT',
-    headers: authHeaders(),
+    headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ date, note }),
   });
 }
@@ -1469,6 +1493,12 @@ export async function createBed(homeSlug, data) {
   });
 }
 
+export async function updateBed(homeSlug, bedId, data) {
+  return apiFetch(`${API_BASE}/beds/${bedId}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
 export async function setupBeds(homeSlug, beds) {
   return apiFetch(`${API_BASE}/beds/setup?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(beds),
@@ -1490,6 +1520,12 @@ export async function revertBedTransition(homeSlug, bedId, reason) {
 export async function moveBedResident(homeSlug, fromBedId, toBedId) {
   return apiFetch(`${API_BASE}/beds/move?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify({ fromBedId, toBedId }),
+  });
+}
+
+export async function deleteBed(homeSlug, bedId, clientUpdatedAt) {
+  return apiFetch(`${API_BASE}/beds/${bedId}?home=${h(homeSlug)}`, {
+    method: 'DELETE', headers: authHeaders(), body: JSON.stringify({ clientUpdatedAt }),
   });
 }
 

@@ -24,6 +24,10 @@ const createBedSchema = z.object({
   notes:       z.string().max(2000).nullable().optional(),
 });
 
+const updateBedSchema = createBedSchema.extend({
+  clientUpdatedAt: z.string(),
+});
+
 const setupBedSchema = createBedSchema.extend({
   status:      z.enum(statusValues).optional(),
   resident_id: z.number().int().positive().optional(),
@@ -52,6 +56,10 @@ const revertSchema = z.object({
 const moveSchema = z.object({
   fromBedId: z.number().int().positive(),
   toBedId:   z.number().int().positive(),
+});
+
+const deleteBedSchema = z.object({
+  clientUpdatedAt: z.string(),
 });
 
 // ── Read endpoints ──────────────────────────────────────────────────────────
@@ -129,6 +137,24 @@ router.put('/move', writeRateLimiter, requireAuth, requireHomeAccess, requireMod
   } catch (err) { next(err); }
 });
 
+// PUT /api/beds/:bedId?home=slug — edit bed metadata
+router.put('/:bedId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.bedId);
+    if (!idParsed.success) return zodError(res, idParsed);
+    const parsed = updateBedSchema.safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed);
+    const bed = await bedService.updateBed(
+      idParsed.data,
+      req.home.id,
+      req.home.slug,
+      parsed.data,
+      req.user.username,
+    );
+    res.json(bed);
+  } catch (err) { next(err); }
+});
+
 // PUT /api/beds/:bedId/status?home=slug — transition bed status
 router.put('/:bedId/status', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
@@ -161,6 +187,24 @@ router.put('/:bedId/revert', writeRateLimiter, requireAuth, requireHomeAccess, r
       parsed.data.reason,
     );
     res.json(bed);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/beds/:bedId?home=slug — delete an available bed
+router.delete('/:bedId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.bedId);
+    if (!idParsed.success) return zodError(res, idParsed);
+    const parsed = deleteBedSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
+    const deleted = await bedService.deleteBed(
+      idParsed.data,
+      req.home.id,
+      req.home.slug,
+      req.user.username,
+      parsed.data.clientUpdatedAt,
+    );
+    res.json(deleted);
   } catch (err) { next(err); }
 });
 
