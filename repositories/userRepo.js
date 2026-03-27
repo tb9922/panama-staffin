@@ -95,8 +95,9 @@ export async function update(id, fields, client) {
   return rows[0] || null;
 }
 
-export async function updatePassword(id, newHash) {
-  await pool.query(
+export async function updatePassword(id, newHash, client) {
+  const conn = client || pool;
+  await conn.query(
     'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
     [newHash, id]
   );
@@ -144,8 +145,9 @@ export async function incrementFailedLogin(username) {
   );
 }
 
-export async function resetFailedLogin(username) {
-  await pool.query(
+export async function resetFailedLogin(username, client) {
+  const conn = client || pool;
+  await conn.query(
     'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username = $1',
     [username]
   );

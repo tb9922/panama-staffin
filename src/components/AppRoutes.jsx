@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { RequireModule, RequirePlatformAdmin } from './RequireRole.jsx';
+import { RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -141,7 +141,7 @@ export default function AppRoutes() {
       {/* Reports & System */}
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
-      <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><UserManagement /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />
 
       {/* Platform admin only */}

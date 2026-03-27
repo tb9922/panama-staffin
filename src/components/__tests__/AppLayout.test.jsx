@@ -191,6 +191,18 @@ describe('AppLayout', () => {
     expect(screen.getByText('Handover Book')).toBeInTheDocument();
   });
 
+  it('config-read roles do not see the Users nav item without user-management rights', () => {
+    mockAuth({ user: { username: 'deputy', role: 'admin', displayName: 'Deputy User' }, isViewer: false, isPlatformAdmin: false });
+    mockData({
+      canRead: (mod) => ['config', 'reports'].includes(mod),
+      canWrite: () => false,
+      homeRole: 'deputy_manager',
+    });
+    renderLayout({ username: 'deputy', role: 'admin' });
+    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+  });
+
   // 8. Platform section only visible to platform admin
   it('platform admin sees the Platform nav section', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: true });

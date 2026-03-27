@@ -99,8 +99,8 @@ export async function isTokenDenied(decoded) {
  * Writes to DB — checked per authenticated request (cluster-safe, ~0.1ms PK lookup).
  * @param {string} username
  */
-export async function revokeUser(username, scope = 'user') {
-  await authRepo.revokeAllForUser(username, scope);
+export async function revokeUser(username, scope = 'user', client) {
+  await authRepo.revokeAllForUser(username, scope, client);
   logger.info({ username, scope }, 'All tokens revoked for user');
 }
 

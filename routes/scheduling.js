@@ -151,6 +151,24 @@ function assertEditLock(req, config, dates) {
   throw new AppError(message, 423, 'SCHEDULING_EDIT_LOCKED');
 }
 
+function buildSchedulingConfigOut(config, { ownDataOnly = false } = {}) {
+  const baseConfig = { ...(config || {}) };
+  const editLockEnabled = Boolean(baseConfig.edit_lock_pin);
+  delete baseConfig.edit_lock_pin;
+
+  if (ownDataOnly) {
+    delete baseConfig.agency_rate_day;
+    delete baseConfig.agency_rate_night;
+    delete baseConfig.ot_premium;
+    delete baseConfig.bh_premium_multiplier;
+  }
+
+  return {
+    ...baseConfig,
+    edit_lock_enabled: editLockEnabled,
+  };
+}
+
 /**
  * Check whether a working shift assignment is blocked by expired / missing mandatory training.
  * Returns a warning string if a blocking type is expired or not started, null if compliant.
@@ -246,7 +264,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     }
 
     // staff_member own-data: minimal staff fields, own overrides only, no training/onboarding
-    let configOut = req.home.config;
+    let configOut = buildSchedulingConfigOut(req.home.config);
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
       staffOut = staff.map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
@@ -257,8 +275,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       trainingOut = [];
       onboardingOut = undefined;
       // Strip commercially sensitive fields — staff don't need cost parameters
-      const { agency_rate_day: _ard, agency_rate_night: _arn, ot_premium: _otp, bh_premium_multiplier: _bhm, ...safeConfig } = req.home.config;
-      configOut = safeConfig;
+      configOut = buildSchedulingConfigOut(req.home.config, { ownDataOnly: true });
     }
 
     res.json({

@@ -188,11 +188,12 @@ export default function DailyStatus() {
   }, [availableStaff, schedData, currentDate]);
 
   const today = formatDate(new Date());
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
   const isPastDate = dateStr < today;
-  const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!(schedData?.config?.edit_lock_pin);
+  const isLocked = isPastDate && !unlockedDates.has(dateStr) && hasEditLock;
 
   function getEditLockOptions(targetDate = dateStr) {
-    if (!schedData?.config?.edit_lock_pin) return {};
+    if (!hasEditLock) return {};
     if (targetDate >= today) return {};
     if (!unlockedDates.has(targetDate) || !storedLockPinRef.current) return {};
     return { editLockPin: storedLockPinRef.current };
@@ -389,8 +390,8 @@ export default function DailyStatus() {
     await applyOverride(staff.id, manualShiftType, getShiftEditReason(manualShiftType), source);
   }
 
-  function unlockDate() {
-    const unlockValue = String(lockPin || schedData?.config?.edit_lock_pin || '');
+  function unlockDate(pinValue = lockPin) {
+    const unlockValue = String(pinValue || '');
     const newUnlocked = new Set(unlockedDates);
     newUnlocked.add(dateStr);
     setUnlockedDates(newUnlocked);
@@ -404,11 +405,12 @@ export default function DailyStatus() {
   }
 
   function attemptUnlock() {
-    if (!schedData) return;
-    const pin = String(schedData.config.edit_lock_pin || '');
-    if (!pin) { unlockDate(); return; }
-    if (String(lockPin) === pin) { unlockDate(); }
-    else { setLockError('Incorrect PIN'); setLockPin(''); }
+    if (!hasEditLock) { unlockDate(''); return; }
+    if (!String(lockPin || '').trim()) {
+      setLockError('Enter the edit PIN');
+      return;
+    }
+    unlockDate(lockPin);
   }
 
   // Wraps any write action with a past-date lock check

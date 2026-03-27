@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import {
   getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
@@ -33,6 +34,8 @@ const ROLE_GROUPS = [
 
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,7 +82,9 @@ export default function UserManagement() {
     <div className={PAGE.container}>
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>User Management</h1>
-        <button className={`${BTN.primary} ${BTN.sm}`} onClick={() => setAddOpen(true)}>Add User</button>
+        {canManageUsers && (
+          <button className={`${BTN.primary} ${BTN.sm}`} onClick={() => setAddOpen(true)}>Add User</button>
+        )}
       </div>
 
       {error && (
@@ -96,7 +101,9 @@ export default function UserManagement() {
 
       {users.length === 0 ? (
         <div className={CARD.padded}>
-          <p className="text-gray-400 text-sm text-center py-8">No users assigned to this home. Use Add User to create one.</p>
+          <p className="text-gray-400 text-sm text-center py-8">
+            No users assigned to this home.{canManageUsers ? ' Use Add User to create one.' : ''}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -138,11 +145,15 @@ export default function UserManagement() {
                         <td className={TABLE.td}>{u.granted_by || '\u2014'}</td>
                         <td className={TABLE.td}>
                           <div className="flex items-center gap-1">
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
+                            {canManageUsers && (
+                              <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
+                            )}
                             {isPlatformAdmin && (
                               <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
                             )}
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Role</button>
+                            {canManageUsers && (
+                              <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Role</button>
+                            )}
                           </div>
                         </td>
                       </tr>

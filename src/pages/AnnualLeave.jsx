@@ -112,8 +112,10 @@ export default function AnnualLeave() {
     return getLeaveYear(today, schedData.config.leave_year_start);
   }, [schedData, today]);
 
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+
   function getEditLockOptions(dates) {
-    if (!schedData?.config?.edit_lock_pin || !storedLockPinRef.current) return {};
+    if (!hasEditLock || !storedLockPinRef.current) return {};
     const targetDates = Array.isArray(dates) ? dates : [dates];
     if (targetDates.some(date => date < today && !unlockedDates.has(date))) return {};
     return { editLockPin: storedLockPinRef.current };
@@ -121,7 +123,7 @@ export default function AnnualLeave() {
 
   function requestUnlock(dates, action) {
     const targetDates = (Array.isArray(dates) ? dates : [dates]).filter(date => date && date < today);
-    if (!schedData?.config?.edit_lock_pin || targetDates.every(date => unlockedDates.has(date))) {
+    if (!hasEditLock || targetDates.every(date => unlockedDates.has(date))) {
       return true;
     }
     setPendingAction({ dates: targetDates, fn: action });
@@ -162,17 +164,15 @@ export default function AnnualLeave() {
   }
 
   function attemptUnlock() {
-    const expectedPin = String(schedData?.config?.edit_lock_pin || '');
-    if (!expectedPin) {
+    if (!hasEditLock) {
       unlockPendingDates();
       return;
     }
-    if (String(lockPin) === expectedPin) {
+    if (String(lockPin || '').trim()) {
       unlockPendingDates();
       return;
     }
-    setLockError('Incorrect PIN');
-    setLockPin('');
+    setLockError('Enter the edit PIN');
   }
 
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours

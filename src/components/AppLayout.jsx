@@ -5,7 +5,7 @@ import { BTN, INPUT, MODAL } from '../lib/design.js';
 import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { getRoleLabel } from '../../shared/roles.js';
+import { ROLES, getRoleLabel } from '../../shared/roles.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
@@ -13,6 +13,7 @@ import AppRoutes from './AppRoutes.jsx';
 export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
+  const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
@@ -122,7 +123,10 @@ export default function AppLayout() {
 
         <nav className="flex-1 py-1.5 px-2 overflow-y-auto space-y-0.5">
           {/* Top-level items */}
-          {NAV_TOP.filter(item => !item.module || canRead(item.module)).map(item => (
+          {NAV_TOP.filter(item => {
+            if (item.requiresUserManagement && !canManageUsers) return false;
+            return !item.module || canRead(item.module);
+          }).map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -181,6 +185,7 @@ export default function AppLayout() {
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
                     {section.items.filter(item => {
                       if (item.platformAdminOnly) return isPlatformAdmin;
+                      if (item.requiresUserManagement && !canManageUsers) return false;
                       if (item.module) return canRead(item.module);
                       if (section.id === 'scheduling' && homeRole === 'staff_member') return item.ownDataSafe === true;
                       return true;

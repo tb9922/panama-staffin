@@ -329,11 +329,13 @@ export default function RotationGrid() {
   }, [editing, schedData, monthDates]);
 
   function isDateLocked(dateStr) {
-    return !!(schedData?.config?.edit_lock_pin) && dateStr < formatDate(new Date()) && !unlockedDates.has(dateStr);
+    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+    return hasEditLock && dateStr < formatDate(new Date()) && !unlockedDates.has(dateStr);
   }
 
   function getEditLockOptions(dates) {
-    if (!schedData?.config?.edit_lock_pin || !storedLockPinRef.current) return {};
+    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+    if (!hasEditLock || !storedLockPinRef.current) return {};
     const targetDates = Array.isArray(dates) ? dates : [dates];
     if (targetDates.some(date => date < formatDate(new Date()) && !unlockedDates.has(date))) return {};
     return { editLockPin: storedLockPinRef.current };
@@ -373,7 +375,7 @@ export default function RotationGrid() {
 
   function unlockPendingDates() {
     if (!pendingAction) return;
-    const unlockValue = String(lockPin || schedData?.config?.edit_lock_pin || '');
+    const unlockValue = String(lockPin || '');
     const nextUnlocked = new Set(unlockedDates);
     pendingAction.dates.forEach(date => nextUnlocked.add(date));
     setUnlockedDates(nextUnlocked);
@@ -389,17 +391,16 @@ export default function RotationGrid() {
   }
 
   function attemptUnlock() {
-    const expectedPin = String(schedData?.config?.edit_lock_pin || '');
-    if (!expectedPin) {
+    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+    if (!hasEditLock) {
       unlockPendingDates();
       return;
     }
-    if (String(lockPin) === expectedPin) {
+    if (String(lockPin || '').trim()) {
       unlockPendingDates();
       return;
     }
-    setLockError('Incorrect PIN');
-    setLockPin('');
+    setLockError('Enter the edit PIN');
   }
 
   function openEditor(staffId, dateStr) {

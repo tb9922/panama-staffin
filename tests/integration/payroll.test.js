@@ -836,8 +836,15 @@ describe('Pensions — /pensions + /pension-config', () => {
       staff_id: 'PH01',
       status: 'opted_out',
       opted_out_date: '2099-07-01',
+      reassessment_date: '2102-07-01',
+      contribution_override_employee: 0.06,
+      contribution_override_employer: 0.04,
     }).expect(201);
     expect(res.body.status).toBe('opted_out');
+    expect(res.body.opted_out_date).toBe('2099-07-01');
+    expect(res.body.reassessment_date).toBe('2102-07-01');
+    expect(res.body.contribution_override_employee).toBe(0.06);
+    expect(res.body.contribution_override_employer).toBe(0.04);
   });
 
   it('POST rejects invalid status enum', async () => {
@@ -858,14 +865,26 @@ describe('Pensions — /pensions + /pension-config', () => {
     const res = await adminGet(`/pensions?home=${homeASlug}`).expect(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
+    const enrolment = res.body.find((row) => row.staff_id === 'PH01');
+    expect(enrolment).toMatchObject({
+      status: 'opted_out',
+      opted_out_date: '2099-07-01',
+      reassessment_date: '2102-07-01',
+      contribution_override_employee: 0.06,
+      contribution_override_employer: 0.04,
+    });
   });
 
-  it('GET pension-config (auth only, no admin/home)', async () => {
-    const res = await request(app)
-      .get(BASE + '/pension-config')
+  it('GET pension-config requires payroll read access for the selected home', async () => {
+    await request(app)
+      .get(`${BASE}/pension-config?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const res = await request(app)
+      .get(`${BASE}/pension-config?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    // Returns object or empty object
     expect(typeof res.body).toBe('object');
   });
 });
@@ -876,10 +895,15 @@ describe('SSP — /sick-periods + /ssp-config', () => {
   let periodId;
   let closedPeriodId;
 
-  it('GET ssp-config (auth only)', async () => {
-    const res = await request(app)
-      .get(BASE + '/ssp-config')
+  it('GET ssp-config requires payroll read access for the selected home', async () => {
+    await request(app)
+      .get(`${BASE}/ssp-config?home=${homeASlug}`)
       .set('Authorization', `Bearer ${viewerToken}`)
+      .expect(403);
+
+    const res = await request(app)
+      .get(`${BASE}/ssp-config?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(Array.isArray(res.body)).toBe(true);
   });

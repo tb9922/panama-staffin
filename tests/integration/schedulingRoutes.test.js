@@ -95,6 +95,13 @@ afterAll(async () => {
 });
 
 describe('scheduling route hardening', () => {
+  it('redacts the raw edit lock PIN from scheduling config responses', async () => {
+    const res = await authRequest('get', `/api/scheduling?home=${homeSlug}`).expect(200);
+
+    expect(res.body.config.edit_lock_enabled).toBe(true);
+    expect(res.body.config.edit_lock_pin).toBeUndefined();
+  });
+
   it('rejects past-date single overrides without the edit lock PIN', async () => {
     const res = await authRequest('put', `/api/scheduling/overrides?home=${homeSlug}`)
       .send({ date: utcDateOffset(-2), staffId: 'sched-route-s1', shift: 'AL' });

@@ -21,7 +21,7 @@ export function validatePassword(password) {
 
 /**
  * Seed admin/viewer users from env vars if the users table is empty.
- * Called once at startup. Non-fatal if table doesn't exist yet.
+ * Called once at startup. Non-fatal if table does not exist yet.
  */
 export async function ensureSeedUsers() {
   const existing = await userRepo.listAll();
@@ -48,7 +48,7 @@ export async function ensureSeedUsers() {
   }
 
   if (seeded === 0) {
-    logger.warn('Users table is empty and no env var hashes found — no users seeded');
+    logger.warn('Users table is empty and no env var hashes found - no users seeded');
   }
 }
 
@@ -82,17 +82,12 @@ export async function updateUser(id, fields, actorUsername) {
   if (!target) throw new Error('User not found');
 
   const updateFields = { ...fields };
-  // Strip is_platform_admin — only settable via direct DB or platform admin routes
   delete updateFields.is_platform_admin;
 
-  // Cannot deactivate yourself
   if (updateFields.active === false && target.username === actorUsername) {
     throw new Error('Cannot deactivate your own account');
   }
 
-  // Cannot deactivate or downgrade the last admin.
-  // Use a transaction with row-level lock to prevent TOCTOU: two concurrent requests
-  // could both pass the count check and both deactivate the last admin.
   const isRemovingAdmin =
     (updateFields.active === false && target.role === 'admin') ||
     (updateFields.role !== undefined && updateFields.role !== 'admin' && target.role === 'admin' && target.active);
@@ -104,7 +99,6 @@ export async function updateUser(id, fields, actorUsername) {
   let updated;
   if (isRemovingAdmin) {
     updated = await withTransaction(async (client) => {
-      // Lock the target row so concurrent requests serialise here
       await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
       const adminCount = await userRepo.countActiveAdmins(client);
       if (adminCount <= 1) {
@@ -116,17 +110,12 @@ export async function updateUser(id, fields, actorUsername) {
     updated = await userRepo.update(id, updateFields);
   }
 
-  // If deactivated, immediately revoke all currently-issued tokens. Fresh login is blocked
-  // by users.active, and old JWTs are durably blocked by the session_version bump above.
   if (updateFields.active === false) {
     await authService.revokeUser(target.username);
   }
 
-  // If role changed, force re-login so a fresh JWT is issued with the new claims.
-  // session_version makes the old token stay invalid even after the user logs back in.
   if (updateFields.role && updateFields.role !== target.role) {
     await authService.revokeUser(target.username);
-    // If upgraded to admin, grant all homes
     if (updateFields.role === 'admin' && updateFields.role !== target.role) {
       await userHomeRepo.grantAllHomesRole(target.username);
     }
@@ -143,14 +132,12 @@ export async function resetPassword(userId, newPassword, _actorUsername) {
   if (!target) throw new Error('User not found');
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await userRepo.updatePassword(userId, hash);
-  await userRepo.bumpSessionVersionById(userId);
-  // Clear lockout so the user can immediately log in with the new password
-  await userRepo.resetFailedLogin(target.username);
-
-  // Revoke all existing tokens — forces re-login with the new password.
-  // users.session_version keeps old JWTs invalid even after the next successful login.
-  await authService.revokeUser(target.username);
+  await withTransaction(async (client) => {
+    await userRepo.updatePassword(userId, hash, client);
+    await userRepo.bumpSessionVersionById(userId, client);
+    await userRepo.resetFailedLogin(target.username, client);
+    await authService.revokeUser(target.username, 'user', client);
+  });
 }
 
 export async function changeOwnPassword(username, currentPassword, newPassword) {
@@ -164,7 +151,9 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
   if (!valid) throw new Error('Current password is incorrect');
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await userRepo.updatePassword(user.id, hash);
-  await userRepo.bumpSessionVersionById(user.id);
-  await authService.revokeUser(username);
+  await withTransaction(async (client) => {
+    await userRepo.updatePassword(user.id, hash, client);
+    await userRepo.bumpSessionVersionById(user.id, client);
+    await authService.revokeUser(username, 'user', client);
+  });
 }

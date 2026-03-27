@@ -568,14 +568,14 @@ export async function upsertPensionEnrolment(homeSlug, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
-export async function getPensionConfig() {
-  return apiFetch(`${API_BASE}/payroll/pension-config`, { headers: authHeaders() });
+export async function getPensionConfig(homeSlug = getCurrentHome()) {
+  return apiFetch(`${API_BASE}/payroll/pension-config?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
 // ── Phase 2: SSP & Sick Periods ───────────────────────────────────────────────
 
-export async function getSSPConfig() {
-  return apiFetch(`${API_BASE}/payroll/ssp-config`, { headers: authHeaders() });
+export async function getSSPConfig(homeSlug = getCurrentHome()) {
+  return apiFetch(`${API_BASE}/payroll/ssp-config?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 export async function getSickPeriods(homeSlug, staffId) {
   const q = staffId ? `&staffId=${staffId}` : '';
