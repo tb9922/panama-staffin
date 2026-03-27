@@ -30,6 +30,10 @@ vi.mock('../../lib/api.js', async () => {
     getAccessLog: vi.fn(),
     getRopaActivities: vi.fn(),
     getDpiaAssessments: vi.fn(),
+    createSnapshot: vi.fn(),
+    getSnapshots: vi.fn(),
+    getSnapshot: vi.fn(),
+    signOffSnapshot: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -76,6 +80,10 @@ function mockAllApis(overrides = {}) {
   api.scanRetention.mockResolvedValue([]);
   if (api.getRopaActivities) api.getRopaActivities.mockResolvedValue({ rows: [] });
   if (api.getDpiaAssessments) api.getDpiaAssessments.mockResolvedValue({ rows: [] });
+  api.createSnapshot.mockResolvedValue({ id: 'snap-001' });
+  api.getSnapshots.mockResolvedValue([]);
+  api.getSnapshot.mockResolvedValue({ id: 'snap-001', status: 'draft' });
+  api.signOffSnapshot.mockResolvedValue({});
 }
 
 describe('GdprDashboard', () => {
@@ -89,6 +97,7 @@ describe('GdprDashboard', () => {
   it('shows loading state initially', () => {
     // All promises pending → loading state shown
     api.getDataRequests.mockReturnValue(new Promise(() => {}));
+    api.getSnapshots.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<GdprDashboard />);
     expect(screen.getByText(/loading gdpr data/i)).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
@@ -10,12 +10,7 @@ import {
   deleteOverride,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
-import {
-  loadSchedulingUnlockedDates,
-  saveSchedulingUnlockedDates,
-  loadSchedulingEditLockPin,
-  saveSchedulingEditLockPin,
-} from '../lib/schedulingEditLock.js';
+import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -52,16 +47,10 @@ export default function AnnualLeave() {
   const [bookingEnd, setBookingEnd] = useState('');
   const [bookingError, setBookingError] = useState(null);
   const [bookingMsg, setBookingMsg] = useState(null);
-  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
-  const [showLockPrompt, setShowLockPrompt] = useState(false);
-  const [lockPin, setLockPin] = useState('');
-  const [lockError, setLockError] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
   const homeSlug = getCurrentHome();
-  const storedLockPinRef = useRef(loadSchedulingEditLockPin(homeSlug || 'default'));
   const today = useLiveDate();
   const isOwnDataAnnualLeave = homeRole === 'staff_member';
   const loadData = useCallback(async () => {
@@ -84,11 +73,6 @@ export default function AnnualLeave() {
   }, [homeSlug, isOwnDataAnnualLeave, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  useEffect(() => {
-    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
-    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
-  }, [homeSlug]);
 
   const activeStaff = useMemo(() => {
     if (!schedData) return [];
@@ -113,67 +97,18 @@ export default function AnnualLeave() {
   }, [schedData, today]);
 
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
-
-  function getEditLockOptions(dates) {
-    if (!hasEditLock || !storedLockPinRef.current) return {};
-    const targetDates = Array.isArray(dates) ? dates : [dates];
-    if (targetDates.some(date => date < today && !unlockedDates.has(date))) return {};
-    return { editLockPin: storedLockPinRef.current };
-  }
-
-  function requestUnlock(dates, action) {
-    const targetDates = (Array.isArray(dates) ? dates : [dates]).filter(date => date && date < today);
-    if (!hasEditLock || targetDates.every(date => unlockedDates.has(date))) {
-      return true;
-    }
-    setPendingAction({ dates: targetDates, fn: action });
-    setLockPin('');
-    setLockError('');
-    setShowLockPrompt(true);
-    return false;
-  }
-
-  function handleLockedError(dates, retryFn) {
-    const targetDates = Array.isArray(dates) ? dates : [dates];
-    const nextUnlocked = new Set(unlockedDates);
-    targetDates.forEach(date => nextUnlocked.delete(date));
-    setUnlockedDates(nextUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
-    storedLockPinRef.current = '';
-    saveSchedulingEditLockPin(homeSlug || 'default', '');
-    setPendingAction({ dates: targetDates, fn: retryFn });
-    setLockPin('');
-    setLockError('');
-    setShowLockPrompt(true);
-  }
-
-  function unlockPendingDates() {
-    if (!pendingAction) return;
-    const nextUnlocked = new Set(unlockedDates);
-    pendingAction.dates.forEach(date => nextUnlocked.add(date));
-    setUnlockedDates(nextUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
-    storedLockPinRef.current = lockPin;
-    saveSchedulingEditLockPin(homeSlug || 'default', lockPin);
-    const action = pendingAction.fn;
-    setPendingAction(null);
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    action();
-  }
-
-  function attemptUnlock() {
-    if (!hasEditLock) {
-      unlockPendingDates();
-      return;
-    }
-    if (String(lockPin || '').trim()) {
-      unlockPendingDates();
-      return;
-    }
-    setLockError('Enter the edit PIN');
-  }
+  const {
+    showLockPrompt,
+    lockPin,
+    lockError,
+    updateLockPin,
+    dismissLockPrompt,
+    attemptUnlock,
+    isDateLocked,
+    getEditLockOptions,
+    requestUnlock,
+    handleLockedError,
+  } = useSchedulingEditLock({ homeSlug, hasEditLock, today });
 
   // Book AL — only on scheduled working days, enforces accrued entitlement in hours
   async function bookAL() {
@@ -240,14 +175,18 @@ export default function AnnualLeave() {
     }
 
     if (toBook.length > 0) {
-      if (!requestUnlock(toBook.map(row => row.date), () => bookAL())) return;
+      const targetDates = toBook.map(row => row.date);
+      if (targetDates.some(date => isDateLocked(date))) {
+        requestUnlock(targetDates, () => bookAL());
+        return;
+      }
       setSaving(true);
       try {
-        await bulkUpsertOverrides(getCurrentHome(), toBook, getEditLockOptions(toBook.map(row => row.date)));
+        await bulkUpsertOverrides(getCurrentHome(), toBook, getEditLockOptions(targetDates));
         await loadData();
       } catch (e) {
         if (e.status === 423) {
-          handleLockedError(toBook.map(row => row.date), () => bookAL());
+          handleLockedError(targetDates, () => bookAL());
           return;
         }
         setError(e.message);
@@ -263,7 +202,10 @@ export default function AnnualLeave() {
 
   // Cancel AL for a staff member on a date
   async function cancelAL(staffId, dateKey) {
-    if (!requestUnlock(dateKey, () => cancelAL(staffId, dateKey))) return;
+    if (isDateLocked(dateKey)) {
+      requestUnlock(dateKey, () => cancelAL(staffId, dateKey));
+      return;
+    }
     setSaving(true);
     try {
       await deleteOverride(getCurrentHome(), dateKey, staffId, getEditLockOptions(dateKey));
@@ -364,7 +306,7 @@ export default function AnnualLeave() {
               inputMode="numeric"
               maxLength={6}
               value={lockPin}
-              onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+              onChange={e => updateLockPin(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
               placeholder="PIN"
               className={`${INPUT.sm} w-24`}
@@ -372,12 +314,7 @@ export default function AnnualLeave() {
             />
             <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
             <button
-              onClick={() => {
-                setShowLockPrompt(false);
-                setPendingAction(null);
-                setLockPin('');
-                setLockError('');
-              }}
+              onClick={dismissLockPrompt}
               className={`${BTN.ghost} ${BTN.sm}`}
             >
               Cancel

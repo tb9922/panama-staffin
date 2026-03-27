@@ -104,7 +104,7 @@ describe('PensionManager', () => {
   });
 
   it('shows loading state initially', () => {
-    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getPensionEnrolments.mockReturnValue(new Promise(() => {}));
     api.getPensionConfig.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<PensionManager />);

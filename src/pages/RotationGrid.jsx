@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
   getScheduledShift, isCareRole, isAgencyShift, isOTShift,
@@ -20,12 +20,7 @@ import {
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
-import {
-  loadSchedulingUnlockedDates,
-  saveSchedulingUnlockedDates,
-  loadSchedulingEditLockPin,
-  saveSchedulingEditLockPin,
-} from '../lib/schedulingEditLock.js';
+import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -110,14 +105,8 @@ export default function RotationGrid() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [bulkModal, setBulkModal] = useState(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
-  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
-  const [showLockPrompt, setShowLockPrompt] = useState(false);
-  const [lockPin, setLockPin] = useState('');
-  const [lockError, setLockError] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
 
   const homeSlug = getCurrentHome();
-  const storedLockPinRef = useRef(loadSchedulingEditLockPin(homeSlug || 'default'));
   const isOwnDataRoster = homeRole === 'staff_member';
   useDirtyGuard(!!editing || !!bulkModal);
 
@@ -150,11 +139,6 @@ export default function RotationGrid() {
   }, [homeSlug, isOwnDataRoster, monthDates]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  useEffect(() => {
-    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
-    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
-  }, [homeSlug]);
 
   const activeStaff = useMemo(() => {
     if (!schedData) return [];
@@ -328,80 +312,20 @@ export default function RotationGrid() {
     };
   }, [editing, schedData, monthDates]);
 
-  function isDateLocked(dateStr) {
-    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
-    return hasEditLock && dateStr < formatDate(new Date()) && !unlockedDates.has(dateStr);
-  }
-
-  function getEditLockOptions(dates) {
-    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
-    if (!hasEditLock || !storedLockPinRef.current) return {};
-    const targetDates = Array.isArray(dates) ? dates : [dates];
-    if (targetDates.some(date => date < formatDate(new Date()) && !unlockedDates.has(date))) return {};
-    return { editLockPin: storedLockPinRef.current };
-  }
-
-  function relockDates(dates, clearPin = false) {
-    const targetDates = Array.isArray(dates) ? dates : [dates];
-    const nextUnlocked = new Set(unlockedDates);
-    targetDates.forEach(date => nextUnlocked.delete(date));
-    setUnlockedDates(nextUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
-    if (clearPin) {
-      storedLockPinRef.current = '';
-      saveSchedulingEditLockPin(homeSlug || 'default', '');
-    }
-  }
-
-  function requestUnlock(dates, action) {
-    const targetDates = (Array.isArray(dates) ? dates : [dates]).filter(Boolean);
-    if (!targetDates.some(date => isDateLocked(date))) {
-      action();
-      return;
-    }
-    setPendingAction({ dates: targetDates, fn: action });
-    setLockPin('');
-    setLockError('');
-    setShowLockPrompt(true);
-  }
-
-  function handleLockedError(dates, retryFn) {
-    relockDates(dates, true);
-    setPendingAction({ dates: Array.isArray(dates) ? dates : [dates], fn: retryFn });
-    setLockPin('');
-    setLockError('');
-    setShowLockPrompt(true);
-  }
-
-  function unlockPendingDates() {
-    if (!pendingAction) return;
-    const unlockValue = String(lockPin || '');
-    const nextUnlocked = new Set(unlockedDates);
-    pendingAction.dates.forEach(date => nextUnlocked.add(date));
-    setUnlockedDates(nextUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
-    storedLockPinRef.current = unlockValue;
-    saveSchedulingEditLockPin(homeSlug || 'default', unlockValue);
-    const action = pendingAction.fn;
-    setPendingAction(null);
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    action();
-  }
-
-  function attemptUnlock() {
-    const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
-    if (!hasEditLock) {
-      unlockPendingDates();
-      return;
-    }
-    if (String(lockPin || '').trim()) {
-      unlockPendingDates();
-      return;
-    }
-    setLockError('Enter the edit PIN');
-  }
+  const today = formatDate(new Date());
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+  const {
+    showLockPrompt,
+    lockPin,
+    lockError,
+    updateLockPin,
+    dismissLockPrompt,
+    attemptUnlock,
+    isDateLocked,
+    getEditLockOptions,
+    requestUnlock,
+    handleLockedError,
+  } = useSchedulingEditLock({ homeSlug, hasEditLock, today });
 
   function openEditor(staffId, dateStr) {
     requestUnlock(dateStr, () => {
@@ -680,7 +604,7 @@ export default function RotationGrid() {
               inputMode="numeric"
               maxLength={6}
               value={lockPin}
-              onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+              onChange={e => updateLockPin(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
               placeholder="PIN"
               className={`${INPUT.sm} w-24`}
@@ -688,12 +612,7 @@ export default function RotationGrid() {
             />
             <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
             <button
-              onClick={() => {
-                setShowLockPrompt(false);
-                setPendingAction(null);
-                setLockPin('');
-                setLockError('');
-              }}
+              onClick={dismissLockPrompt}
               className={`${BTN.ghost} ${BTN.sm}`}
             >
               Cancel

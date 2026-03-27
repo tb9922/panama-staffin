@@ -144,19 +144,22 @@ describe('MonthlyTimesheet', () => {
 
   it('shows loading state while scheduling data loads', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
-    api.getTimesheetPeriod.mockResolvedValue([]);
+    api.getTimesheetPeriod.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<MonthlyTimesheet />);
     expect(screen.getByText('Loading data...')).toBeInTheDocument();
   });
 
   it('loads scheduling data for the visible payroll month only', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 2, 8)));
     renderAdmin();
-    await vi.runAllTimersAsync();
+    await screen.findByText('Monthly Timesheet');
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth() + 1;
+    const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(new Date(Date.UTC(currentYear, currentMonth, 0)).getUTCDate()).padStart(2, '0')}`;
     expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
-      from: '2026-03-01',
-      to: '2026-03-31',
+      from: monthStart,
+      to: monthEnd,
     });
   });
 

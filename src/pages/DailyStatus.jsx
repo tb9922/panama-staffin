@@ -24,12 +24,7 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import {
-  loadSchedulingUnlockedDates,
-  saveSchedulingUnlockedDates,
-  loadSchedulingEditLockPin,
-  saveSchedulingEditLockPin,
-} from '../lib/schedulingEditLock.js';
+import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 
 function getCenteredSchedulingRange(date, radiusDays = 200) {
   return {
@@ -91,16 +86,8 @@ export default function DailyStatus() {
   const [gapPanelDate, setGapPanelDate] = useState(null);
   const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
 
-  // PIN unlock uses getCurrentHome() as the key to avoid timing dependency on data load
-  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(getCurrentHome() || 'default'));
-  const [showLockPrompt, setShowLockPrompt] = useState(false);
-  const [lockPin, setLockPin] = useState('');
-  const [lockError, setLockError] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
-
   const noteTimerRef = useRef(null);
   const savingRef = useRef(false);
-  const storedLockPinRef = useRef(loadSchedulingEditLockPin(getCurrentHome() || 'default'));
   useDirtyGuard(!!modal);
 
   const closeModal = useCallback(() => {
@@ -140,22 +127,8 @@ export default function DailyStatus() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  useEffect(() => {
-    setUnlockedDates(loadSchedulingUnlockedDates(homeSlug || 'default'));
-    storedLockPinRef.current = loadSchedulingEditLockPin(homeSlug || 'default');
-  }, [homeSlug]);
-
   // Cleanup debounce timer on unmount
   useEffect(() => () => clearTimeout(noteTimerRef.current), []);
-
-  // Reset lock prompt state and override warnings when navigating to a different date
-  useEffect(() => {
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    setPendingAction(null);
-    setOverrideWarnings([]);
-  }, [dateStr]);
 
   const staffForDay = useMemo(() => {
     if (!schedData) return [];
@@ -189,34 +162,25 @@ export default function DailyStatus() {
 
   const today = formatDate(new Date());
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
-  const isPastDate = dateStr < today;
-  const isLocked = isPastDate && !unlockedDates.has(dateStr) && hasEditLock;
+  const {
+    showLockPrompt,
+    lockPin,
+    lockError,
+    updateLockPin,
+    dismissLockPrompt,
+    attemptUnlock,
+    requestUnlock,
+    handleLockedError,
+    getEditLockOptions,
+    isDateLocked,
+  } = useSchedulingEditLock({ homeSlug, hasEditLock, today });
+  const isLocked = isDateLocked(dateStr);
 
-  function getEditLockOptions(targetDate = dateStr) {
-    if (!hasEditLock) return {};
-    if (targetDate >= today) return {};
-    if (!unlockedDates.has(targetDate) || !storedLockPinRef.current) return {};
-    return { editLockPin: storedLockPinRef.current };
-  }
-
-  function relockDate(targetDate = dateStr, clearPin = false) {
-    const nextUnlocked = new Set(unlockedDates);
-    nextUnlocked.delete(targetDate);
-    setUnlockedDates(nextUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', nextUnlocked);
-    if (clearPin) {
-      storedLockPinRef.current = '';
-      saveSchedulingEditLockPin(homeSlug || 'default', '');
-    }
-  }
-
-  function handleLockedError(retryFn, targetDate = dateStr) {
-    relockDate(targetDate, true);
-    setPendingAction({ fn: retryFn });
-    setLockError('');
-    setLockPin('');
-    setShowLockPrompt(true);
-  }
+  // Reset lock prompt state and override warnings when navigating to a different date
+  useEffect(() => {
+    dismissLockPrompt();
+    setOverrideWarnings([]);
+  }, [dateStr, dismissLockPrompt]);
 
   function goDay(offset) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
@@ -237,7 +201,7 @@ export default function DailyStatus() {
       await loadData();
     } catch (e) {
       if (e.status === 423) {
-        handleLockedError(() => applyOverride(staffId, shift, reason, source, sleepIn, replacesStaffId, extra), dateStr);
+        handleLockedError(dateStr, () => applyOverride(staffId, shift, reason, source, sleepIn, replacesStaffId, extra));
         return;
       }
       setError(e.message);
@@ -288,7 +252,7 @@ export default function DailyStatus() {
       await loadData();
     } catch (e) {
       if (e.status === 423) {
-        handleLockedError(() => toggleSleepIn(staffId), dateStr);
+        handleLockedError(dateStr, () => toggleSleepIn(staffId));
         return;
       }
       setError(e.message);
@@ -309,7 +273,7 @@ export default function DailyStatus() {
       await loadData();
     } catch (e) {
       if (e.status === 423) {
-        handleLockedError(() => removeOverride(staffId), dateStr);
+        handleLockedError(dateStr, () => removeOverride(staffId));
         return;
       }
       setError(e.message);
@@ -340,7 +304,7 @@ export default function DailyStatus() {
       await loadData();
     } catch (e) {
       if (e.status === 423) {
-        handleLockedError(() => applySickOverride(staffId), dateStr);
+        handleLockedError(dateStr, () => applySickOverride(staffId));
         savingRef.current = false;
         setSaving(false);
         return;
@@ -390,34 +354,9 @@ export default function DailyStatus() {
     await applyOverride(staff.id, manualShiftType, getShiftEditReason(manualShiftType), source);
   }
 
-  function unlockDate(pinValue = lockPin) {
-    const unlockValue = String(pinValue || '');
-    const newUnlocked = new Set(unlockedDates);
-    newUnlocked.add(dateStr);
-    setUnlockedDates(newUnlocked);
-    saveSchedulingUnlockedDates(homeSlug || 'default', newUnlocked);
-    storedLockPinRef.current = unlockValue;
-    saveSchedulingEditLockPin(homeSlug || 'default', unlockValue);
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    if (pendingAction) { pendingAction.fn(); setPendingAction(null); }
-  }
-
-  function attemptUnlock() {
-    if (!hasEditLock) { unlockDate(''); return; }
-    if (!String(lockPin || '').trim()) {
-      setLockError('Enter the edit PIN');
-      return;
-    }
-    unlockDate(lockPin);
-  }
-
   // Wraps any write action with a past-date lock check
   function withLockCheck(action) {
-    if (!isLocked) { action(); return; }
-    setPendingAction({ fn: action });
-    setShowLockPrompt(true);
+    requestUnlock(dateStr, action);
   }
 
   const escColor = (esc) => {
@@ -670,14 +609,14 @@ export default function DailyStatus() {
             inputMode="numeric"
             maxLength={6}
             value={lockPin}
-            onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+            onChange={e => updateLockPin(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
             placeholder="PIN"
             className={`${INPUT.sm} w-20`}
             autoFocus
           />
           <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
-          <button onClick={() => { setShowLockPrompt(false); setLockPin(''); setLockError(''); setPendingAction(null); }} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
+          <button onClick={dismissLockPrompt} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
           {lockError && <span className="text-xs text-red-600">{lockError}</span>}
         </div>
       )}
@@ -742,9 +681,9 @@ export default function DailyStatus() {
                     await upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr));
                   } catch (err) {
                     if (err.status === 423) {
-                      handleLockedError(() => {
+                      handleLockedError(dateStr, () => {
                         upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr)).catch(innerErr => setError(innerErr.message));
-                      }, dateStr);
+                      });
                       return;
                     }
                     setError(err.message);
@@ -913,11 +852,11 @@ export default function DailyStatus() {
                               await loadData();
                             } catch (e) {
                               if (e.status === 423) {
-                                handleLockedError(() => {
+                                handleLockedError(dateStr, () => {
                                   setModal('swap');
                                   setSwapFrom(a.id);
                                   setSwapTo(b.id);
-                                }, dateStr);
+                                });
                                 return;
                               }
                               setError(e.message);
@@ -985,10 +924,10 @@ export default function DailyStatus() {
                       await loadData();
                     } catch (e) {
                       if (e.status === 423) {
-                        handleLockedError(() => {
+                        handleLockedError(dateStr, () => {
                           setModal('agency');
                           setAgencyShiftType(agencyShiftType);
-                        }, dateStr);
+                        });
                         return;
                       }
                       setError(e.message);

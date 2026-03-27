@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RotationGrid from '../RotationGrid.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -63,11 +63,13 @@ describe('RotationGrid', () => {
   });
 
   it('loads a centered scheduling window for the visible month', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(Date.UTC(2026, 2, 8)));
     renderAdmin();
-    await vi.runAllTimersAsync();
-    const anchor = new Date(Date.UTC(2026, 2, 16));
+    await screen.findByRole('button', { name: 'Previous month' });
+    const now = new Date();
+    const monthDates = Array.from({ length: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate() }, (_, index) =>
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), index + 1))
+    );
+    const anchor = monthDates[Math.floor(monthDates.length / 2)];
     expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
       from: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - 200))),
       to: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + 200))),
@@ -92,15 +94,9 @@ describe('RotationGrid', () => {
 
   it('displays month header with month label and navigation arrows', async () => {
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Roster')).toBeInTheDocument();
-    });
-
-    expect(screen.getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Previous month' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next month' })).toBeInTheDocument();
-
-    const allText = document.body.innerText || document.body.textContent;
-    expect(allText).toMatch(/\d{4}/);
+    expect(screen.getAllByText(/\w+\s\d{4}/).length).toBeGreaterThan(0);
   });
 
   it('displays active care staff names in the grid', async () => {
@@ -179,16 +175,16 @@ describe('RotationGrid', () => {
   });
 
   it('navigating to next month updates the month label', async () => {
+    const user = userEvent.setup();
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Roster')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
-
+    await screen.findByRole('button', { name: 'Next month' });
+    const monthLabelsBefore = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
+    await user.click(screen.getByRole('button', { name: 'Next month' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Current month' })).toBeInTheDocument();
     });
+    const monthLabelsAfter = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
+    expect(monthLabelsAfter).not.toEqual(monthLabelsBefore);
   }, 15000);
 
   it('team filter dropdown filters staff to selected team', async () => {
