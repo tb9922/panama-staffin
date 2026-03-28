@@ -5,13 +5,14 @@ import { FUNDING_TYPES, CARE_TYPES, getLabel, formatCurrency } from '../../lib/f
 import { updateFinanceResident, getFinanceFeeHistory } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 
-export default function ResidentEditModal({ home, resident, isAdmin, onClose, onSaved }) {
+export default function ResidentEditModal({ home, resident, canEdit, onClose, onSaved }) {
   const [tab, setTab] = useState('profile');
   const [form, setForm] = useState({ ...resident });
   const [feeHistory, setFeeHistory] = useState([]);
   const [feeChangeReason, setFeeChangeReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const readOnly = !canEdit;
 
   const feeChanged = form.weekly_fee != resident.weekly_fee;
 
@@ -90,28 +91,28 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
         <div className="space-y-3">
           <div>
             <label className={INPUT.label}>Resident Name *</label>
-            <input className={INPUT.base} value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} disabled={!isAdmin} />
+            <input className={INPUT.base} value={form.resident_name || ''} onChange={e => set('resident_name', e.target.value)} disabled={readOnly} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Room Number</label>
-              <input className={INPUT.base} value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} disabled={!isAdmin} />
+              <input className={INPUT.base} value={form.room_number || ''} onChange={e => set('room_number', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Admission Date</label>
-              <input type="date" className={INPUT.base} value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} disabled={!isAdmin} />
+              <input type="date" className={INPUT.base} value={form.admission_date || ''} onChange={e => set('admission_date', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Care Type</label>
-              <select className={INPUT.select} value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} disabled={!isAdmin}>
+              <select className={INPUT.select} value={form.care_type || ''} onChange={e => set('care_type', e.target.value)} disabled={readOnly}>
                 {CARE_TYPES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>
               <label className={INPUT.label}>Funding Type</label>
-              <select className={INPUT.select} value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} disabled={!isAdmin}>
+              <select className={INPUT.select} value={form.funding_type || ''} onChange={e => set('funding_type', e.target.value)} disabled={readOnly}>
                 {FUNDING_TYPES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
             </div>
@@ -119,16 +120,16 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Funding Authority</label>
-              <input className={INPUT.base} value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} disabled={!isAdmin} />
+              <input className={INPUT.base} value={form.funding_authority || ''} onChange={e => set('funding_authority', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Funding Reference</label>
-              <input className={INPUT.base} value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} disabled={!isAdmin} />
+              <input className={INPUT.base} value={form.funding_reference || ''} onChange={e => set('funding_reference', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div>
             <label className={INPUT.label}>Notes</label>
-            <textarea className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} disabled={!isAdmin} />
+            <textarea className={INPUT.base} rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} disabled={readOnly} />
           </div>
         </div>
       )}
@@ -138,48 +139,48 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Weekly Fee</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} disabled={!isAdmin} />
+              <input type="number" step="0.01" className={INPUT.base} value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>LA Contribution</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} disabled={!isAdmin} />
+              <input type="number" step="0.01" className={INPUT.base} value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>CHC Contribution</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} disabled={!isAdmin} />
+              <input type="number" step="0.01" className={INPUT.base} value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>FNC Amount</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} disabled={!isAdmin} />
+              <input type="number" step="0.01" className={INPUT.base} value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={INPUT.label}>Top-Up Amount</label>
-              <input type="number" step="0.01" className={INPUT.base} value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} disabled={!isAdmin} />
+              <input type="number" step="0.01" className={INPUT.base} value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Top-Up Payer</label>
-              <input className={INPUT.base} value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} disabled={!isAdmin} />
+              <input className={INPUT.base} value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Top-Up Contact</label>
-              <input className={INPUT.base} value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} disabled={!isAdmin} />
+              <input className={INPUT.base} value={form.top_up_contact || ''} onChange={e => set('top_up_contact', e.target.value)} disabled={readOnly} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Last Fee Review</label>
-              <input type="date" className={INPUT.base} value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value)} disabled={!isAdmin} />
+              <input type="date" className={INPUT.base} value={form.last_fee_review || ''} onChange={e => set('last_fee_review', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Next Fee Review</label>
-              <input type="date" className={INPUT.base} value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value)} disabled={!isAdmin} />
+              <input type="date" className={INPUT.base} value={form.next_fee_review || ''} onChange={e => set('next_fee_review', e.target.value)} disabled={readOnly} />
             </div>
           </div>
-          {feeChanged && isAdmin && (
+          {feeChanged && canEdit && (
             <div>
               <label className={INPUT.label}>Fee Change Reason *</label>
               <input className={INPUT.base} value={feeChangeReason} onChange={e => setFeeChangeReason(e.target.value)} placeholder="e.g. Annual fee uplift" />
@@ -215,7 +216,7 @@ export default function ResidentEditModal({ home, resident, isAdmin, onClose, on
         </div>
       )}
 
-      {isAdmin && (
+      {canEdit && (
         <div className={MODAL.footer}>
           <button type="button" className={BTN.secondary} onClick={onClose}>Cancel</button>
           <button type="button" className={BTN.primary} onClick={handleSave}

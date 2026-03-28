@@ -313,7 +313,7 @@ export default function RotationGrid() {
   }, [editing, schedData, monthDates]);
 
   const today = formatDate(new Date());
-  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
   const {
     showLockPrompt,
     lockPin,

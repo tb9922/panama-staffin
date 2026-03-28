@@ -157,7 +157,7 @@ export default function Residents() {
       ) : (
         <ResidentTable
           residents={residents}
-          isAdmin={canEdit}
+          canEdit={canEdit}
           onEdit={setEditResident}
           onDischarge={setDischargeResident}
           onAdmit={() => setShowAdmit(true)}
@@ -180,7 +180,7 @@ export default function Residents() {
         <ResidentEditModal
           home={home}
           resident={editResident}
-          isAdmin={canEdit}
+          canEdit={canEdit}
           onClose={() => setEditResident(null)}
           onSaved={load}
         />

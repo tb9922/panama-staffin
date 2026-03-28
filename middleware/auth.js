@@ -21,6 +21,16 @@ async function getAuthDbUser(req) {
   return req.authDbUser;
 }
 
+async function getActiveAuthDbUser(req, res) {
+  try {
+    const dbUser = await getAuthDbUser(req);
+    return dbUser?.active ? dbUser : null;
+  } catch {
+    authServiceUnavailable(res);
+    return undefined;
+  }
+}
+
 export async function requireAuth(req, res, next) {
   // Read JWT from HttpOnly cookie first, fall back to Authorization header
   // for backwards compatibility with API clients / integration tests.
@@ -85,13 +95,10 @@ export async function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Forbidden - admin role required' });
   // Re-verify role from DB - JWT claim may be stale (admin downgraded after last login).
   // Without this, a demoted admin retains requireAdmin access for the JWT's remaining TTL.
-  try {
-    const dbUser = await getAuthDbUser(req);
-    if (dbUser?.role !== 'admin' || !dbUser.active) {
-      return res.status(403).json({ error: 'Forbidden - admin role required' });
-    }
-  } catch {
-    return authServiceUnavailable(res);
+  const dbUser = await getActiveAuthDbUser(req, res);
+  if (dbUser === undefined) return;
+  if (dbUser?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden - admin role required' });
   }
   next();
 }
@@ -102,13 +109,10 @@ export async function requirePlatformAdmin(req, res, next) {
   }
   // Re-verify from DB - JWT claim may be stale (platform admin demoted after last login).
   // Without this, a terminated platform admin retains full access for the JWT's remaining TTL.
-  try {
-    const dbUser = await getAuthDbUser(req);
-    if (!dbUser?.is_platform_admin || !dbUser.active) {
-      return res.status(403).json({ error: 'Platform admin access required' });
-    }
-  } catch {
-    return authServiceUnavailable(res);
+  const dbUser = await getActiveAuthDbUser(req, res);
+  if (dbUser === undefined) return;
+  if (!dbUser?.is_platform_admin) {
+    return res.status(403).json({ error: 'Platform admin access required' });
   }
   next();
 }
@@ -131,19 +135,16 @@ export async function requireHomeAccess(req, res, next) {
   // Platform admins bypass per-home role check - they have implicit home_manager access.
   // Re-verify from DB - JWT claim may be stale (admin demoted after last login).
   if (req.user.is_platform_admin) {
-    try {
-      const dbUser = await getAuthDbUser(req);
-      if (dbUser?.is_platform_admin && dbUser.active) {
-        req.home = home;
-        req.homeRole = 'home_manager';
-        req.staffId = null;
-        return next();
-      }
-      // Stale claim - clear it and fall through to per-home role check.
-      req.user.is_platform_admin = false;
-    } catch {
-      return authServiceUnavailable(res);
+    const dbUser = await getActiveAuthDbUser(req, res);
+    if (dbUser === undefined) return;
+    if (dbUser?.is_platform_admin) {
+      req.home = home;
+      req.homeRole = 'home_manager';
+      req.staffId = null;
+      return next();
     }
+    // Stale claim - clear it and fall through to per-home role check.
+    req.user.is_platform_admin = false;
   }
 
   // Resolve per-home role from user_home_roles.

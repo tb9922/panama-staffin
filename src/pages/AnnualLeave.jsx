@@ -96,7 +96,7 @@ export default function AnnualLeave() {
     return getLeaveYear(today, schedData.config.leave_year_start);
   }, [schedData, today]);
 
-  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled || schedData?.config?.edit_lock_pin);
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
   const {
     showLockPrompt,
     lockPin,
