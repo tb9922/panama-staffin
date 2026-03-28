@@ -226,7 +226,7 @@ export async function sync(homeId, incidentsArr, client) {
  */
 export async function freeze(incidentId, homeId) {
   const { rowCount } = await pool.query(
-    `UPDATE incidents SET frozen_at = NOW()
+    `UPDATE incidents SET frozen_at = NOW(), updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND frozen_at IS NULL AND deleted_at IS NULL`,
     [incidentId, homeId]
   );
@@ -241,7 +241,7 @@ export async function freeze(incidentId, homeId) {
  */
 export async function isFrozen(incidentId, homeId) {
   const { rows } = await pool.query(
-    'SELECT frozen_at FROM incidents WHERE id = $1 AND home_id = $2',
+    'SELECT frozen_at FROM incidents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
     [incidentId, homeId]
   );
   return rows.length > 0 && rows[0].frozen_at != null;
@@ -321,9 +321,9 @@ export async function upsert(homeId, data) {
        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
      )
-     ON CONFLICT (home_id, id) DO UPDATE SET
-       date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
-       person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
+      ON CONFLICT (home_id, id) DO UPDATE SET
+        date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
+        person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
        medical_attention=$13,hospital_attendance=$14,
        cqc_notifiable=$15,cqc_notification_type=$16,cqc_notification_deadline=$17,
        cqc_notified=$18,cqc_notified_date=$19,cqc_reference=$20,
@@ -331,13 +331,14 @@ export async function upsert(homeId, data) {
        safeguarding_referral=$26,safeguarding_to=$27,safeguarding_reference=$28,safeguarding_date=$29,
        witnesses=$30,duty_of_candour_applies=$31,candour_notification_date=$32,candour_letter_sent_date=$33,candour_recipient=$34,
        police_involved=$35,police_reference=$36,police_contact_date=$37,
-       msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
-       investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
-       investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
-       corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
-       deleted_at=NULL
-     WHERE incidents.frozen_at IS NULL
-     RETURNING ${INCIDENT_COLS}`,
+        msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
+        investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
+        investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
+        corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
+        version = incidents.version + 1,
+        deleted_at=NULL
+      WHERE incidents.frozen_at IS NULL
+      RETURNING ${INCIDENT_COLS}`,
     [
       id, homeId, data.date || null, data.time || null, data.location || null,
       data.type || null, data.severity || null, data.description || null,

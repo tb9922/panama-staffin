@@ -95,6 +95,30 @@ describe('Compliance route create flows', () => {
     expect(listRes.body.incidents.some(incident => incident.id === createRes.body.id)).toBe(true);
   });
 
+  it('normalises corrective action status values from frontend payloads', async () => {
+    const createRes = await request(app)
+      .post('/api/incidents')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        date: '2026-03-26',
+        type: 'near_miss',
+        severity: 'minor',
+        description: 'Corrective action status normalisation',
+        corrective_actions: [
+          {
+            description: 'Review procedure',
+            assigned_to: 'Manager',
+            due_date: '2026-04-01',
+            status: 'open',
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(createRes.body.corrective_actions[0].status).toBe('pending');
+  });
+
   it('accepts blank DoLS review_status and returns the created row in the list response', async () => {
     const createRes = await request(app)
       .post('/api/dols')

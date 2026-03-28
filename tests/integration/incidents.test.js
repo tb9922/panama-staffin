@@ -90,6 +90,30 @@ describe('Incidents: upsert and read', () => {
     expect(found.staff_involved).toContain('S001');
     expect(found.staff_involved).toContain('S002');
   });
+
+  it('increments version and updated_at on upsert conflict path', async () => {
+    const before = await incidentRepo.findById(incId, homeA);
+    const updated = await incidentRepo.upsert(homeA, {
+      id: incId,
+      date: '2026-01-16',
+      time: '15:00',
+      location: 'Main lounge',
+      type: 'fall',
+      severity: 'serious',
+      description: 'Resident fall updated through upsert path',
+      person_affected: 'resident',
+      person_affected_name: 'Test Resident',
+      staff_involved: ['S001'],
+      immediate_action: 'Updated action',
+      medical_attention: true,
+      hospital_attendance: false,
+      reported_by: 'test-user',
+    });
+
+    expect(updated.version).toBe(before.version + 1);
+    expect(updated.updated_at).not.toBe(before.updated_at);
+    expect(updated.description).toBe('Resident fall updated through upsert path');
+  });
 });
 
 // ── Update + Optimistic Locking ────────────────────────────────────────────
@@ -191,8 +215,11 @@ describe('Incidents: freeze and addenda', () => {
   });
 
   it('freezes an incident', async () => {
+    const before = await incidentRepo.findById(incId, homeA);
     const result = await incidentRepo.freeze(incId, homeA);
     expect(result).toBe(true);
+    const after = await incidentRepo.findById(incId, homeA);
+    expect(after.updated_at).not.toBe(before.updated_at);
   });
 
   it('confirms frozen status', async () => {
@@ -226,6 +253,22 @@ describe('Incidents: freeze and addenda', () => {
     expect(addenda).toHaveLength(2);
     expect(addenda[0].content).toBe('Investigation initiated by local authority');
     expect(addenda[1].content).toBe('Second note');
+  });
+
+  it('treats soft-deleted incidents as not frozen', async () => {
+    const created = await incidentRepo.upsert(homeA, {
+      date: '2026-03-05',
+      type: 'near_miss',
+      severity: 'minor',
+      description: 'Freeze visibility test',
+      reported_by: 'test-user',
+    });
+    createdIds.push(created.id);
+    await incidentRepo.freeze(created.id, homeA);
+    await pool.query('UPDATE incidents SET deleted_at = NOW() WHERE id = $1 AND home_id = $2', [created.id, homeA]);
+
+    const frozen = await incidentRepo.isFrozen(created.id, homeA);
+    expect(frozen).toBe(false);
   });
 });
 

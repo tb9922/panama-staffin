@@ -109,6 +109,41 @@ describe('Finance: residents', () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
+  it('updates resident updated_at when recalculating balance and payment info', async () => {
+    await pool.query(
+      `UPDATE finance_residents SET updated_at = '2000-01-01T00:00:00Z' WHERE id = $1 AND home_id = $2`,
+      [residentId, homeA]
+    );
+    const before = await financeRepo.findResidentById(residentId, homeA);
+
+    const invoice = await financeRepo.createInvoice(homeA, {
+      invoice_number: `INV-RBAL-${residentId}`,
+      resident_id: residentId,
+      payer_type: 'resident',
+      payer_name: 'Margaret Smith',
+      period_start: '2026-02-01',
+      period_end: '2026-02-28',
+      subtotal: 1000,
+      total_amount: 1000,
+      balance_due: 1000,
+      status: 'sent',
+      issue_date: '2026-02-01',
+      due_date: '2026-02-28',
+      created_by: 'admin',
+    });
+
+    await financeRepo.recalculateResidentBalance(residentId, homeA);
+    await financeRepo.updateResidentPaymentInfo(residentId, homeA, '2026-02-15', 250);
+
+    const after = await financeRepo.findResidentById(residentId, homeA);
+    expect(after.outstanding_balance).toBe(1000);
+    expect(after.last_payment_date).toBe('2026-02-15');
+    expect(after.last_payment_amount).toBe(250);
+    expect(after.updated_at).not.toBe(before.updated_at);
+
+    await financeRepo.softDelete('invoice', invoice.id, homeA);
+  });
+
   it('findResidents returns { rows, total }', async () => {
     const result = await financeRepo.findResidents(homeA);
     expect(result).toHaveProperty('rows');
@@ -494,7 +529,7 @@ describe('Finance: payment schedules', () => {
   });
 
   it('soft-deletes schedule', async () => {
-    const deleted = await financeRepo.softDelete('schedule', schedId, homeA);
+    const deleted = await financeService.softDeletePaymentSchedule(schedId, homeA, 'admin');
     expect(deleted).toBe(true);
 
     const byId = await financeRepo.findPaymentScheduleById(schedId, homeA);

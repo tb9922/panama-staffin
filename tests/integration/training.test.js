@@ -142,6 +142,22 @@ describe('Training: training records', () => {
     })).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  it('rejects overwriting an existing training record without _clientUpdatedAt', async () => {
+    await trainingRepo.upsertRecord(homeA, 'TRN-S001', 'infection-control', {
+      completed: '2026-03-01',
+      expiry: '2027-03-01',
+      trainer: 'Initial Trainer',
+      method: 'classroom',
+    });
+
+    await expect(trainingRepo.upsertRecord(homeA, 'TRN-S001', 'infection-control', {
+      completed: '2026-03-15',
+      expiry: '2027-03-15',
+      trainer: 'Overwrite Attempt',
+      method: 'online',
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   it('soft-deletes a training record', async () => {
     await trainingRepo.removeRecord(homeA, 'TRN-S001', 'moving-handling');
 
@@ -224,6 +240,28 @@ describe('Training: supervisions', () => {
       _clientUpdatedAt: fresh.updated_at,
     })).rejects.toMatchObject({ statusCode: 409 });
   });
+
+  it('rejects overwriting an existing supervision without _clientUpdatedAt', async () => {
+    await supervisionRepo.upsertSession(homeA, 'TRN-S001', {
+      id: 'sup-test-no-token',
+      date: '2026-03-01',
+      supervisor: 'Initial Supervisor',
+      topics: 'Initial topics',
+      actions: 'Initial actions',
+      next_due: '2026-05-01',
+      notes: 'Initial notes',
+    });
+
+    await expect(supervisionRepo.upsertSession(homeA, 'TRN-S001', {
+      id: 'sup-test-no-token',
+      date: '2026-03-02',
+      supervisor: 'Overwrite Supervisor',
+      topics: 'Overwrite topics',
+      actions: 'Overwrite actions',
+      next_due: '2026-05-02',
+      notes: 'Overwrite notes',
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
 });
 
 // ── Appraisals ──────────────────────────────────────────────────────────────
@@ -302,6 +340,30 @@ describe('Training: appraisals', () => {
       next_due: '2027-01-27',
       notes: 'Stale notes',
       _clientUpdatedAt: fresh.updated_at,
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('rejects overwriting an existing appraisal without _clientUpdatedAt', async () => {
+    await appraisalRepo.upsertAppraisal(homeA, 'TRN-S002', {
+      id: 'apr-test-no-token',
+      date: '2026-01-28',
+      appraiser: 'Initial Appraiser',
+      objectives: 'Initial objectives',
+      training_needs: 'Initial needs',
+      development_plan: 'Initial plan',
+      next_due: '2027-01-28',
+      notes: 'Initial notes',
+    });
+
+    await expect(appraisalRepo.upsertAppraisal(homeA, 'TRN-S002', {
+      id: 'apr-test-no-token',
+      date: '2026-01-29',
+      appraiser: 'Overwrite Appraiser',
+      objectives: 'Overwrite objectives',
+      training_needs: 'Overwrite needs',
+      development_plan: 'Overwrite plan',
+      next_due: '2027-01-29',
+      notes: 'Overwrite notes',
     })).rejects.toMatchObject({ statusCode: 409 });
   });
 });
@@ -403,6 +465,36 @@ describe('Training: fire drills', () => {
       conducted_by: 'Stale Lead',
       notes: 'Stale notes',
       _clientUpdatedAt: fresh.updated_at,
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('rejects overwriting an existing fire drill without _clientUpdatedAt', async () => {
+    await fireDrillRepo.upsertDrill(homeA, {
+      id: 'fd-test-no-token',
+      date: '2026-02-13',
+      time: '12:00',
+      scenario: 'Initial no-token drill',
+      evacuation_time_seconds: 210,
+      staff_present: ['TRN-S001'],
+      residents_evacuated: 15,
+      issues: 'Initial issue',
+      corrective_actions: 'Initial action',
+      conducted_by: 'Initial Lead',
+      notes: 'Initial notes',
+    });
+
+    await expect(fireDrillRepo.upsertDrill(homeA, {
+      id: 'fd-test-no-token',
+      date: '2026-02-14',
+      time: '13:00',
+      scenario: 'Overwrite no-token drill',
+      evacuation_time_seconds: 220,
+      staff_present: ['TRN-S002'],
+      residents_evacuated: 16,
+      issues: 'Overwrite issue',
+      corrective_actions: 'Overwrite action',
+      conducted_by: 'Overwrite Lead',
+      notes: 'Overwrite notes',
     })).rejects.toMatchObject({ statusCode: 409 });
   });
 });

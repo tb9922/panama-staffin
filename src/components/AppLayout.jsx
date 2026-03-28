@@ -123,10 +123,7 @@ export default function AppLayout() {
 
         <nav className="flex-1 py-1.5 px-2 overflow-y-auto space-y-0.5">
           {/* Top-level items */}
-          {NAV_TOP.filter(item => {
-            if (item.requiresUserManagement && !canManageUsers) return false;
-            return !item.module || canRead(item.module);
-          }).map(item => (
+          {NAV_TOP.filter(item => !item.module || canRead(item.module)).map(item => (
             <NavLink
               key={item.path}
               to={item.path}

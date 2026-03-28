@@ -3,13 +3,21 @@ import { requireAuth } from '../../middleware/auth.js';
 
 // Mock authService so we can control JWT verification
 vi.mock('../../services/authService.js', () => ({
-  verifyToken: vi.fn(() => ({ username: 'admin', role: 'admin' })),
+  verifyToken: vi.fn(() => ({ username: 'admin', role: 'admin', session_version: 0 })),
   isTokenDenied: vi.fn(() => Promise.resolve(false)),
 }));
 
 // Mock homeRepo + userHomeRepo (required by auth.js import)
 vi.mock('../../repositories/homeRepo.js', () => ({}));
 vi.mock('../../repositories/userHomeRepo.js', () => ({ hasAccess: vi.fn() }));
+vi.mock('../../repositories/userRepo.js', () => ({
+  findByUsername: vi.fn(() => Promise.resolve({
+    username: 'admin',
+    role: 'admin',
+    active: true,
+    session_version: 0,
+  })),
+}));
 
 function makeReq(overrides = {}) {
   return {
@@ -79,6 +87,19 @@ describe('CSRF double-submit validation', () => {
     const req = makeReq({
       cookies: { panama_token: 'valid-jwt', panama_csrf: 'token-a' },
       headers: { 'x-csrf-token': 'token-b' },
+    });
+    const res = makeRes();
+    const next = vi.fn();
+    await requireAuth(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('CSRF token mismatch');
+  });
+
+  it('rejects multi-byte UTF-8 mismatches without throwing', async () => {
+    const req = makeReq({
+      cookies: { panama_token: 'valid-jwt', panama_csrf: '£' },
+      headers: { 'x-csrf-token': '€' },
     });
     const res = makeRes();
     const next = vi.fn();

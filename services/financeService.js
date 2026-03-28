@@ -541,9 +541,13 @@ export async function softDeleteExpense(id, homeId, username) {
 }
 
 export async function softDeletePaymentSchedule(id, homeId, username) {
-  const deleted = await financeRepo.softDelete('schedule', id, homeId);
-  if (deleted) logger.info({ homeId, scheduleId: id, deletedBy: username }, 'Payment schedule soft-deleted');
-  return deleted;
+  return withTransaction(async (client) => {
+    const schedule = await financeRepo.findPaymentScheduleById(id, homeId, client, true);
+    if (!schedule) return false;
+    const deleted = await financeRepo.softDelete('schedule', id, homeId, client);
+    if (deleted) logger.info({ homeId, scheduleId: id, deletedBy: username }, 'Payment schedule soft-deleted');
+    return deleted;
+  });
 }
 
 // ── Receivables Detail ───────────────────────────────────────────────────────

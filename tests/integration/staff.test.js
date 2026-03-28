@@ -125,7 +125,7 @@ describe('POST /api/staff — create', () => {
   afterAll(async () => {
     // Clean up created staff for this block
     await pool.query(
-      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003')`,
+      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004')`,
       [homeAId]
     );
   });
@@ -187,6 +187,27 @@ describe('POST /api/staff — create', () => {
       .set('Authorization', `Bearer ${viewerToken}`)
       .send(staff)
       .expect(403);
+  });
+
+  it('increments version when POST upserts an existing staff member', async () => {
+    const initial = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: 'ST004', name: 'Upsert Target', hourly_rate: 13.25 }))
+      .expect(201);
+
+    const updated = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: 'ST004', name: 'Upsert Target Updated', hourly_rate: 13.75 }))
+      .expect(201);
+
+    expect(initial.body.version).toBe(1);
+    expect(updated.body.version).toBe(2);
+    expect(updated.body.name).toBe('Upsert Target Updated');
+    expect(updated.body.hourly_rate).toBe(13.75);
   });
 
   it('rejects request with no home parameter', async () => {
@@ -298,6 +319,15 @@ describe('DELETE /api/staff/:id — soft delete', () => {
   });
 
   it('admin can soft-delete staff', async () => {
+    await pool.query(
+      `UPDATE staff SET updated_at = '2000-01-01T00:00:00Z' WHERE home_id = $1 AND id = 'ST020'`,
+      [homeAId]
+    );
+    const before = await pool.query(
+      `SELECT updated_at FROM staff WHERE home_id = $1 AND id = 'ST020'`,
+      [homeAId]
+    );
+
     await request(app)
       .delete('/api/staff/ST020')
       .query({ home: homeASlug })
@@ -306,11 +336,12 @@ describe('DELETE /api/staff/:id — soft delete', () => {
 
     // Verify soft-deleted in DB
     const { rows } = await pool.query(
-      `SELECT deleted_at, active FROM staff WHERE home_id = $1 AND id = 'ST020'`,
+      `SELECT deleted_at, active, updated_at FROM staff WHERE home_id = $1 AND id = 'ST020'`,
       [homeAId]
     );
     expect(rows[0].deleted_at).not.toBeNull();
     expect(rows[0].active).toBe(false);
+    expect(rows[0].updated_at.toISOString()).not.toBe(before.rows[0].updated_at.toISOString());
   });
 
   it('cascades override deletion', async () => {

@@ -12,6 +12,14 @@ function authServiceUnavailable(res) {
   return res.status(503).json({ error: 'Authentication service unavailable' });
 }
 
+function csrfTokensMatch(cookieToken, headerToken) {
+  if (typeof cookieToken !== 'string' || typeof headerToken !== 'string') return false;
+  const cookieBuf = Buffer.from(cookieToken, 'utf8');
+  const headerBuf = Buffer.from(headerToken, 'utf8');
+  if (cookieBuf.length !== headerBuf.length) return false;
+  return timingSafeEqual(cookieBuf, headerBuf);
+}
+
 async function getAuthDbUser(req) {
   if (Object.prototype.hasOwnProperty.call(req, 'authDbUser')) {
     return req.authDbUser;
@@ -49,9 +57,7 @@ export async function requireAuth(req, res, next) {
     if (!safeMethod) {
       const cookieToken = req.cookies.panama_csrf;
       const headerToken = req.headers['x-csrf-token'];
-      const tokensMatch = cookieToken && headerToken &&
-        cookieToken.length === headerToken.length &&
-        timingSafeEqual(Buffer.from(cookieToken, 'utf8'), Buffer.from(headerToken, 'utf8'));
+      const tokensMatch = csrfTokensMatch(cookieToken, headerToken);
       if (!tokensMatch) {
         return res.status(403).json({ error: 'CSRF token mismatch' });
       }

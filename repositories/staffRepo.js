@@ -164,6 +164,7 @@ export async function upsertOne(homeId, staff, client) {
        active=$9, wtr_opt_out=$10, start_date=$11, leaving_date=$12,
        date_of_birth=$13, ni_number=$14, contract_hours=$15,
        al_entitlement=$16, al_carryover=$17, updated_at=NOW(),
+       version = staff.version + 1,
        deleted_at=NULL
      RETURNING ${STAFF_COLS}`,
     [
@@ -237,7 +238,7 @@ export async function updateOne(homeId, staffId, fields, version, client) {
  */
 export async function softDeleteOne(homeId, staffId, client) {
   const { rowCount } = await (client || pool).query(
-    `UPDATE staff SET deleted_at = NOW(), active = false, leaving_date = CURRENT_DATE
+    `UPDATE staff SET deleted_at = NOW(), active = false, leaving_date = CURRENT_DATE, updated_at = NOW()
      WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );

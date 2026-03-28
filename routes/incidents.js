@@ -15,6 +15,14 @@ const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
 // Converts empty strings to null so optional enum fields tolerate unset form values from the frontend.
 const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
+const correctiveActionStatusSchema = z.preprocess(
+  v => {
+    if (v === '') return null;
+    if (v === 'open') return 'pending';
+    return v;
+  },
+  z.enum(['pending', 'in_progress', 'completed', 'cancelled']).nullable().optional()
+);
 const addendumSchema = z.object({ content: z.string().min(1).max(5000) });
 
 const incidentBodySchema = z.object({
@@ -72,7 +80,7 @@ const incidentBodySchema = z.object({
     assigned_to:    z.string().max(200).nullable().optional(),
     due_date:       dateSchema.optional(),
     completed_date: dateSchema.optional(),
-    status:         z.string().max(50).nullable().optional(),
+    status:         correctiveActionStatusSchema,
   })).max(100).optional(),
 });
 const incidentUpdateSchema = incidentBodySchema.partial().extend({

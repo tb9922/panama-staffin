@@ -142,20 +142,19 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
   const { rows } = await conn.query(
     `INSERT INTO training_records
        (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
-        certificate_ref, level, notes, updated_at, deleted_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NULL)
-     ON CONFLICT (home_id, staff_id, training_type_id) DO UPDATE SET
-       completed = EXCLUDED.completed, expiry = EXCLUDED.expiry,
-       trainer = EXCLUDED.trainer, method = EXCLUDED.method,
-       certificate_ref = EXCLUDED.certificate_ref, level = EXCLUDED.level,
-       notes = EXCLUDED.notes, updated_at = NOW(), deleted_at = NULL
-     RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes, updated_at`,
+         certificate_ref, level, notes, updated_at, deleted_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NULL)
+      ON CONFLICT (home_id, staff_id, training_type_id) DO NOTHING
+      RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes, updated_at`,
     [homeId, staffId, typeId,
      record.completed ?? null, record.expiry ?? null,
      record.trainer ?? null, record.method ?? null,
      record.certificate_ref ?? null, record.level ?? null,
      record.notes ?? null]
   );
+  if (rows.length === 0) {
+    throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+  }
   const r = rows[0];
   return {
     completed: toDateStr(r.completed),

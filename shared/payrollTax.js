@@ -434,14 +434,16 @@ export function calculatePensionContributions(grossPay, payFrequency, pensionCon
   const weeks = payFrequency === 'monthly' ? (52 / 12) : payFrequency === 'fortnightly' ? 2 : 1;
   const lowerPeriod = pensionConfig.lower_qualifying_weekly * weeks;
   const upperPeriod = pensionConfig.upper_qualifying_weekly * weeks;
+  const employeeRate = enrolment.contribution_override_employee ?? pensionConfig.employee_rate;
+  const employerRate = enrolment.contribution_override_employer ?? pensionConfig.employer_rate;
 
   const qualifyingEarnings = Math.max(0, Math.min(grossPay, upperPeriod) - lowerPeriod);
 
   if (qualifyingEarnings <= 0) return ZERO;
 
   return {
-    employeeAmount: round2(qualifyingEarnings * pensionConfig.employee_rate),
-    employerAmount: round2(qualifyingEarnings * pensionConfig.employer_rate),
+    employeeAmount: round2(qualifyingEarnings * employeeRate),
+    employerAmount: round2(qualifyingEarnings * employerRate),
     qualifyingEarnings: round2(qualifyingEarnings),
   };
 }

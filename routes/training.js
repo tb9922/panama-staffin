@@ -16,7 +16,18 @@ import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const isValidIsoDateOnly = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+const dateSchema = z.preprocess(
+  v => v === '' ? null : v,
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().refine(
+    v => v === null || isValidIsoDateOnly(v),
+    'Invalid date'
+  )
+);
 const staffIdSchema = z.string().min(1).max(20);
 const typeIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
 
@@ -38,7 +49,7 @@ const trainingTypeSchema = z.object({
 const trainingTypesArraySchema = z.array(trainingTypeSchema).max(100);
 const trainingTypesUpdateSchema = z.object({
   trainingTypes: trainingTypesArraySchema,
-  _clientUpdatedAt: z.string().max(50).optional(),
+  _clientUpdatedAt: z.string().max(50),
 });
 
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
@@ -163,6 +174,9 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = supervisionSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!parsed.data._clientUpdatedAt) {
+      return res.status(400).json({ error: '_clientUpdatedAt is required when updating a supervision' });
+    }
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -201,6 +215,9 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = appraisalSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!parsed.data._clientUpdatedAt) {
+      return res.status(400).json({ error: '_clientUpdatedAt is required when updating an appraisal' });
+    }
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
@@ -239,6 +256,9 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
     const parsed = fireDrillSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (!parsed.data._clientUpdatedAt) {
+      return res.status(400).json({ error: '_clientUpdatedAt is required when updating a fire drill' });
+    }
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });

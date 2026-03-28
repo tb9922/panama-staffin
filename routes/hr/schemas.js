@@ -19,7 +19,19 @@ export const caseTypeSchema = z.enum([
 
 const jsonOrArray = z.preprocess(
   v => { if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } } return v; },
-  z.array(z.object({}).passthrough())
+  z.array(z.object({}).passthrough()).max(100)
+).refine(
+  v => JSON.stringify(v).length <= 50000,
+  'Structured data is too large'
+);
+
+const grievanceActionStatusSchema = z.preprocess(
+  v => {
+    if (v === '') return null;
+    if (v === 'open') return 'pending';
+    return v;
+  },
+  z.enum(['pending', 'in_progress', 'completed', 'cancelled']).nullable().optional()
 );
 
 export const disciplinaryBodySchema = z.object({
@@ -140,8 +152,8 @@ export const grievanceUpdateSchema = z.object({
   investigation_officer: z.string().max(200).nullable().optional(),
   investigation_start_date: dateSchema.nullable().optional(),
   investigation_notes:  z.string().max(5000).nullable().optional(),
-  witnesses:            z.array(z.object({ name: z.string().max(200).optional(), role: z.string().max(200).optional(), statement_summary: z.string().max(5000).optional() }).passthrough()).optional(),
-  evidence_items:       z.array(z.object({ description: z.string().max(5000).optional(), date: dateSchema.optional(), type: z.string().max(100).optional() }).passthrough()).optional(),
+  witnesses:            z.array(z.object({ name: z.string().max(200).optional(), role: z.string().max(200).optional(), statement_summary: z.string().max(5000).optional() }).passthrough()).max(50).optional(),
+  evidence_items:       z.array(z.object({ description: z.string().max(5000).optional(), date: dateSchema.optional(), type: z.string().max(100).optional() }).passthrough()).max(50).optional(),
   investigation_completed_date: dateSchema.nullable().optional(),
   investigation_findings: z.string().max(5000).nullable().optional(),
   // Hearing
@@ -188,7 +200,7 @@ export const grievanceActionBodySchema = z.object({
   description:  z.string().min(1).max(2000),
   responsible:  z.string().max(200).optional(),
   due_date:     dateSchema.optional(),
-  status:       z.string().max(50).optional(),
+  status:       grievanceActionStatusSchema,
 });
 
 export const grievanceActionUpdateSchema = z.object({
@@ -196,7 +208,8 @@ export const grievanceActionUpdateSchema = z.object({
   responsible:    z.string().max(200).nullable().optional(),
   due_date:       dateSchema.nullable().optional(),
   completed_date: dateSchema.nullable().optional(),
-  status:         z.string().max(50).optional(),
+  status:         grievanceActionStatusSchema,
+  _version:       z.number().int().positive(),
 });
 
 // ── Performance Schemas ─────────────────────────────────────────────────────
@@ -582,7 +595,7 @@ export const meetingBodySchema = z.object({
     staff_id: z.string().max(20).optional(),
     name: z.string().max(200),
     role_in_meeting: z.enum(['subject', 'investigator', 'witness', 'companion', 'note_taker', 'hr_advisor', 'chair']),
-  })).optional(),
+  })).max(50).optional(),
   summary:       z.string().max(10000).optional(),
   key_points:    z.string().max(10000).optional(),
   outcome:       z.string().max(5000).optional(),
