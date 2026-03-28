@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   buildComplianceMatrix, getComplianceStats,
@@ -22,7 +22,7 @@ const CELL_COLORS = {
   wrong_level:   'bg-orange-200 text-orange-800 hover:bg-orange-300 cursor-pointer hover:shadow-sm',
 };
 
-export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, onReload }) {
+export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, configUpdatedAt, onReload, readOnly = false }) {
   const [view, setView] = useState('matrix');
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -88,6 +88,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
 
   function openRecordModal(staffId, typeId) {
     const existing = (training || {})[staffId]?.[typeId] || null;
+    if (readOnly && !existing) return;
     setRecordModal({ isOpen: true, staffId, typeId, existing });
   }
 
@@ -98,27 +99,31 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [typeError, setTypeError] = useState(null);
 
   // Keep allTypes in sync if parent reloads (after save)
-  useMemo(() => { setAllTypes(trainingTypes); }, [trainingTypes]);
+  useEffect(() => { setAllTypes(trainingTypes); }, [trainingTypes]);
 
   function addTrainingType() {
+    if (readOnly) return;
     const id = 'custom-' + Date.now();
     setAllTypes([...allTypes, { id, name: 'New Training', category: 'mandatory', refresher_months: 12, roles: null, legislation: '', active: true }]);
   }
 
   function updateTypeField(id, field, value) {
+    if (readOnly) return;
     setAllTypes(allTypes.map(t => t.id === id ? { ...t, [field]: value } : t));
   }
 
   function removeType(id) {
+    if (readOnly) return;
     if (!confirm('Remove this training type? Existing records will be kept.')) return;
     setAllTypes(allTypes.filter(t => t.id !== id));
   }
 
   async function saveTypes() {
+    if (readOnly) return;
     setTypesSaving(true);
     setTypeError(null);
     try {
-      await updateTrainingTypes(homeSlug, allTypes);
+      await updateTrainingTypes(homeSlug, allTypes, configUpdatedAt);
       onReload();
     } catch (e) {
       setTypeError('Failed to save training types: ' + e.message);
@@ -221,6 +226,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   }
 
   function handleCSVFile(e) {
+    if (readOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -233,6 +239,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   }
 
   async function handleImportCSV() {
+    if (readOnly) return;
     const validRows = csvRows.filter(r => r.valid);
     if (validRows.length === 0) return;
     setImporting(true);
@@ -267,7 +274,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       <div className="flex items-center justify-between mb-4 print:hidden">
         <div className="flex gap-2">
           <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
-          <button onClick={() => setShowImportModal(true)} className={BTN.secondary}>Import CSV</button>
+          {!readOnly && <button onClick={() => setShowImportModal(true)} className={BTN.secondary}>Import CSV</button>}
           <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
           <button onClick={() => setView(view === 'matrix' ? 'list' : 'matrix')} className={BTN.secondary}>
             {view === 'matrix' ? 'List View' : 'Grid View'}
@@ -357,8 +364,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                           <td key={t.id} className="py-1 px-0.5 text-center">
                             <button
                               onClick={() => r.status !== TRAINING_STATUS.NOT_REQUIRED && openRecordModal(s.id, t.id)}
-                              disabled={r.status === TRAINING_STATUS.NOT_REQUIRED}
-                              className={`w-full h-9 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${CELL_COLORS[r.status]}`}
+                              disabled={r.status === TRAINING_STATUS.NOT_REQUIRED || (readOnly && !r.record)}
+                              className={`w-full h-9 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all ${CELL_COLORS[r.status]} ${(readOnly && !r.record) ? 'cursor-default hover:shadow-none' : ''}`}
                               title={`${s.name} — ${t.name}: ${display.label}${r.daysUntilExpiry != null ? ` (${r.daysUntilExpiry}d)` : ''}${r.requiredLevel ? ` [needs ${r.requiredLevel.name}]` : ''}`}
                             >
                               {display.symbol}
@@ -405,9 +412,13 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
                         const r = staffMap?.get(t.id);
                         if (!r || r.status === TRAINING_STATUS.NOT_REQUIRED) return null;
                         const display = STATUS_DISPLAY[r.status];
+                        const canOpen = !readOnly || !!r.record;
                         return (
-                          <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => openRecordModal(s.id, t.id)}>
+                          <div
+                            key={t.id}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 text-xs transition-colors ${canOpen ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+                            onClick={() => canOpen && openRecordModal(s.id, t.id)}
+                          >
                             <div>
                               <div className="font-medium text-gray-800">{t.name}</div>
                               {r.record && <div className="text-gray-400 mt-0.5">Completed: {r.record.completed} · Expires: {r.record.expiry}{r.record.level ? ` · ${r.record.level}` : ''}</div>}
@@ -429,11 +440,12 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       )}
 
       {/* Manage Training Types */}
-      <div className="mt-6 print:hidden">
-        <button onClick={() => setShowManageTypes(!showManageTypes)} className={BTN.ghost}>
-          {showManageTypes ? 'Hide' : 'Manage'} Training Types
-        </button>
-        {showManageTypes && (
+      {!readOnly && (
+        <div className="mt-6 print:hidden">
+          <button onClick={() => setShowManageTypes(!showManageTypes)} className={BTN.ghost}>
+            {showManageTypes ? 'Hide' : 'Manage'} Training Types
+          </button>
+          {showManageTypes && (
           <div className={`mt-3 ${CARD.flush}`}>
             <table className={TABLE.table}>
               <thead className={TABLE.thead}>
@@ -497,8 +509,9 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               </div>
             </div>
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex gap-4 text-[10px] text-gray-500 mt-4 print:hidden flex-wrap">
@@ -528,12 +541,13 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
             homeSlug={homeSlug}
             staff={activeStaff}
             onSaved={onReload}
+            readOnly={readOnly}
           />
         );
       })()}
 
       {/* CSV Import Modal */}
-      <Modal isOpen={showImportModal} onClose={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); }} title="Import Training Records from CSV" size="lg">
+      <Modal isOpen={!readOnly && showImportModal} onClose={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); }} title="Import Training Records from CSV" size="lg">
         {csvRows.length === 0 ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">

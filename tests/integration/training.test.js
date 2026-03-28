@@ -66,6 +66,8 @@ afterAll(async () => {
 // ── Training Records ────────────────────────────────────────────────────────
 
 describe('Training: training records', () => {
+  let fireSafetyVersion;
+
   it('upserts a training record', async () => {
     const result = await trainingRepo.upsertRecord(homeA, 'TRN-S001', 'fire-safety', {
       completed: '2026-01-15',
@@ -82,6 +84,8 @@ describe('Training: training records', () => {
     expect(result.trainer).toBe('Jane Smith');
     expect(result.method).toBe('classroom');
     expect(result.certificate_ref).toBe('FS-042');
+    expect(result.updated_at).toBeTruthy();
+    fireSafetyVersion = result.updated_at;
   });
 
   it('upserts a second record for same staff different type', async () => {
@@ -120,10 +124,22 @@ describe('Training: training records', () => {
       expiry: '2027-06-15',
       trainer: 'Updated Trainer',
       method: 'e-learning',
+      _clientUpdatedAt: fireSafetyVersion,
     });
 
     expect(result.completed).toBe('2026-06-15');
     expect(result.trainer).toBe('Updated Trainer');
+    expect(result.updated_at).not.toBe(fireSafetyVersion);
+  });
+
+  it('rejects stale training record updates', async () => {
+    await expect(trainingRepo.upsertRecord(homeA, 'TRN-S001', 'fire-safety', {
+      completed: '2026-08-01',
+      expiry: '2027-08-01',
+      trainer: 'Stale Writer',
+      method: 'online',
+      _clientUpdatedAt: fireSafetyVersion,
+    })).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('soft-deletes a training record', async () => {
@@ -174,6 +190,40 @@ describe('Training: supervisions', () => {
     const result = await supervisionRepo.findByHome(homeA);
     expect(result.total).toBe(0);
   });
+
+  it('rejects stale supervision updates', async () => {
+    const fresh = await supervisionRepo.upsertSession(homeA, 'TRN-S001', {
+      id: 'sup-test-stale',
+      date: '2026-02-18',
+      supervisor: 'Fresh Manager',
+      topics: 'Fresh topics',
+      actions: 'Fresh actions',
+      next_due: '2026-04-18',
+      notes: 'Fresh notes',
+    });
+
+    await supervisionRepo.upsertSession(homeA, 'TRN-S001', {
+      id: 'sup-test-stale',
+      date: '2026-02-19',
+      supervisor: 'Updated Manager',
+      topics: 'Updated topics',
+      actions: 'Updated actions',
+      next_due: '2026-04-19',
+      notes: 'Updated notes',
+      _clientUpdatedAt: fresh.updated_at,
+    });
+
+    await expect(supervisionRepo.upsertSession(homeA, 'TRN-S001', {
+      id: 'sup-test-stale',
+      date: '2026-02-20',
+      supervisor: 'Stale Manager',
+      topics: 'Stale topics',
+      actions: 'Stale actions',
+      next_due: '2026-04-20',
+      notes: 'Stale notes',
+      _clientUpdatedAt: fresh.updated_at,
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
 });
 
 // ── Appraisals ──────────────────────────────────────────────────────────────
@@ -216,6 +266,43 @@ describe('Training: appraisals', () => {
 
     const result = await appraisalRepo.findByHome(homeA);
     expect(result.total).toBe(0);
+  });
+
+  it('rejects stale appraisal updates', async () => {
+    const fresh = await appraisalRepo.upsertAppraisal(homeA, 'TRN-S002', {
+      id: 'apr-test-stale',
+      date: '2026-01-25',
+      appraiser: 'Fresh Appraiser',
+      objectives: 'Fresh objectives',
+      training_needs: 'Fresh needs',
+      development_plan: 'Fresh plan',
+      next_due: '2027-01-25',
+      notes: 'Fresh notes',
+    });
+
+    await appraisalRepo.upsertAppraisal(homeA, 'TRN-S002', {
+      id: 'apr-test-stale',
+      date: '2026-01-26',
+      appraiser: 'Updated Appraiser',
+      objectives: 'Updated objectives',
+      training_needs: 'Updated needs',
+      development_plan: 'Updated plan',
+      next_due: '2027-01-26',
+      notes: 'Updated notes',
+      _clientUpdatedAt: fresh.updated_at,
+    });
+
+    await expect(appraisalRepo.upsertAppraisal(homeA, 'TRN-S002', {
+      id: 'apr-test-stale',
+      date: '2026-01-27',
+      appraiser: 'Stale Appraiser',
+      objectives: 'Stale objectives',
+      training_needs: 'Stale needs',
+      development_plan: 'Stale plan',
+      next_due: '2027-01-27',
+      notes: 'Stale notes',
+      _clientUpdatedAt: fresh.updated_at,
+    })).rejects.toMatchObject({ statusCode: 409 });
   });
 });
 
@@ -271,5 +358,51 @@ describe('Training: fire drills', () => {
   it('returns false for already-deleted drill', async () => {
     const deleted = await fireDrillRepo.removeDrill(homeA, drillId);
     expect(deleted).toBe(false);
+  });
+
+  it('rejects stale fire drill updates', async () => {
+    const fresh = await fireDrillRepo.upsertDrill(homeA, {
+      id: 'fd-test-stale',
+      date: '2026-02-10',
+      time: '09:00',
+      scenario: 'Fresh drill',
+      evacuation_time_seconds: 180,
+      staff_present: ['TRN-S001'],
+      residents_evacuated: 12,
+      issues: 'None',
+      corrective_actions: 'None',
+      conducted_by: 'Fresh Lead',
+      notes: 'Fresh notes',
+    });
+
+    await fireDrillRepo.upsertDrill(homeA, {
+      id: 'fd-test-stale',
+      date: '2026-02-11',
+      time: '10:00',
+      scenario: 'Updated drill',
+      evacuation_time_seconds: 190,
+      staff_present: ['TRN-S001', 'TRN-S002'],
+      residents_evacuated: 13,
+      issues: 'Updated issue',
+      corrective_actions: 'Updated action',
+      conducted_by: 'Updated Lead',
+      notes: 'Updated notes',
+      _clientUpdatedAt: fresh.updated_at,
+    });
+
+    await expect(fireDrillRepo.upsertDrill(homeA, {
+      id: 'fd-test-stale',
+      date: '2026-02-12',
+      time: '11:00',
+      scenario: 'Stale drill',
+      evacuation_time_seconds: 200,
+      staff_present: ['TRN-S002'],
+      residents_evacuated: 14,
+      issues: 'Stale issue',
+      corrective_actions: 'Stale action',
+      conducted_by: 'Stale Lead',
+      notes: 'Stale notes',
+      _clientUpdatedAt: fresh.updated_at,
+    })).rejects.toMatchObject({ statusCode: 409 });
   });
 });

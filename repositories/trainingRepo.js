@@ -1,3 +1,4 @@
+import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
 /**
@@ -96,6 +97,48 @@ export async function sync(homeId, trainingObj, client) {
 
 export async function upsertRecord(homeId, staffId, typeId, record, client) {
   const conn = client || pool;
+  const clientUpdatedAt = record._clientUpdatedAt || null;
+
+  if (clientUpdatedAt) {
+    const { rows, rowCount } = await conn.query(
+      `UPDATE training_records
+       SET completed = $4,
+           expiry = $5,
+           trainer = $6,
+           method = $7,
+           certificate_ref = $8,
+           level = $9,
+           notes = $10,
+           updated_at = NOW(),
+           deleted_at = NULL
+       WHERE home_id = $1
+         AND staff_id = $2
+         AND training_type_id = $3
+         AND deleted_at IS NULL
+         AND date_trunc('milliseconds', updated_at) = $11::timestamptz
+       RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, level, notes, updated_at`,
+      [homeId, staffId, typeId,
+        record.completed ?? null, record.expiry ?? null,
+        record.trainer ?? null, record.method ?? null,
+        record.certificate_ref ?? null, record.level ?? null,
+        record.notes ?? null, clientUpdatedAt]
+    );
+    if (rowCount === 0) {
+      throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+    }
+    const r = rows[0];
+    return {
+      completed: toDateStr(r.completed),
+      expiry:    toDateStr(r.expiry),
+      trainer:   r.trainer   ?? undefined,
+      method:    r.method    ?? undefined,
+      certificate_ref: r.certificate_ref ?? undefined,
+      level:     r.level     ?? undefined,
+      notes:     r.notes     ?? undefined,
+      updated_at: r.updated_at ? r.updated_at.toISOString() : undefined,
+    };
+  }
+
   const { rows } = await conn.query(
     `INSERT INTO training_records
        (home_id, staff_id, training_type_id, completed, expiry, trainer, method,

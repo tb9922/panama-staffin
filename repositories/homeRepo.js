@@ -142,6 +142,31 @@ export async function updateConfig(homeId, configObj, client) {
 }
 
 /**
+ * Update only the training_types config key.
+ * Optionally guards on the caller's last-seen updated_at to prevent stale overwrites.
+ * Returns the fresh updated_at ISO string, or null on stale conflict.
+ */
+export async function updateTrainingTypesConfig(homeId, trainingTypes, client, clientUpdatedAt) {
+  const conn = client || pool;
+  const params = [JSON.stringify(trainingTypes), homeId];
+  let sql = `
+    UPDATE homes
+    SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{training_types}', $1::jsonb, true),
+        updated_at = NOW()
+    WHERE id = $2 AND deleted_at IS NULL`;
+
+  if (clientUpdatedAt) {
+    params.push(clientUpdatedAt);
+    sql += ` AND date_trunc('milliseconds', updated_at) = $${params.length}::timestamptz`;
+  }
+
+  sql += ' RETURNING updated_at';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && clientUpdatedAt) return null;
+  return rows[0]?.updated_at ? rows[0].updated_at.toISOString() : null;
+}
+
+/**
  * Update the annual_leave JSONB for a home.
  * @param {number} homeId
  * @param {object} alObj

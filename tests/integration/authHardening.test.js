@@ -7,12 +7,16 @@
  * Requires: PostgreSQL running with migrations applied (incl. 087).
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
 import { validatePassword } from '../../services/userService.js';
+import * as userService from '../../services/userService.js';
+import * as authService from '../../services/authService.js';
+import * as authRepo from '../../repositories/authRepo.js';
+import * as userRepo from '../../repositories/userRepo.js';
 
 const TEST_PREFIX = 'lockout-test';
 const ADMIN_USER = `${TEST_PREFIX}-admin`;
@@ -74,6 +78,10 @@ afterAll(async () => {
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${TEST_PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${TEST_PREFIX}-%'`);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 // ── Password Complexity ─────────────────────────────────────────────────────
@@ -199,4 +207,142 @@ describe('Per-home role change takes effect without token revocation', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ roleId: 'viewer' });
   }, 15000);
+});
+
+describe('Session and logout hardening', () => {
+  it('returns 503 when auth dependency checks fail instead of forcing a 401 logout', async () => {
+    vi.spyOn(authService, 'isTokenDenied').mockRejectedValueOnce(new Error('db down'));
+
+    const res = await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(503);
+
+    expect(res.body.error).toMatch(/authentication service unavailable/i);
+  });
+
+  it('rejects a deactivated platform admin token on /api/homes', async () => {
+    const loginRes = await request(app).post('/api/login').send({ username: ADMIN_USER, password: ADMIN_PW });
+    expect(loginRes.status).toBe(200);
+    const staleToken = loginRes.body.token;
+
+    await pool.query('UPDATE users SET active = false WHERE username = $1', [ADMIN_USER]);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${staleToken}`)
+      .expect(401);
+
+    await pool.query('UPDATE users SET active = true WHERE username = $1', [ADMIN_USER]);
+  });
+
+  it('fails closed when logout deny-list persistence fails', async () => {
+    vi.spyOn(authRepo, 'addToDenyList').mockRejectedValueOnce(new Error('db down'));
+    const loginRes = await request(app).post('/api/login').send({ username: LOCKOUT_USER, password: LOCKOUT_PW });
+    expect(loginRes.status).toBe(200);
+    const userToken = loginRes.body.token;
+
+    const res = await request(app)
+      .post('/api/login/logout')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(503);
+
+    expect(res.body.error).toMatch(/logout failed/i);
+    const setCookies = res.headers['set-cookie'] || [];
+    expect(setCookies.some(cookie => cookie.startsWith('panama_token=;'))).toBe(false);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(200);
+  });
+
+  it('reuses the authenticated DB user lookup on platform-admin home requests', async () => {
+    const spy = vi.spyOn(userRepo, 'findByUsername');
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(ADMIN_USER);
+  });
+});
+
+describe('Password updates are atomic', () => {
+  it('resetPassword rolls back if revokeUser fails', async () => {
+    await pool.query(
+      "UPDATE users SET failed_login_count = 3, locked_until = NOW() + INTERVAL '5 minutes' WHERE id = $1",
+      [lockoutUserId]
+    );
+    const before = await pool.query(
+      'SELECT password_hash, session_version, failed_login_count, locked_until FROM users WHERE id = $1',
+      [lockoutUserId]
+    );
+
+    vi.spyOn(authService, 'revokeUser').mockRejectedValueOnce(new Error('denylist down'));
+
+    await expect(userService.resetPassword(lockoutUserId, 'FreshReset1X', ADMIN_USER))
+      .rejects.toThrow(/denylist down/i);
+
+    const after = await pool.query(
+      'SELECT password_hash, session_version, failed_login_count, locked_until FROM users WHERE id = $1',
+      [lockoutUserId]
+    );
+    expect(after.rows[0].password_hash).toBe(before.rows[0].password_hash);
+    expect(after.rows[0].session_version).toBe(before.rows[0].session_version);
+    expect(after.rows[0].failed_login_count).toBe(3);
+    expect(after.rows[0].locked_until).not.toBeNull();
+  });
+
+  it('changeOwnPassword rolls back if revokeUser fails', async () => {
+    await pool.query(
+      'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1',
+      [lockoutUserId]
+    );
+    const before = await pool.query(
+      'SELECT password_hash, session_version FROM users WHERE username = $1',
+      [LOCKOUT_USER]
+    );
+
+    vi.spyOn(authService, 'revokeUser').mockRejectedValueOnce(new Error('denylist down'));
+
+    await expect(userService.changeOwnPassword(LOCKOUT_USER, LOCKOUT_PW, 'ChangedOwn1X'))
+      .rejects.toThrow(/denylist down/i);
+
+    const after = await pool.query(
+      'SELECT password_hash, session_version FROM users WHERE username = $1',
+      [LOCKOUT_USER]
+    );
+    expect(after.rows[0].password_hash).toBe(before.rows[0].password_hash);
+    expect(after.rows[0].session_version).toBe(before.rows[0].session_version);
+  });
+});
+
+describe('Admin guardrails', () => {
+  it('prevents removing the last active admin', async () => {
+    const auxUsername = `${TEST_PREFIX}-aux-admin`;
+    const auxHash = await bcrypt.hash('AuxAdminPass1X', 4);
+    const { rows: [auxUser] } = await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+       VALUES ($1, $2, 'admin', true, 'Aux Admin', 'test-setup')
+       RETURNING id`,
+      [auxUsername, auxHash]
+    );
+
+    try {
+      vi.spyOn(userRepo, 'lockActiveAdminIds').mockResolvedValueOnce([auxUser.id]);
+
+      await expect(userService.updateUser(auxUser.id, { active: false }, LOCKOUT_USER))
+        .rejects.toThrow(/last active admin/i);
+
+      const stillActive = await userRepo.findByUsername(auxUsername);
+      expect(stillActive.active).toBe(true);
+    } finally {
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [auxUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [auxUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [auxUsername]).catch(() => {});
+    }
+  });
 });

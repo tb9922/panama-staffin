@@ -19,14 +19,14 @@ const SUP_STATUS_BADGE = {
   not_started:{ badge: BADGE.gray, label: 'No Records' },
 };
 
-export default function SupervisionPanel({ supervisions, staff, homeSlug, config, onReload }) {
+export default function SupervisionPanel({ supervisions, staff, homeSlug, config, onReload, readOnly = false }) {
   const [filterTeam, setFilterTeam] = useState('All');
   const [search, setSearch] = useState('');
   const [supFilter, setSupFilter] = useState('all');
   const [expanded, setExpanded] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', existing: false });
+  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -70,21 +70,22 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   }, [modalData.date, modalData.staffId, modalData.existing, modalData.next_due, activeStaff, config, today]);
 
   function openModal(staffId, session) {
+    if (readOnly && !session) return;
     if (session) {
-      setModalData({ staffId, id: session.id, date: session.date, supervisor: session.supervisor || '', topics: session.topics || '', actions: session.actions || '', next_due: session.next_due || '', notes: session.notes || '', existing: true });
+      setModalData({ staffId, id: session.id, date: session.date, supervisor: session.supervisor || '', topics: session.topics || '', actions: session.actions || '', next_due: session.next_due || '', notes: session.notes || '', updated_at: session.updated_at || '', existing: true });
     } else {
       const s = activeStaff.find(x => x.id === staffId);
       const freq = s ? getSupervisionFrequency(s, config, today) : 49;
       const nextDue = new Date(today);
       nextDue.setUTCDate(nextDue.getUTCDate() + freq);
-      setModalData({ staffId, id: 'sup-' + Date.now(), date: todayStr, supervisor: '', topics: '', actions: '', next_due: formatDate(nextDue), notes: '', existing: false });
+      setModalData({ staffId, id: 'sup-' + Date.now(), date: todayStr, supervisor: '', topics: '', actions: '', next_due: formatDate(nextDue), notes: '', updated_at: '', existing: false });
     }
     setError(null);
     setShowModal(true);
   }
 
   async function handleSave() {
-    if (!modalData.staffId || !modalData.date) return;
+    if (readOnly || !modalData.staffId || !modalData.date) return;
     setSaving(true);
     setError(null);
     const effectiveNextDue = modalData.existing ? modalData.next_due : supNextDue;
@@ -97,6 +98,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       actions: modalData.actions,
       next_due: effectiveNextDue,
       notes: modalData.notes,
+      ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
     try {
       if (modalData.existing) {
@@ -114,6 +116,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   }
 
   async function handleDelete() {
+    if (readOnly) return;
     if (!confirm('Delete this supervision record?')) return;
     setSaving(true);
     setError(null);
@@ -210,7 +213,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
               {isExpanded && (
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <div className="flex justify-end mb-2">
-                    <button onClick={() => openModal(s.id, null)} className={`${BTN.primary} ${BTN.sm}`}>Record Supervision</button>
+                    {!readOnly && <button onClick={() => openModal(s.id, null)} className={`${BTN.primary} ${BTN.sm}`}>Record Supervision</button>}
                   </div>
                   {staffSups.length === 0 ? (
                     <div className="text-sm text-gray-400 text-center py-4">No supervision records</div>
@@ -247,34 +250,37 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       </div>
 
       {/* Supervision Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={modalData.existing ? 'Edit Supervision' : 'Record Supervision'} size="lg">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={readOnly ? 'View Supervision' : modalData.existing ? 'Edit Supervision' : 'Record Supervision'} size="lg">
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Date</label>
-              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} />
+              <input type="date" value={modalData.date} onChange={e => setModalData({ ...modalData, date: e.target.value })} className={INPUT.base} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>Supervisor</label>
               <input type="text" value={modalData.supervisor} onChange={e => setModalData({ ...modalData, supervisor: e.target.value })}
+                disabled={readOnly}
                 className={INPUT.base} placeholder="Supervisor name" />
             </div>
           </div>
           <div>
             <label className={INPUT.label}>Topics Discussed</label>
             <textarea value={modalData.topics} onChange={e => setModalData({ ...modalData, topics: e.target.value })}
+              disabled={readOnly}
               className={`${INPUT.base} h-20 resize-none`} placeholder="Key topics covered in the session..." />
           </div>
           <div>
             <label className={INPUT.label}>Actions Agreed</label>
             <textarea value={modalData.actions} onChange={e => setModalData({ ...modalData, actions: e.target.value })}
+              disabled={readOnly}
               className={`${INPUT.base} h-20 resize-none`} placeholder="Action items agreed upon..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>Next Due (auto)</label>
               <input type="date" value={modalData.existing ? modalData.next_due : supNextDue}
-                onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} />
+                onChange={e => setModalData({ ...modalData, next_due: e.target.value })} className={INPUT.base} disabled={readOnly} />
               {!modalData.existing && modalData.staffId && (() => {
                 const s = activeStaff.find(x => x.id === modalData.staffId);
                 if (!s) return null;
@@ -286,21 +292,24 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
             <div>
               <label className={INPUT.label}>Notes</label>
               <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
+                disabled={readOnly}
                 className={INPUT.base} placeholder="Optional notes" />
             </div>
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
         <div className={MODAL.footer}>
-          {modalData.existing && (
+          {modalData.existing && !readOnly && (
             <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
-          <button onClick={handleSave}
-            disabled={!modalData.staffId || !modalData.date || saving}
-            className={`${BTN.primary} disabled:opacity-50`}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+          {!readOnly && (
+            <button onClick={handleSave}
+              disabled={!modalData.staffId || !modalData.date || saving}
+              className={`${BTN.primary} disabled:opacity-50`}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
         </div>
       </Modal>
     </>

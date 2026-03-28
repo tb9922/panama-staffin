@@ -12,7 +12,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { getTrainingTypes } from '../shared/training.js';
-import { updateConfig } from '../repositories/homeRepo.js';
+import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -36,6 +36,10 @@ const trainingTypeSchema = z.object({
 });
 
 const trainingTypesArraySchema = z.array(trainingTypeSchema).max(100);
+const trainingTypesUpdateSchema = z.object({
+  trainingTypes: trainingTypesArraySchema,
+  _clientUpdatedAt: z.string().max(50).optional(),
+});
 
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -108,19 +112,35 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       supervision_frequency_standard: req.home.config?.supervision_frequency_standard ?? 49,
       supervision_probation_months: req.home.config?.supervision_probation_months ?? 6,
     };
-    res.json({ training, supervisions, appraisals, fireDrills, trainingTypes, staff, supervisionConfig });
+    res.json({
+      training,
+      supervisions,
+      appraisals,
+      fireDrills,
+      trainingTypes,
+      staff,
+      supervisionConfig,
+      configUpdatedAt: req.home.updated_at ? req.home.updated_at.toISOString() : null,
+    });
   } catch (err) { next(err); }
 });
 
 // PUT /api/training/config/types?home=X — update training types in config
 router.put('/config/types', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
-    const parsed = trainingTypesArraySchema.safeParse(req.body?.trainingTypes);
+    const parsed = trainingTypesUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const updatedConfig = { ...req.home.config, training_types: parsed.data };
-    await updateConfig(req.home.id, updatedConfig);
-    await auditService.log('training_types_update', req.home.slug, req.user.username, { typeCount: parsed.data.length });
-    res.json({ ok: true });
+    const updatedAt = await updateTrainingTypesConfig(
+      req.home.id,
+      parsed.data.trainingTypes,
+      null,
+      parsed.data._clientUpdatedAt
+    );
+    if (updatedAt === null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
+    await auditService.log('training_types_update', req.home.slug, req.user.username, { typeCount: parsed.data.trainingTypes.length });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (err) { next(err); }
 });
 

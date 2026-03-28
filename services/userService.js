@@ -21,7 +21,7 @@ export function validatePassword(password) {
 
 /**
  * Seed admin/viewer users from env vars if the users table is empty.
- * Called once at startup. Non-fatal if table doesn't exist yet.
+ * Called once at startup. Non-fatal if table does not exist yet.
  */
 export async function ensureSeedUsers() {
   const existing = await userRepo.listAll();
@@ -48,7 +48,7 @@ export async function ensureSeedUsers() {
   }
 
   if (seeded === 0) {
-    logger.warn('Users table is empty and no env var hashes found — no users seeded');
+    logger.warn('Users table is empty and no env var hashes found - no users seeded');
   }
 }
 
@@ -81,49 +81,45 @@ export async function updateUser(id, fields, actorUsername) {
   const target = await userRepo.findById(id);
   if (!target) throw new Error('User not found');
 
-  // Strip is_platform_admin — only settable via direct DB or platform admin routes
-  delete fields.is_platform_admin;
+  const updateFields = { ...fields };
+  delete updateFields.is_platform_admin;
 
-  // Cannot deactivate yourself
-  if (fields.active === false && target.username === actorUsername) {
+  if (updateFields.active === false && target.username === actorUsername) {
     throw new Error('Cannot deactivate your own account');
   }
 
-  // Cannot deactivate or downgrade the last admin.
-  // Use a transaction with row-level lock to prevent TOCTOU: two concurrent requests
-  // could both pass the count check and both deactivate the last admin.
   const isRemovingAdmin =
-    (fields.active === false && target.role === 'admin') ||
-    (fields.role !== undefined && fields.role !== 'admin' && target.role === 'admin' && target.active);
+    (updateFields.active === false && target.role === 'admin') ||
+    (updateFields.role !== undefined && updateFields.role !== 'admin' && target.role === 'admin' && target.active);
+
+  if (updateFields.active === false || (updateFields.role && updateFields.role !== target.role)) {
+    updateFields.bump_session_version = true;
+  }
 
   let updated;
   if (isRemovingAdmin) {
     updated = await withTransaction(async (client) => {
-      // Lock the target row so concurrent requests serialise here
-      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
-      const adminCount = await userRepo.countActiveAdmins(client);
-      if (adminCount <= 1) {
+      const lockedTarget = await userRepo.findById(id, client, { forUpdate: true });
+      if (!lockedTarget) throw new Error('User not found');
+
+      const activeAdminIds = await userRepo.lockActiveAdminIds(client);
+      if (activeAdminIds.length <= 1) {
         throw new Error('Cannot remove the last active admin');
       }
-      return userRepo.update(id, fields, client);
+
+      return userRepo.update(id, updateFields, client);
     });
   } else {
-    updated = await userRepo.update(id, fields);
+    updated = await userRepo.update(id, updateFields);
   }
 
-  // If deactivated, immediately revoke all tokens.
-  // Use scope='admin' so the sentinel is NOT cleared if the user somehow re-authenticates.
-  if (fields.active === false) {
-    await authService.revokeUser(target.username, 'admin');
+  if (updateFields.active === false) {
+    await authService.revokeUser(target.username);
   }
 
-  // If role changed, force re-login so new JWT has correct claims.
-  // Use scope='admin' so the sentinel survives clearForUser on re-login; without this,
-  // the user could log in again immediately and reactivate old JWTs with the old role.
-  if (fields.role && fields.role !== target.role) {
-    await authService.revokeUser(target.username, 'admin');
-    // If upgraded to admin, grant all homes
-    if (fields.role === 'admin' && fields.role !== target.role) {
+  if (updateFields.role && updateFields.role !== target.role) {
+    await authService.revokeUser(target.username);
+    if (updateFields.role === 'admin' && updateFields.role !== target.role) {
       await userHomeRepo.grantAllHomesRole(target.username);
     }
   }
@@ -139,29 +135,28 @@ export async function resetPassword(userId, newPassword, _actorUsername) {
   if (!target) throw new Error('User not found');
 
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await userRepo.updatePassword(userId, hash);
-  // Clear lockout so the user can immediately log in with the new password
-  await userRepo.resetFailedLogin(target.username);
-
-  // Revoke all existing tokens — forces re-login with new password.
-  // scope='user' so clearForUser on re-login clears the sentinel and the user
-  // can log back in with the new password. The window for old-token reuse is
-  // bounded by the JWT TTL (4h); DB re-verification in requireAdmin closes
-  // any role-escalation gap for that window.
-  await authService.revokeUser(target.username);
+  await withTransaction(async (client) => {
+    await userRepo.updatePassword(userId, hash, client);
+    await userRepo.bumpSessionVersionById(userId, client);
+    await userRepo.resetFailedLogin(target.username, client);
+    await authService.revokeUser(target.username, 'user', client);
+  });
 }
 
 export async function changeOwnPassword(username, currentPassword, newPassword) {
   const pwError = validatePassword(newPassword);
   if (pwError) throw new Error(pwError);
 
-  const user = await userRepo.findByUsername(username);
-  if (!user) throw new Error('User not found');
-
-  const valid = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!valid) throw new Error('Current password is incorrect');
-
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  await userRepo.updatePassword(user.id, hash);
-  await authService.revokeUser(username);
+  await withTransaction(async (client) => {
+    const user = await userRepo.findByUsername(username, client, { forUpdate: true });
+    if (!user) throw new Error('User not found');
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) throw new Error('Current password is incorrect');
+
+    await userRepo.updatePassword(user.id, hash, client);
+    await userRepo.bumpSessionVersionById(user.id, client);
+    await authService.revokeUser(username, 'user', client);
+  });
 }

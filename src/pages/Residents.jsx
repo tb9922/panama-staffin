@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
 import {
@@ -26,6 +27,7 @@ export default function Residents() {
   const [editResident, setEditResident] = useState(null);
   const [dischargeResident, setDischargeResident] = useState(null);
   const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
 
   const home = getCurrentHome();
   const { canWrite } = useData();
@@ -56,6 +58,12 @@ export default function Residents() {
   }, [home, filterStatus, filterFunding, searchQuery]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+  }, []);
 
   function handleSearchKeyDown(e) {
     if (e.key === 'Enter') setSearchQuery(searchInput.trim());
@@ -88,8 +96,14 @@ export default function Residents() {
   }, [residents, bedsAvailable]);
 
   function showToast(msg, duration = 5000) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToast(msg);
-    setTimeout(() => setToast(null), duration);
+    toastTimeoutRef.current = setTimeout(() => {
+      toastTimeoutRef.current = null;
+      setToast(null);
+    }, duration);
   }
 
   return (
@@ -163,16 +177,17 @@ export default function Residents() {
         />
       )}
 
-      {showAdmit && (
-        <ResidentAdmitModal
-          home={home}
-          onClose={() => setShowAdmit(false)}
-          onSaved={() => {
-            load();
-            showToast(<>Resident admitted. <a href="/beds" className="underline font-medium">Assign a bed in Bed Manager &rarr;</a></>, 10000);
-          }}
-        />
-      )}
+        {showAdmit && (
+          <ResidentAdmitModal
+            home={home}
+            onClose={() => setShowAdmit(false)}
+            onSaved={(resident) => {
+              load();
+              const bedUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
+              showToast(<>Resident admitted. <Link to={bedUrl} className="underline font-medium">Assign a bed in Bed Manager &rarr;</Link></>, 10000);
+            }}
+          />
+        )}
 
       {editResident && (
         <ResidentEditModal
@@ -189,13 +204,14 @@ export default function Residents() {
           home={home}
           resident={dischargeResident}
           onClose={() => setDischargeResident(null)}
-          onSaved={(hadBed, roomNumber) => {
-            load();
-            if (hadBed) {
-              showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <a href="/beds" className="underline font-medium">update in Bed Manager &rarr;</a></>, 10000);
-            } else {
-              showToast('Resident discharged.');
-            }
+            onSaved={(hadBed, roomNumber) => {
+              load();
+              if (hadBed) {
+                const bedUrl = dischargeResident?.id ? `/beds?residentId=${dischargeResident.id}` : '/beds';
+                showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <Link to={bedUrl} className="underline font-medium">update in Bed Manager &rarr;</Link></>, 10000);
+              } else {
+                showToast('Resident discharged.');
+              }
           }}
         />
       )}

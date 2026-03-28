@@ -19,7 +19,7 @@ const TABS = [
 export default function TrainingMatrix() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
-  const canEdit = canWrite('staff');
+  const canEdit = canWrite('compliance');
   const [tab, setTab] = useState('training');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +69,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           config={{ training_types: state.trainingTypes }}
+          configUpdatedAt={state.configUpdatedAt}
           onReload={() => setRefreshKey(k => k + 1)}
           readOnly={!canEdit}
         />

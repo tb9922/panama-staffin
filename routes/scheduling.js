@@ -10,6 +10,7 @@ import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as auditService from '../services/auditService.js';
 import { dispatchEvent } from '../services/webhookService.js';
+import { AppError } from '../errors.js';
 import {
   getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
@@ -117,6 +118,8 @@ const VALID_SHIFTS = [
   'BH-D', 'BH-N',
 ];
 const shiftSchema = z.enum(VALID_SHIFTS);
+const isoDateOnlyRe = /^\d{4}-\d{2}-\d{2}$/;
+const strictDateSchema = z.string().regex(isoDateOnlyRe).refine(isValidIsoDateOnly, { message: 'Invalid date' });
 
 // Shifts that require care staff to have valid mandatory training
 const WORKING_SHIFTS_FOR_TRAINING_CHECK = new Set([
@@ -130,6 +133,53 @@ const TRAINING_BLOCKING_CARE_ROLES = new Set([
 ]);
 const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
 
+function getUtcTodayStr() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString().slice(0, 10);
+}
+
+function isValidIsoDateOnly(value) {
+  if (!isoDateOnlyRe.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function assertEditLock(req, config, dates) {
+  const expectedPin = String(config?.edit_lock_pin || '');
+  if (!expectedPin) return;
+
+  const lockedDates = [...new Set(dates.filter(date => date < getUtcTodayStr()))];
+  if (lockedDates.length === 0) return;
+
+  if (String(req.get('X-Edit-Lock-Pin') || '') === expectedPin) return;
+
+  const message = lockedDates.length === 1
+    ? `Past date ${lockedDates[0]} is locked — enter the edit PIN to continue`
+    : 'Past dates are locked — enter the edit PIN to continue';
+  throw new AppError(message, 423, 'SCHEDULING_EDIT_LOCKED');
+}
+
+function buildSchedulingConfigOut(config, { ownDataOnly = false } = {}) {
+  const baseConfig = { ...(config || {}) };
+  const editLockEnabled = Boolean(baseConfig.edit_lock_pin);
+  delete baseConfig.edit_lock_pin;
+
+  if (ownDataOnly) {
+    delete baseConfig.agency_rate_day;
+    delete baseConfig.agency_rate_night;
+    delete baseConfig.ot_premium;
+    delete baseConfig.bh_premium_multiplier;
+  }
+
+  return {
+    ...baseConfig,
+    edit_lock_enabled: editLockEnabled,
+  };
+}
+
 /**
  * Check whether a working shift assignment is blocked by expired / missing mandatory training.
  * Returns a warning string if a blocking type is expired or not started, null if compliant.
@@ -139,13 +189,13 @@ const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguard
  *
  * Uses one DB query: joins staff + training_records for the 3 blocking types.
  */
-async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, client) {
+async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, effectiveDate, client) {
   if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(shift)) return null;
   const trainingTypes = config?.training_types;
   if (!trainingTypes?.length) return null;
 
   const conn = client || pool;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const effectiveDateStr = effectiveDate || getUtcTodayStr();
 
   // Get staff role/name + latest expiry per blocking type in a single query.
   // NULL expiry (never-expiring training) is mapped to '9999-12-31' so it never triggers blocking.
@@ -178,7 +228,7 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
     if (!t) continue; // type not configured for this home
     if (t.roles && !t.roles.includes(role)) continue; // doesn't apply to this role
     const expiry = expiryMap.get(typeId);
-    if (!expiry || expiry < todayStr) blocked.push(t.name || typeId);
+    if (!expiry || expiry < effectiveDateStr) blocked.push(t.name || typeId);
   }
 
   if (!blocked.length) return null;
@@ -189,14 +239,17 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
-    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     const now = new Date();
-    const fromDate = (typeof req.query.from === 'string' && dateRe.test(req.query.from))
-      ? req.query.from
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
-    const toDate = (typeof req.query.to === 'string' && dateRe.test(req.query.to))
-      ? req.query.to
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
+    const requestedFrom = typeof req.query.from === 'string' ? req.query.from : null;
+    const requestedTo = typeof req.query.to === 'string' ? req.query.to : null;
+    if (requestedFrom && !isValidIsoDateOnly(requestedFrom)) {
+      return res.status(400).json({ error: 'Invalid from date' });
+    }
+    if (requestedTo && !isValidIsoDateOnly(requestedTo)) {
+      return res.status(400).json({ error: 'Invalid to date' });
+    }
+    const fromDate = requestedFrom || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
+    const toDate = requestedTo || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
     // Cap range to 400 days to prevent unbounded queries
     const daySpan = (new Date(toDate) - new Date(fromDate)) / 86400000;
     if (daySpan < 0 || daySpan > 400) {
@@ -225,7 +278,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     }
 
     // staff_member own-data: minimal staff fields, own overrides only, no training/onboarding
-    let configOut = req.home.config;
+    let configOut = buildSchedulingConfigOut(req.home.config);
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
       staffOut = staff.map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
@@ -236,8 +289,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       trainingOut = [];
       onboardingOut = undefined;
       // Strip commercially sensitive fields — staff don't need cost parameters
-      const { agency_rate_day: _ard, agency_rate_night: _arn, ot_premium: _otp, bh_premium_multiplier: _bhm, ...safeConfig } = req.home.config;
-      configOut = safeConfig;
+      configOut = buildSchedulingConfigOut(req.home.config, { ownDataOnly: true });
     }
 
     res.json({
@@ -255,7 +307,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 
 // PUT /api/scheduling/overrides?home=X — upsert single override
 const overrideBodySchema = z.object({
-  date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date:     strictDateSchema,
   staffId:  z.string().min(1).max(40),
   shift:    shiftSchema,
   reason:   z.string().max(200).optional(),
@@ -271,6 +323,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const parsed = overrideBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours } = parsed.data;
+    assertEditLock(req, req.home.config, [date]);
 
     // Validate replaces_staff_id constraints
     if (replaces_staff_id) {
@@ -303,7 +356,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
     } else {
       // Non-AL shifts: training check + upsert in one transaction (prevents TOCTOU)
       await withTransaction(async (client) => {
-        trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config, client);
+        trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client);
         if (trainingWarning && req.home.config?.enforce_training_blocking) {
           const err = new Error(trainingWarning);
           err.isTrainingBlock = true;
@@ -331,7 +384,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
 // DELETE /api/scheduling/overrides?home=X&date=YYYY-MM-DD&staffId=X — delete single override
 const overrideDeleteSchema = z.object({
   home:    z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date:    strictDateSchema,
   staffId: z.string().min(1).max(40),
 });
 
@@ -339,6 +392,7 @@ router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, re
   try {
     const parsed = overrideDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    assertEditLock(req, req.home.config, [parsed.data.date]);
     await overrideRepo.deleteOne(req.home.id, parsed.data.date, parsed.data.staffId);
     await auditService.log('override_delete', req.home.slug, req.user.username, { date: parsed.data.date, staffId: parsed.data.staffId });
     res.json({ ok: true });
@@ -350,7 +404,7 @@ router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, re
 // POST /api/scheduling/overrides/bulk?home=X — bulk upsert
 const bulkBodySchema = z.object({
   overrides: z.array(z.object({
-    date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    date:     strictDateSchema,
     staffId:  z.string().min(1).max(40),
     shift:    shiftSchema,
     reason:   z.string().max(200).optional(),
@@ -366,6 +420,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
   try {
     const parsed = bulkBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    assertEditLock(req, req.home.config, parsed.data.overrides.map(o => o.date));
 
     // Validate replaces_staff_id constraints on all rows before opening DB transaction
     for (const o of parsed.data.overrides) {
@@ -386,7 +441,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
       // Training-blocking check inside transaction (prevents TOCTOU between check and write)
       for (const o of overrides) {
         if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
-        const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config, client);
+        const w = await checkTrainingBlockingForOverride(req.home.id, o.staffId, o.shift, req.home.config, o.date, client);
         if (w) {
           if (req.home.config?.enforce_training_blocking) {
             const err = new Error(w);
@@ -443,8 +498,8 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
 // DELETE /api/scheduling/overrides/month?home=X&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — delete range
 const monthDeleteSchema = z.object({
   home:     z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  toDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fromDate: strictDateSchema,
+  toDate:   strictDateSchema,
 });
 
 router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
@@ -456,6 +511,7 @@ router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAcce
     // Prevent accidental full wipe — max 366 days
     const from = new Date(fromDate), to = new Date(toDate);
     if ((to - from) / 86400000 > 366) return res.status(400).json({ error: 'Date range exceeds 366 days' });
+    assertEditLock(req, req.home.config, [fromDate]);
     const deleted = await overrideRepo.deleteForDateRange(req.home.id, fromDate, toDate);
     await auditService.log('override_month_revert', req.home.slug, req.user.username, { fromDate, toDate, deleted });
     res.json({ ok: true, deleted });
@@ -466,7 +522,7 @@ router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAcce
 
 // PUT /api/scheduling/day-notes?home=X — upsert or delete a day note
 const dayNoteSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: strictDateSchema,
   note: z.string().max(5000),
 });
 
@@ -475,6 +531,7 @@ router.put('/day-notes', writeRateLimiter, requireAuth, requireHomeAccess, requi
     const parsed = dayNoteSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, note } = parsed.data;
+    assertEditLock(req, req.home.config, [date]);
     if (note.trim() === '') {
       await dayNoteRepo.deleteOne(req.home.id, date);
       await auditService.log('day_note_delete', req.home.slug, req.user.username, { date });

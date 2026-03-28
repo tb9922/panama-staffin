@@ -5,7 +5,7 @@ import { BTN, INPUT, MODAL } from '../lib/design.js';
 import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { getRoleLabel } from '../../shared/roles.js';
+import { ROLES, getRoleLabel } from '../../shared/roles.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
@@ -13,6 +13,7 @@ import AppRoutes from './AppRoutes.jsx';
 export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
+  const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
@@ -40,6 +41,26 @@ export default function AppLayout() {
         </div>
         <p className="text-red-600 text-sm">{error}</p>
         <p className="text-gray-400 text-xs mt-3">Make sure the API server is running (npm run dev)</p>
+      </div>
+    </div>
+  );
+
+  if (!activeHome) return (
+    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
+      <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-6 max-w-md mx-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-amber-900 font-semibold text-lg">No Home Access</h2>
+        </div>
+        <p className="text-amber-800 text-sm">Your account is signed in, but it is not assigned to any home yet.</p>
+        <p className="text-gray-500 text-xs mt-3">Ask a platform admin to grant home access, or log out and switch accounts.</p>
+        <div className="mt-5">
+          <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.primary}>Logout</button>
+        </div>
       </div>
     </div>
   );
@@ -161,7 +182,9 @@ export default function AppLayout() {
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
                     {section.items.filter(item => {
                       if (item.platformAdminOnly) return isPlatformAdmin;
+                      if (item.requiresUserManagement && !canManageUsers) return false;
                       if (item.module) return canRead(item.module);
+                      if (section.id === 'scheduling' && homeRole === 'staff_member') return item.ownDataSafe === true;
                       return true;
                     }).map(item => (
                       <NavLink
@@ -200,7 +223,7 @@ export default function AppLayout() {
               <div className="flex flex-col items-end gap-0.5">
                 <button onClick={() => setChangePwOpen(true)}
                   className="text-[10px] text-gray-500 hover:text-blue-400 transition-colors font-medium">Password</button>
-                <button onClick={() => logout()}
+                <button onClick={() => { void logout(); }}
                   className="text-[10px] text-gray-500 hover:text-red-400 transition-colors font-medium">Logout</button>
               </div>
             </div>
