@@ -319,3 +319,30 @@ describe('Password updates are atomic', () => {
     expect(after.rows[0].session_version).toBe(before.rows[0].session_version);
   });
 });
+
+describe('Admin guardrails', () => {
+  it('prevents removing the last active admin', async () => {
+    const auxUsername = `${TEST_PREFIX}-aux-admin`;
+    const auxHash = await bcrypt.hash('AuxAdminPass1X', 4);
+    const { rows: [auxUser] } = await pool.query(
+      `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+       VALUES ($1, $2, 'admin', true, 'Aux Admin', 'test-setup')
+       RETURNING id`,
+      [auxUsername, auxHash]
+    );
+
+    try {
+      vi.spyOn(userRepo, 'lockActiveAdminIds').mockResolvedValueOnce([auxUser.id]);
+
+      await expect(userService.updateUser(auxUser.id, { active: false }, LOCKOUT_USER))
+        .rejects.toThrow(/last active admin/i);
+
+      const stillActive = await userRepo.findByUsername(auxUsername);
+      expect(stillActive.active).toBe(true);
+    } finally {
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [auxUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [auxUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [auxUsername]).catch(() => {});
+    }
+  });
+});

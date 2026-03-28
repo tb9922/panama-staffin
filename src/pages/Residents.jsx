@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
@@ -27,6 +27,7 @@ export default function Residents() {
   const [editResident, setEditResident] = useState(null);
   const [dischargeResident, setDischargeResident] = useState(null);
   const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
 
   const home = getCurrentHome();
   const { canWrite } = useData();
@@ -57,6 +58,12 @@ export default function Residents() {
   }, [home, filterStatus, filterFunding, searchQuery]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+  }, []);
 
   function handleSearchKeyDown(e) {
     if (e.key === 'Enter') setSearchQuery(searchInput.trim());
@@ -89,8 +96,14 @@ export default function Residents() {
   }, [residents, bedsAvailable]);
 
   function showToast(msg, duration = 5000) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToast(msg);
-    setTimeout(() => setToast(null), duration);
+    toastTimeoutRef.current = setTimeout(() => {
+      toastTimeoutRef.current = null;
+      setToast(null);
+    }, duration);
   }
 
   return (

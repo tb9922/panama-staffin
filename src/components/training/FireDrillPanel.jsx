@@ -9,7 +9,7 @@ import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false }) {
   const [showModal, setShowModal] = useState(false);
-  const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', existing: false });
+  const [modalData, setModalData] = useState({ id: '', date: '', time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -25,9 +25,9 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
   function openModal(drill) {
     if (readOnly && !drill) return;
     if (drill) {
-      setModalData({ id: drill.id, date: drill.date, time: drill.time || '', scenario: drill.scenario || '', evacuation_time_seconds: drill.evacuation_time_seconds ?? '', staff_present: drill.staff_present || [], residents_evacuated: drill.residents_evacuated ?? '', issues: drill.issues || '', corrective_actions: drill.corrective_actions || '', conducted_by: drill.conducted_by || '', notes: drill.notes || '', existing: true });
+      setModalData({ id: drill.id, date: drill.date, time: drill.time || '', scenario: drill.scenario || '', evacuation_time_seconds: drill.evacuation_time_seconds ?? '', staff_present: drill.staff_present || [], residents_evacuated: drill.residents_evacuated ?? '', issues: drill.issues || '', corrective_actions: drill.corrective_actions || '', conducted_by: drill.conducted_by || '', notes: drill.notes || '', updated_at: drill.updated_at || '', existing: true });
     } else {
-      setModalData({ id: 'fd-' + Date.now(), date: todayStr, time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', existing: false });
+      setModalData({ id: 'fd-' + Date.now(), date: todayStr, time: '', scenario: '', evacuation_time_seconds: '', staff_present: [], residents_evacuated: '', issues: '', corrective_actions: '', conducted_by: '', notes: '', updated_at: '', existing: false });
     }
     setError(null);
     setShowModal(true);
@@ -58,6 +58,7 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
       corrective_actions: modalData.corrective_actions,
       conducted_by: modalData.conducted_by,
       notes: modalData.notes,
+      ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
     try {
       if (modalData.existing) {

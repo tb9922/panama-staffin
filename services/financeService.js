@@ -497,7 +497,7 @@ export async function rejectExpense(id, homeId, rejector, reason) {
 export async function softDeleteResident(id, homeId, username) {
   return withTransaction(async (client) => {
     // Guard: block deletion if there are any outstanding (unpaid) invoices
-    const existing = await financeRepo.findResidentById(id, homeId, client);
+    const existing = await financeRepo.findResidentById(id, homeId, client, { forUpdate: true });
     if (!existing) return false;
     if (parseFloat(existing.outstanding_balance || 0) > 0) {
       throw Object.assign(new Error('Cannot delete resident with outstanding balance. Zero the balance first.'), { statusCode: 400 });

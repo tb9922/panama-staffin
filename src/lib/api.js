@@ -1218,9 +1218,14 @@ export async function deleteTrainingRecord(homeSlug, staffId, typeId) {
   });
 }
 
-export async function updateTrainingTypes(homeSlug, trainingTypes) {
+export async function updateTrainingTypes(homeSlug, trainingTypes, clientUpdatedAt) {
   return apiFetch(`${API_BASE}/training/config/types?home=${h(homeSlug)}`, {
-    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ trainingTypes }),
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      trainingTypes,
+      ...(clientUpdatedAt ? { _clientUpdatedAt: clientUpdatedAt } : {}),
+    }),
   });
 }
 

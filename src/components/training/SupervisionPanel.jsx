@@ -26,7 +26,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   const [expanded, setExpanded] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', existing: false });
+  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', supervisor: '', topics: '', actions: '', next_due: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -72,13 +72,13 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
   function openModal(staffId, session) {
     if (readOnly && !session) return;
     if (session) {
-      setModalData({ staffId, id: session.id, date: session.date, supervisor: session.supervisor || '', topics: session.topics || '', actions: session.actions || '', next_due: session.next_due || '', notes: session.notes || '', existing: true });
+      setModalData({ staffId, id: session.id, date: session.date, supervisor: session.supervisor || '', topics: session.topics || '', actions: session.actions || '', next_due: session.next_due || '', notes: session.notes || '', updated_at: session.updated_at || '', existing: true });
     } else {
       const s = activeStaff.find(x => x.id === staffId);
       const freq = s ? getSupervisionFrequency(s, config, today) : 49;
       const nextDue = new Date(today);
       nextDue.setUTCDate(nextDue.getUTCDate() + freq);
-      setModalData({ staffId, id: 'sup-' + Date.now(), date: todayStr, supervisor: '', topics: '', actions: '', next_due: formatDate(nextDue), notes: '', existing: false });
+      setModalData({ staffId, id: 'sup-' + Date.now(), date: todayStr, supervisor: '', topics: '', actions: '', next_due: formatDate(nextDue), notes: '', updated_at: '', existing: false });
     }
     setError(null);
     setShowModal(true);
@@ -98,6 +98,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
       actions: modalData.actions,
       next_due: effectiveNextDue,
       notes: modalData.notes,
+      ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
     try {
       if (modalData.existing) {

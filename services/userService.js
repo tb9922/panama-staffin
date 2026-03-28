@@ -99,11 +99,14 @@ export async function updateUser(id, fields, actorUsername) {
   let updated;
   if (isRemovingAdmin) {
     updated = await withTransaction(async (client) => {
-      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id]);
-      const adminCount = await userRepo.countActiveAdmins(client);
-      if (adminCount <= 1) {
+      const lockedTarget = await userRepo.findById(id, client, { forUpdate: true });
+      if (!lockedTarget) throw new Error('User not found');
+
+      const activeAdminIds = await userRepo.lockActiveAdminIds(client);
+      if (activeAdminIds.length <= 1) {
         throw new Error('Cannot remove the last active admin');
       }
+
       return userRepo.update(id, updateFields, client);
     });
   } else {
@@ -144,14 +147,14 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
   const pwError = validatePassword(newPassword);
   if (pwError) throw new Error(pwError);
 
-  const user = await userRepo.findByUsername(username);
-  if (!user) throw new Error('User not found');
-
-  const valid = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!valid) throw new Error('Current password is incorrect');
-
   const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await withTransaction(async (client) => {
+    const user = await userRepo.findByUsername(username, client, { forUpdate: true });
+    if (!user) throw new Error('User not found');
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) throw new Error('Current password is incorrect');
+
     await userRepo.updatePassword(user.id, hash, client);
     await userRepo.bumpSessionVersionById(user.id, client);
     await authService.revokeUser(username, 'user', client);

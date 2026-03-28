@@ -22,7 +22,7 @@ const CELL_COLORS = {
   wrong_level:   'bg-orange-200 text-orange-800 hover:bg-orange-300 cursor-pointer hover:shadow-sm',
 };
 
-export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, onReload, readOnly = false }) {
+export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, configUpdatedAt, onReload, readOnly = false }) {
   const [view, setView] = useState('matrix');
   const [filterTeam, setFilterTeam] = useState('All');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -123,7 +123,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
     setTypesSaving(true);
     setTypeError(null);
     try {
-      await updateTrainingTypes(homeSlug, allTypes);
+      await updateTrainingTypes(homeSlug, allTypes, configUpdatedAt);
       onReload();
     } catch (e) {
       setTypeError('Failed to save training types: ' + e.message);

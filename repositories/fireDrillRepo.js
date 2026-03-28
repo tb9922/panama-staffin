@@ -1,3 +1,4 @@
+import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
 const DRILL_COLS = 'id, home_id, date, time, scenario, evacuation_time_seconds, staff_present, residents_evacuated, issues, corrective_actions, conducted_by, notes, created_at, updated_at, deleted_at';
@@ -90,6 +91,38 @@ export async function sync(homeId, drillsArr, client) {
 }
 
 export async function upsertDrill(homeId, record) {
+  if (record._clientUpdatedAt) {
+    const { rows, rowCount } = await pool.query(
+      `UPDATE fire_drills
+       SET date = $3,
+           time = $4,
+           scenario = $5,
+           evacuation_time_seconds = $6,
+           staff_present = $7,
+           residents_evacuated = $8,
+           issues = $9,
+           corrective_actions = $10,
+           conducted_by = $11,
+           notes = $12,
+           updated_at = NOW(),
+           deleted_at = NULL
+       WHERE home_id = $1
+         AND id = $2
+         AND deleted_at IS NULL
+         AND date_trunc('milliseconds', updated_at) = $13::timestamptz
+       RETURNING ${DRILL_COLS}`,
+      [homeId, record.id, record.date, record.time || null, record.scenario || null,
+        record.evacuation_time_seconds ?? null, JSON.stringify(record.staff_present || []),
+        record.residents_evacuated ?? null, record.issues || null,
+        record.corrective_actions || null, record.conducted_by || null,
+        record.notes || null, record._clientUpdatedAt]
+    );
+    if (rowCount === 0) {
+      throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+    }
+    return shapeRow(rows[0]);
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO fire_drills
        (id, home_id, date, time, scenario, evacuation_time_seconds, staff_present,

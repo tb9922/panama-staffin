@@ -48,6 +48,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         certificate_ref: form.certificate_ref,
         evidence_ref: form.evidence_ref,
         notes: form.notes,
+        ...(existing?.updated_at ? { _clientUpdatedAt: existing.updated_at } : {}),
       };
       if (typeLevels && form.level) record.level = form.level;
       await upsertTrainingRecord(homeSlug, staffId, typeId, record);

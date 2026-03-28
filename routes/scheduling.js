@@ -118,6 +118,8 @@ const VALID_SHIFTS = [
   'BH-D', 'BH-N',
 ];
 const shiftSchema = z.enum(VALID_SHIFTS);
+const isoDateOnlyRe = /^\d{4}-\d{2}-\d{2}$/;
+const strictDateSchema = z.string().regex(isoDateOnlyRe).refine(isValidIsoDateOnly, { message: 'Invalid date' });
 
 // Shifts that require care staff to have valid mandatory training
 const WORKING_SHIFTS_FOR_TRAINING_CHECK = new Set([
@@ -134,6 +136,15 @@ const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguard
 function getUtcTodayStr() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString().slice(0, 10);
+}
+
+function isValidIsoDateOnly(value) {
+  if (!isoDateOnlyRe.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
 }
 
 function assertEditLock(req, config, dates) {
@@ -228,14 +239,17 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
-    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     const now = new Date();
-    const fromDate = (typeof req.query.from === 'string' && dateRe.test(req.query.from))
-      ? req.query.from
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
-    const toDate = (typeof req.query.to === 'string' && dateRe.test(req.query.to))
-      ? req.query.to
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
+    const requestedFrom = typeof req.query.from === 'string' ? req.query.from : null;
+    const requestedTo = typeof req.query.to === 'string' ? req.query.to : null;
+    if (requestedFrom && !isValidIsoDateOnly(requestedFrom)) {
+      return res.status(400).json({ error: 'Invalid from date' });
+    }
+    if (requestedTo && !isValidIsoDateOnly(requestedTo)) {
+      return res.status(400).json({ error: 'Invalid to date' });
+    }
+    const fromDate = requestedFrom || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
+    const toDate = requestedTo || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
     // Cap range to 400 days to prevent unbounded queries
     const daySpan = (new Date(toDate) - new Date(fromDate)) / 86400000;
     if (daySpan < 0 || daySpan > 400) {
@@ -293,7 +307,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 
 // PUT /api/scheduling/overrides?home=X — upsert single override
 const overrideBodySchema = z.object({
-  date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date:     strictDateSchema,
   staffId:  z.string().min(1).max(40),
   shift:    shiftSchema,
   reason:   z.string().max(200).optional(),
@@ -370,7 +384,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
 // DELETE /api/scheduling/overrides?home=X&date=YYYY-MM-DD&staffId=X — delete single override
 const overrideDeleteSchema = z.object({
   home:    z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  date:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date:    strictDateSchema,
   staffId: z.string().min(1).max(40),
 });
 
@@ -390,7 +404,7 @@ router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, re
 // POST /api/scheduling/overrides/bulk?home=X — bulk upsert
 const bulkBodySchema = z.object({
   overrides: z.array(z.object({
-    date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    date:     strictDateSchema,
     staffId:  z.string().min(1).max(40),
     shift:    shiftSchema,
     reason:   z.string().max(200).optional(),
@@ -484,8 +498,8 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
 // DELETE /api/scheduling/overrides/month?home=X&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — delete range
 const monthDeleteSchema = z.object({
   home:     z.string().max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  toDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fromDate: strictDateSchema,
+  toDate:   strictDateSchema,
 });
 
 router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
@@ -508,7 +522,7 @@ router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAcce
 
 // PUT /api/scheduling/day-notes?home=X — upsert or delete a day note
 const dayNoteSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: strictDateSchema,
   note: z.string().max(5000),
 });
 

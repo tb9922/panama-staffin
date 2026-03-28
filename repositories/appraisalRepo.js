@@ -1,3 +1,4 @@
+import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
 function shapeRow(row) {
@@ -105,6 +106,35 @@ export async function sync(homeId, appraisalsObj, client) {
 }
 
 export async function upsertAppraisal(homeId, staffId, record) {
+  if (record._clientUpdatedAt) {
+    const { rows, rowCount } = await pool.query(
+      `UPDATE appraisals
+       SET staff_id = $3,
+           date = $4,
+           appraiser = $5,
+           objectives = $6,
+           training_needs = $7,
+           development_plan = $8,
+           next_due = $9,
+           notes = $10,
+           updated_at = NOW(),
+           deleted_at = NULL
+       WHERE home_id = $1
+         AND id = $2
+         AND deleted_at IS NULL
+         AND date_trunc('milliseconds', updated_at) = $11::timestamptz
+       RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
+      [homeId, record.id, staffId, record.date, record.appraiser || null,
+        record.objectives || null, record.training_needs || null,
+        record.development_plan || null, record.next_due || null,
+        record.notes || null, record._clientUpdatedAt]
+    );
+    if (rowCount === 0) {
+      throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+    }
+    return shapeRow(rows[0]);
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO appraisals
        (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)

@@ -24,7 +24,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
   const [expanded, setExpanded] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: '', notes: '', existing: false });
+  const [modalData, setModalData] = useState({ staffId: '', id: '', date: '', appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: '', notes: '', updated_at: '', existing: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -67,11 +67,11 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
   function openModal(staffId, appraisal) {
     if (readOnly && !appraisal) return;
     if (appraisal) {
-      setModalData({ staffId, id: appraisal.id, date: appraisal.date, appraiser: appraisal.appraiser || '', objectives: appraisal.objectives || '', training_needs: appraisal.training_needs || '', development_plan: appraisal.development_plan || '', next_due: appraisal.next_due || '', notes: appraisal.notes || '', existing: true });
+      setModalData({ staffId, id: appraisal.id, date: appraisal.date, appraiser: appraisal.appraiser || '', objectives: appraisal.objectives || '', training_needs: appraisal.training_needs || '', development_plan: appraisal.development_plan || '', next_due: appraisal.next_due || '', notes: appraisal.notes || '', updated_at: appraisal.updated_at || '', existing: true });
     } else {
       const nextDue = new Date(today);
       nextDue.setUTCFullYear(nextDue.getUTCFullYear() + 1);
-      setModalData({ staffId, id: 'apr-' + Date.now(), date: todayStr, appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: formatDate(nextDue), notes: '', existing: false });
+      setModalData({ staffId, id: 'apr-' + Date.now(), date: todayStr, appraiser: '', objectives: '', training_needs: '', development_plan: '', next_due: formatDate(nextDue), notes: '', updated_at: '', existing: false });
     }
     setError(null);
     setShowModal(true);
@@ -92,6 +92,7 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
       development_plan: modalData.development_plan,
       next_due: effectiveNextDue,
       notes: modalData.notes,
+      ...(modalData.updated_at ? { _clientUpdatedAt: modalData.updated_at } : {}),
     };
     try {
       if (modalData.existing) {

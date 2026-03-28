@@ -1,18 +1,21 @@
 import { pool } from '../db.js';
 
 const SAFE_COLUMNS = 'id, username, role, display_name, active, is_platform_admin, created_at, updated_at, last_login_at, created_by';
+const AUTH_COLUMNS = 'id, username, password_hash, role, display_name, active, is_platform_admin, last_login_at, failed_login_count, locked_until, session_version';
 
-export async function findByUsername(username) {
-  const { rows } = await pool.query(
-    'SELECT id, username, password_hash, role, display_name, active, is_platform_admin, last_login_at, failed_login_count, locked_until, session_version FROM users WHERE username = $1',
+export async function findByUsername(username, client, { forUpdate = false } = {}) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${AUTH_COLUMNS} FROM users WHERE username = $1${forUpdate ? ' FOR UPDATE' : ''}`,
     [username]
   );
   return rows[0] || null;
 }
 
-export async function findById(id) {
-  const { rows } = await pool.query(
-    `SELECT ${SAFE_COLUMNS} FROM users WHERE id = $1`,
+export async function findById(id, client, { forUpdate = false } = {}) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${SAFE_COLUMNS} FROM users WHERE id = $1${forUpdate ? ' FOR UPDATE' : ''}`,
     [id]
   );
   return rows[0] || null;
@@ -124,6 +127,13 @@ export async function countActiveAdmins(client) {
     "SELECT COUNT(*)::int AS count FROM users WHERE role = 'admin' AND active = true"
   );
   return rows[0].count;
+}
+
+export async function lockActiveAdminIds(client) {
+  const { rows } = await client.query(
+    "SELECT id FROM users WHERE role = 'admin' AND active = true FOR UPDATE"
+  );
+  return rows.map(row => row.id);
 }
 
 export async function existsByUsername(username, client) {

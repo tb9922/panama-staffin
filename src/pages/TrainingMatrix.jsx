@@ -69,6 +69,7 @@ export default function TrainingMatrix() {
           staff={state.staff}
           homeSlug={homeSlug}
           config={{ training_types: state.trainingTypes }}
+          configUpdatedAt={state.configUpdatedAt}
           onReload={() => setRefreshKey(k => k + 1)}
           readOnly={!canEdit}
         />

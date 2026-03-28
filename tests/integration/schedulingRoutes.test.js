@@ -173,4 +173,18 @@ describe('scheduling route hardening', () => {
     expect(res.body.warnings).toBeDefined();
     expect(res.body.warnings[0]).toMatch(/Fire Safety/i);
   });
+
+  it('rejects invalid calendar dates on scheduling bundle queries', async () => {
+    const res = await authRequest('get', `/api/scheduling?home=${homeSlug}&from=2025-99-99&to=2025-12-01`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid from date/i);
+  });
+
+  it('rejects invalid calendar dates on month revert requests', async () => {
+    const res = await authRequest('delete', `/api/scheduling/overrides/month?home=${homeSlug}&fromDate=2025-99-99&toDate=2025-12-01`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid date/i);
+  });
 });
