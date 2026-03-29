@@ -129,6 +129,7 @@ function CQCEvidenceInner({ data }) {
   const [savingEvidence, setSavingEvidence] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [snapshotError, setSnapshotError] = useState(null);
+  const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
 
   // Snapshot state
@@ -175,10 +176,19 @@ function CQCEvidenceInner({ data }) {
     if (!home || generating) return;
     setGenerating(true);
     setSnapshotError(null);
+    setSnapshotNotice(null);
     try {
       await createSnapshot(home, 'cqc', formatDate(dateRange.from), formatDate(dateRange.to));
-      loadSnapshots();
-    } catch (e) { setSnapshotError(e.message); }
+      await loadSnapshots();
+    } catch (e) {
+      if (e?.status === 409 && /identical snapshot/i.test(e.message || '')) {
+        await loadSnapshots();
+        setShowSnapshots(true);
+        setSnapshotNotice('This exact snapshot is already saved. Snapshot History has been opened below.');
+      } else {
+        setSnapshotError(e.message);
+      }
+    }
     finally { setGenerating(false); }
   }
 
@@ -333,6 +343,7 @@ function CQCEvidenceInner({ data }) {
       </div>
 
       {pdfError && <p className="mb-3 text-sm text-red-600">{pdfError}</p>}
+      {snapshotNotice && <p className="mb-3 text-sm text-amber-700">{snapshotNotice}</p>}
       {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
 
       {/* KPI Cards */}
