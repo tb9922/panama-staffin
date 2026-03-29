@@ -4,6 +4,7 @@ import * as homeRepo from '../repositories/homeRepo.js';
 import { getHomeRole } from '../repositories/userHomeRepo.js';
 import { findByUsername as findUserByUsername } from '../repositories/userRepo.js';
 import { hasModuleAccess, ROLES } from '../shared/roles.js';
+import { setRequestContext } from '../requestContext.js';
 import { z } from 'zod';
 
 const homeSlugSchema = z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/i, 'Invalid home slug');
@@ -94,6 +95,7 @@ export async function requireAuth(req, res, next) {
   }
 
   req.user = decoded;
+  setRequestContext({ username: decoded.username });
   next();
 }
 
@@ -147,6 +149,7 @@ export async function requireHomeAccess(req, res, next) {
       req.home = home;
       req.homeRole = 'home_manager';
       req.staffId = null;
+      setRequestContext({ homeSlug: home.slug });
       return next();
     }
     // Stale claim - clear it and fall through to per-home role check.
@@ -162,6 +165,7 @@ export async function requireHomeAccess(req, res, next) {
   req.home = home;
   req.homeRole = assignment.role_id;
   req.staffId = assignment.staff_id || null;
+  setRequestContext({ homeSlug: home.slug });
   next();
 }
 

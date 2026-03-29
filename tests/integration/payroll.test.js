@@ -624,19 +624,22 @@ describe('Payroll Runs — /runs', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
-  // jspdf-autotable side-effect import doesn't register in vitest's Node
-  // environment (doc.autoTable is not a function). The route logic, auth,
-  // and data assembly are covered by the bulk payslips test (JSON response).
-  it.skip('GET single payslip returns PDF (requires jspdf-autotable in Node)', async () => {
+  function responseSize(res) {
+    if (Buffer.isBuffer(res.body)) return res.body.length;
+    if (typeof res.text === 'string') return res.text.length;
+    return 0;
+  }
+
+  it('GET single payslip returns PDF', async () => {
     const res = await adminGet(`/runs/${runId}/payslips/PH01?home=${homeASlug}`).expect(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
-    expect(res.body.length).toBeGreaterThan(0);
+    expect(responseSize(res)).toBeGreaterThan(0);
   });
 
-  it.skip('GET summary-pdf returns PDF for approved run (requires jspdf-autotable in Node)', async () => {
+  it('GET summary-pdf returns PDF for approved run', async () => {
     const res = await adminGet(`/runs/${runId}/summary-pdf?home=${homeASlug}`).expect(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
-    expect(res.body.length).toBeGreaterThan(0);
+    expect(responseSize(res)).toBeGreaterThan(0);
   });
 
   afterAll(async () => {

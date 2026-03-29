@@ -11,9 +11,15 @@ import { config } from './config.js';
 import { AppError } from './errors.js';
 import { pool } from './db.js';
 import logger from './logger.js';
+import { metricsContentType, recordHttpRequestMetrics, renderMetrics } from './metrics.js';
+import { runWithRequestContext } from './requestContext.js';
 
 if (config.sentryDsn) {
-  Sentry.init({ dsn: config.sentryDsn, environment: config.nodeEnv });
+  Sentry.init({
+    dsn: config.sentryDsn,
+    environment: config.nodeEnv,
+    tracesSampleRate: config.sentryTracesSampleRate,
+  });
   logger.info('Sentry error tracking enabled');
 }
 import authRouter from './routes/auth.js';
@@ -82,12 +88,15 @@ app.use(express.json({ limit: config.requestBodyLimit }));
 
 app.use((req, res, next) => {
   req.id = randomUUID();
-  const start = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - start;
-    logger.info({ reqId: req.id, method: req.method, url: req.url, status: res.statusCode, ms }, 'request');
+  runWithRequestContext({ reqId: req.id }, () => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - start;
+      recordHttpRequestMetrics(req, res, ms);
+      logger.info({ method: req.method, url: req.url, status: res.statusCode, ms }, 'request');
+    });
+    next();
   });
-  next();
 });
 
 // ── Access logging (fire-and-forget — never blocks responses) ─────────────────
@@ -164,6 +173,19 @@ app.get('/health', async (req, res) => {
       waiting: pool.waitingCount,
     },
   });
+});
+
+app.get('/metrics', async (req, res) => {
+  if (!config.metricsToken) {
+    return res.status(404).send('Not found');
+  }
+  const authHeader = req.headers.authorization || '';
+  if (authHeader !== `Bearer ${config.metricsToken}`) {
+    return res.status(401).json({ error: 'Unauthorised' });
+  }
+  const body = await renderMetrics();
+  res.set('Content-Type', metricsContentType());
+  res.send(body);
 });
 
 // 404 catch-all for unmatched API routes (SPA routes fall through to index.html)

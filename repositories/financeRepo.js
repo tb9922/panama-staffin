@@ -1,7 +1,8 @@
 import { pool } from '../db.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
-function ts(v) { return v instanceof Date ? v.toISOString() : v; }
+const ts = toIsoOrNull;
 const f = v => v != null ? parseFloat(v) : null;
 
 /* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */

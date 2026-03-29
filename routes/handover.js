@@ -5,10 +5,11 @@ import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as auditService from '../services/auditService.js';
 
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD').nullable());
+const dateSchema = nullableDateInput;
 const uuidSchema = z.string().uuid('Invalid entry ID');
 
 const entryBodySchema = z.object({

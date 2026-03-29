@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
-
-const ts = v => v instanceof Date ? v.toISOString() : v;
+import { paginateResult } from '../lib/pagination.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
 const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, description,
@@ -27,7 +27,7 @@ function shapeRow(row) {
     staff_involved: row.staff_involved, immediate_action: row.immediate_action,
     medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
     cqc_notifiable: row.cqc_notifiable, cqc_notification_type: row.cqc_notification_type,
-    cqc_notification_deadline: ts(row.cqc_notification_deadline),
+    cqc_notification_deadline: toIsoOrNull(row.cqc_notification_deadline),
     cqc_notified: row.cqc_notified, cqc_notified_date: row.cqc_notified_date, cqc_reference: row.cqc_reference,
     riddor_reportable: row.riddor_reportable, riddor_category: row.riddor_category,
     riddor_reported: row.riddor_reported, riddor_reported_date: row.riddor_reported_date, riddor_reference: row.riddor_reference,
@@ -44,13 +44,8 @@ function shapeRow(row) {
     investigation_lead: row.investigation_lead, investigation_review_date: row.investigation_review_date,
     root_cause: row.root_cause, lessons_learned: row.lessons_learned, investigation_closed_date: row.investigation_closed_date,
     corrective_actions: row.corrective_actions, reported_by: row.reported_by,
-    reported_at: ts(row.reported_at), updated_at: ts(row.updated_at), frozen_at: ts(row.frozen_at),
+    reported_at: toIsoOrNull(row.reported_at), updated_at: toIsoOrNull(row.updated_at), frozen_at: toIsoOrNull(row.frozen_at),
   };
-}
-
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
 }
 
 /**
@@ -66,7 +61,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeRow);
+  return paginateResult(rows, shapeRow);
 }
 
 /**
@@ -259,10 +254,15 @@ export async function isFrozen(incidentId, homeId) {
 export async function addAddendum(incidentId, homeId, author, content) {
   const { rows } = await pool.query(
     `INSERT INTO incident_addenda (incident_id, home_id, author, content)
-     VALUES ($1, $2, $3, $4) RETURNING ${ADDENDUM_COLS}`,
+     SELECT $1::varchar, $2::integer, $3::varchar, $4::text
+     WHERE EXISTS (
+       SELECT 1 FROM incidents
+       WHERE id = $1::varchar AND home_id = $2::integer AND deleted_at IS NULL
+     )
+     RETURNING ${ADDENDUM_COLS}`,
     [incidentId, homeId, author, content]
   );
-  return rows[0];
+  return rows[0] || null;
 }
 
 /**

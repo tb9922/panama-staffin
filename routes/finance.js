@@ -5,13 +5,14 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as financeService from '../services/financeService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
 // ── Shared Schemas ────────────────────────────────────────────────────────────
 
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),

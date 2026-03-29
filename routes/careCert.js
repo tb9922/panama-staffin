@@ -7,10 +7,11 @@ import { diffFields } from '../lib/audit.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 
 const careCertCreateSchema = z.object({
   staffId:    staffIdSchema,

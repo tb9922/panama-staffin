@@ -8,10 +8,11 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 
 const complaintBodySchema = z.object({
   date:                dateSchema,

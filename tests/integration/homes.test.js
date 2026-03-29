@@ -107,6 +107,30 @@ describe('Homes: config update', () => {
     expect(found.config.registered_beds).toBe(45);
   });
 
+  it('returns null on stale config update when updated_at changed underneath', async () => {
+    const before = await homeRepo.findById(homeIds[0]);
+    const staleUpdatedAt = before.updated_at.toISOString();
+
+    const freshUpdatedAt = await homeRepo.updateTrainingTypesConfig(homeIds[0], [
+      {
+        id: 'fire-safety',
+        name: 'Fire Safety',
+        category: 'mandatory',
+        refresher_months: 12,
+        roles: ['Carer'],
+        active: true,
+      },
+    ]);
+    expect(freshUpdatedAt).toBeTruthy();
+
+    const result = await homeRepo.updateConfig(homeIds[0], {
+      ...before.config,
+      home_name: 'Stale overwrite attempt',
+    }, null, staleUpdatedAt);
+
+    expect(result).toBeNull();
+  });
+
   it('upsert on conflict updates existing home', async () => {
     const result = await homeRepo.upsert('home-test-alpha', 'Alpha Care Home', {
       home_name: 'Alpha Conflict Update',

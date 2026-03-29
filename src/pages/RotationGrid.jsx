@@ -5,8 +5,7 @@ import {
   calculateStaffPeriodHours, SHIFT_COLORS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
-import Modal from '../components/Modal.jsx';
+import { CARD, TABLE, INPUT, BTN, BADGE, PAGE } from '../lib/design.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
 import {
@@ -21,6 +20,7 @@ import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
+import RotationGridModals from '../components/scheduling/RotationGridModals.jsx';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -33,28 +33,6 @@ function getInitials(staffMap, staffId) {
 }
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
-
-const SHIFT_OPTIONS = [
-  { value: 'E',     label: 'E — Early',          group: 'Standard' },
-  { value: 'L',     label: 'L — Late',           group: 'Standard' },
-  { value: 'EL',    label: 'EL — Full Day',      group: 'Standard' },
-  { value: 'N',     label: 'N — Night',          group: 'Standard' },
-  { value: 'OFF',   label: 'OFF — Day Off',      group: 'Standard' },
-  { value: 'AVL',   label: 'AVL — Available',    group: 'Standard' },
-  { value: 'AL',    label: 'AL — Annual Leave',  group: 'Absence' },
-  { value: 'SICK',  label: 'SICK — Sick',        group: 'Absence' },
-  { value: 'ADM',   label: 'ADM — Admin',        group: 'Absence' },
-  { value: 'TRN',   label: 'TRN — Training',     group: 'Absence' },
-  { value: 'OC-E',  label: 'OC-E — OT Early',   group: 'Overtime' },
-  { value: 'OC-L',  label: 'OC-L — OT Late',    group: 'Overtime' },
-  { value: 'OC-EL', label: 'OC-EL — OT Full',   group: 'Overtime' },
-  { value: 'OC-N',  label: 'OC-N — OT Night',   group: 'Overtime' },
-  { value: 'AG-E',  label: 'AG-E — Agency Early', group: 'Agency' },
-  { value: 'AG-L',  label: 'AG-L — Agency Late',  group: 'Agency' },
-  { value: 'AG-N',  label: 'AG-N — Agency Night', group: 'Agency' },
-  { value: 'BH-D',  label: 'BH-D — Bank Hol Day', group: 'Bank Hol' },
-  { value: 'BH-N',  label: 'BH-N — Bank Hol Night', group: 'Bank Hol' },
-];
 
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -499,45 +477,6 @@ export default function RotationGrid() {
   if (!schedData) return null;
 
 
-  const CoverageRow = ({ label, before, after }) => {
-    if (!before || !after) return null;
-    const headChanged = after.coverage.headCount !== before.coverage.headCount;
-    const skillChanged = after.coverage.skillPoints !== before.coverage.skillPoints;
-    const headBad = after.coverage.headCount < after.coverage.required.heads;
-    const skillBad = after.coverage.skillPoints < after.coverage.required.skill_points;
-    return (
-      <div className="flex items-center justify-between text-xs py-0.5">
-        <span className="text-gray-500 capitalize w-12">{label}</span>
-        <span className="flex items-center gap-1">
-          <span>Heads:</span>
-          {headChanged ? (
-            <>
-              <span className="text-gray-400">{before.coverage.headCount}</span>
-              <span>&rarr;</span>
-              <span className={headBad ? 'text-red-600 font-bold' : 'font-medium'}>{after.coverage.headCount}</span>
-            </>
-          ) : (
-            <span className="font-medium">{after.coverage.headCount}</span>
-          )}
-          <span className="text-gray-300">/{after.coverage.required.heads}</span>
-        </span>
-        <span className="flex items-center gap-1">
-          <span>Skill:</span>
-          {skillChanged ? (
-            <>
-              <span className="text-gray-400">{before.coverage.skillPoints.toFixed(1)}</span>
-              <span>&rarr;</span>
-              <span className={skillBad ? 'text-red-600 font-bold' : 'font-medium'}>{after.coverage.skillPoints.toFixed(1)}</span>
-            </>
-          ) : (
-            <span className="font-medium">{after.coverage.skillPoints.toFixed(1)}</span>
-          )}
-          <span className="text-gray-300">/{after.coverage.required.skill_points}</span>
-        </span>
-      </div>
-    );
-  };
-
   return (
     <div className="p-4 max-w-full mx-auto">
       {/* Print header */}
@@ -794,255 +733,20 @@ export default function RotationGrid() {
         ))}
       </div>
 
-      {/* Bulk Revert Modal */}
-      <Modal isOpen={bulkModal?.type === 'revert-all'} onClose={() => setBulkModal(null)} title="Revert All Overrides" size="sm">
-            <p className="text-sm text-gray-600 mb-2">Remove all manual overrides for <strong>{monthLabel}</strong>?</p>
-            <p className="text-xs text-amber-600 mb-4">This will reset all sick, AL, OT, and agency bookings this month.</p>
-            <div className={MODAL.footer}>
-              <button onClick={() => setBulkModal(null)} className={BTN.secondary}>Cancel</button>
-              <button onClick={revertAllOverrides} disabled={saving} className={`${BTN.danger} disabled:opacity-50`}>
-                {saving ? 'Reverting...' : 'Revert All'}
-              </button>
-            </div>
-      </Modal>
-
-      {/* Shift Editor Modal */}
-      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={editing ? schedData.staff.find(s => s.id === editing.staffId)?.name || 'Edit Shift' : 'Edit Shift'} size="lg">
-          {editing && <>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-gray-500">
-                {parseLocalDate(editing.dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}
-              </p>
-              <div className="text-right">
-                <span className={`px-2 py-1 rounded text-xs font-medium ${SHIFT_COLORS[editing.currentShift] || 'bg-gray-100'}`}>
-                  {editing.currentShift}
-                </span>
-                <p className="text-[10px] text-gray-400 mt-1">current</p>
-              </div>
-            </div>
-
-            <div>
-              {/* Shift Selector Dropdown */}
-              <div className="mb-4">
-                <label className={INPUT.label}>Change shift to:</label>
-                <select
-                  value={editing.proposedShift}
-                  onChange={e => {
-                    const newShift = e.target.value;
-                    setEditing({
-                      ...editing,
-                      proposedShift: newShift,
-                      // Clear cover link when shifting away from OC/AG — prevents stale
-                      // replacesStaffId persisting when the picker disappears from view
-                      ...( !(isOTShift(newShift) || isAgencyShift(newShift)) && { replacesStaffId: null } ),
-                    });
-                  }}
-                  className={`${INPUT.select} font-medium`}>
-                  <optgroup label="Standard">
-                    {SHIFT_OPTIONS.filter(o => o.group === 'Standard').map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Absence">
-                    {SHIFT_OPTIONS.filter(o => o.group === 'Absence').map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Overtime / On-Call">
-                    {SHIFT_OPTIONS.filter(o => o.group === 'Overtime').map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Agency">
-                    {SHIFT_OPTIONS.filter(o => o.group === 'Agency').map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Bank Holiday">
-                    {SHIFT_OPTIONS.filter(o => o.group === 'Bank Hol').map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
-
-              {/* Covers-for picker — only visible for OC/AG shifts */}
-              {(isOTShift(editing.proposedShift) || isAgencyShift(editing.proposedShift)) && (
-                <div className="mb-4">
-                  <label className={INPUT.label}>Covers for (optional):</label>
-                  <select
-                    value={editing.replacesStaffId || ''}
-                    onChange={e => setEditing({ ...editing, replacesStaffId: e.target.value || null })}
-                    className={INPUT.select}>
-                    <option value="">— None —</option>
-                    {schedData.staff
-                      .filter(st => {
-                        if (st.id === editing.staffId) return false;           // can't cover yourself
-                        if (st.active === false) return false;                  // skip inactive
-                        if (!isCareRole(st.role)) return false;                 // only care staff
-                        const stActual = getActualShift(
-                          st, parseLocalDate(editing.dateStr),
-                          schedData.overrides, schedData.config.cycle_start_date
-                        );
-                        // Staff on these shifts are 'absent' for cover purposes
-                        // (OFF/AVL are rest days — don't need covering)
-                        return ['AL', 'SICK', 'ADM', 'TRN'].includes(stActual.shift);
-                      })
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map(st => {
-                        const stShift = getActualShift(
-                          st, parseLocalDate(editing.dateStr),
-                          schedData.overrides, schedData.config.cycle_start_date
-                        ).shift;
-                        return (
-                          <option key={st.id} value={st.id}>
-                            {st.name} ({stShift})
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-              )}
-
-              {/* Impact Preview */}
-              {impact ? (
-                <div className="space-y-3">
-                  <div className={`rounded-lg px-4 py-2.5 flex items-center gap-2 ${
-                    impact.errors.length > 0 ? 'bg-red-50 border border-red-200' :
-                    impact.warnings.length > 0 ? 'bg-amber-50 border border-amber-200' :
-                    'bg-green-50 border border-green-200'
-                  }`}>
-                    <span className="text-lg">{impact.errors.length > 0 ? '!' : impact.warnings.length > 0 ? '~' : 'OK'}</span>
-                    <div>
-                      <div className={`font-semibold text-sm ${
-                        impact.errors.length > 0 ? 'text-red-800' : impact.warnings.length > 0 ? 'text-amber-800' : 'text-green-800'
-                      }`}>
-                        {impact.errors.length > 0 ? 'Issues Found — Review Before Approving' :
-                         impact.warnings.length > 0 ? 'Warnings — Proceed With Caution' :
-                         'All Clear — Safe to Apply'}
-                      </div>
-                      <div className="text-[10px] text-gray-500">
-                        {editing.currentShift} &rarr; {editing.proposedShift}
-                      </div>
-                    </div>
-                  </div>
-
-                  {impact.errors.length > 0 && (
-                    <div className="space-y-1">
-                      {impact.errors.map((e, i) => (
-                        <div key={i} className="text-xs bg-red-50 text-red-700 px-3 py-1.5 rounded flex items-start gap-1.5">
-                          <span className="font-bold mt-px">!</span> {e}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {impact.warnings.length > 0 && (
-                    <div className="space-y-1">
-                      {impact.warnings.map((w, i) => (
-                        <div key={i} className="text-xs bg-amber-50 text-amber-700 px-3 py-1.5 rounded flex items-start gap-1.5">
-                          <span className="font-bold mt-px">~</span> {w}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="border rounded-lg p-3">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Day Coverage Impact</h4>
-                    <CoverageRow label="Early" before={impact.coverageBefore.early} after={impact.coverageAfter.early} />
-                    <CoverageRow label="Late" before={impact.coverageBefore.late} after={impact.coverageAfter.late} />
-                    <CoverageRow label="Night" before={impact.coverageBefore.night} after={impact.coverageAfter.night} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="border rounded-lg p-3">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Day Cost</h4>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-gray-400 text-xs">£{impact.costBefore.total.toFixed(0)}</span>
-                        <span className="text-xs">&rarr;</span>
-                        <span className="font-bold text-sm">£{impact.costAfter.total.toFixed(0)}</span>
-                      </div>
-                      <div className={`text-xs mt-0.5 font-medium ${
-                        impact.costDelta > 0 ? 'text-red-600' : impact.costDelta < 0 ? 'text-green-600' : 'text-gray-400'
-                      }`}>
-                        {impact.costDelta > 0 ? '+' : ''}{impact.costDelta !== 0 ? `£${impact.costDelta.toFixed(2)}` : 'No change'}
-                      </div>
-                    </div>
-                    <div className="border rounded-lg p-3">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Staff Month</h4>
-                      <div className="text-xs space-y-0.5">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Hours:</span>
-                          <span className="font-medium">
-                            {impact.statsBefore.totalHours.toFixed(1)} &rarr; {impact.statsAfter.totalHours.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Pay:</span>
-                          <span className="font-medium">
-                            £{impact.statsBefore.totalPay.toFixed(0)} &rarr; £{impact.statsAfter.totalPay.toFixed(0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">WTR:</span>
-                          <span className={`font-medium ${
-                            impact.wtrAfter === 'BREACH' ? 'text-red-600' : impact.wtrAfter === 'HIGH' ? 'text-amber-600' : 'text-green-600'
-                          }`}>{impact.wtrAfter}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Fatigue:</span>
-                          <span className={`font-medium ${
-                            impact.fatigueAfter.exceeded ? 'text-red-600' : impact.fatigueAfter.atRisk ? 'text-amber-600' : 'text-green-600'
-                          }`}>{impact.fatigueAfter.consecutive}d consec</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : editing.proposedShift === editing.currentShift ? (
-                <div className="text-sm text-gray-400 text-center py-4">Select a different shift to see the impact</div>
-              ) : null}
-            </div>
-
-            {/* Footer */}
-            <div className={MODAL.footer}>
-              <button onClick={() => setEditing(null)} className={BTN.ghost} disabled={saving}>
-                Cancel
-              </button>
-              {canEdit && <div className="flex gap-2">
-                <button onClick={() => { bulkSickWeek(editing.staffId, editing.dateStr); setEditing(null); }}
-                  disabled={saving}
-                  className={`${BTN.ghost} ${BTN.xs} text-red-600 disabled:opacity-50`}>
-                  Sick 7 Days
-                </button>
-                {editing.currentShift !== getScheduledShift(schedData.staff.find(s => s.id === editing.staffId), getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr)) && (
-                  <button onClick={() => {
-                    const staff = schedData.staff.find(s => s.id === editing.staffId);
-                    const scheduled = getScheduledShift(staff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr));
-                    setEditing({ ...editing, proposedShift: scheduled, replacesStaffId: null });
-                  }} disabled={saving} className={`${BTN.ghost} ${BTN.xs} text-blue-600 disabled:opacity-50`}>
-                    Revert to Scheduled
-                  </button>
-                )}
-                <button
-                  onClick={applyChange}
-                  disabled={saving || !editing.proposedShift || editing.proposedShift === editing.currentShift}
-                  className={`${
-                    impact?.errors.length > 0
-                      ? BTN.danger
-                      : impact?.warnings.length > 0
-                      ? 'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2'
-                      : BTN.success
-                  } disabled:opacity-30`}>
-                  {saving ? 'Saving...' :
-                   impact?.errors.length > 0 ? 'Apply Anyway' :
-                   impact?.warnings.length > 0 ? 'Apply (with warnings)' :
-                   'Approve & Apply'}
-                </button>
-              </div>}
-            </div>
-          </>}
-      </Modal>
+      <RotationGridModals
+        bulkModal={bulkModal}
+        setBulkModal={setBulkModal}
+        monthLabel={monthLabel}
+        saving={saving}
+        revertAllOverrides={revertAllOverrides}
+        editing={editing}
+        setEditing={setEditing}
+        schedData={schedData}
+        impact={impact}
+        canEdit={canEdit}
+        bulkSickWeek={bulkSickWeek}
+        applyChange={applyChange}
+      />
       {ConfirmDialog}
     </div>
   );

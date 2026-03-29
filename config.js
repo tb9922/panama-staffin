@@ -1,9 +1,8 @@
 /**
- * Centralised server configuration.
+ * Centralized server configuration.
  *
  * Loads .env on startup, then validates that every required environment
- * variable is present. The server refuses to start if any are missing —
- * a misconfigured server is worse than a server that won't start.
+ * variable is present. The server refuses to start if any are missing.
  *
  * All process.env reads live here. Everywhere else in the server imports
  * from this module rather than reading process.env directly.
@@ -15,8 +14,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env manually — no dotenv dependency. Variables already set in the
-// environment (e.g. injected by the host) are never overwritten.
+// Load .env manually. Variables already set by the host are never overwritten.
 try {
   const envContent = fs.readFileSync(path.join(__dirname, '.env'), 'utf-8');
   for (const line of envContent.split('\n')) {
@@ -30,13 +28,22 @@ try {
     if (key && !(key in process.env)) process.env[key] = val;
   }
 } catch {
-  // .env is optional in production where env vars are injected externally
+  // .env is optional in production where env vars are injected externally.
 }
 
-// Required variables — missing any of these is a fatal startup error.
-// Use console.error here; the logger hasn't been initialised yet.
+function parseIntEnv(value, fallback) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseFloatEnv(value, fallback) {
+  const parsed = Number.parseFloat(value ?? '');
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+// Missing any of these is a fatal startup error.
 const REQUIRED_VARS = ['JWT_SECRET', 'DB_PASSWORD', 'ALLOWED_ORIGIN'];
-const missing = REQUIRED_VARS.filter(k => !process.env[k]);
+const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
   console.error('See .env.example for required configuration.');
@@ -49,15 +56,14 @@ if (process.env.JWT_SECRET.length < 32) {
 }
 
 if (process.env.ALLOWED_ORIGIN === '*') {
-  console.error('FATAL: ALLOWED_ORIGIN=* is not permitted — this would expose all endpoints including health records');
+  console.error('FATAL: ALLOWED_ORIGIN=* is not permitted because it would expose protected endpoints');
   process.exit(1);
 }
 
-// ENCRYPTION_KEY — optional (only required if webhooks with secrets are used), but if set
-// it must be exactly 64 hex chars (32 bytes for AES-256-GCM). Catch format errors at
-// startup rather than at first webhook delivery in production.
+// ENCRYPTION_KEY is optional, but if set it must be exactly 64 hex characters.
 if (process.env.ENCRYPTION_KEY) {
-  if (process.env.ENCRYPTION_KEY.length !== 64 || !/^[0-9a-fA-F]+$/.test(process.env.ENCRYPTION_KEY)) {
+  const validHex = /^[0-9a-fA-F]+$/.test(process.env.ENCRYPTION_KEY);
+  if (process.env.ENCRYPTION_KEY.length !== 64 || !validHex) {
     console.error('FATAL: ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes for AES-256-GCM).');
     console.error(`Got ${process.env.ENCRYPTION_KEY.length} characters.`);
     console.error('Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
@@ -66,54 +72,60 @@ if (process.env.ENCRYPTION_KEY) {
 }
 
 export const config = {
-  // ── Server ──────────────────────────────────────────────────────────────────
-  port: parseInt(process.env.PORT || '3001', 10),
-  sentryDsn: process.env.SENTRY_DSN || null,  // optional — monitoring only
+  // Server
+  port: parseIntEnv(process.env.PORT, 3001),
+  sentryDsn: process.env.SENTRY_DSN || null,
+  sentryTracesSampleRate: parseFloatEnv(process.env.SENTRY_TRACES_SAMPLE_RATE, 0),
   allowedOrigin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
   nodeEnv: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
+  metricsToken: process.env.METRICS_TOKEN || null,
 
-  // ── Authentication ───────────────────────────────────────────────────────────
+  // Authentication
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: '4h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '4h',
 
-  // Env-var users — fallback for pre-migration compatibility. Once the users
-  // table is populated these are ignored. Can be removed after first deployment.
+  // Env-var users are a temporary fallback for pre-migration compatibility.
   users: [
-    process.env.ADMIN_PASSWORD_HASH  ? { username: 'admin',  hash: process.env.ADMIN_PASSWORD_HASH,  role: 'admin' }  : null,
-    process.env.VIEWER_PASSWORD_HASH ? { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' } : null,
+    process.env.ADMIN_PASSWORD_HASH
+      ? { username: 'admin', hash: process.env.ADMIN_PASSWORD_HASH, role: 'admin' }
+      : null,
+    process.env.VIEWER_PASSWORD_HASH
+      ? { username: 'viewer', hash: process.env.VIEWER_PASSWORD_HASH, role: 'viewer' }
+      : null,
   ].filter(Boolean),
 
-  // ── Paths ────────────────────────────────────────────────────────────────────
+  // Paths
   dataDir: path.join(__dirname, 'homes'),
   backupDir: path.join(__dirname, 'backups'),
   auditFile: path.join(__dirname, 'audit_log.json'),
   legacyFile: path.join(__dirname, 'staffing_data.json'),
 
-  // ── Data management ──────────────────────────────────────────────────────────
+  // Data management
   backupRetentionCount: 20,
   auditLogMaxEntries: 500,
   requestBodyLimit: '1mb',
 
-  // ── Database ─────────────────────────────────────────────────────────────────
+  // Database
   db: {
     host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
+    port: parseIntEnv(process.env.DB_PORT, 5432),
     name: process.env.DB_NAME || 'panama_dev',
     user: process.env.DB_USER || 'panama',
     password: process.env.DB_PASSWORD,
-    poolMax: parseInt(process.env.DB_POOL_MAX || '30', 10),
-    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
-    connectionTimeoutMs: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000', 10),
+    poolMax: parseIntEnv(process.env.DB_POOL_MAX, 20),
+    idleTimeoutMs: parseIntEnv(process.env.DB_POOL_IDLE_TIMEOUT, 30000),
+    connectionTimeoutMs: parseIntEnv(process.env.DB_POOL_CONNECT_TIMEOUT, 5000),
+    idleInTransactionTimeoutMs: parseIntEnv(process.env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS, 60000),
     ssl: process.env.DB_SSL === 'false'
       ? false
       : { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' },
   },
 
-  // ── File uploads ───────────────────────────────────────────────────────────
+  // File uploads
   upload: {
     dir: path.join(__dirname, 'uploads'),
-    maxFileSize: 20 * 1024 * 1024, // 20MB
+    maxFileSize: 20 * 1024 * 1024,
     allowedMimeTypes: [
       'application/pdf',
       'application/msword',

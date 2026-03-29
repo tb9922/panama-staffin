@@ -119,7 +119,6 @@ export async function upsert(slug, name, configObj, annualLeave, client) {
        name = EXCLUDED.name,
        config = EXCLUDED.config,
        annual_leave = EXCLUDED.annual_leave,
-       deleted_at = NULL,
        updated_at = NOW()
      RETURNING ${HOME_COLS}`,
     [slug, name, JSON.stringify(configObj), JSON.stringify(annualLeave || {})]
@@ -132,13 +131,20 @@ export async function upsert(slug, name, configObj, annualLeave, client) {
  * @param {number} homeId
  * @param {object} configObj
  * @param {object} [client]
+ * @param {string} [clientUpdatedAt]
  */
-export async function updateConfig(homeId, configObj, client) {
+export async function updateConfig(homeId, configObj, client, clientUpdatedAt) {
   const conn = client || pool;
-  await conn.query(
-    'UPDATE homes SET config = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL',
-    [JSON.stringify(configObj), homeId]
-  );
+  const params = [JSON.stringify(configObj), homeId];
+  let sql = 'UPDATE homes SET config = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL';
+  if (clientUpdatedAt) {
+    params.push(clientUpdatedAt);
+    sql += ` AND date_trunc('milliseconds', updated_at) = $${params.length}::timestamptz`;
+  }
+  sql += ' RETURNING updated_at';
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && clientUpdatedAt) return null;
+  return rows[0]?.updated_at ? rows[0].updated_at.toISOString() : null;
 }
 
 /**

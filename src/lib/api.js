@@ -1347,9 +1347,14 @@ export async function deleteStaffMember(homeSlug, staffId) {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-export async function saveConfig(homeSlug, config) {
+export async function saveConfig(homeSlug, config, { clientUpdatedAt } = {}) {
   return apiFetch(`${API_BASE}/homes/config?home=${h(homeSlug)}`, {
-    method: 'PUT', headers: authHeaders(), body: JSON.stringify({ config }),
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      config,
+      ...(clientUpdatedAt ? { _clientUpdatedAt: clientUpdatedAt } : {}),
+    }),
   });
 }
 

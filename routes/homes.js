@@ -13,6 +13,7 @@ const router = Router();
 
 const configBodySchema = z.object({
   config: homeConfigSchema,
+  _clientUpdatedAt: z.string().max(50).optional(),
 }).strict();
 
 // GET /api/homes — list homes the user can access, with per-home roleId
@@ -54,10 +55,25 @@ router.put('/config', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     }
 
     const before = req.home.config ?? {};
-    await homeRepo.updateConfig(req.home.id, parsed.data.config);
-    const changes = diffFields(before, parsed.data.config);
+    const nextConfig = { ...parsed.data.config };
+    if (!Object.prototype.hasOwnProperty.call(parsed.data.config, 'edit_lock_pin') &&
+        Object.prototype.hasOwnProperty.call(before, 'edit_lock_pin')) {
+      nextConfig.edit_lock_pin = before.edit_lock_pin;
+    }
+
+    const updatedAt = await homeRepo.updateConfig(
+      req.home.id,
+      nextConfig,
+      null,
+      parsed.data._clientUpdatedAt
+    );
+    if (updatedAt === null) {
+      return res.status(409).json({ error: 'Home config was modified by another user. Please refresh and try again.' });
+    }
+
+    const changes = diffFields(before, nextConfig);
     await auditService.log('home_config_update', req.home.slug, req.user.username, { changes });
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (err) { next(err); }
 });
 

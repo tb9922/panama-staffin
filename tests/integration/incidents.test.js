@@ -270,6 +270,21 @@ describe('Incidents: freeze and addenda', () => {
     const frozen = await incidentRepo.isFrozen(created.id, homeA);
     expect(frozen).toBe(false);
   });
+
+  it('blocks addenda on soft-deleted incidents', async () => {
+    const created = await incidentRepo.upsert(homeA, {
+      date: '2026-03-06',
+      type: 'fall',
+      severity: 'minor',
+      description: 'Deleted incident addendum test',
+      reported_by: 'test-user',
+    });
+    createdIds.push(created.id);
+    await pool.query('UPDATE incidents SET deleted_at = NOW() WHERE id = $1 AND home_id = $2', [created.id, homeA]);
+
+    const addendum = await incidentRepo.addAddendum(created.id, homeA, 'Manager Smith', 'Should not save');
+    expect(addendum).toBeNull();
+  });
 });
 
 // ── CQC / RIDDOR Fields ───────────────────────────────────────────────────

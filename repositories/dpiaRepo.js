@@ -1,7 +1,8 @@
 import { pool } from '../db.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 const d = v => v instanceof Date ? v.toISOString().slice(0, 10) : v;
-const ts = v => v instanceof Date ? v.toISOString() : v;
+const ts = toIsoOrNull;
 
 const COLS = 'id, home_id, title, processing_description, purpose, scope, screening_result, screening_rationale, high_risk_triggers, necessity_assessment, proportionality_assessment, legal_basis, risk_assessment, risk_level, measures, residual_risk, consultation_required, dpo_advice, dpo_advice_date, ico_consultation, ico_consultation_date, stakeholder_views, status, approved_by, approved_date, review_date, next_review_due, notes, version, created_by, created_at, updated_at';
 

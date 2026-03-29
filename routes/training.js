@@ -13,21 +13,11 @@ import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
-const isValidIsoDateOnly = (value) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-};
-const dateSchema = z.preprocess(
-  v => v === '' ? null : v,
-  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().refine(
-    v => v === null || isValidIsoDateOnly(v),
-    'Invalid date'
-  )
-);
+const dateSchema = nullableDateInput;
 const staffIdSchema = z.string().min(1).max(20);
 const typeIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
 

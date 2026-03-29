@@ -9,10 +9,11 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { dispatchEvent } from '../services/webhookService.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const incidentIdSchema = z.string().min(1).max(100);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 // Converts empty strings to null so optional enum fields tolerate unset form values from the frontend.
 const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
 const correctiveActionStatusSchema = z.preprocess(
@@ -210,6 +211,7 @@ router.post('/:id/addenda', writeRateLimiter, requireAuth, requireHomeAccess, re
     const parsed = addendumSchema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message });
     const addendum = await incidentRepo.addAddendum(idParsed.data, req.home.id, req.user.username, parsed.data.content);
+    if (!addendum) return res.status(404).json({ error: 'Incident not found' });
     await auditService.log('incident_addendum', req.home.slug, req.user.username, { id: idParsed.data });
     res.json(addendum);
   } catch (err) { next(err); }

@@ -47,13 +47,13 @@ import { getSchedulingData, saveConfig, getLoggedInUser } from '../../lib/api.js
 
 function setupAdminMocks() {
   getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
-  getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA });
+  getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA, configUpdatedAt: '2026-03-28T10:00:00.000Z' });
   saveConfig.mockResolvedValue({});
 }
 
 function setupViewerMocks() {
   getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
-  getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA });
+  getSchedulingData.mockResolvedValue({ ...MOCK_SCHEDULING_DATA, configUpdatedAt: '2026-03-28T10:00:00.000Z' });
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,11 @@ describe('Config', () => {
     await user.click(saveBtn);
 
     await waitFor(() => {
-      expect(saveConfig).toHaveBeenCalledWith('test-home', expect.any(Object));
+      expect(saveConfig).toHaveBeenCalledWith(
+        'test-home',
+        expect.any(Object),
+        { clientUpdatedAt: '2026-03-28T10:00:00.000Z' }
+      );
     });
   });
 

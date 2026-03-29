@@ -7,6 +7,7 @@ import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ const router = Router();
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max(100).optional();
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 
 const requestBodySchema = z.object({
   request_type:      z.enum(['sar', 'erasure', 'rectification', 'restriction', 'portability']),

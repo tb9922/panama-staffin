@@ -157,6 +157,15 @@ export async function findPendingRetries(limit = 20) {
   }));
 }
 
+export async function countRetryQueueSize() {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM webhook_deliveries
+     WHERE status IN ('pending_retry', 'in_progress')`
+  );
+  return rows[0]?.count || 0;
+}
+
 export async function updateDeliveryForRetry(id, retryCount, nextRetryAt) {
   await pool.query(
     `UPDATE webhook_deliveries

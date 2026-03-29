@@ -6,13 +6,14 @@ import * as dpiaRepo from '../repositories/dpiaRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { zodError } from '../errors.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
 const dpiaStatusSchema = z.enum(['screening', 'in_progress', 'completed', 'approved', 'review_due']).optional();
 
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),

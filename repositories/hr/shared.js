@@ -1,9 +1,10 @@
 import { pool } from '../../db.js';
+import { toIsoOrNull } from '../../lib/serverTimestamps.js';
 
 export { pool };
 
 export function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
-export function ts(v) { return v instanceof Date ? v.toISOString() : v; }
+export function ts(v) { return toIsoOrNull(v); }
 
 // ── Shape Factory ────────────────────────────────────────────────────────────
 // Builds a row → API-object shaper from a declarative config.

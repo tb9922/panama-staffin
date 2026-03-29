@@ -41,6 +41,14 @@ function assertBedDeletable(bed) {
   }
 }
 
+async function assertResidentNotAlreadyOccupied(homeId, residentId, currentBedId, client) {
+  if (!residentId) return;
+  const existing = await bedRepo.findByResidentId(residentId, homeId, client);
+  if (existing && existing.id !== currentBedId) {
+    throw new ValidationError(`Resident is already assigned to occupied bed ${existing.room_number}`);
+  }
+}
+
 function buildStatusData(oldStatus, newStatus, transitionData) {
   const {
     residentId, holdExpires, reservedUntil,
@@ -223,6 +231,7 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
     if (residentId && newStatus === 'occupied') {
       const resident = await financeRepo.findResidentById(residentId, homeId, client);
       if (!resident) throw new ValidationError('Resident not found in this home');
+      await assertResidentNotAlreadyOccupied(homeId, residentId, bedId, client);
     }
 
     const statusData = buildStatusData(bed.status, newStatus, transitionData);

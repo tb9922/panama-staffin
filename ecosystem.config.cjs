@@ -11,7 +11,7 @@
  * Production setup:
  *   pm2 start ecosystem.config.cjs --env production
  *   pm2 save
- *   pm2 startup   # generates systemd/launchd auto-start on boot
+ *   pm2 startup
  */
 
 module.exports = {
@@ -19,14 +19,15 @@ module.exports = {
     {
       name: 'panama',
       script: 'server.js',
-      instances: 4,              // cluster mode — 4 workers behind PM2 load balancer
+      instances: 4,              // Cluster mode - 4 workers behind PM2's internal balancer.
+      // Keep instances * DB_POOL_MAX within PostgreSQL connection headroom.
       exec_mode: 'cluster',
       autorestart: true,
-      watch: false,              // nodemon handles dev; PM2 handles production
+      watch: false,              // Nodemon handles dev; PM2 handles production.
       node_args: '--max-old-space-size=768',
       max_memory_restart: '1G',
-      min_uptime: '10s',         // consider crash if dies within 10s of start
-      max_restarts: 10,          // stop restart loop after 10 rapid failures
+      min_uptime: '10s',         // Consider crash if it dies within 10s of start.
+      max_restarts: 10,          // Stop restart loop after 10 rapid failures.
 
       // Logging
       error_file: './logs/panama-error.log',
@@ -41,11 +42,10 @@ module.exports = {
       // pm2 set pm2-logrotate:compress true
 
       // Graceful shutdown
-      kill_timeout: 5000,        // matches server.js 5s force-exit timeout
+      kill_timeout: 5000,        // Matches server.js 5s force-exit timeout.
       listen_timeout: 10000,
       shutdown_with_message: true,
 
-      // Environment
       env: {
         NODE_ENV: 'development',
       },

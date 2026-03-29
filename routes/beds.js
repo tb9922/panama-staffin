@@ -5,11 +5,12 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as bedService from '../services/bedService.js';
 import { STATUSES, ROOM_TYPES } from '../lib/beds.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 
 const statusValues = Object.values(STATUSES);
 const roomTypeValues = Object.values(ROOM_TYPES);

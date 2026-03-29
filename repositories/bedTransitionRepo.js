@@ -1,8 +1,9 @@
 import { pool } from '../db.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 const TRANSITION_COLS = 'id, home_id, bed_id, from_status, to_status, resident_id, changed_by, changed_at, reason';
 
-function ts(v) { return v instanceof Date ? v.toISOString() : v; }
+const ts = toIsoOrNull;
 const f = v => v != null ? parseFloat(v) : null;
 
 // ── Shape ───────────────────────────────────────────────────────────────────
@@ -66,17 +67,18 @@ export async function getLatestTransition(bedId, homeId, client) {
 
 export async function getMonthlyOccupancy(homeId, months = 12, client) {
   const conn = client || pool;
+  const monthCount = Math.max(1, Math.min(Number.isFinite(Number(months)) ? Number(months) : 12, 60));
   const { rows } = await conn.query(
     `/* bedTransitionRepo – getMonthlyOccupancy */
      WITH months AS (
        SELECT generate_series(
-         date_trunc('month', NOW()) - INTERVAL '${months - 1} months',
+         date_trunc('month', NOW()) - make_interval(months => ($2::int - 1)),
          date_trunc('month', NOW()),
          INTERVAL '1 month'
        ) AS month_start
      ),
      bed_list AS (
-       SELECT id FROM beds WHERE home_id = $1 AND deleted_at IS NULL
+       SELECT id FROM beds WHERE home_id = $1
      ),
      bed_month_status AS (
        SELECT
@@ -107,7 +109,7 @@ export async function getMonthlyOccupancy(homeId, months = 12, client) {
      FROM bed_month_status
      GROUP BY month_start
      ORDER BY month_start`,
-    [homeId]
+    [homeId, monthCount]
   );
   return rows.map(r => ({ month: r.month, occupancyRate: f(r.occupancy_rate) }));
 }

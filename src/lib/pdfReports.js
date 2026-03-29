@@ -1,5 +1,5 @@
 // PDF Report Generation using jsPDF + autoTable
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours } from './rotation.js';
 import { calculateDayCost, getDayCoverageStatus } from './escalation.js';

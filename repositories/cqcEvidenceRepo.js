@@ -1,4 +1,5 @@
 import { pool } from '../db.js';
+import { paginateResult } from '../lib/pagination.js';
 
 const EVIDENCE_COLS = 'id, home_id, version, quality_statement, type, title, description, date_from, date_to, evidence_category, added_by, added_at, created_at, deleted_at';
 
@@ -12,11 +13,6 @@ function shapeRow(row) {
   };
 }
 
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
-}
-
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
     `SELECT ${EVIDENCE_COLS}, COUNT(*) OVER() AS _total FROM cqc_evidence
@@ -25,7 +21,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeRow);
+  return paginateResult(rows, shapeRow);
 }
 
 export async function sync(homeId, arr, client) {

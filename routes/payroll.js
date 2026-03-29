@@ -35,6 +35,7 @@ import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ function blockOwnDataRole(req, res, moduleId) {
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
-const dateSchema     = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema     = nullableDateInput;
 const optTime        = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{2}:\d{2}$/).nullable().optional());
 const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();

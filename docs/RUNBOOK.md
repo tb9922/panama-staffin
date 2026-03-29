@@ -1,97 +1,102 @@
 # Incident Runbook
 
-Operational procedures for common failure scenarios. For deployment procedures, see [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). For rollback, see [ROLLBACK.md](ROLLBACK.md).
+Operational procedures for common failure scenarios. For deployment procedures,
+see [DEPLOYMENT.md](DEPLOYMENT.md). For rollback, see [ROLLBACK.md](ROLLBACK.md).
 
----
+## 1. Auth Outage
 
-## 1. Auth Outage (Users Cannot Log In)
-
-**Symptoms:** All login attempts fail. Multiple users reporting simultaneously.
+**Symptoms:** All login attempts fail or authenticated requests start returning `503`.
 
 **Diagnosis:**
+
 ```bash
 # Check if server is responding
 curl -s http://localhost:3001/health | jq .
 
-# Check recent auth errors in PM2 logs
+# Check recent auth errors
 pm2 logs panama --lines 50 | grep -i "auth\|login\|jwt\|token"
 
-# Check if account lockout is widespread
+# Check account lockout state
 psql -c "SELECT username, locked_until FROM users WHERE locked_until > NOW();"
 ```
 
-**Resolution:**
+**Resolution**
 
 | Cause | Fix |
 |-------|-----|
 | Server down | `pm2 restart panama` |
 | DB connection failure | Check PostgreSQL: `pg_isready -h localhost` |
-| JWT_SECRET changed/missing | Verify `.env` has correct `JWT_SECRET` (min 32 chars). Restart server. |
-| Mass lockout (brute force) | Unlock users: `UPDATE users SET locked_until = NULL, failed_login_count = 0;` |
-| Token deny list issue | Deny list is DB-backed (`token_denylist` table). Check: `SELECT COUNT(*) FROM token_denylist;` In-memory cache syncs on startup. If tokens aren't being denied, check DB connectivity first. Restart server to resync cache. |
-
-**Escalation:** If DB is unreachable after restart, check disk space (`df -h`) and PostgreSQL logs (`journalctl -u postgresql`).
-
----
+| JWT secret changed/missing | Verify `.env` has the correct `JWT_SECRET` and restart |
+| Mass lockout | `UPDATE users SET locked_until = NULL, failed_login_count = 0;` |
+| Token deny-list issue | Check DB connectivity and `token_denylist` table health, then restart to resync cache |
 
 ## 2. Database Pressure
 
-**Symptoms:** Slow page loads, health endpoint shows `pool.waiting > 0`, `queryMs > 500`.
+**Symptoms:** Slow page loads, health endpoint shows `pool.waiting > 0`, or `queryMs > 500`.
 
 **Diagnosis:**
+
 ```bash
 # Health endpoint pool stats
 curl -s http://localhost:3001/health | jq '.pool, .queryMs'
+
+# Metrics endpoint (if enabled)
+curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:3001/metrics | grep "panama_db_pool"
 
 # Active connections
 psql -c "SELECT count(*) FROM pg_stat_activity WHERE state = 'active';"
 
 # Long-running queries
-psql -c "SELECT pid, now() - pg_stat_activity.query_start AS duration, query
-         FROM pg_stat_activity WHERE state = 'active' AND query_start < now() - interval '10 seconds'
+psql -c "SELECT pid, now() - query_start AS duration, query
+         FROM pg_stat_activity
+         WHERE state = 'active'
+           AND query_start < now() - interval '10 seconds'
          ORDER BY duration DESC;"
 
-# Disk usage
-df -h /var/lib/postgresql
+# Idle transactions that should be killed by timeout
+psql -c "SELECT pid, now() - xact_start AS duration, state, query
+         FROM pg_stat_activity
+         WHERE state LIKE 'idle in transaction%';"
 ```
 
-**Resolution:**
+**Resolution**
 
 | Cause | Fix |
 |-------|-----|
-| Pool exhaustion (waiting > 5) | Kill long queries: `SELECT pg_terminate_backend(pid);` Increase `DB_POOL_MAX` if recurring. |
-| Slow query (no index) | Add index. Check `EXPLAIN ANALYZE` on the slow query. |
-| Disk full | Clear old backups: `ls -la backups/`. Purge old audit entries: `DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '7 years';` |
-| Too many connections | Check for connection leaks. Restart server to release pool. |
+| Pool exhaustion | Kill long queries, then review `DB_POOL_MAX` and PM2 worker count |
+| Slow query | Run `EXPLAIN ANALYZE` and add indexes or reduce scan size |
+| Disk full | Clear old backups/logs and check PostgreSQL WAL growth |
+| Too many connections | Rebalance with `PM2 workers * DB_POOL_MAX <= max_connections - reserve` |
 
-**Escalation:** If disk is >90% full, immediately clear old backups and WAL files. Consider expanding disk.
+**Notes**
 
----
+- Runtime defaults assume `DB_POOL_MAX=20`.
+- With PM2 `instances=4`, that is an 80-connection app budget.
+- `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` defaults to 60000 and should terminate stuck idle transactions automatically.
 
 ## 3. Deploy Rollback
 
-**Symptoms:** New deploy introduced a bug. Need to revert.
+**Symptoms:** A new deploy introduced a bug and needs to be reverted.
 
-**Procedure:** See [ROLLBACK.md](ROLLBACK.md) for full procedure with RTO/RPO targets.
+**Procedure**
 
-**Quick steps:**
 1. Identify the last known-good commit: `git log --oneline -10`
-2. Revert: `git checkout <commit> -- .`
+2. Restore the code: `git checkout <commit> -- .`
 3. Reinstall: `npm ci --omit=dev && npm run build`
 4. Restart: `pm2 restart panama`
 5. Verify: `curl -s http://localhost:3001/health | jq .`
 
-**If a migration was applied:** For emergency rollback of a specific migration, see [ROLLBACK.md](ROLLBACK.md) (manual DOWN SQL). For non-emergency fixes, write a new corrective migration (forward-only).
+If a migration was applied, prefer a forward corrective migration. For emergency
+rollback of a specific migration, follow [ROLLBACK.md](ROLLBACK.md).
 
----
+## 4. Data Corruption / Restore From Backup
 
-## 4. Data Corruption / Restore from Backup
-
-**Symptoms:** Missing or incorrect data reported by users. Audit log shows unexpected changes.
+**Symptoms:** Missing or incorrect data is reported by users.
 
 **Diagnosis:**
+
 ```bash
-# Check recent audit entries for suspicious activity
+# Check recent audit entries
 psql -c "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 20;"
 
 # Check backup freshness
@@ -101,25 +106,39 @@ ls -la backups/*.sql.gz | tail -5
 scripts/verify-backup.sh
 ```
 
-**Restore procedure:**
-1. **Stop the application:** `pm2 stop panama`
-2. **Take a snapshot of current state:** `pg_dump panama_prod > pre_restore_$(date +%Y%m%d_%H%M%S).sql`
-3. **Restore from backup:**
+**Restore Procedure**
+
+1. Stop the app: `pm2 stop panama`
+2. Snapshot current state: `pg_dump panama_prod > pre_restore_$(date +%Y%m%d_%H%M%S).sql`
+3. Restore the chosen backup:
    ```bash
    gunzip -c backups/YYYY-MM-DD_HH-MM-SS.sql.gz | psql panama_prod
    ```
-4. **Run migrations:** `node scripts/migrate.js` (backup may be behind current schema)
-5. **Restart:** `pm2 start panama`
-6. **Verify:** Check health endpoint, login, spot-check affected data
+4. Run migrations: `node scripts/migrate.js`
+5. Restart: `pm2 start panama`
+6. Verify: health, login, and the affected data area
 
-**Escalation:** If backup is also corrupted, check if automated backup script has been failing silently. Review `crontab -l` for backup schedule.
+**Offsite Backup Expectations**
 
----
+- Prefer setting `BACKUP_S3_BUCKET` or `BACKUP_SCP_TARGET`
+- Use `VERIFY_AFTER_BACKUP=true` on at least one scheduled verification run each week
+- Set `HEALTHCHECK_URL` so verification failures trigger an external alert
+
+## 5. Observability Checklist
+
+For a healthy production install:
+
+- `SENTRY_DSN` set if you want backend error reporting
+- `SENTRY_TRACES_SAMPLE_RATE` set above `0` if you want backend latency traces
+- `VITE_SENTRY_DSN` set if you want frontend reporting
+- `VITE_SENTRY_TRACES_SAMPLE_RATE` set above `0` if you want frontend traces
+- `METRICS_TOKEN` set if you want `/metrics`
 
 ## General Escalation
 
 If you cannot resolve an issue within 30 minutes:
-1. Document what you've tried and what symptoms persist
+
+1. Document what you tried and what symptoms persist
 2. Check PM2 logs: `pm2 logs panama --lines 200`
 3. Check PostgreSQL logs: `journalctl -u postgresql --since "1 hour ago"`
 4. Take a database snapshot before attempting further fixes
