@@ -32,14 +32,11 @@ psql -c "SELECT username, locked_until FROM users WHERE locked_until > NOW();"
 
 ## 2. Database Pressure
 
-**Symptoms:** Slow page loads, health endpoint shows `pool.waiting > 0`, or `queryMs > 500`.
+**Symptoms:** Slow page loads, `/metrics` shows elevated `panama_db_pool_waiting`, or users report intermittent timeouts.
 
 **Diagnosis:**
 
 ```bash
-# Health endpoint pool stats
-curl -s http://localhost:3001/health | jq '.pool, .queryMs'
-
 # Metrics endpoint (if enabled)
 curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:3001/metrics | grep "panama_db_pool"
 

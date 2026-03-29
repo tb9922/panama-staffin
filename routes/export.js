@@ -11,14 +11,14 @@ router.get('/', requireAuth, requireHomeAccess, requireModule('reports', 'read')
   try {
     const homeSlug = req.home.slug;
 
-    // Pass the real per-home role so assembleData's PII_ROLES allowlist applies correctly.
-    // Training leads, HR officers, and finance officers have legitimate access to NI/DoB/hourly_rate.
+    // Pass the real per-home role so assembleData's PII allowlist applies correctly.
     const data = await homeService.assembleData(homeSlug, req.homeRole);
 
     await auditService.log('data_export', homeSlug, req.user.username, null);
 
     res.setHeader('Content-Disposition', `attachment; filename="${homeSlug}_data.json"`);
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json(data);
   } catch (err) {
     next(err);

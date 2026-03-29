@@ -611,6 +611,7 @@ describe('Payroll Runs — /runs', () => {
     const res = await adminGet(`/runs/${runId}/export?home=${homeASlug}`).expect(200);
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.headers['content-disposition']).toMatch(/attachment/);
+    expect(res.headers['cache-control']).toBe('no-store, no-cache, must-revalidate, private');
   });
 
   it('GET export supports sage format', async () => {
@@ -633,12 +634,14 @@ describe('Payroll Runs — /runs', () => {
   it('GET single payslip returns PDF', async () => {
     const res = await adminGet(`/runs/${runId}/payslips/PH01?home=${homeASlug}`).expect(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['cache-control']).toBe('no-store, no-cache, must-revalidate, private');
     expect(responseSize(res)).toBeGreaterThan(0);
   });
 
   it('GET summary-pdf returns PDF for approved run', async () => {
     const res = await adminGet(`/runs/${runId}/summary-pdf?home=${homeASlug}`).expect(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['cache-control']).toBe('no-store, no-cache, must-revalidate, private');
     expect(responseSize(res)).toBeGreaterThan(0);
   });
 
