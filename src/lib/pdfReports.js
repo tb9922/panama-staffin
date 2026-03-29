@@ -1,6 +1,6 @@
 // PDF Report Generation using jsPDF + autoTable
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours } from './rotation.js';
 import { calculateDayCost, getDayCoverageStatus } from './escalation.js';
 import {
@@ -83,7 +83,7 @@ export function generateRosterPDF(data, weekStart) {
     return [s.name, s.team, s.role, ...shifts, totalHours.toFixed(1)];
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [headers],
     body: rows,
@@ -132,7 +132,7 @@ export function generateRosterPDF(data, weekStart) {
     ];
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: cy,
     head: [covHeaders],
     body: covRows,
@@ -191,7 +191,7 @@ export function generateCostPDF(data, year, month) {
     ['Annual Projection', `£${Math.round(totals.total / monthDates.length * 365).toLocaleString()}`],
   ];
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Metric', 'Value']],
     body: summaryItems,
@@ -207,7 +207,7 @@ export function generateCostPDF(data, year, month) {
     const budgetY = doc.lastAutoTable.finalY + 6;
     const variance = totals.total - budget;
     const variancePct = ((variance / budget) * 100).toFixed(1);
-    doc.autoTable({
+    autoTable(doc, {
       startY: budgetY,
       head: [['Budget Analysis', '']],
       body: [
@@ -249,7 +249,7 @@ export function generateCostPDF(data, year, month) {
     totals.bhPremium.toFixed(0), totals.total.toFixed(0), '',
   ]);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: tableY + 3,
     head: [headers],
     body: rows,
@@ -282,7 +282,7 @@ export function generateCoveragePDF(data, weekStart) {
 
   // Min staffing reference
   const mins = data.config.minimum_staffing;
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Minimum Staffing Requirements', 'Heads', 'Skill Points']],
     body: [
@@ -321,7 +321,7 @@ export function generateCoveragePDF(data, weekStart) {
     });
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [headers],
     body: rows,
@@ -362,7 +362,7 @@ export function generateStaffPDF(data) {
     s.contract_type || 'Full-time',
   ]);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [headers],
     body: rows,
@@ -377,7 +377,7 @@ export function generateStaffPDF(data) {
   const avgRate = activeStaff.reduce((s, x) => s + (x.hourly_rate || 0), 0) / (activeStaff.length || 1);
   const teams = [...new Set(activeStaff.map(s => s.team))];
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: summaryY,
     head: [['Summary', 'Value']],
     body: [
@@ -443,7 +443,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     ];
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Metric', 'Weight', 'Available', 'Raw Value', 'Score']],
     body: metricRows,
@@ -466,7 +466,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const fillResult = score.metrics.staffingFillRate?.detail;
   const agencyResult = score.metrics.agencyDependency?.detail;
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Staffing KPI', 'Value']],
     body: [
@@ -495,7 +495,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   y += 3;
 
   const escLabels = ['Normal', 'Float', 'OT', 'Agency', 'Short', 'UNSAFE'];
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Date', 'Early', 'Late', 'Night', 'Worst']],
     body: coverage.map(r => [
@@ -522,7 +522,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   const training = calculateTrainingBreakdown(data, today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Training KPI', 'Value']],
     body: [
@@ -542,7 +542,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   // Per-type breakdown
   y = doc.lastAutoTable.finalY + 6;
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Training Type', 'Legislation', 'Compliant', 'Expired', 'Not Started', 'Total']],
     body: training.perType.map(t => [t.name, t.legislation, t.compliant, t.expired, t.notStarted, t.total]),
@@ -568,7 +568,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     doc.text('Non-Compliant Staff', 14, y);
     y += 3;
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Staff', 'Role', 'Training', 'Status', 'Days']],
       body: training.nonCompliant.slice(0, 20).map(nc => [
@@ -595,7 +595,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const dbsList = getDbsStatusList(data);
   const dbsComplete = dbsList.filter(d => d.dbsStatus === 'Clear').length;
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Safeguarding KPI', 'Value']],
     body: [
@@ -611,7 +611,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   // DBS status table
   y = doc.lastAutoTable.finalY + 6;
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Staff', 'Role', 'DBS Status', 'DBS Number', 'Barred List', 'RTW Expiry']],
     body: dbsList.map(d => [d.name, d.role, d.dbsStatus, d.dbsNumber, d.barredListChecked, d.rtwExpiry]),
@@ -634,7 +634,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const obMatrix = buildOnboardingMatrix(activeStaff, ONBOARDING_SECTIONS, data.onboarding || {});
   const obStats = getOnboardingStats(obMatrix);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Governance KPI', 'Value']],
     body: [
@@ -678,7 +678,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
       obRows.push([s.name, s.role, s.start_date || '-', missing.join(', ')]);
     }
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Staff', 'Role', 'Start Date', 'Missing Sections']],
       body: obRows,
@@ -699,7 +699,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const acr = calculateActionCompletionRate(data.incidents || [], fromStr, toStr);
   const incidentTrends = getIncidentTrendData(data.incidents || [], fromStr, toStr);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Premises & Incident KPI', 'Value']],
     body: [
@@ -727,7 +727,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     doc.setFont('helvetica', 'bold');
     doc.text('Recent Fire Drills', 14, y);
     y += 3;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Date', 'Scenario', 'Evac Time (s)', 'Staff Present', 'Conducted By']],
       body: drills.map(d => [d.date, (d.scenario || '').substring(0, 60), d.evacuation_time_seconds || '-', d.staff_present?.length || 0, d.conducted_by || '-']),
@@ -744,7 +744,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const mcaPct = calculateMcaTrainingCompliancePct(data, today);
   const trendData = calculateTrainingTrend(data, today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Effective KPI', 'Value']],
     body: [
@@ -771,7 +771,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const eqPct = calculateEqualityTrainingPct(data, today);
   const dpPct = calculateDataProtectionTrainingPct(data, today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Caring KPI', 'Value']],
     body: [
@@ -792,7 +792,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     doc.setFont('helvetica', 'bold');
     doc.text('Manual Evidence — Caring & Responsive', 14, y);
     y += 3;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Statement', 'Type', 'Title', 'Description', 'Period']],
       body: caringEvidence.map(e => {
@@ -824,7 +824,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const sickResult = calculateSickRate(data, dateRange);
   const fatigueRisks = getFatigueSummary(data);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Governance & Workforce KPI', 'Value']],
     body: [
@@ -845,7 +845,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   // Fatigue risks
   if (fatigueRisks.length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Staff at Fatigue Risk', 'Role', 'Consecutive Days', 'Status']],
       body: fatigueRisks.map(f => [f.name, f.role, f.consecutive, f.exceeded ? 'EXCEEDED' : 'At Limit']),
@@ -866,7 +866,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const turnover = calculateStaffTurnover(data, dateRange);
   const fbPct = calculateFatigueBreachesPct(data, dateRange);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Engagement & Improvement KPI', 'Value']],
     body: [
@@ -893,7 +893,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     doc.text('Additional Manual Evidence', 14, y);
     y += 3;
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Statement', 'Type', 'Title', 'Description', 'Period']],
       body: manualEvidence.map(e => {
@@ -918,7 +918,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const complaintStats = getComplaintStats(data.complaints || [], data.config, fromStr, toStr);
   const surveyStats = getSurveyStats(data.complaint_surveys || [], fromStr, toStr);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Complaints KPI', 'Value']],
     body: [
@@ -940,7 +940,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const recentComplaints = (data.complaints || []).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
   if (recentComplaints.length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Date', 'Category', 'Title', 'Status', 'Response Days']],
       body: recentComplaints.map(c => {
@@ -958,7 +958,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   const maintStats = getMaintenanceStats(data.maintenance || [], today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Maintenance KPI', 'Value']],
     body: [
@@ -985,7 +985,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   if (maintItems.length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Category', 'Frequency', 'Last Completed', 'Next Due', 'Status', 'Certificate']],
       body: maintItems.map(m => [
@@ -1014,7 +1014,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   const ipcStats = getIpcStats(data.ipc_audits || [], today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['IPC KPI', 'Value']],
     body: [
@@ -1032,7 +1032,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const recentAudits = (data.ipc_audits || []).sort((a, b) => (b.audit_date || '').localeCompare(a.audit_date || '')).slice(0, 10);
   if (recentAudits.length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Date', 'Type', 'Auditor', 'Score', 'Risk Areas', 'Actions']],
       body: recentAudits.map(a => [
@@ -1054,7 +1054,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
 
   const riskStats = getRiskStats(data.risk_register || [], today);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Risk KPI', 'Value']],
     body: [
@@ -1074,7 +1074,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     .sort((a, b) => ((b.likelihood || 1) * (b.impact || 1)) - ((a.likelihood || 1) * (a.impact || 1))).slice(0, 15);
   if (openRisks.length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Title', 'Category', 'L', 'I', 'Score', 'Band', 'Next Review']],
       body: openRisks.map(r => {
@@ -1106,7 +1106,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const dolStats = getDolsStats(data.dols || [], data.mca_assessments || [], today);
   const wbStats = getWhistleblowingStats(data.whistleblowing_concerns || [], fromStr, toStr);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Governance KPI', 'Value']],
     body: [
@@ -1133,7 +1133,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   // Policy detail table
   if ((data.policy_reviews || []).length > 0) {
     y = doc.lastAutoTable.finalY + 6;
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Policy', 'Version', 'Last Reviewed', 'Next Due', 'Status']],
       body: (data.policy_reviews || []).map(p => {
@@ -1202,7 +1202,7 @@ export function generateBoardPackPDF(data, dateRangeDays = 28, snapshot = null) 
   const incidentStats = data.incidents ? getIncidentTrendData(data.incidents, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
   const complaintStats = data.complaints ? getComplaintStats(data.complaints, data.config, formatDate(dateRange.from), formatDate(dateRange.to)) : null;
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Key Performance Indicator', 'Value', 'Status']],
     body: [
@@ -1234,7 +1234,7 @@ export function generateBoardPackPDF(data, dateRangeDays = 28, snapshot = null) 
   const coverageRows = getCoverageSummary(data, covDateRange);
   const escLabels2 = ['Normal', 'Float', 'OT', 'Agency', 'Short', 'UNSAFE'];
   if (coverageRows.length > 0) {
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Date', 'Early', 'Late', 'Night', 'Worst']],
       body: coverageRows.map(r => [
@@ -1272,7 +1272,7 @@ export function generateBoardPackPDF(data, dateRangeDays = 28, snapshot = null) 
   const trainingBreakdown = calculateTrainingBreakdown(data, today);
   const trainingTypes = trainingBreakdown.perType || [];
   if (trainingTypes.length > 0) {
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Training Type', 'Compliant', 'Expired', 'Not Started', 'Compliance %']],
       body: trainingTypes.map(t => [

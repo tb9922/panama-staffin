@@ -27,6 +27,7 @@ vi.mock('../../lib/api.js', async () => {
     getCqcEvidence: vi.fn(),
     createCqcEvidence: vi.fn(),
     deleteCqcEvidence: vi.fn(),
+    logReportDownload: vi.fn(),
     createSnapshot: vi.fn(),
     getSnapshots: vi.fn(),
     getSnapshot: vi.fn(),
@@ -38,11 +39,16 @@ vi.mock('../../lib/excel.js', () => ({
   downloadXLSX: vi.fn(),
 }));
 
+vi.mock('../../lib/pdfReports.js', () => ({
+  generateEvidencePackPDF: vi.fn(),
+}));
+
 vi.mock('../../hooks/useLiveDate.js', () => ({
   useLiveDate: vi.fn(() => '2026-03-08'),
 }));
 
 import * as api from '../../lib/api.js';
+import * as pdfReports from '../../lib/pdfReports.js';
 
 // ── Fixture data ───────────────────────────────────────────────────────────────
 
@@ -191,6 +197,21 @@ describe('CQCEvidence', () => {
     });
   });
 
+  it('generates the evidence pack without surfacing a PDF error', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Generate Evidence Pack/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Generate Evidence Pack/i }));
+
+    await waitFor(() => {
+      expect(pdfReports.generateEvidencePackPDF).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Failed to generate PDF/i)).not.toBeInTheDocument();
+  });
+
   it('shows Export Excel button', async () => {
     renderAdmin();
     await waitFor(() => {
@@ -250,5 +271,34 @@ describe('CQCEvidence', () => {
 
     // Viewer should NOT see the Add Evidence button
     expect(screen.queryByRole('button', { name: '+ Add Evidence' })).not.toBeInTheDocument();
+  });
+
+  it('shows a friendly notice and opens snapshot history when the same snapshot already exists', async () => {
+    const user = userEvent.setup();
+    api.createSnapshot.mockRejectedValueOnce(Object.assign(new Error('An identical snapshot already exists'), { status: 409 }));
+    api.getSnapshots.mockResolvedValue([
+      {
+        id: 'snap-001',
+        computed_at: '2026-03-08T10:00:00Z',
+        overall_score: 88,
+        band: 'Good',
+        engine_version: 'v1',
+        computed_by: 'admin',
+        signed_off_by: null,
+      },
+    ]);
+
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save Snapshot' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Save Snapshot' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('This exact snapshot is already saved. Snapshot History has been opened below.')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Hide Snapshot History (1)' })).toBeInTheDocument();
+    expect(screen.getByText('2026-03-08')).toBeInTheDocument();
   });
 });
