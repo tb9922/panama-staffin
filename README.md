@@ -1,14 +1,35 @@
 # Panama Staffing
 
-Care home staff scheduling and compliance platform using the Panama 2-2-3 rotation pattern. Built for UK residential care homes.
+Care home staff scheduling and compliance platform using the Panama 2-2-3
+rotation pattern. Built for UK residential care homes.
+
+## Current Status
+
+The current hardening baseline is documented in
+[docs/HARDENING_SUMMARY_2026-03-29.md](docs/HARDENING_SUMMARY_2026-03-29.md).
+
+Current verified local baseline:
+
+- `npm test`: 134 files, 2533 tests passed
+- `npm run build`: passed
+- `npm run audit:routes`: passed
+- `npm audit --omit=dev --json`: 0 vulnerabilities
+
+Recent hardening work covered:
+
+- auth/session invalidation, logout behavior, and per-home RBAC
+- scheduling, dashboard, training, and bed/finance correctness fixes
+- GDPR/export/privacy tightening and safer health/ops defaults
+- broader integration, page, and browser coverage
+- quieter test output and cleanup of the last known GDPR query concurrency warning
 
 ## Tech Stack
 
 - **Frontend**: React 19, Vite 7, Tailwind CSS 4, React Router 7
 - **Backend**: Express 5 (Node.js 22), PostgreSQL
-- **PDF**: jspdf + jspdf-autotable
-- **Monitoring**: Sentry
-- **Testing**: Vitest
+- **PDF**: `jspdf` + `jspdf-autotable`
+- **Monitoring**: Sentry + Prometheus-style `/metrics`
+- **Testing**: Vitest + Playwright
 
 ## Prerequisites
 
@@ -26,20 +47,18 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env — generate JWT_SECRET and set DB credentials
-# See .env.example for all required variables
+# Edit .env, generate JWT_SECRET, and set DB credentials
 
 # 3. Start PostgreSQL (via Docker or local install)
-docker compose up -d   # if using the included compose file
+docker compose up -d
 
 # 4. Run migrations
-node -e "import('./db.js').then(m => m.default.query('SELECT 1'))"
-# Migrations run automatically on server start
+node scripts/migrate.js
 
 # 5. Start development servers
 npm run dev
-# API:  http://localhost:3001
-# UI:   http://localhost:5173
+# API: http://localhost:3001
+# UI:  http://localhost:5173
 ```
 
 Default logins: `admin / admin123` (edit), `viewer / view123` (read-only).
@@ -48,87 +67,91 @@ Default logins: `admin / admin123` (edit), `viewer / view123` (read-only).
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start API + UI concurrently (nodemon + vite) |
+| `npm run dev` | Start API + UI concurrently (`nodemon` + `vite`) |
 | `npm run server` | Start API server only |
 | `npm run client` | Start Vite dev server only |
-| `npm run build` | Production build (Vite) |
+| `npm run build` | Production build |
 | `npm run lint` | ESLint check |
-| `npm test` | Run unit tests (vitest) |
+| `npm test` | Run the main Vitest suite |
 | `npm run test:watch` | Run tests in watch mode |
-| `npm run test:integration` | Run integration tests (requires running DB) |
+| `npm run test:integration` | Run integration tests |
+| `npm run test:frontend` | Run frontend-focused tests |
+| `npm run test:e2e` | Run Playwright browser tests |
 | `npm run audit:routes` | Audit route definitions |
 
 ## Architecture
 
-```
-server.js                 Express entry point — mounts all route modules
-config.js                 Centralised environment config with fail-fast validation
-db.js                     PostgreSQL connection pool + auto-migration runner
-logger.js                 Structured logging (Winston/Sentry)
+```text
+server.js                 Express entry point
+config.js                 Centralized environment config with fail-fast validation
+db.js                     PostgreSQL connection pool + migration runner
+logger.js                 Structured logging
+metrics.js                Prometheus-style metrics registry
+requestContext.js         Request-scoped context (reqId, homeSlug, username)
 
-routes/                   HTTP endpoint definitions (26 route modules)
+routes/                   HTTP endpoint definitions (34 top-level route modules)
 services/                 Business logic layer
-repositories/             Database access (one repo per domain table)
-middleware/               Auth (JWT), access logging
-migrations/               Numbered SQL migration files (001–081)
-lib/                      Shared server utilities (pagination, Zod helpers, rate limiter)
+repositories/             Database access layer
+middleware/               Auth, request context, access logging
+migrations/               Numbered SQL migration files (001-131)
+lib/                      Shared server utilities
 
 src/                      React frontend
-  App.jsx                 Shell: sidebar nav, auth, undo/redo, multi-home selector
-  lib/                    Client-side business logic (rotation, escalation, accrual, CQC, etc.)
-  pages/                  One component per route (~45 pages)
-  hooks/                  Shared React hooks (useDirtyGuard, etc.)
-  components/             Shared UI components (ErrorBoundary, Modal, Pagination, etc.)
+  pages/                  Route-level screens
+  components/             Shared UI and extracted modal/state slices
+  hooks/                  Shared React hooks
+  lib/                    Client-side business logic and API wrappers
 ```
 
 ### Request Flow
 
-```
-Client  ->  Route  ->  Service  ->  Repository  ->  PostgreSQL
-                          |
-                     Zod validation
-                     Business rules
-                     Audit logging
+```text
+Client -> Route -> Service -> Repository -> PostgreSQL
+                   |          |
+                   |          +-- audit logging / row locking / OCC
+                   +-- validation / business rules / request context
 ```
 
 ## API Overview
 
-All endpoints require JWT authentication via `Authorization: Bearer <token>`.
+All endpoints require JWT authentication via `Authorization: Bearer <token>` or
+the browser cookie/CSRF flow.
 
 | Group | Prefix | Description |
 |-------|--------|-------------|
 | Auth | `/api/login` | Login, logout, token revocation |
-| Homes | `/api/homes` | Home CRUD, multi-home management |
-| Staff | `/api/homes/:slug/staff` | Staff register, roles, rates |
-| Scheduling | `/api/homes/:slug/scheduling` | Overrides, daily status, rotation |
-| Training | `/api/homes/:slug/training` | Training records, types, compliance |
-| Incidents | `/api/homes/:slug/incidents` | Incident reporting, CQC/RIDDOR tracking |
-| Complaints | `/api/homes/:slug/complaints` | Complaints and satisfaction surveys |
-| Maintenance | `/api/homes/:slug/maintenance` | Environment checks, certificates |
-| IPC | `/api/homes/:slug/ipc` | Infection prevention audits, outbreaks |
-| Risks | `/api/homes/:slug/risks` | Risk register, actions, reviews |
-| Policies | `/api/homes/:slug/policies` | Policy review tracking |
-| Whistleblowing | `/api/homes/:slug/whistleblowing` | Speak-up concerns |
-| DoLS | `/api/homes/:slug/dols` | DoLS/LPS applications, MCA assessments |
-| Care Certificate | `/api/homes/:slug/care-cert` | 16-standard progress tracking |
-| Payroll | `/api/homes/:slug/payroll` | Timesheets, pay rates, runs, agency |
-| HR | `/api/homes/:slug/hr` | Disciplinary, grievance, performance, absence, contracts |
-| Finance | `/api/homes/:slug/finance` | Income, expenses, receivables, payables |
-| GDPR | `/api/homes/:slug/gdpr` | Data requests, breaches, retention, consent |
-| CQC Evidence | `/api/homes/:slug/cqc-evidence` | Quality statements, compliance scoring |
-| Dashboard | `/api/homes/:slug/dashboard` | Aggregated KPIs and alerts |
+| Homes | `/api/homes` | Home config and access |
+| Dashboard | `/api/dashboard` | Aggregated KPIs and alerts |
+| Scheduling | `/api/scheduling` | Overrides, rota, daily status |
+| Staff | `/api/staff` | Staff register and onboarding-related data |
+| Training | `/api/training` | Training records, types, compliance |
+| Payroll | `/api/payroll` | Timesheets, runs, pensions, SSP, exports |
+| Finance | `/api/finance` | Residents, invoices, expenses, beds |
+| HR | `/api/hr` | Disciplinary, grievance, performance, contracts |
+| GDPR | `/api/gdpr` | SARs, breaches, retention, consent |
+| Export | `/api/export` | Controlled report/export data |
+| Audit | `/api/audit` | Audit log and report downloads |
 
 ## Testing
 
 ```bash
-# Unit tests (no DB required)
 npm test
-
-# Integration tests (requires running PostgreSQL with test DB)
-npm run test:integration
+npm run test:frontend
+npm run test:e2e
+npm run audit:routes
 ```
 
-Unit tests cover field mappers, business logic (Bradford scores, working-day calculations), and validation schemas.
+The current baseline is 2533 passing tests across 134 files, covering unit,
+integration, route, page, and targeted browser flows.
+
+## Key Docs
+
+- [docs/HARDENING_SUMMARY_2026-03-29.md](docs/HARDENING_SUMMARY_2026-03-29.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
+- [docs/AUTH.md](docs/AUTH.md)
+- [docs/BACKUP_DRILL.md](docs/BACKUP_DRILL.md)
 
 ## Deployment
 
@@ -139,16 +162,30 @@ docker build -t panama-staffing .
 docker run -p 3001:3001 --env-file .env panama-staffing
 ```
 
-The Dockerfile uses a multi-stage build: stage 1 builds the Vite frontend, stage 2 copies only production dependencies and compiled assets.
+The Dockerfile uses a multi-stage build: one stage builds the Vite frontend and
+the final stage ships only the runtime dependencies and compiled assets.
 
 ### Environment Variables
 
-See `.env.example` for the full list. Required:
+See `.env.example` for the full list. Core required values:
 
-- `JWT_SECRET` -- 64-char hex string for token signing
-- `ADMIN_PASSWORD_HASH` / `VIEWER_PASSWORD_HASH` -- bcrypt hashes
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` -- PostgreSQL connection
-- `ALLOWED_ORIGIN` -- CORS whitelist (e.g. `http://localhost:5173`)
+- `JWT_SECRET`
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- `ALLOWED_ORIGIN`
+
+Recommended production values now also include:
+
+- `JWT_EXPIRES_IN`
+- `DB_POOL_MAX`
+- `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`
+- `METRICS_TOKEN`
+- `SENTRY_DSN`
+- `SENTRY_TRACES_SAMPLE_RATE`
+- `VITE_SENTRY_DSN`
+- `VITE_SENTRY_TRACES_SAMPLE_RATE`
+- `BACKUP_S3_BUCKET` or `BACKUP_SCP_TARGET`
+- `VERIFY_AFTER_BACKUP`
+- `HEALTHCHECK_URL`
 
 ## License
 

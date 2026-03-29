@@ -2,6 +2,8 @@
 
 Operational procedures for common failure scenarios. For deployment procedures,
 see [DEPLOYMENT.md](DEPLOYMENT.md). For rollback, see [ROLLBACK.md](ROLLBACK.md).
+For the current hardening baseline, see
+[HARDENING_SUMMARY_2026-03-29.md](HARDENING_SUMMARY_2026-03-29.md).
 
 ## 1. Auth Outage
 
@@ -130,6 +132,7 @@ For a healthy production install:
 - `VITE_SENTRY_DSN` set if you want frontend reporting
 - `VITE_SENTRY_TRACES_SAMPLE_RATE` set above `0` if you want frontend traces
 - `METRICS_TOKEN` set if you want `/metrics`
+- request logs should include `reqId`, and where available `homeSlug` and `username`
 
 ## General Escalation
 

@@ -2,6 +2,9 @@
 
 Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built for UK residential care homes. Self-hosted, no subscription.
 
+Latest platform baseline note:
+- `docs/HARDENING_SUMMARY_2026-03-29.md` - summary of the recent auth, scheduling, payroll, GDPR, ops, and test hardening work
+
 ## Engineering Standards — Always Active
 
 **Default thinking mode: experienced-dev.** Every task in this codebase — writing, reviewing, debugging, architecture, deployment — is performed through the lens of a senior developer with 20+ years of production experience. The full skill is at `~/.claude/commands/experienced-dev.md`.
@@ -131,6 +134,10 @@ npm run dev          # Starts both servers concurrently
 Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 
 ## Tech Stack
+
+Current baseline:
+- PostgreSQL schema is at 131 migrations
+- Vitest baseline is 2,533+ tests across 134 files
 
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
 - **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 117 migrations)
