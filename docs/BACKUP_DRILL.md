@@ -39,17 +39,18 @@ scripts/verify-backup.sh
 - [ ] Script exits 0
 - [ ] Output shows row counts for key tables (staff, homes, audit_log)
 
-### 3. Check migration version match
+### 3. Check migration version
 
 ```bash
 # Current DB migration version
 psql -c "SELECT MAX(id) FROM migrations;"
 
-# Health endpoint version
-curl -s http://localhost:3001/health | jq '.migrationVersion'
+# Current app health
+curl -s http://localhost:3001/health | jq .
 ```
 
-- [ ] Both values match
+- [ ] Migration query returned the expected latest version
+- [ ] Health endpoint still returns `status: "ok"` and `db: "ok"`
 
 ### 4. Test restore to scratch database (quarterly)
 

@@ -19,11 +19,13 @@ import { __primeBankHolidayCacheForTests, __resetBankHolidayCacheForTests } from
 const PREFIX = 'coverage-routes';
 const ADMIN_USER = `${PREFIX}-admin`;
 const SIGNOFF_USER = `${PREFIX}-signoff`;
+const TRAINING_LEAD_USER = `${PREFIX}-training-lead`;
 const VIEWER_USER = `${PREFIX}-viewer`;
 const PW = 'CoverageTest!2026';
 
 let adminToken;
 let signoffToken;
+let trainingLeadToken;
 let viewerToken;
 let homeAId;
 let homeASlug;
@@ -100,8 +102,9 @@ beforeAll(async () => {
      VALUES
        ($1, $4, 'admin', true, 'Coverage Admin', 'test-setup'),
        ($2, $4, 'admin', true, 'Coverage Signoff', 'test-setup'),
-       ($3, $4, 'viewer', true, 'Coverage Viewer', 'test-setup')`,
-    [ADMIN_USER, SIGNOFF_USER, VIEWER_USER, hash]
+       ($3, $4, 'viewer', true, 'Coverage Training Lead', 'test-setup'),
+       ($5, $4, 'viewer', true, 'Coverage Viewer', 'test-setup')`,
+    [ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, hash, VIEWER_USER]
   );
 
   await pool.query(
@@ -109,16 +112,19 @@ beforeAll(async () => {
      VALUES
        ($1, $4, 'home_manager', NULL, 'test-setup'),
        ($2, $4, 'home_manager', NULL, 'test-setup'),
-       ($3, $4, 'viewer', NULL, 'test-setup')`,
-    [ADMIN_USER, SIGNOFF_USER, VIEWER_USER, homeAId]
+       ($3, $4, 'training_lead', NULL, 'test-setup'),
+       ($5, $4, 'viewer', NULL, 'test-setup')`,
+    [ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, homeAId, VIEWER_USER]
   );
 
   const adminLogin = await request(app).post('/api/login').send({ username: ADMIN_USER, password: PW }).expect(200);
   const signoffLogin = await request(app).post('/api/login').send({ username: SIGNOFF_USER, password: PW }).expect(200);
+  const trainingLeadLogin = await request(app).post('/api/login').send({ username: TRAINING_LEAD_USER, password: PW }).expect(200);
   const viewerLogin = await request(app).post('/api/login').send({ username: VIEWER_USER, password: PW }).expect(200);
 
   adminToken = adminLogin.body.token;
   signoffToken = signoffLogin.body.token;
+  trainingLeadToken = trainingLeadLogin.body.token;
   viewerToken = viewerLogin.body.token;
 }, 20000);
 
@@ -257,9 +263,26 @@ describe('dashboard and export routes', () => {
     const exportRes = await authGet(`/api/export?home=${homeASlug}`, viewerToken).expect(200);
     expect(exportRes.headers['content-type']).toMatch(/application\/json/);
     expect(exportRes.headers['content-disposition']).toMatch(/attachment/);
+    expect(exportRes.headers['cache-control']).toBe('no-store, no-cache, must-revalidate, private');
     expect(exportRes.body.staff).toBeDefined();
 
     await authGet(`/api/export?home=${homeBSlug}`, viewerToken).expect(403);
+  });
+
+  it('redacts staff PII for training leads in export and data responses', async () => {
+    const exportRes = await authGet(`/api/export?home=${homeASlug}`, trainingLeadToken).expect(200);
+    const exportStaff = exportRes.body.staff.find((row) => row.id === 'CV001');
+    expect(exportStaff).toBeTruthy();
+    expect(exportStaff).not.toHaveProperty('hourly_rate');
+    expect(exportStaff).not.toHaveProperty('ni_number');
+    expect(exportStaff).not.toHaveProperty('date_of_birth');
+
+    const dataRes = await authGet(`/api/data?home=${homeASlug}`, trainingLeadToken).expect(200);
+    const dataStaff = dataRes.body.staff.find((row) => row.id === 'CV001');
+    expect(dataStaff).toBeTruthy();
+    expect(dataStaff).not.toHaveProperty('hourly_rate');
+    expect(dataStaff).not.toHaveProperty('ni_number');
+    expect(dataStaff).not.toHaveProperty('date_of_birth');
   });
 });
 

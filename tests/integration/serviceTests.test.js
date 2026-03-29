@@ -227,6 +227,17 @@ describe('homeService', () => {
       expect(staff).toHaveProperty('team');
     });
 
+    it('strips payroll and identity PII for training lead role', async () => {
+      const data = await homeService.assembleData(SLUG, 'training_lead');
+      const staff = data.staff.find(s => s.id === 'svc-S001');
+      expect(staff).toBeTruthy();
+      expect(staff).not.toHaveProperty('hourly_rate');
+      expect(staff).not.toHaveProperty('ni_number');
+      expect(staff).not.toHaveProperty('date_of_birth');
+      expect(staff).toHaveProperty('id');
+      expect(staff).toHaveProperty('name');
+    });
+
     it('throws NotFoundError for nonexistent home', async () => {
       await expect(
         homeService.assembleData('nonexistent-slug-xyz', 'admin'),

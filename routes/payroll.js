@@ -38,6 +38,7 @@ import { isOwnDataOnly } from '../shared/roles.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
+const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
 
 /**
  * For own-data roles (staff_member): require a linked staff_id.
@@ -452,6 +453,7 @@ router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAcces
     );
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', SENSITIVE_DOWNLOAD_CACHE_CONTROL);
     res.send(csv);
   } catch (err) { next(err); }
 });
@@ -474,6 +476,7 @@ router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requi
     const pdf = generatePayslipPDF(payslips[0]);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="payslip_${staffId}_${payslips[0].run.period_start}.pdf"`);
+    res.setHeader('Cache-Control', SENSITIVE_DOWNLOAD_CACHE_CONTROL);
     res.send(Buffer.from(pdf.output('arraybuffer')));
   } catch (err) { next(err); }
 });
@@ -812,6 +815,7 @@ router.get('/runs/:runId/summary-pdf', readRateLimiter, requireAuth, requireHome
       'Content-Disposition',
       `attachment; filename="payroll_summary_${run.period_start}_${run.period_end}.pdf"`,
     );
+    res.setHeader('Cache-Control', SENSITIVE_DOWNLOAD_CACHE_CONTROL);
     res.send(buffer);
   } catch (err) { next(err); }
 });

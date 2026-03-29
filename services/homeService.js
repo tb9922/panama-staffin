@@ -49,8 +49,8 @@ export async function assembleData(homeSlug, userRole) {
   // PII allowlist — only roles with legitimate HR/payroll/staff-management access
   // receive NI numbers, date_of_birth, and hourly_rate.
   // Denylist is unsafe: new PII fields would leak until explicitly blocked.
-  // Roles excluded: shift_coordinator, viewer, staff_member (and any unknown role).
-  const PII_ROLES = new Set(['admin', 'home_manager', 'deputy_manager', 'hr_officer', 'finance_officer', 'training_lead']);
+  // Roles excluded: training_lead, shift_coordinator, viewer, staff_member (and any unknown role).
+  const PII_ROLES = new Set(['admin', 'home_manager', 'deputy_manager', 'hr_officer', 'finance_officer']);
   if (!PII_ROLES.has(userRole)) {
     payload.staff = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
       ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));

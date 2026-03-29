@@ -37,6 +37,7 @@ router.get('/admin/audit-export', requireAuth, requireHomeAccess, requireModule(
     const to = dateParamSchema.safeParse(req.query.to).success ? req.query.to : '9999-12-31';
     const rows = await auditRepo.exportHrByHome(req.home.slug, from, to);
     res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${req.home.slug}-${from}-${to}.json"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json(rows);
   } catch (err) { next(err); }
 });

@@ -26,8 +26,9 @@ pm2 restart panama              # Or: systemctl restart panama
 ## Post-Deploy Verification
 
 - [ ] Health check: `curl -s http://localhost:3001/health | jq .`
-  - `status: "ok"`, `db: "ok"`, `migrationVersion` matches expected
-  - `pool.waiting` is 0
+  - `status: "ok"`, `db: "ok"`
+- [ ] Metrics check when enabled: `curl -s -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:3001/metrics | grep panama_db_pool_waiting`
+  - `panama_db_pool_waiting` is `0`
 - [ ] Login test: admin + viewer credentials both work
 - [ ] Data loads: navigate to Dashboard, confirm data renders
 - [ ] PM2 status: `pm2 status` shows `online`, no restart loops

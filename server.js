@@ -150,28 +150,17 @@ app.get('/readiness', (req, res) => {
 // Health check — intentionally public (Docker/load balancer probe)
 app.get('/health', async (req, res) => {
   let dbOk = false;
-  let queryMs = null;
-  let migrationVersion = null;
   try {
-    const start = Date.now();
-    const [, mv] = await Promise.race([
-      Promise.all([pool.query('SELECT 1'), pool.query('SELECT MAX(id) AS v FROM migrations')]),
+    await Promise.race([
+      pool.query('SELECT 1'),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
     ]);
-    queryMs = Date.now() - start;
     dbOk = true;
-    migrationVersion = mv.rows[0]?.v ?? null;
   } catch { /* db down or timeout */ }
+  res.setHeader('Cache-Control', 'no-store');
   res.status(dbOk ? 200 : 503).json({
     status: dbOk ? 'ok' : 'degraded',
     db: dbOk ? 'ok' : 'error',
-    queryMs,
-    migrationVersion,
-    pool: {
-      total: pool.totalCount,
-      idle: pool.idleCount,
-      waiting: pool.waitingCount,
-    },
   });
 });
 
