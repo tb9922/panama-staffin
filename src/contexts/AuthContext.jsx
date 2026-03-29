@@ -8,9 +8,14 @@ export function AuthProvider({ children }) {
 
   const handleLogin = useCallback((u) => setUser(u), []);
 
-  const handleLogout = useCallback(() => {
-    apiLogout();
-    setUser(null);
+  const handleLogout = useCallback(async (options = {}) => {
+    try {
+      await apiLogout(options);
+      setUser(null);
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   const isViewer = user?.role === 'viewer';

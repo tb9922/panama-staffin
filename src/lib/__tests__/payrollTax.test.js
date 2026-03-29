@@ -96,6 +96,30 @@ describe('getHMRCPaymentDueDate', () => {
   });
 });
 
+describe('calculatePensionContributions overrides', () => {
+  it('uses enrolment contribution overrides when present', () => {
+    const result = calculatePensionContributions(
+      500,
+      'weekly',
+      {
+        lower_qualifying_weekly: 125,
+        upper_qualifying_weekly: 967,
+        employee_rate: 0.05,
+        employer_rate: 0.03,
+      },
+      {
+        status: 'eligible_enrolled',
+        contribution_override_employee: 0.02,
+        contribution_override_employer: 0.07,
+      }
+    );
+
+    expect(result.qualifyingEarnings).toBe(375);
+    expect(result.employeeAmount).toBe(7.5);
+    expect(result.employerAmount).toBe(26.25);
+  });
+});
+
 describe('getPayPeriodNumber', () => {
   it('weekly: Apr 12 2025 → period 1 (first week after Apr 6)', () => {
     expect(getPayPeriodNumber('2025-04-12', 'weekly')).toBe(1);

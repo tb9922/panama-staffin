@@ -3,6 +3,7 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import {
   getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
@@ -33,6 +34,8 @@ const ROLE_GROUPS = [
 
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,7 +82,9 @@ export default function UserManagement() {
     <div className={PAGE.container}>
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>User Management</h1>
-        <button className={`${BTN.primary} ${BTN.sm}`} onClick={() => setAddOpen(true)}>Add User</button>
+        {canManageUsers && (
+          <button className={`${BTN.primary} ${BTN.sm}`} onClick={() => setAddOpen(true)}>Add User</button>
+        )}
       </div>
 
       {error && (
@@ -96,7 +101,9 @@ export default function UserManagement() {
 
       {users.length === 0 ? (
         <div className={CARD.padded}>
-          <p className="text-gray-400 text-sm text-center py-8">No users assigned to this home. Use Add User to create one.</p>
+          <p className="text-gray-400 text-sm text-center py-8">
+            No users assigned to this home.{canManageUsers ? ' Use Add User to create one.' : ''}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -138,9 +145,15 @@ export default function UserManagement() {
                         <td className={TABLE.td}>{u.granted_by || '\u2014'}</td>
                         <td className={TABLE.td}>
                           <div className="flex items-center gap-1">
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Role</button>
+                            {canManageUsers && (
+                              <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setEditUser(u)}>Edit</button>
+                            )}
+                            {isPlatformAdmin && (
+                              <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setResetPwUser(u)}>Reset PW</button>
+                            )}
+                            {canManageUsers && (
+                              <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setRolesUser(u)}>Role</button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -245,6 +258,7 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
 // ── Edit User Modal ──────────────────────────────────────────────────────────
 
 function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
+  const { isPlatformAdmin } = useAuth();
   const [form, setForm] = useState({ displayName: user.display_name || '', active: user.active });
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(null);
@@ -256,7 +270,9 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
     setLocalError(null);
     setSaving(true);
     try {
-      await updateUser(homeSlug, user.id, { displayName: form.displayName, active: form.active });
+      const payload = { displayName: form.displayName };
+      if (isPlatformAdmin) payload.active = form.active;
+      await updateUser(homeSlug, user.id, payload);
       onSuccess(`User "${user.username}" updated`);
       onClose();
     } catch (err) {
@@ -275,12 +291,18 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
             <label className={INPUT.label}>Display Name</label>
             <input className={INPUT.base} value={form.displayName} onChange={e => set('displayName', e.target.value)} maxLength={200} autoFocus />
           </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="user-active" checked={form.active} onChange={e => set('active', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-            <label htmlFor="user-active" className="text-sm text-gray-700">Active</label>
-          </div>
-          {!form.active && (
+          {isPlatformAdmin ? (
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="user-active" checked={form.active} onChange={e => set('active', e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <label htmlFor="user-active" className="text-sm text-gray-700">Active</label>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+              Home managers can update display names here. Account status changes require a platform admin.
+            </p>
+          )}
+          {isPlatformAdmin && !form.active && (
             <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
               Deactivating a user will immediately revoke all their sessions.
             </p>

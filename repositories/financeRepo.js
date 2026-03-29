@@ -1,7 +1,8 @@
 import { pool } from '../db.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 function d(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : v; }
-function ts(v) { return v instanceof Date ? v.toISOString() : v; }
+const ts = toIsoOrNull;
 const f = v => v != null ? parseFloat(v) : null;
 
 /* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */
@@ -204,7 +205,8 @@ export async function recalculateResidentBalance(residentId, homeId, client) {
       WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL
         AND status = ANY($3::text[])
         AND balance_due > 0
-    ), 0)
+    ), 0),
+    updated_at = NOW()
     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
     RETURNING outstanding_balance
   `, [residentId, homeId, OUTSTANDING_STATUSES]);
@@ -218,6 +220,7 @@ export async function updateResidentPaymentInfo(residentId, homeId, paymentDate,
     UPDATE finance_residents SET
       last_payment_date = $3,
       last_payment_amount = $4,
+      updated_at = NOW(),
       outstanding_balance = COALESCE((
         SELECT SUM(balance_due) FROM finance_invoices
         WHERE resident_id = $1 AND home_id = $2 AND deleted_at IS NULL

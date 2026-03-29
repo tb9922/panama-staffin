@@ -1,3 +1,4 @@
+import { ConflictError } from '../../errors.js';
 import { pool, createShaper, paginate } from './shared.js';
 
 const COLS = `id, home_id, staff_id, date_raised, raised_by_method,
@@ -123,12 +124,12 @@ export async function updateGrievance(id, homeId, data, client, version) {
 
 // ── Grievance Actions ───────────────────────────────────────────────────────
 
-const ACTION_COLS = 'id, home_id, grievance_id, description, responsible, due_date, completed_date, status, created_at';
+const ACTION_COLS = 'id, home_id, grievance_id, description, responsible, due_date, completed_date, status, created_at, updated_at, version';
 
 const shapeGrvAction = createShaper({
-  fields: ['id', 'home_id', 'grievance_id', 'description', 'responsible', 'due_date', 'completed_date', 'status', 'created_at'],
+  fields: ['id', 'home_id', 'grievance_id', 'description', 'responsible', 'due_date', 'completed_date', 'status', 'created_at', 'updated_at', 'version'],
   dates: ['due_date', 'completed_date'],
-  timestamps: ['created_at'],
+  timestamps: ['created_at', 'updated_at'],
 });
 
 export async function findGrievanceActions(grievanceId, homeId, client) {
@@ -137,6 +138,15 @@ export async function findGrievanceActions(grievanceId, homeId, client) {
     `SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE grievance_id = $1 AND home_id = $2 ORDER BY created_at`,
     [grievanceId, homeId]);
   return rows.map(shapeGrvAction);
+}
+
+export async function findGrievanceActionById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE id = $1 AND home_id = $2`,
+    [id, homeId]
+  );
+  return shapeGrvAction(rows[0]);
 }
 
 export async function createGrievanceAction(grievanceId, homeId, data, client) {
@@ -150,7 +160,7 @@ export async function createGrievanceAction(grievanceId, homeId, data, client) {
   return shapeGrvAction(rows[0]);
 }
 
-export async function updateGrievanceAction(id, homeId, data, client) {
+export async function updateGrievanceAction(id, homeId, data, client, version) {
   const conn = client || pool;
   const params = [id, homeId];
   const fields = [];
@@ -158,10 +168,24 @@ export async function updateGrievanceAction(id, homeId, data, client) {
   for (const key of settable) {
     if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
-  if (fields.length === 0) return shapeGrvAction((await conn.query(`SELECT ${ACTION_COLS} FROM hr_grievance_actions WHERE id = $1 AND home_id = $2`, [id, homeId])).rows[0]);
-  const { rows } = await conn.query(
-    `UPDATE hr_grievance_actions SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING ${ACTION_COLS}`,
+  if (fields.length === 0) return findGrievanceActionById(id, homeId, client);
+  fields.push('version = version + 1');
+  fields.push('updated_at = NOW()');
+  let sql = `UPDATE hr_grievance_actions SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2`;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  sql += ` RETURNING ${ACTION_COLS}`;
+  const { rows, rowCount } = await conn.query(
+    sql,
     params
   );
+  if (rowCount === 0 && version != null) {
+    const existing = await findGrievanceActionById(id, homeId, client);
+    if (existing) {
+      throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+    }
+  }
   return shapeGrvAction(rows[0]);
 }

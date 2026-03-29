@@ -12,6 +12,7 @@ export default function Config() {
   const canEdit = canWrite('config');
   const homeSlug = getCurrentHome();
   const [config, setConfig] = useState(null);
+  const [configUpdatedAt, setConfigUpdatedAt] = useState(null);
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -31,6 +32,7 @@ export default function Config() {
       setLoadError(null);
       const d = await getSchedulingData(homeSlug);
       setConfig(JSON.parse(JSON.stringify(d.config || {})));
+      setConfigUpdatedAt(d.configUpdatedAt || null);
       setStaff(d.staff || []);
     } catch (e) {
       setLoadError(e.message);
@@ -59,7 +61,8 @@ export default function Config() {
     setSaving(true);
     setSaveError(null);
     try {
-      await saveConfig(homeSlug, config);
+      const result = await saveConfig(homeSlug, config, { clientUpdatedAt: configUpdatedAt });
+      if (result?.updated_at) setConfigUpdatedAt(result.updated_at);
       setSaved(true);
       setDirty(false);
       setTimeout(() => setSaved(false), 2000);

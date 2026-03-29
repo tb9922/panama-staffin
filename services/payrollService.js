@@ -414,7 +414,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         pensionEmployee = pr.employeeAmount;
         pensionEmployer = pr.employerAmount;
         // Record contribution row (deletes+recreates on recalculate via cascade on payroll_lines)
-        if (pr.employeeAmount > 0) {
+        if (pr.employeeAmount > 0 || pr.employerAmount > 0) {
           await pensionRepo.insertContribution(homeId, {
             payroll_line_id: line.id,
             staff_id: s.id,

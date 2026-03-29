@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
-
-const ts = v => v instanceof Date ? v.toISOString() : v;
+import { paginateResult } from '../lib/pagination.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 /* Explicit column lists — no SELECT * — so future columns don't auto-leak to API consumers. */
 const DOLS_COLS = `id, home_id, resident_name, resident_id, dob, room_number,
@@ -33,7 +33,7 @@ function shapeDolsRow(row) {
     authorisation_number: row.authorisation_number, authorising_authority: row.authorising_authority,
     restrictions: typeof row.restrictions === 'string' ? JSON.parse(row.restrictions) : row.restrictions,
     reviewed_date: row.reviewed_date, review_status: row.review_status, next_review_date: row.next_review_date,
-    notes: row.notes, updated_at: ts(row.updated_at),
+    notes: row.notes, updated_at: toIsoOrNull(row.updated_at),
   };
 }
 
@@ -43,13 +43,8 @@ function shapeMcaRow(row) {
     resident_name: row.resident_name, resident_id: row.resident_id || null, assessment_date: row.assessment_date, assessor: row.assessor,
     decision_area: row.decision_area, lacks_capacity: row.lacks_capacity,
     best_interest_decision: row.best_interest_decision, next_review_date: row.next_review_date,
-    notes: row.notes, updated_at: ts(row.updated_at),
+    notes: row.notes, updated_at: toIsoOrNull(row.updated_at),
   };
-}
-
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
@@ -60,7 +55,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeDolsRow);
+  return paginateResult(rows, shapeDolsRow);
 }
 
 export async function syncDols(homeId, arr, client) {
@@ -209,7 +204,7 @@ export async function findMcaByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeMcaRow);
+  return paginateResult(rows, shapeMcaRow);
 }
 
 export async function syncMca(homeId, arr, client) {

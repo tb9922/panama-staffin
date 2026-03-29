@@ -83,22 +83,20 @@ router.post('/', loginLimiter, async (req, res, next) => {
 // ── Logout (clear cookie) ───────────────────────────────────────────────────
 
 router.post('/logout', requireAuth, async (req, res) => {
-  let revoked = true;
   if (req.user.jti) {
     const expiresAt = new Date(req.user.exp * 1000);
     try {
       await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt);
     } catch (err) {
       logger.error({ jti: req.user.jti, err: err.message }, 'logout deny-list write failed');
-      revoked = false;
+      return res.status(503).json({ error: 'Logout failed — please retry' });
     }
   }
   auditService.log('logout', '-', req.user.username, null).catch(() => {});
-  // Always clear cookies regardless of deny-list outcome (defense in depth)
   res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
-  res.json({ ok: true, revoked });
+  res.json({ ok: true, revoked: true });
 });
 
 // ── Token revocation ──────────────────────────────────────────────────────────

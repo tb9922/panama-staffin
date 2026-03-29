@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
-const ts = v => v instanceof Date ? v.toISOString() : v;
+const ts = toIsoOrNull;
 
 const COLS = 'id, home_id, title, description, category, owner, likelihood, impact, inherent_risk, controls, residual_likelihood, residual_impact, residual_risk, actions, last_reviewed, next_review, status, updated_at, version';
 

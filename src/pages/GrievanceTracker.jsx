@@ -184,7 +184,12 @@ export default function GrievanceTracker() {
     if (saving) return;
     setSaving(true);
     try {
-      await updateGrievanceAction(action.id, { ...action, status: 'completed', completed_date: new Date().toISOString().slice(0, 10) });
+      await updateGrievanceAction(action.id, {
+        ...action,
+        status: 'completed',
+        completed_date: new Date().toISOString().slice(0, 10),
+        _version: action.version,
+      });
       setActions(await getGrievanceActions(editing.id));
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }

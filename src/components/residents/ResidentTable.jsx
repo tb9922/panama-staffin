@@ -19,12 +19,12 @@ function renderFeeReview(r) {
   return <span className={color}>{r.next_fee_review}</span>;
 }
 
-export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge, onAdmit }) {
+export default function ResidentTable({ residents, canEdit, onEdit, onDischarge, onAdmit }) {
   if (residents.length === 0) {
     return (
       <div className={CARD.padded + ' text-center py-12'}>
         <p className="text-gray-500 mb-4">No residents yet</p>
-        {isAdmin && (
+        {canEdit && (
           <button className={BTN.primary} onClick={onAdmit}>Admit your first resident</button>
         )}
       </div>
@@ -68,7 +68,7 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
               <th scope="col" className={TABLE.th + ' text-right'}>Balance</th>
               <th scope="col" className={TABLE.th}>Last Paid</th>
               <th scope="col" className={TABLE.th}>Status</th>
-              {isAdmin && <th scope="col" className={TABLE.th}>Actions</th>}
+              {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -93,7 +93,7 @@ export default function ResidentTable({ residents, isAdmin, onEdit, onDischarge,
                 <td className={TABLE.td}>
                   <span className={BADGE[getStatusBadge(r.status, RESIDENT_STATUSES)]}>{getLabel(r.status, RESIDENT_STATUSES)}</span>
                 </td>
-                {isAdmin && (
+                {canEdit && (
                   <td className={TABLE.td} onClick={e => e.stopPropagation()}>
                     {r.status === 'active' && (
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => onDischarge(r)}>Discharge</button>

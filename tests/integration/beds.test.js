@@ -16,6 +16,17 @@ import * as dashboardRepo from '../../repositories/dashboardRepo.js';
 
 let homeA, homeB, residentId;
 const bedIds = [];
+let residentSeq = 1;
+
+async function createResident(homeId, name = `Test Resident ${residentSeq++}`) {
+  const { rows: [resident] } = await pool.query(
+    `INSERT INTO finance_residents (home_id, resident_name, room_number, admission_date, care_type, funding_type, weekly_fee, status, created_by)
+     VALUES ($1, $2, '1A', '2025-01-01', 'residential', 'self_funded', 1000, 'active', 'test')
+     RETURNING id`,
+    [homeId, name]
+  );
+  return resident.id;
+}
 
 beforeAll(async () => {
   // Clean up previous test data
@@ -162,16 +173,92 @@ describe('bedRepo: updateStatus', () => {
       booked_until: null,
       hold_expires: null,
       status_since: '2026-03-02',
+      notes: null,
       updated_by: 'admin',
     });
 
     expect(updated.status).toBe('available');
     expect(updated.reserved_until).toBeNull();
     expect(updated.booked_from).toBeNull();
+    expect(updated.notes).toBeNull();
   });
 });
 
 // ── bedTransitionRepo ─────────────────────────────────────────────────────────
+
+describe('bedService: update and delete metadata', () => {
+  it('updates bed metadata for an available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'EDIT001',
+      room_name: 'Willow',
+      room_type: 'single',
+      floor: '1',
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    const updated = await bedService.updateBed(bed.id, homeA, 'bed-test-a', {
+      room_number: 'EDIT001A',
+      room_name: 'Willow Suite',
+      room_type: 'en_suite',
+      floor: 'Ground',
+      notes: 'Updated via test',
+      clientUpdatedAt: bed.updated_at,
+    }, 'admin');
+
+    expect(updated.room_number).toBe('EDIT001A');
+    expect(updated.room_name).toBe('Willow Suite');
+    expect(updated.room_type).toBe('en_suite');
+    expect(updated.floor).toBe('Ground');
+    expect(updated.notes).toBe('Updated via test');
+  });
+
+  it('blocks room number changes for occupied beds', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'EDIT002',
+      room_type: 'single',
+      status: 'occupied',
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    await expect(bedService.updateBed(bed.id, homeA, 'bed-test-a', {
+      room_number: 'EDIT002B',
+      room_name: 'Occupied Room',
+      room_type: 'single',
+      floor: '1',
+      notes: '',
+      clientUpdatedAt: bed.updated_at,
+    }, 'admin')).rejects.toThrow(/room number can only be changed/i);
+  });
+
+  it('deletes an available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'DEL001',
+      room_type: 'single',
+      created_by: 'admin',
+    });
+
+    const deleted = await bedService.deleteBed(bed.id, homeA, 'bed-test-a', 'admin', bed.updated_at);
+    const found = await bedRepo.findById(bed.id, homeA);
+
+    expect(deleted.room_number).toBe('DEL001');
+    expect(found).toBeNull();
+  });
+
+  it('blocks deleting a non-available bed', async () => {
+    const bed = await bedRepo.create(homeA, {
+      room_number: 'DEL002',
+      room_type: 'single',
+      status: 'maintenance',
+      created_by: 'admin',
+    });
+    bedIds.push(bed.id);
+
+    await expect(bedService.deleteBed(bed.id, homeA, 'bed-test-a', 'admin', bed.updated_at))
+      .rejects.toThrow(/only available beds can be deleted/i);
+  });
+});
 
 describe('bedTransitionRepo', () => {
   let bedId;
@@ -219,6 +306,13 @@ describe('bedTransitionRepo', () => {
   it('getLatestTransition returns most recent', async () => {
     const latest = await bedTransitionRepo.getLatestTransition(bedId, homeA);
     expect(latest.to_status).toBe('reserved');
+  });
+
+  it('returns monthly occupancy rows without querying a deleted_at column', async () => {
+    const rows = await bedTransitionRepo.getMonthlyOccupancy(homeA, 3);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveProperty('month');
+    expect(rows[0]).toHaveProperty('occupancyRate');
   });
 });
 
@@ -425,6 +519,37 @@ describe('bedService: validation errors', () => {
     })).rejects.toThrow(/resident/i);
   });
 
+  it('rejects assigning a resident who already occupies another bed', async () => {
+    const duplicateResidentId = await createResident(homeA, 'Duplicate Bed Resident');
+    const first = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'UNI001' }, 'admin');
+    const second = await bedService.createBed(homeA, 'bed-test-a', { room_number: 'UNI002' }, 'admin');
+    bedIds.push(first.id, second.id);
+
+    await bedService.transitionStatus(first.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: first.updated_at,
+    }).then((reserved) => bedService.transitionStatus(first.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: duplicateResidentId,
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    }));
+
+    const reservedSecond = await bedService.transitionStatus(second.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: second.updated_at,
+    });
+
+    await expect(bedService.transitionStatus(second.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: duplicateResidentId,
+      username: 'admin',
+      clientUpdatedAt: reservedSecond.updated_at,
+    })).rejects.toThrow(/already assigned/i);
+  });
+
   it('rejects emergency admission without skipReservation flag', async () => {
     // Release reservation first
     const avail = await bedService.transitionStatus(bedId, homeA, 'bed-test-a', {
@@ -476,9 +601,11 @@ describe('bedService: optimistic locking', () => {
 // ── bedService: moveBed ──────────────────────────────────────────────────────
 
 describe('bedService: moveBed', () => {
-  let fromBedId, toBedId;
+  let fromBedId, toBedId, moveResidentId;
 
   beforeAll(async () => {
+    moveResidentId = await createResident(homeA, 'Move Bed Resident');
+
     // Create source bed (occupied) and destination bed (available)
     const fromBed = await bedService.createBed(homeA, 'bed-test-a', {
       room_number: 'M001',
@@ -494,7 +621,7 @@ describe('bedService: moveBed', () => {
     });
     await bedService.transitionStatus(fromBedId, homeA, 'bed-test-a', {
       status: 'occupied',
-      residentId,
+      residentId: moveResidentId,
       username: 'admin',
       clientUpdatedAt: reserved.updated_at,
     });
@@ -512,7 +639,7 @@ describe('bedService: moveBed', () => {
     expect(result.from.status).toBe('vacating');
     expect(result.from.resident_id).toBeNull();
     expect(result.to.status).toBe('occupied');
-    expect(result.to.resident_id).toBe(residentId);
+    expect(result.to.resident_id).toBe(moveResidentId);
   });
 
   it('rejects move from non-occupied bed', async () => {
@@ -528,6 +655,7 @@ describe('bedService: moveBed', () => {
   });
 
   it('rejects move to non-available bed', async () => {
+    const secondMoveResidentId = await createResident(homeA, 'Move Bed Resident 2');
     // toBed is now occupied, create a new occupied source
     const src = await bedService.createBed(homeA, 'bed-test-a', {
       room_number: 'M004',
@@ -540,7 +668,7 @@ describe('bedService: moveBed', () => {
     });
     await bedService.transitionStatus(src.id, homeA, 'bed-test-a', {
       status: 'occupied',
-      residentId,
+      residentId: secondMoveResidentId,
       username: 'admin',
       clientUpdatedAt: r1.updated_at,
     });
@@ -667,6 +795,7 @@ describe('Home isolation', () => {
 
 describe('bedRepo: expiring holds and stale occupants', () => {
   it('findExpiringHolds returns beds with holds expiring within range', async () => {
+    const holdResidentId = await createResident(homeA, 'Hospital Hold Resident');
     const bed = await bedService.createBed(homeA, 'bed-test-a', {
       room_number: 'EH001',
     }, 'admin');
@@ -680,7 +809,7 @@ describe('bedRepo: expiring holds and stale occupants', () => {
     });
     const r2 = await bedService.transitionStatus(bed.id, homeA, 'bed-test-a', {
       status: 'occupied',
-      residentId,
+      residentId: holdResidentId,
       username: 'admin',
       clientUpdatedAt: r1.updated_at,
     });

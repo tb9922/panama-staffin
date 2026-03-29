@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import PensionManager from '../PensionManager.jsx';
-
-// ---------------------------------------------------------------------------
-// Module mocks
-// ---------------------------------------------------------------------------
 
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
@@ -24,15 +21,7 @@ vi.mock('../../lib/api.js', async () => {
   };
 });
 
-// ---------------------------------------------------------------------------
-// Imports after mocks
-// ---------------------------------------------------------------------------
-
 import * as api from '../../lib/api.js';
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const MOCK_SCHED_DATA = {
   staff: [
@@ -51,8 +40,8 @@ const MOCK_SCHED_DATA = {
 const MOCK_CONFIG = {
   employee_rate: 0.05,
   employer_rate: 0.03,
-  lower_weekly: 120,
-  upper_weekly: 967,
+  lower_qualifying_weekly: 120,
+  upper_qualifying_weekly: 967,
 };
 
 const MOCK_ENROLMENTS = [
@@ -60,8 +49,8 @@ const MOCK_ENROLMENTS = [
     staff_id: 'S001',
     status: 'eligible_enrolled',
     enrolled_date: '2024-01-01',
-    opt_out_date: null,
-    re_enrolled_date: null,
+    opted_out_date: null,
+    reassessment_date: null,
     contribution_override_employee: null,
     contribution_override_employer: null,
     notes: '',
@@ -70,10 +59,10 @@ const MOCK_ENROLMENTS = [
     staff_id: 'S002',
     status: 'opted_out',
     enrolled_date: '2024-01-01',
-    opt_out_date: '2024-06-01',
-    re_enrolled_date: '2027-06-01',
-    contribution_override_employee: null,
-    contribution_override_employer: null,
+    opted_out_date: '2024-06-01',
+    reassessment_date: '2027-06-01',
+    contribution_override_employee: 0.055,
+    contribution_override_employer: 0.035,
     notes: 'Opted out by written notice',
   },
 ];
@@ -100,10 +89,6 @@ function renderViewer(enrolments) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe('PensionManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -111,7 +96,7 @@ describe('PensionManager', () => {
     api.getCurrentHome.mockReturnValue('test-home');
   });
 
-  it('smoke test -- renders without crashing', async () => {
+  it('renders without crashing', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Pension Auto-Enrolment')).toBeInTheDocument()
@@ -119,14 +104,14 @@ describe('PensionManager', () => {
   });
 
   it('shows loading state initially', () => {
-    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getPensionEnrolments.mockReturnValue(new Promise(() => {}));
     api.getPensionConfig.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<PensionManager />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
-  it('shows error message when API fails', async () => {
+  it('shows an error message when the API fails', async () => {
     api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
     api.getPensionEnrolments.mockRejectedValue(new Error('Connection refused'));
     api.getPensionConfig.mockResolvedValue(MOCK_CONFIG);
@@ -136,7 +121,7 @@ describe('PensionManager', () => {
     );
   });
 
-  it('renders pension config summary cards', async () => {
+  it('renders pension config summary cards with qualifying earnings values', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Employee contribution')).toBeInTheDocument()
@@ -144,9 +129,11 @@ describe('PensionManager', () => {
     expect(screen.getByText('Employer contribution')).toBeInTheDocument();
     expect(screen.getByText('Lower earnings')).toBeInTheDocument();
     expect(screen.getByText('Upper earnings')).toBeInTheDocument();
+    expect(screen.getByText('£120.00 /wk')).toBeInTheDocument();
+    expect(screen.getByText('£967.00 /wk')).toBeInTheDocument();
   });
 
-  it('renders enrolment table with correct column headers', async () => {
+  it('renders the enrolment table with action controls for managers', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByRole('columnheader', { name: 'Staff Member' })).toBeInTheDocument()
@@ -166,7 +153,7 @@ describe('PensionManager', () => {
     expect(screen.getByText('1 opted out')).toBeInTheDocument();
   });
 
-  it('shows Add / Update Enrolment button for admin', async () => {
+  it('shows the add enrolment button for managers', async () => {
     renderAdmin();
     await waitFor(() =>
       expect(screen.getByText('Pension Auto-Enrolment')).toBeInTheDocument()
@@ -174,7 +161,7 @@ describe('PensionManager', () => {
     expect(screen.getByRole('button', { name: 'Add / Update Enrolment' })).toBeInTheDocument();
   });
 
-  it('hides Add / Update Enrolment button and Actions column for viewer', async () => {
+  it('hides mutation controls for viewers', async () => {
     renderViewer();
     await waitFor(() =>
       expect(screen.getByText('Pension Auto-Enrolment')).toBeInTheDocument()
@@ -183,13 +170,32 @@ describe('PensionManager', () => {
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
   });
 
-  it('shows unrecorded staff alert when staff have no enrolment', async () => {
+  it('shows an alert when staff have no enrolment record', async () => {
     renderAdmin();
-    // Wait for scheduling data to load (which populates activeStaff / unrecorded list)
-    // S003 has no enrolment record — the alert depends on schedData being loaded
     await waitFor(() =>
       expect(screen.getByText(/have no pension enrolment record/)).toBeInTheDocument()
     );
     expect(screen.getAllByText(/Carol Davis/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('saves edits using the backend pension field names', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => expect(screen.getByText('Bob Jones')).toBeInTheDocument());
+
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[1]);
+    await user.click(screen.getByRole('button', { name: 'Save Enrolment' }));
+
+    await waitFor(() => expect(api.upsertPensionEnrolment).toHaveBeenCalled());
+    expect(api.upsertPensionEnrolment).toHaveBeenCalledWith('test-home', expect.objectContaining({
+      staff_id: 'S002',
+      opted_out_date: '2024-06-01',
+      reassessment_date: '2027-06-01',
+      contribution_override_employee: 0.055,
+      contribution_override_employer: 0.035,
+    }));
+    const payload = api.upsertPensionEnrolment.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('opt_out_date');
+    expect(payload).not.toHaveProperty('re_enrolled_date');
   });
 });

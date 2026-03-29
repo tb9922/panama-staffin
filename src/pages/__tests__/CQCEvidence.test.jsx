@@ -27,6 +27,10 @@ vi.mock('../../lib/api.js', async () => {
     getCqcEvidence: vi.fn(),
     createCqcEvidence: vi.fn(),
     deleteCqcEvidence: vi.fn(),
+    createSnapshot: vi.fn(),
+    getSnapshots: vi.fn(),
+    getSnapshot: vi.fn(),
+    signOffSnapshot: vi.fn(),
   };
 });
 
@@ -68,6 +72,10 @@ function setupApiMocks() {
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
   api.createCqcEvidence.mockResolvedValue({ id: 'ev-001' });
   api.deleteCqcEvidence.mockResolvedValue({});
+  api.createSnapshot.mockResolvedValue({ id: 'snap-001' });
+  api.getSnapshots.mockResolvedValue([]);
+  api.getSnapshot.mockResolvedValue({ id: 'snap-001', status: 'draft' });
+  api.signOffSnapshot.mockResolvedValue({});
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────────

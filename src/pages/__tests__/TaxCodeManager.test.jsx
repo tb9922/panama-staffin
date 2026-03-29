@@ -117,7 +117,7 @@ describe('TaxCodeManager', () => {
   });
 
   it('shows loading state initially', () => {
-    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getTaxCodes.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<TaxCodeManager />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();

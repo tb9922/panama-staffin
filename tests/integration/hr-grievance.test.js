@@ -219,6 +219,7 @@ describe('Grievance Actions: nested CRUD', () => {
     expect(action.home_id).toBe(homeA);
     expect(action.description).toBe('Interview witnesses');
     expect(action.status).toBe('pending');
+    expect(action.version).toBe(1);
   });
 
   it('lists actions for a grievance', async () => {
@@ -236,13 +237,22 @@ describe('Grievance Actions: nested CRUD', () => {
   });
 
   it('updates an action', async () => {
+    const current = await hrRepo.findGrievanceActions(grievanceId, homeA);
+    const target = current.find(action => action.id === actionId);
     const updated = await hrRepo.updateGrievanceAction(actionId, homeA, {
       status: 'completed',
       completed_date: '2026-04-10',
-    });
+    }, null, target.version);
 
     expect(updated.status).toBe('completed');
     expect(updated.completed_date).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    expect(updated.version).toBe(target.version + 1);
+  });
+
+  it('rejects stale grievance action updates', async () => {
+    await expect(hrRepo.updateGrievanceAction(actionId, homeA, {
+      status: 'cancelled',
+    }, null, 1)).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('actions isolated to home', async () => {
@@ -253,7 +263,7 @@ describe('Grievance Actions: nested CRUD', () => {
   it('action update blocked for wrong home', async () => {
     const updated = await hrRepo.updateGrievanceAction(actionId, homeB, {
       status: 'pending',
-    });
+    }, null, 2);
     // Should return undefined/null since no row matches
     expect(updated).toBeFalsy();
   });

@@ -139,14 +139,15 @@ export async function upsertAppraisal(homeId, staffId, record) {
     `INSERT INTO appraisals
        (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-     ON CONFLICT (home_id, id) DO UPDATE SET
-       date=EXCLUDED.date, appraiser=EXCLUDED.appraiser, objectives=EXCLUDED.objectives, training_needs=EXCLUDED.training_needs,
-       development_plan=EXCLUDED.development_plan, next_due=EXCLUDED.next_due, notes=EXCLUDED.notes, updated_at=NOW(), deleted_at=NULL
-     RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
+      ON CONFLICT (home_id, id) DO NOTHING
+      RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.appraiser || null,
      record.objectives || null, record.training_needs || null,
      record.development_plan || null, record.next_due || null, record.notes || null]
   );
+  if (rows.length === 0) {
+    throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+  }
   return shapeRow(rows[0]);
 }
 

@@ -35,6 +35,7 @@ import { generatePayslipPDF }  from '../lib/payslipPdf.js';
 import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ function blockOwnDataRole(req, res, moduleId) {
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
 
-const dateSchema     = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema     = nullableDateInput;
 const optTime        = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{2}:\d{2}$/).nullable().optional());
 const ruleIdSchema   = z.coerce.number().int().positive();
 const runIdSchema    = z.coerce.number().int().positive();
@@ -640,6 +641,8 @@ const enrolmentBodySchema = z.object({
   opted_out_date:    dateSchema.nullable().optional(),
   postponed_until:   dateSchema.nullable().optional(),
   reassessment_date: dateSchema.nullable().optional(),
+  contribution_override_employee: z.number().min(0).max(1).nullable().optional(),
+  contribution_override_employer: z.number().min(0).max(1).nullable().optional(),
   notes:             z.string().max(1000).nullable().optional(),
 });
 
@@ -667,8 +670,9 @@ router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requi
 });
 
 // GET /api/payroll/pension-config
-router.get('/pension-config', readRateLimiter, requireAuth, async (req, res, next) => {
+router.get('/pension-config', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const today = new Date().toISOString().slice(0, 10);
     const config = await pensionRepo.getPensionConfig(today);
     res.json(config || {});
@@ -678,8 +682,9 @@ router.get('/pension-config', readRateLimiter, requireAuth, async (req, res, nex
 // ── Phase 2: SSP & Sick Periods ───────────────────────────────────────────────
 
 // GET /api/payroll/ssp-config
-router.get('/ssp-config', readRateLimiter, requireAuth, async (req, res, next) => {
+router.get('/ssp-config', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
+    if (blockOwnDataRole(req, res, 'payroll')) return;
     const configs = await sspRepo.getAllSSPConfigs();
     res.json(configs);
   } catch (err) { next(err); }

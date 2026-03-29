@@ -7,10 +7,12 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
+const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
 
 const dolsBodySchema = z.object({
   resident_name:          z.string().min(1).max(200),
@@ -26,7 +28,7 @@ const dolsBodySchema = z.object({
   authorising_authority:  z.string().max(200).nullable().optional(),
   restrictions:           z.array(z.string().max(500)).max(50).optional(),
   reviewed_date:          dateSchema.optional(),
-  review_status:          z.enum(['pending', 'in_progress', 'completed']).nullable().optional(),
+  review_status:          optEnum('pending', 'in_progress', 'completed'),
   next_review_date:       dateSchema.optional(),
   notes:                  z.string().max(5000).nullable().optional(),
 });

@@ -7,6 +7,7 @@ const CONFIG_COLS = `id, effective_from, lower_qualifying_weekly, upper_qualifyi
 
 const ENROLMENT_COLS = `id, home_id, staff_id, status,
   enrolled_date, opted_out_date, postponed_until, reassessment_date,
+  contribution_override_employee, contribution_override_employer,
   notes, updated_at`;
 
 const CONTRIBUTION_COLS = `id, home_id, payroll_line_id, staff_id,
@@ -76,14 +77,17 @@ export async function upsertEnrolment(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO pension_enrolments
        (home_id, staff_id, status, enrolled_date, opted_out_date, postponed_until,
-        reassessment_date, notes, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+        reassessment_date, contribution_override_employee, contribution_override_employer,
+        notes, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
      ON CONFLICT (home_id, staff_id) DO UPDATE SET
        status            = EXCLUDED.status,
        enrolled_date     = EXCLUDED.enrolled_date,
        opted_out_date    = EXCLUDED.opted_out_date,
        postponed_until   = EXCLUDED.postponed_until,
        reassessment_date = EXCLUDED.reassessment_date,
+       contribution_override_employee = EXCLUDED.contribution_override_employee,
+       contribution_override_employer = EXCLUDED.contribution_override_employer,
        notes             = EXCLUDED.notes,
        updated_at        = NOW()
      RETURNING ${ENROLMENT_COLS}`,
@@ -91,6 +95,8 @@ export async function upsertEnrolment(homeId, data, client) {
       homeId, data.staff_id, data.status ?? 'pending_assessment',
       data.enrolled_date || null, data.opted_out_date || null,
       data.postponed_until || null, data.reassessment_date || null,
+      data.contribution_override_employee ?? null,
+      data.contribution_override_employer ?? null,
       data.notes || null,
     ]
   );
@@ -107,6 +113,8 @@ function shapeEnrolment(row) {
     opted_out_date: toDateStr(row.opted_out_date),
     postponed_until: toDateStr(row.postponed_until),
     reassessment_date: toDateStr(row.reassessment_date),
+    contribution_override_employee: f(row.contribution_override_employee),
+    contribution_override_employer: f(row.contribution_override_employer),
     notes: row.notes || null,
     updated_at: row.updated_at ?? null,
   };

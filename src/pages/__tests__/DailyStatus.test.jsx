@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import DailyStatus from '../DailyStatus.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA } from '../../test/fixtures/schedulingData.js';
+import { useData } from '../../contexts/DataContext.jsx';
+import { addDays, formatDate, parseDate } from '../../lib/rotation.js';
 
 // ── Module mocks ───────────────────────────────────────────────────────────────
 
@@ -76,6 +78,36 @@ describe('DailyStatus', () => {
     });
     // Retry link should appear alongside the error
     expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+  });
+
+  it('loads a centered scheduling window around the viewed date', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(api.getSchedulingData).toHaveBeenCalled();
+    });
+    const expectedDate = parseDate(FIXED_DATE);
+    expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
+      from: formatDate(addDays(expectedDate, -200)),
+      to: formatDate(addDays(expectedDate, 200)),
+    });
+  });
+
+  it('shows a restricted state for staff self-service accounts', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S001',
+    });
+    renderWithProviders(<DailyStatus />, {
+      route: `/day/${FIXED_DATE}`,
+      path: '/day/:date',
+      user: { username: 'staff', role: 'viewer' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Daily Status is not available for staff self-service accounts.')).toBeInTheDocument();
+    });
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('displays the date in the page heading', async () => {
@@ -161,6 +193,39 @@ describe('DailyStatus', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: 'Mark Sick' })).toBeInTheDocument();
+  });
+
+  it('clicking a shift badge opens the change-status modal and saves a new shift', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    let shiftButtons = [];
+    await waitFor(() => {
+      shiftButtons = screen.getAllByRole('button', { name: 'Change shift for Alice Smith' });
+      expect(shiftButtons.length).toBeGreaterThan(0);
+    });
+
+    await user.click(shiftButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Change Status' })).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'L');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.upsertOverride).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          date: FIXED_DATE,
+          staffId: 'S001',
+          shift: 'L',
+          reason: 'Manual shift edit',
+          source: 'manual',
+        }),
+        expect.any(Object),
+      );
+    });
   });
 
   it('displays Handover Notes textarea', async () => {

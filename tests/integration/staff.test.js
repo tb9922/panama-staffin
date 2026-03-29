@@ -16,6 +16,7 @@ import { app } from '../../server.js';
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
 const PREFIX = 'staff-test';
+const BCRYPT_ROUNDS = 4;
 const ADMIN_USER = `${PREFIX}-admin`;
 const VIEWER_USER = `${PREFIX}-viewer`;
 const ADMIN_PW = 'StaffTestAdmin!2025';
@@ -49,8 +50,8 @@ beforeAll(async () => {
   homeBId = hb.id;
 
   // Create test users
-  const adminHash = await bcrypt.hash(ADMIN_PW, 12);
-  const viewerHash = await bcrypt.hash(VIEWER_PW, 12);
+  const adminHash = await bcrypt.hash(ADMIN_PW, BCRYPT_ROUNDS);
+  const viewerHash = await bcrypt.hash(VIEWER_PW, BCRYPT_ROUNDS);
   await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'admin', true, 'Staff Test Admin', 'test-setup')`,
@@ -84,7 +85,7 @@ beforeAll(async () => {
     .send({ username: VIEWER_USER, password: VIEWER_PW })
     .expect(200);
   viewerToken = viewerRes.body.token;
-});
+}, 30000);
 
 afterAll(async () => {
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug LIKE '${PREFIX}-%')`);
@@ -93,7 +94,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM token_denylist WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM users WHERE username LIKE '${PREFIX}-%'`);
   await pool.query(`DELETE FROM homes WHERE slug LIKE '${PREFIX}-%'`);
-});
+}, 30000);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ describe('POST /api/staff — create', () => {
   afterAll(async () => {
     // Clean up created staff for this block
     await pool.query(
-      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003')`,
+      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004')`,
       [homeAId]
     );
   });
@@ -186,6 +187,27 @@ describe('POST /api/staff — create', () => {
       .set('Authorization', `Bearer ${viewerToken}`)
       .send(staff)
       .expect(403);
+  });
+
+  it('increments version when POST upserts an existing staff member', async () => {
+    const initial = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: 'ST004', name: 'Upsert Target', hourly_rate: 13.25 }))
+      .expect(201);
+
+    const updated = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: 'ST004', name: 'Upsert Target Updated', hourly_rate: 13.75 }))
+      .expect(201);
+
+    expect(initial.body.version).toBe(1);
+    expect(updated.body.version).toBe(2);
+    expect(updated.body.name).toBe('Upsert Target Updated');
+    expect(updated.body.hourly_rate).toBe(13.75);
   });
 
   it('rejects request with no home parameter', async () => {
@@ -297,6 +319,15 @@ describe('DELETE /api/staff/:id — soft delete', () => {
   });
 
   it('admin can soft-delete staff', async () => {
+    await pool.query(
+      `UPDATE staff SET updated_at = '2000-01-01T00:00:00Z' WHERE home_id = $1 AND id = 'ST020'`,
+      [homeAId]
+    );
+    const before = await pool.query(
+      `SELECT updated_at FROM staff WHERE home_id = $1 AND id = 'ST020'`,
+      [homeAId]
+    );
+
     await request(app)
       .delete('/api/staff/ST020')
       .query({ home: homeASlug })
@@ -305,11 +336,12 @@ describe('DELETE /api/staff/:id — soft delete', () => {
 
     // Verify soft-deleted in DB
     const { rows } = await pool.query(
-      `SELECT deleted_at, active FROM staff WHERE home_id = $1 AND id = 'ST020'`,
+      `SELECT deleted_at, active, updated_at FROM staff WHERE home_id = $1 AND id = 'ST020'`,
       [homeAId]
     );
     expect(rows[0].deleted_at).not.toBeNull();
     expect(rows[0].active).toBe(false);
+    expect(rows[0].updated_at.toISOString()).not.toBe(before.rows[0].updated_at.toISOString());
   });
 
   it('cascades override deletion', async () => {

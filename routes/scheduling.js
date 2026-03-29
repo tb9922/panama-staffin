@@ -294,6 +294,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
 
     res.json({
       config: configOut,
+      configUpdatedAt: req.home.updated_at ? req.home.updated_at.toISOString() : null,
       staff: staffOut,
       overrides: overridesOut,
       day_notes: dayNotes,

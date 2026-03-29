@@ -3,6 +3,7 @@ import { getCycleDates, getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN } from '../lib/design.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 
 const PRESET_SCENARIOS = [
   { name: 'CLEAN (Zero disruption)', sick: 0, al: 0 },
@@ -22,6 +23,7 @@ const WINTER_SCENARIOS = [
 ];
 
 export default function ScenarioModel() {
+  const { homeRole } = useData();
   const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,16 +32,30 @@ export default function ScenarioModel() {
   const [customName, setCustomName] = useState('Custom Scenario');
 
   const [error, setError] = useState(null);
+  const isOwnDataScenario = homeRole === 'staff_member';
 
   useEffect(() => {
-    if (!homeSlug) return;
+    if (!homeSlug || isOwnDataScenario) {
+      setLoading(false);
+      return;
+    }
     getSchedulingData(homeSlug)
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [homeSlug]);
+  }, [homeSlug, isOwnDataScenario]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading scenario data...</div>;
+  if (isOwnDataScenario) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Staffing Cost Scenarios</h1>
+          <p className="text-sm text-gray-500">Staffing cost scenarios are not available for staff self-service accounts.</p>
+        </div>
+      </div>
+    );
+  }
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
   return <ScenarioModelInner schedData={schedData} customSick={customSick} setCustomSick={setCustomSick} customAL={customAL} setCustomAL={setCustomAL} customName={customName} setCustomName={setCustomName} />;

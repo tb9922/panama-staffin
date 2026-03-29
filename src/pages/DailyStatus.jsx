@@ -1,16 +1,14 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  formatDate, parseDate, addDays, getStaffForDay, getShiftHours,
+  formatDate, parseDate, addDays, getStaffForDay,
   isWorkingShift, isEarlyShift, isLateShift, isNightShift, isCareRole,
   SHIFT_COLORS, countALOnDate,
 } from '../lib/rotation.js';
 import {
-  getDayCoverageStatus, calculateDayCost, checkFatigueRisk, validateSwap,
+  getDayCoverageStatus, calculateDayCost, checkFatigueRisk,
 } from '../lib/escalation.js';
-import { calculateAccrual } from '../lib/accrual.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE, ESC_COLORS } from '../lib/design.js';
-import Modal from '../components/Modal.jsx';
+import { CARD, TABLE, INPUT, BTN, BADGE, PAGE, ESC_COLORS } from '../lib/design.js';
 import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
@@ -24,6 +22,25 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
+import DailyStatusCoverageGapPanel from '../components/scheduling/DailyStatusCoverageGapPanel.jsx';
+import DailyStatusModal from '../components/scheduling/DailyStatusModal.jsx';
+
+function getCenteredSchedulingRange(date, radiusDays = 200) {
+  return {
+    from: formatDate(addDays(date, -radiusDays)),
+    to: formatDate(addDays(date, radiusDays)),
+  };
+}
+
+function getShiftEditReason(shift) {
+  if (shift === 'OFF') return 'Manual day off';
+  if (shift === 'TRN') return 'Training';
+  if (shift === 'ADM') return 'Admin';
+  if (shift.startsWith('OC-')) return 'OT booked';
+  if (shift.startsWith('AG-')) return 'Agency';
+  return 'Manual shift edit';
+}
 
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
@@ -39,6 +56,7 @@ export default function DailyStatus() {
 
   const [modal, setModal] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
+  const [manualShiftType, setManualShiftType] = useState('');
   const [otShiftType, setOtShiftType] = useState('OC-EL');
   const [agencyShiftType, setAgencyShiftType] = useState('');
   const [swapFrom, setSwapFrom] = useState('');
@@ -47,19 +65,6 @@ export default function DailyStatus() {
   const [gapPanelDate, setGapPanelDate] = useState(null);
   const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
 
-  // PIN unlock uses getCurrentHome() as the key to avoid timing dependency on data load
-  const [unlockedDates, setUnlockedDates] = useState(() => {
-    try {
-      const homeSlug = getCurrentHome() || 'default';
-      const stored = sessionStorage.getItem(`unlocked_${homeSlug}`);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
-  const [showLockPrompt, setShowLockPrompt] = useState(false);
-  const [lockPin, setLockPin] = useState('');
-  const [lockError, setLockError] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
-
   const noteTimerRef = useRef(null);
   const savingRef = useRef(false);
   useDirtyGuard(!!modal);
@@ -67,6 +72,7 @@ export default function DailyStatus() {
   const closeModal = useCallback(() => {
     setModal(null);
     setSelectedStaff('');
+    setManualShiftType('');
     setSwapFrom('');
     setSwapTo('');
     setAgencyShiftType('');
@@ -74,35 +80,34 @@ export default function DailyStatus() {
 
   useEscapeKey(!!modal, closeModal);
 
-  const { canWrite } = useData();
+  const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
   const homeSlug = getCurrentHome();
+  const isOwnDataDailyStatus = homeRole === 'staff_member';
 
   const loadData = useCallback(async () => {
-    if (!homeSlug) return;
+    if (!homeSlug || isOwnDataDailyStatus) {
+      setSchedData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const { from, to } = getCenteredSchedulingRange(currentDate);
     setLoading(true);
+    setError(null);
     try {
-      setSchedData(await getSchedulingData(homeSlug));
+      setSchedData(await getSchedulingData(homeSlug, { from, to }));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [homeSlug]);
+  }, [homeSlug, isOwnDataDailyStatus, currentDate]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   // Cleanup debounce timer on unmount
   useEffect(() => () => clearTimeout(noteTimerRef.current), []);
-
-  // Reset lock prompt state and override warnings when navigating to a different date
-  useEffect(() => {
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    setPendingAction(null);
-    setOverrideWarnings([]);
-  }, [dateStr]);
 
   const staffForDay = useMemo(() => {
     if (!schedData) return [];
@@ -135,8 +140,26 @@ export default function DailyStatus() {
   }, [availableStaff, schedData, currentDate]);
 
   const today = formatDate(new Date());
-  const isPastDate = dateStr < today;
-  const isLocked = isPastDate && !unlockedDates.has(dateStr) && !!(schedData?.config?.edit_lock_pin);
+  const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
+  const {
+    showLockPrompt,
+    lockPin,
+    lockError,
+    updateLockPin,
+    dismissLockPrompt,
+    attemptUnlock,
+    requestUnlock,
+    handleLockedError,
+    getEditLockOptions,
+    isDateLocked,
+  } = useSchedulingEditLock({ homeSlug, hasEditLock, today });
+  const isLocked = isDateLocked(dateStr);
+
+  // Reset lock prompt state and override warnings when navigating to a different date
+  useEffect(() => {
+    dismissLockPrompt();
+    setOverrideWarnings([]);
+  }, [dateStr, dismissLockPrompt]);
 
   function goDay(offset) {
     navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
@@ -148,10 +171,18 @@ export default function DailyStatus() {
     setSaving(true);
     setOverrideWarnings([]);
     try {
-      const result = await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra });
+      const result = await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId, shift, reason, source: source || 'manual', sleep_in: sleepIn, replaces_staff_id: replacesStaffId || undefined, ...extra },
+        getEditLockOptions(dateStr),
+      );
       if (result?.warnings?.length) setOverrideWarnings(result.warnings);
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => applyOverride(staffId, shift, reason, source, sleepIn, replacesStaffId, extra));
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -168,29 +199,41 @@ export default function DailyStatus() {
     setSaving(true);
     try {
       if (existing) {
-        await upsertOverride(getCurrentHome(), {
-          date: dateStr,
-          staffId,
-          shift: existing.shift,
-          reason: existing.reason,
-          source: existing.source,
-          sleep_in: !existing.sleep_in,
-          replaces_staff_id: existing.replaces_staff_id,
-          override_hours: existing.override_hours,
-        });
+        await upsertOverride(
+          getCurrentHome(),
+          {
+            date: dateStr,
+            staffId,
+            shift: existing.shift,
+            reason: existing.reason,
+            source: existing.source,
+            sleep_in: !existing.sleep_in,
+            replaces_staff_id: existing.replaces_staff_id,
+            override_hours: existing.override_hours,
+          },
+          getEditLockOptions(dateStr),
+        );
       } else {
         const s = staffForDay.find(m => m.id === staffId);
-        await upsertOverride(getCurrentHome(), {
-          date: dateStr,
-          staffId,
-          shift: s?.scheduledShift || 'OFF',
-          reason: 'Sleep in',
-          source: 'manual',
-          sleep_in: true,
-        });
+        await upsertOverride(
+          getCurrentHome(),
+          {
+            date: dateStr,
+            staffId,
+            shift: s?.scheduledShift || 'OFF',
+            reason: 'Sleep in',
+            source: 'manual',
+            sleep_in: true,
+          },
+          getEditLockOptions(dateStr),
+        );
       }
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => toggleSleepIn(staffId));
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -205,9 +248,13 @@ export default function DailyStatus() {
     savingRef.current = true;
     setSaving(true);
     try {
-      await deleteOverride(getCurrentHome(), dateStr, staffId);
+      await deleteOverride(getCurrentHome(), dateStr, staffId, getEditLockOptions(dateStr));
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => removeOverride(staffId));
+        return;
+      }
       setError(e.message);
     } finally {
       savingRef.current = false;
@@ -228,9 +275,19 @@ export default function DailyStatus() {
 
     setSaving(true);
     try {
-      await upsertOverride(getCurrentHome(), { date: dateStr, staffId, shift: 'SICK', reason: 'Sick', source: 'manual' });
+      await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId, shift: 'SICK', reason: 'Sick', source: 'manual' },
+        getEditLockOptions(dateStr),
+      );
       await loadData();
     } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => applySickOverride(staffId));
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
       setError(e.message);
       savingRef.current = false;
       setSaving(false);
@@ -249,33 +306,118 @@ export default function DailyStatus() {
     }
   }
 
-  function unlockDate() {
-    const homeSlug = getCurrentHome() || 'default';
-    const newUnlocked = new Set(unlockedDates);
-    newUnlocked.add(dateStr);
-    setUnlockedDates(newUnlocked);
-    try {
-      sessionStorage.setItem(`unlocked_${homeSlug}`, JSON.stringify([...newUnlocked]));
-    } catch { /* quota exceeded — in-memory unlock still works */ }
-    setShowLockPrompt(false);
-    setLockPin('');
-    setLockError('');
-    if (pendingAction) { pendingAction.fn(); setPendingAction(null); }
+  async function applyManualShiftEdit() {
+    const staff = staffForDay.find(member => member.id === selectedStaff);
+    if (!staff || !manualShiftType) return;
+    if (manualShiftType === '__scheduled__') {
+      if (staff.isOverride) {
+        await removeOverride(staff.id);
+      } else {
+        closeModal();
+      }
+      return;
+    }
+    if (manualShiftType === staff.shift && !staff.isOverride) {
+      closeModal();
+      return;
+    }
+    if (manualShiftType === 'SICK') {
+      await applySickOverride(staff.id);
+      return;
+    }
+    const source = manualShiftType.startsWith('OC-')
+      ? 'ot'
+      : manualShiftType.startsWith('AG-')
+        ? 'agency'
+        : 'manual';
+    await applyOverride(staff.id, manualShiftType, getShiftEditReason(manualShiftType), source);
   }
 
-  function attemptUnlock() {
-    if (!schedData) return;
-    const pin = String(schedData.config.edit_lock_pin || '');
-    if (!pin) { unlockDate(); return; }
-    if (String(lockPin) === pin) { unlockDate(); }
-    else { setLockError('Incorrect PIN'); setLockPin(''); }
+  async function handlePermanentSwap(staffAId, staffBId) {
+    const staffA = staffForDay.find(member => member.id === staffAId);
+    const staffB = staffForDay.find(member => member.id === staffBId);
+    if (!staffA || !staffB) return;
+    setSaving(true);
+    try {
+      await updateStaffMember(getCurrentHome(), staffA.id, { ...schedData.staff.find(member => member.id === staffA.id), team: staffB.team });
+      await updateStaffMember(getCurrentHome(), staffB.id, { ...schedData.staff.find(member => member.id === staffB.id), team: staffA.team });
+      await loadData();
+      closeModal();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTemporarySwap(staffAId, staffBId) {
+    const staffA = staffForDay.find(member => member.id === staffAId);
+    const staffB = staffForDay.find(member => member.id === staffBId);
+    if (!staffA || !staffB) return;
+    setSaving(true);
+    try {
+      await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId: staffAId, shift: staffB.shift, reason: `Swapped with ${staffB.name}`, source: 'swap' },
+        getEditLockOptions(dateStr),
+      );
+      await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId: staffBId, shift: staffA.shift, reason: `Swapped with ${staffA.name}`, source: 'swap' },
+        getEditLockOptions(dateStr),
+      );
+      await loadData();
+      closeModal();
+    } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => {
+          setModal('swap');
+          setSwapFrom(staffA.id);
+          setSwapTo(staffB.id);
+        });
+        return;
+      }
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAgencyBooking(shiftType, replacesStaffId = null) {
+    const agencyId = `AG-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    setSaving(true);
+    try {
+      await upsertOverride(
+        getCurrentHome(),
+        {
+          date: dateStr,
+          staffId: agencyId,
+          shift: shiftType,
+          reason: 'Agency',
+          source: 'agency',
+          replaces_staff_id: replacesStaffId || undefined,
+        },
+        getEditLockOptions(dateStr),
+      );
+      await loadData();
+      closeModal();
+    } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => {
+          setModal('agency');
+          setAgencyShiftType(shiftType);
+        });
+        return;
+      }
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   // Wraps any write action with a past-date lock check
   function withLockCheck(action) {
-    if (!isLocked) { action(); return; }
-    setPendingAction({ fn: action });
-    setShowLockPrompt(true);
+    requestUnlock(dateStr, action);
   }
 
   const escColor = (esc) => {
@@ -300,79 +442,7 @@ export default function DailyStatus() {
     return reasons;
   };
 
-  // Cascade coverage panel — shown after a sick override creates a gap
-  const CoverageGapPanel = () => {
-    if (!schedData) return null;
-    const floaters = staffForDay.filter(s => s.shift === 'AVL' && isCareRole(s.role));
-    const otCandidates = staffForDay.filter(s =>
-      isCareRole(s.role) && !isWorkingShift(s.shift) && s.shift !== 'SICK' && s.shift !== 'AL'
-    );
-    const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
-    const periodShift = { early: 'E', late: 'L', night: 'N' };
-    const periodOcShift = { early: 'OC-E', late: 'OC-L', night: 'OC-N' };
-    const label = p => p.charAt(0).toUpperCase() + p.slice(1);
-    return (
-      <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 print:hidden">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-amber-800">Coverage Gap — action needed</h3>
-          <button onClick={() => setShowGapPanel(false)} className={`${BTN.ghost} ${BTN.xs} text-gray-400`}>Dismiss</button>
-        </div>
-        <p className="text-xs text-amber-700 mb-3">
-          {shortPeriods.length > 0
-            ? `Short: ${shortPeriods.map(label).join(', ')} — below minimum staffing`
-            : 'Coverage affected — review options below'}
-        </p>
-        <div className="mb-3">
-          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">1 — Deploy Float</div>
-          {floaters.length === 0
-            ? <div className="text-xs text-gray-400">No floaters available today</div>
-            : <div className="space-y-1">
-                {floaters.map(s => {
-                  const fatigue = checkFatigueRisk(s, currentDate, schedData.overrides, schedData.config);
-                  return (
-                    <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
-                      <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.role})</span></span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
-                        {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodShift[p], `Float deployed — ${p} gap cover`, 'manual', false, gapPanelAbsentStaffId)} disabled={saving} className={`${BTN.success} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-          }
-        </div>
-        <div className="mb-3">
-          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">2 — Call In (OT)</div>
-          {otCandidates.length === 0
-            ? <div className="text-xs text-gray-400">No off-duty staff available</div>
-            : <div className="space-y-1">
-                {otCandidates.slice(0, 5).map(s => {
-                  const fatigue = checkFatigueRisk(s, currentDate, schedData.overrides, schedData.config);
-                  return (
-                    <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
-                      <span className="text-xs font-medium">{s.name} <span className="text-gray-400 text-[10px]">({s.shift})</span></span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
-                        {shortPeriods.map(p => (
-                          <button key={p} onClick={() => applyOverride(s.id, periodOcShift[p], `Called in — ${p} OT`, 'ot', false, gapPanelAbsentStaffId)} disabled={saving} className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}>{label(p)}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-          }
-        </div>
-        <div>
-          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">3 — Book Agency</div>
-          <button onClick={() => { setShowGapPanel(false); setModal('agency'); }} className={`${BTN.danger} ${BTN.xs}`}>Open Agency Booking</button>
-        </div>
-      </div>
-    );
-  };
+
 
   const StaffRow = ({ s }) => {
     const blockReasons = isWorkingShift(s.shift) ? getBlockingReasons(s) : [];
@@ -390,7 +460,23 @@ export default function DailyStatus() {
       <td className={`${TABLE.td} text-xs`}>{s.role}</td>
       <td className={`${TABLE.td} text-xs`}>{s.team}</td>
       <td className={TABLE.td}>
-        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => withLockCheck(() => {
+              setSelectedStaff(s.id);
+              setManualShiftType(s.isOverride ? s.shift : '__scheduled__');
+              setModal('shiftEdit');
+            })}
+            disabled={saving}
+            aria-label={`Change shift for ${s.name}`}
+            className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors duration-150 hover:opacity-80 disabled:opacity-50 ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}
+          >
+            {s.shift}
+          </button>
+        ) : (
+          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+        )}
         {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
         {s.replaces_staff_id && (() => {
           const replaced = staffForDay.find(m => m.id === s.replaces_staff_id);
@@ -428,6 +514,28 @@ export default function DailyStatus() {
       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
+          <p className="text-sm text-gray-500">Select a home to view daily status.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isOwnDataDailyStatus) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
+          <p className="text-sm text-gray-500">Daily Status is not available for staff self-service accounts.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) return (
     <div className="p-6">
@@ -490,14 +598,14 @@ export default function DailyStatus() {
             inputMode="numeric"
             maxLength={6}
             value={lockPin}
-            onChange={e => { setLockPin(e.target.value); setLockError(''); }}
+            onChange={e => updateLockPin(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && attemptUnlock()}
             placeholder="PIN"
             className={`${INPUT.sm} w-20`}
             autoFocus
           />
           <button onClick={attemptUnlock} className={`${BTN.primary} ${BTN.sm}`}>Unlock</button>
-          <button onClick={() => { setShowLockPrompt(false); setLockPin(''); setLockError(''); setPendingAction(null); }} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
+          <button onClick={dismissLockPrompt} className={`${BTN.ghost} ${BTN.sm}`}>Cancel</button>
           {lockError && <span className="text-xs text-red-600">{lockError}</span>}
         </div>
       )}
@@ -559,8 +667,14 @@ export default function DailyStatus() {
                 clearTimeout(noteTimerRef.current);
                 noteTimerRef.current = setTimeout(async () => {
                   try {
-                    await upsertDayNote(getCurrentHome(), dateStr, note);
+                    await upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr));
                   } catch (err) {
+                    if (err.status === 423) {
+                      handleLockedError(dateStr, () => {
+                        upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr)).catch(innerErr => setError(innerErr.message));
+                      });
+                      return;
+                    }
                     setError(err.message);
                   }
                 }, 800);
@@ -613,261 +727,59 @@ export default function DailyStatus() {
           </div>
 
           {/* Coverage gap cascade panel — appears after marking sick */}
-          {showGapPanel && gapPanelDate === dateStr && <CoverageGapPanel />}
+          {showGapPanel && gapPanelDate === dateStr && (
+            <DailyStatusCoverageGapPanel
+              schedData={schedData}
+              staffForDay={staffForDay}
+              coverage={coverage}
+              currentDate={currentDate}
+              gapPanelAbsentStaffId={gapPanelAbsentStaffId}
+              saving={saving}
+              onDismiss={() => setShowGapPanel(false)}
+              onApplyOverride={applyOverride}
+              onOpenAgencyBooking={() => {
+                setShowGapPanel(false);
+                setModal('agency');
+              }}
+            />
+          )}
         </div>
       </div>
 
-      {/* Modal */}
-      <Modal isOpen={!!modal} onClose={closeModal} title={modal === 'sick' ? 'Mark Sick' : modal === 'al' ? 'Book AL' : modal === 'ot' ? 'Book OT' : modal === 'swap' ? 'Swap Shifts' : modal === 'training' ? 'Book Training' : modal === 'sleepIn' ? 'Toggle Sleep In' : 'Book Agency'} size="sm">
-            {modal === 'swap' ? (
-              <div className="space-y-3">
-                <div>
-                  <label className={INPUT.label}>Staff A (gives their shift)</label>
-                  <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} className={INPUT.select}>
-                    <option value="">Select...</option>
-                    {staffForDay.filter(s => isWorkingShift(s.shift) && isCareRole(s.role)).map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={INPUT.label}>Staff B (takes their shift)</label>
-                  <select value={swapTo} onChange={e => setSwapTo(e.target.value)} className={INPUT.select}>
-                    <option value="">Select...</option>
-                    {staffForDay.filter(s => isCareRole(s.role) && s.id !== swapFrom).map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>
-                    ))}
-                  </select>
-                </div>
-                {swapFrom && swapTo && (() => {
-                  const a = staffForDay.find(s => s.id === swapFrom);
-                  const b = staffForDay.find(s => s.id === swapTo);
-                  if (!a || !b) return null;
-                  const valAB = validateSwap(a, b, currentDate, schedData.overrides, schedData.config, schedData.training);
-                  const valBA = validateSwap(b, a, currentDate, schedData.overrides, schedData.config, schedData.training);
-                  const allIssues = [...valAB.issues, ...valBA.issues];
-                  const configShifts = schedData.config.shifts || {};
-                  const hrs = s => {
-                    if (!s) return 0;
-                    if (s.startsWith('OC-') || s.startsWith('AG-')) return configShifts[s.slice(3)]?.hours || 0;
-                    if (s === 'BH-D') return configShifts.EL?.hours || configShifts.E?.hours || 0;
-                    if (s === 'BH-N') return configShifts.N?.hours || 0;
-                    return configShifts[s]?.hours || 0;
-                  };
-                  const costBefore = hrs(a.shift) * (a.hourly_rate || 0) + hrs(b.shift) * (b.hourly_rate || 0);
-                  const costAfter  = hrs(b.shift) * (a.hourly_rate || 0) + hrs(a.shift) * (b.hourly_rate || 0);
-                  const costDelta  = costAfter - costBefore;
-                  return (
-                    <div className="space-y-1">
-                      <div className="text-xs text-gray-500 bg-gray-50 rounded-xl px-2 py-1">
-                        {a.name} ({a.shift}) &harr; {b.name} ({b.shift})
-                      </div>
-                      {allIssues.map((issue, i) => (
-                        <div key={i} className={`text-xs px-2 py-1 rounded-xl ${issue.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {issue.msg}
-                        </div>
-                      ))}
-                      {allIssues.length === 0 && <div className="text-xs text-green-600 bg-green-50 rounded-xl px-2 py-1">Safe to swap</div>}
-                      {a.shift !== b.shift && (
-                        <div className={`text-xs px-2 py-1 rounded-xl ${costDelta > 0.01 ? 'bg-red-50 text-red-700' : costDelta < -0.01 ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
-                          Cost impact: {Math.abs(costDelta) < 0.01 ? 'No change' : `${costDelta > 0 ? '+' : ''}£${costDelta.toFixed(2)} today`}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                <div className={MODAL.footer}>
-                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  {(() => {
-                    const a = staffForDay.find(s => s.id === swapFrom);
-                    const b = staffForDay.find(s => s.id === swapTo);
-                    const canSwap = !!(swapFrom && swapTo && swapFrom !== swapTo);
-                    const isFloat = a?.team === 'Float' || b?.team === 'Float';
-                    return (
-                      <>
-                        {canEdit && (
-                          <button
-                            disabled={!canSwap || isFloat || saving}
-                            title={isFloat ? 'Float staff have no fixed rotation to swap permanently' : `${a?.name}: ${a?.team} → ${b?.team} | ${b?.name}: ${b?.team} → ${a?.team}`}
-                            onClick={async () => {
-                              if (!a || !b) return;
-                              setSaving(true);
-                              try {
-                                await updateStaffMember(getCurrentHome(), a.id, { ...schedData.staff.find(s => s.id === a.id), team: b.team });
-                                await updateStaffMember(getCurrentHome(), b.id, { ...schedData.staff.find(s => s.id === b.id), team: a.team });
-                                await loadData();
-                              } catch (e) {
-                                setError(e.message);
-                              } finally {
-                                setSaving(false);
-                              }
-                              setModal(null); setSwapFrom(''); setSwapTo('');
-                            }}
-                            className={`${BTN.secondary} disabled:opacity-50 text-xs`}
-                          >
-                            {canSwap && !isFloat ? `Permanent (${a.team} ↔ ${b.team})` : 'Permanent'}
-                          </button>
-                        )}
-                        <button
-                          disabled={!canSwap || saving}
-                          onClick={async () => {
-                            if (!a || !b) return;
-                            setSaving(true);
-                            try {
-                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapFrom, shift: b.shift, reason: `Swapped with ${b.name}`, source: 'swap' });
-                              await upsertOverride(getCurrentHome(), { date: dateStr, staffId: swapTo, shift: a.shift, reason: `Swapped with ${a.name}`, source: 'swap' });
-                              await loadData();
-                            } catch (e) {
-                              setError(e.message);
-                            } finally {
-                              setSaving(false);
-                            }
-                            setModal(null); setSwapFrom(''); setSwapTo('');
-                          }}
-                          className={`${BTN.primary} disabled:opacity-50`}
-                        >
-                          {saving ? 'Saving...' : 'Today Only'}
-                        </button>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            ) : modal === 'agency' ? (
-              <div className="space-y-3">
-                <select value={agencyShiftType} onChange={e => setAgencyShiftType(e.target.value)} className={INPUT.select}>
-                  <option value="">Select shift type...</option>
-                  <option value="AG-E">Agency Early (AG-E)</option>
-                  <option value="AG-L">Agency Late (AG-L)</option>
-                  <option value="AG-EL">Agency Full Day (AG-EL)</option>
-                  <option value="AG-N">Agency Night (AG-N)</option>
-                </select>
-                {agencyShiftType && (() => {
-                  const agPeriods = agencyShiftType === 'AG-E' ? 'Early'
-                    : agencyShiftType === 'AG-L' ? 'Late'
-                    : agencyShiftType === 'AG-EL' ? 'Early + Late (full day)'
-                    : 'Night';
-                  const agHours = getShiftHours(agencyShiftType, schedData.config);
-                  const isNight = agencyShiftType === 'AG-N';
-                  const agRate = isNight ? (schedData.config.agency_rate_night || 0) : (schedData.config.agency_rate_day || 0);
-                  const agCost = (agHours * agRate).toFixed(2);
-                  const shortPeriods = ['early', 'late', 'night'].filter(p => coverage[p] && coverage[p].escalation.level >= 1);
-                  const absentToday = staffForDay.filter(s => s.shift === 'SICK' || s.shift === 'AL');
-                  return (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 space-y-1.5 text-xs">
-                      <div className="font-semibold text-blue-700">Booking — {dateStr}</div>
-                      <div className="text-gray-600"><span className="font-medium">Covers:</span> {agPeriods}</div>
-                      {shortPeriods.length > 0 && (
-                        <div className="text-amber-700"><span className="font-medium">Gap:</span> {shortPeriods.join(', ')} below minimum</div>
-                      )}
-                      <div className="text-gray-600">
-                        <span className="font-medium">Rate:</span> £{agRate.toFixed(2)}/hr ({isNight ? 'night' : 'day'}) &middot; {agHours}h &middot; est. <strong>£{agCost}</strong>
-                      </div>
-                      {absentToday.length > 0 && (
-                        <div className="text-gray-500"><span className="font-medium">Absent today:</span> {absentToday.map(s => `${s.name} (${s.shift})`).join(', ')}</div>
-                      )}
-                    </div>
-                  );
-                })()}
-                <div className={MODAL.footer}>
-                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!agencyShiftType || saving} onClick={async () => {
-                    const agId = 'AG-' + crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
-                    setSaving(true);
-                    try {
-                      await upsertOverride(getCurrentHome(), { date: dateStr, staffId: agId, shift: agencyShiftType, reason: 'Agency', source: 'agency', replaces_staff_id: gapPanelAbsentStaffId || undefined });
-                      await loadData();
-                    } catch (e) {
-                      setError(e.message);
-                    } finally {
-                      setSaving(false);
-                    }
-                    setModal(null); setAgencyShiftType('');
-                  }} className={`${BTN.danger} disabled:opacity-50`}>{saving ? 'Booking...' : 'Book'}</button>
-                </div>
-              </div>
-            ) : modal === 'training' ? (
-              <div className="space-y-3">
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-                  <option value="">Select staff...</option>
-                  {staffForDay.filter(s => isCareRole(s.role))
-                    .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>)}
-                </select>
-                <div className={MODAL.footer}>
-                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff || saving} onClick={() => applyOverride(selectedStaff, 'TRN', 'Training', 'manual')}
-                    className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
-                </div>
-              </div>
-            ) : modal === 'sleepIn' ? (
-              <div className="space-y-3">
-                <p className="text-xs text-gray-500">Sleep-in is a flat-rate addition to the current shift (Mencap ruling). Staff remain on their rostered shift.</p>
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-                  <option value="">Select staff...</option>
-                  {staffForDay.filter(s => isCareRole(s.role))
-                    .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift}){s.sleep_in ? ' — remove SI' : ' — add SI'}</option>)}
-                </select>
-                <div className={MODAL.footer}>
-                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff || saving} onClick={() => toggleSleepIn(selectedStaff)}
-                    className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-                  <option value="">Select staff...</option>
-                  {(modal === 'ot' ? availableStaff : staffForDay.filter(s => isWorkingShift(s.shift)))
-                    .map(s => <option key={s.id} value={s.id}>{s.name} ({s.shift})</option>)}
-                </select>
-                {modal === 'ot' && selectedStaff && (
-                  <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
-                    <option value="OC-E">OC-E (Early)</option>
-                    <option value="OC-L">OC-L (Late)</option>
-                    <option value="OC-EL">OC-EL (Full Day)</option>
-                    <option value="OC-N">OC-N (Night)</option>
-                  </select>
-                )}
-                {modal === 'al' && alCount >= schedData.config.max_al_same_day && (
-                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
-                )}
-                {modal === 'al' && selectedStaff && (() => {
-                  const staff = schedData.staff.find(s => s.id === selectedStaff);
-                  if (!staff) return null;
-                  const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
-                  if (accrual.missingContractHours) {
-                    return <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-xl">
-                      Set contract hours in Staff Database to enable AL booking
-                    </div>;
-                  }
-                  if (accrual.remainingHours <= 0) {
-                    return <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">
-                      No AL remaining ({accrual.accruedHours.toFixed(1)}h earned, {accrual.usedHours.toFixed(1)}h used)
-                    </div>;
-                  }
-                  return <div className="text-xs text-gray-500">AL: {accrual.remainingHours.toFixed(1)}h remaining</div>;
-                })()}
-                <div className={MODAL.footer}>
-                  <button onClick={closeModal} className={BTN.ghost}>Cancel</button>
-                  <button disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day) || (modal === 'al' && selectedStaff && (() => {
-                    const staff = schedData.staff.find(s => s.id === selectedStaff);
-                    if (!staff) return false;
-                    const acc = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
-                    return acc.remainingHours <= 0 || acc.missingContractHours;
-                  })())} onClick={() => {
-                    if (modal === 'sick') applySickOverride(selectedStaff);
-                    else if (modal === 'al') {
-                      // al_hours computed by backend — pass hint for optimistic display
-                      applyOverride(selectedStaff, 'AL', 'Annual leave', 'manual', false, null, {});
-                    }
-                    else {
-                      applyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
-                    }
-                  }} className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Confirm'}</button>
-                </div>
-              </div>
-            )}
-      </Modal>
+      <DailyStatusModal
+        modal={modal}
+        isOpen={!!modal}
+        onClose={closeModal}
+        staffForDay={staffForDay}
+        currentDate={currentDate}
+        dateStr={dateStr}
+        schedData={schedData}
+        coverage={coverage}
+        availableStaff={availableStaff}
+        selectedStaff={selectedStaff}
+        setSelectedStaff={setSelectedStaff}
+        manualShiftType={manualShiftType}
+        setManualShiftType={setManualShiftType}
+        otShiftType={otShiftType}
+        setOtShiftType={setOtShiftType}
+        agencyShiftType={agencyShiftType}
+        setAgencyShiftType={setAgencyShiftType}
+        swapFrom={swapFrom}
+        setSwapFrom={setSwapFrom}
+        swapTo={swapTo}
+        setSwapTo={setSwapTo}
+        canEdit={canEdit}
+        saving={saving}
+        alCount={alCount}
+        gapPanelAbsentStaffId={gapPanelAbsentStaffId}
+        onApplyOverride={applyOverride}
+        onApplySickOverride={applySickOverride}
+        onToggleSleepIn={toggleSleepIn}
+        onApplyManualShiftEdit={applyManualShiftEdit}
+        onHandlePermanentSwap={handlePermanentSwap}
+        onHandleTemporarySwap={handleTemporarySwap}
+        onHandleAgencyBooking={handleAgencyBooking}
+      />
     </div>
   );
 }

@@ -130,6 +130,7 @@ function renderViewer(entries) {
 describe('MonthlyTimesheet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
   });
@@ -143,9 +144,23 @@ describe('MonthlyTimesheet', () => {
 
   it('shows loading state while scheduling data loads', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
-    api.getTimesheetPeriod.mockResolvedValue([]);
+    api.getTimesheetPeriod.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<MonthlyTimesheet />);
     expect(screen.getByText('Loading data...')).toBeInTheDocument();
+  });
+
+  it('loads scheduling data for the visible payroll month only', async () => {
+    renderAdmin();
+    await screen.findByText('Monthly Timesheet');
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth() + 1;
+    const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(new Date(Date.UTC(currentYear, currentMonth, 0)).getUTCDate()).padStart(2, '0')}`;
+    expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
+      from: monthStart,
+      to: monthEnd,
+    });
   });
 
   it('stays on loading screen when scheduling data fails', async () => {

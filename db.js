@@ -5,16 +5,16 @@ import logger from './logger.js';
 const { Pool } = pg;
 
 // Return DATE columns as ISO strings ('YYYY-MM-DD'), not JS Date objects.
-// Without this, pg interprets DATE as midnight local time — during BST (UTC+1)
-// a date like '2026-03-31' becomes 2026-03-30T23:00:00Z, losing a day.
 pg.types.setTypeParser(1082, (val) => val);
 
-/** Convert a DATE value to 'YYYY-MM-DD' string. Works with both
- *  Date objects (TIMESTAMP columns) and strings (DATE columns after type parser). */
-export function toDateStr(v) {
-  if (v == null) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  return typeof v === 'string' ? v : String(v);
+/**
+ * Convert a DATE value to 'YYYY-MM-DD' string. Works with both Date objects
+ * (TIMESTAMP columns) and strings (DATE columns after the type parser above).
+ */
+export function toDateStr(value) {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return typeof value === 'string' ? value : String(value);
 }
 
 export const pool = new Pool({
@@ -33,20 +33,26 @@ pool.on('error', (err) => {
   logger.error({ error: err.message }, 'Unexpected database pool error');
 });
 
-// Set per-connection timeouts so no query runs forever and locks don't hang indefinitely
+// Set per-connection safeguards so queries, locks, and idle transactions do not linger forever.
 pool.on('connect', (client) => {
-  client.query('SET statement_timeout = 30000; SET lock_timeout = 10000').catch((err) => {
-    logger.warn({ error: err.message }, 'Failed to set timeouts on new connection');
-  });
+  (async () => {
+    try {
+      await client.query(`SET statement_timeout = ${30_000}`);
+      await client.query(`SET lock_timeout = ${10_000}`);
+      await client.query(`SET idle_in_transaction_session_timeout = ${config.db.idleInTransactionTimeoutMs}`);
+    } catch (err) {
+      logger.warn({ error: err.message }, 'Failed to set timeouts on new connection');
+    }
+  })();
 });
 
-// Periodic pool stats — warn when clients are waiting for connections
+// Periodic pool stats - warn when clients are waiting for connections.
 setInterval(() => {
   const { totalCount, idleCount, waitingCount } = pool;
   if (waitingCount > 0) {
     logger.warn({ totalCount, idleCount, waitingCount }, 'DB pool has waiting clients');
   }
-}, 300000).unref();
+}, 30_000).unref();
 
 /**
  * Run a function inside a transaction. Rolls back on error.

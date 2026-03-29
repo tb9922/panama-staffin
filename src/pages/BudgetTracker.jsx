@@ -139,8 +139,14 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   async function patchConfig(patch) {
     const newConfig = { ...config, ...patch };
     try {
-      await saveConfig(getCurrentHome(), newConfig);
-      setSchedData(prev => ({ ...prev, config: newConfig }));
+      const result = await saveConfig(getCurrentHome(), newConfig, {
+        clientUpdatedAt: schedData.configUpdatedAt || null,
+      });
+      setSchedData(prev => ({
+        ...prev,
+        config: newConfig,
+        configUpdatedAt: result?.updated_at || prev.configUpdatedAt || null,
+      }));
     } catch (e) {
       setSaveError(e.message);
     }

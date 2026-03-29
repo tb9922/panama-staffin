@@ -330,6 +330,65 @@ describe('calculateRun', () => {
     }
   });
 
+  it('records employer-only pension contributions when employee override is 0%', async () => {
+    const { rows: existingConfigRows } = await pool.query(
+      `SELECT effective_from::text
+       FROM pension_config
+       WHERE effective_from BETWEEN '2025-10-17' AND '2025-11-16'`
+    );
+    const usedDates = new Set(existingConfigRows.map(r => r.effective_from));
+    let effectiveFrom = null;
+    for (let day = 16; day >= 17 - 31; day--) {
+      const candidate = new Date(Date.UTC(2025, 10, day));
+      const dateStr = candidate.toISOString().slice(0, 10);
+      if (!usedDates.has(dateStr) && dateStr <= '2025-11-16') {
+        effectiveFrom = dateStr;
+        break;
+      }
+    }
+    expect(effectiveFrom).toBeTruthy();
+
+    const { rows: [configRow] } = await pool.query(
+      `INSERT INTO pension_config
+         (effective_from, lower_qualifying_weekly, upper_qualifying_weekly, trigger_annual, employee_rate, employer_rate, state_pension_age)
+       VALUES ($1, 120, 967, 10000, 0.05, 0.03, 66)
+       RETURNING id`
+      ,
+      [effectiveFrom]
+    );
+    try {
+      await pool.query(
+        `INSERT INTO pension_enrolments
+           (home_id, staff_id, status, enrolled_date, contribution_override_employee, contribution_override_employer)
+         VALUES ($1, 'TP02', 'eligible_enrolled', $2, 0, 0.03)
+         ON CONFLICT (home_id, staff_id) DO UPDATE SET
+           status = EXCLUDED.status,
+           enrolled_date = EXCLUDED.enrolled_date,
+           contribution_override_employee = EXCLUDED.contribution_override_employee,
+           contribution_override_employer = EXCLUDED.contribution_override_employer`,
+        [homeId, PERIOD_END]
+      );
+
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+
+      const { rows } = await pool.query(
+        `SELECT pc.employee_amount, pc.employer_amount
+         FROM pension_contributions pc
+         JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
+         WHERE pl.payroll_run_id = $1 AND pc.staff_id = 'TP02'`,
+        [runId]
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(parseFloat(rows[0].employee_amount)).toBe(0);
+      expect(parseFloat(rows[0].employer_amount)).toBeGreaterThan(0);
+    } finally {
+      await pool.query(`DELETE FROM pension_enrolments WHERE home_id = $1 AND staff_id = 'TP02'`, [homeId]);
+      await pool.query(`DELETE FROM pension_config WHERE id = $1`, [configRow.id]);
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+    }
+  }, 30000);
+
   it('flags TP04 as NMW non-compliant', async () => {
     const { rows: [line] } = await pool.query(
       `SELECT nmw_compliant, nmw_lowest_rate, notes

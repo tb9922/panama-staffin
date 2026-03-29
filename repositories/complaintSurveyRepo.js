@@ -1,8 +1,9 @@
 import { pool } from '../db.js';
+import { paginateResult } from '../lib/pagination.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 const SURVEY_COLS = 'id, home_id, version, type, date, title, total_sent, responses, overall_satisfaction, area_scores, key_feedback, actions, conducted_by, reported_at, created_at, deleted_at';
 
-const ts = v => v instanceof Date ? v.toISOString() : v;
 const pf = v => v != null ? parseFloat(v) : v;
 
 function shapeRow(row) {
@@ -12,13 +13,8 @@ function shapeRow(row) {
     total_sent: row.total_sent, responses: row.responses,
     overall_satisfaction: pf(row.overall_satisfaction), area_scores: row.area_scores,
     key_feedback: row.key_feedback, actions: row.actions,
-    conducted_by: row.conducted_by, reported_at: ts(row.reported_at),
+    conducted_by: row.conducted_by, reported_at: toIsoOrNull(row.reported_at),
   };
-}
-
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
@@ -29,7 +25,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeRow);
+  return paginateResult(rows, shapeRow);
 }
 
 export async function sync(homeId, arr, client) {

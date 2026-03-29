@@ -164,7 +164,7 @@ describe('PayrollDetail', () => {
   });
 
   it('shows loading state initially', () => {
-    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getPayrollRun.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<PayrollDetail />);
     expect(screen.getByText(/Loading payroll run/)).toBeInTheDocument();

@@ -126,21 +126,19 @@ export async function upsertDrill(homeId, record) {
   const { rows } = await pool.query(
     `INSERT INTO fire_drills
        (id, home_id, date, time, scenario, evacuation_time_seconds, staff_present,
-        residents_evacuated, issues, corrective_actions, conducted_by, notes, updated_at)
+         residents_evacuated, issues, corrective_actions, conducted_by, notes, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
-     ON CONFLICT (home_id, id) DO UPDATE SET
-       date=EXCLUDED.date, time=EXCLUDED.time, scenario=EXCLUDED.scenario,
-       evacuation_time_seconds=EXCLUDED.evacuation_time_seconds, staff_present=EXCLUDED.staff_present,
-       residents_evacuated=EXCLUDED.residents_evacuated, issues=EXCLUDED.issues,
-       corrective_actions=EXCLUDED.corrective_actions,
-       conducted_by=EXCLUDED.conducted_by, notes=EXCLUDED.notes, updated_at=NOW(), deleted_at=NULL
-     RETURNING ${DRILL_COLS}`,
+      ON CONFLICT (home_id, id) DO NOTHING
+      RETURNING ${DRILL_COLS}`,
     [record.id, homeId, record.date, record.time || null, record.scenario || null,
      record.evacuation_time_seconds ?? null,
      JSON.stringify(record.staff_present || []),
      record.residents_evacuated ?? null, record.issues || null,
      record.corrective_actions || null, record.conducted_by || null, record.notes || null]
   );
+  if (rows.length === 0) {
+    throw new ConflictError('Record was modified by another user. Please refresh and try again.');
+  }
   return shapeRow(rows[0]);
 }
 

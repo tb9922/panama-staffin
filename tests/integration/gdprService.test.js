@@ -92,6 +92,12 @@ beforeAll(async () => {
     [homeA, STAFF[0]]
   );
 
+  await pool.query(
+    `INSERT INTO pension_enrolments (home_id, staff_id, status, enrolled_date, notes)
+     VALUES ($1, $2, 'eligible_enrolled', '2025-04-06', 'Sensitive pension note')`,
+    [homeA, STAFF[0]]
+  );
+
   // ── HR Disciplinary ────────────────────────────────────────────────────
   await pool.query(
     `INSERT INTO hr_disciplinary_cases
@@ -242,6 +248,7 @@ async function cleanHome(hid) {
     { sql: `DELETE FROM training_records WHERE home_id = $1` },
     { sql: `DELETE FROM supervisions WHERE home_id = $1` },
     { sql: `DELETE FROM appraisals WHERE home_id = $1` },
+    { sql: `DELETE FROM pension_enrolments WHERE home_id = $1` },
     { sql: `DELETE FROM onboarding WHERE home_id = $1` },
     { sql: `DELETE FROM care_certificates WHERE home_id = $1` },
     { sql: `DELETE FROM dols WHERE home_id = $1` },
@@ -621,6 +628,16 @@ describe('executeErasure', () => {
     expect(rows[0].objectives).toBeNull();
     expect(rows[0].training_needs).toBeNull();
     expect(rows[0].development_plan).toBeNull();
+    expect(rows[0].notes).toBeNull();
+  });
+
+  it('retains pension enrolments but clears notes', async () => {
+    const { rows } = await pool.query(
+      `SELECT status, notes FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].status).toBe('eligible_enrolled');
     expect(rows[0].notes).toBeNull();
   });
 

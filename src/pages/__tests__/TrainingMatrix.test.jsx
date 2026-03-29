@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TrainingMatrix from '../TrainingMatrix.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -185,5 +186,56 @@ describe('TrainingMatrix', () => {
     // All four tabs are visible regardless of role
     expect(screen.getByRole('tab', { name: 'Training' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Supervisions' })).toBeInTheDocument();
+  });
+
+  it('uses compliance write access to enable training edit controls', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: moduleId => moduleId === 'compliance',
+      homeRole: 'training_lead',
+      staffId: null,
+    });
+
+    renderWithProviders(<TrainingMatrix />, { user: { username: 'lead', role: 'training_lead' } });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Import CSV' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Manage Training Types' })).toBeInTheDocument();
+  });
+
+  it('honors read-only mode across training tabs', async () => {
+    const user = userEvent.setup();
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'viewer',
+      staffId: null,
+    });
+
+    renderWithProviders(<TrainingMatrix />, { user: { username: 'viewer', role: 'viewer' } });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Training Matrix').length).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(screen.queryByRole('button', { name: 'Import CSV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage Training Types' })).not.toBeInTheDocument();
+
+    const fireSafetyCell = screen.getAllByRole('button').find((button) => {
+      const title = button.getAttribute('title') || '';
+      return title.includes('Bob Jones') && title.includes('Fire Safety');
+    });
+    expect(fireSafetyCell).toBeDefined();
+    expect(fireSafetyCell).toBeDisabled();
+
+    await user.click(screen.getByRole('tab', { name: 'Supervisions' }));
+    expect(screen.queryByRole('button', { name: 'Record Supervision' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Appraisals' }));
+    expect(screen.queryByRole('button', { name: 'Record Appraisal' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Fire Drills' }));
+    expect(screen.queryByRole('button', { name: 'Record Fire Drill' })).not.toBeInTheDocument();
   });
 });

@@ -1,8 +1,8 @@
 import { pool } from '../db.js';
+import { paginateResult } from '../lib/pagination.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 const COMPLAINT_COLS = 'id, home_id, version, date, raised_by, raised_by_name, category, title, description, acknowledged_date, response_deadline, status, investigator, investigation_notes, resolution, resolution_date, outcome_shared, root_cause, improvements, lessons_learned, reported_by, reported_at, updated_at, created_at, deleted_at';
-
-const ts = v => v instanceof Date ? v.toISOString() : v;
 
 function shapeRow(row) {
   return {
@@ -13,13 +13,8 @@ function shapeRow(row) {
     investigator: row.investigator, investigation_notes: row.investigation_notes,
     resolution: row.resolution, resolution_date: row.resolution_date, outcome_shared: row.outcome_shared,
     root_cause: row.root_cause, improvements: row.improvements, lessons_learned: row.lessons_learned,
-    reported_by: row.reported_by, reported_at: ts(row.reported_at), updated_at: ts(row.updated_at),
+    reported_by: row.reported_by, reported_at: toIsoOrNull(row.reported_at), updated_at: toIsoOrNull(row.updated_at),
   };
-}
-
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
@@ -30,7 +25,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeRow);
+  return paginateResult(rows, shapeRow);
 }
 
 export async function sync(homeId, arr, client) {

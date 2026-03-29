@@ -10,6 +10,16 @@ let bankHolidayCache = null;
 let cacheExpiry = 0;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+export function __resetBankHolidayCacheForTests() {
+  bankHolidayCache = null;
+  cacheExpiry = 0;
+}
+
+export function __primeBankHolidayCacheForTests(cache, expiresAt = Date.now() + CACHE_TTL_MS) {
+  bankHolidayCache = cache;
+  cacheExpiry = expiresAt;
+}
+
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const now = Date.now();

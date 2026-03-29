@@ -32,8 +32,8 @@ export default function ResidentAdmitModal({ home, onClose, onSaved }) {
         if (data[k] === '' || data[k] == null) data[k] = null;
         else data[k] = parseFloat(data[k]);
       }
-      await createFinanceResident(home, data);
-      onSaved();
+      const created = await createFinanceResident(home, data);
+      onSaved(created);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -148,7 +148,7 @@ export default function ResidentAdmitModal({ home, onClose, onSaved }) {
 
         {/* Bed assignment note */}
         <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded text-sm text-gray-600">
-          After saving, <a href="/beds" className="text-blue-600 underline font-medium">assign a bed in Bed Manager &rarr;</a>
+          After saving, assign a bed in Bed Manager.
         </div>
 
         <div className={MODAL.footer}>

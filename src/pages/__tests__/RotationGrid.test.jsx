@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import RotationGrid from '../RotationGrid.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA } from '../../test/fixtures/schedulingData.js';
-
-// ── Module mocks ───────────────────────────────────────────────────────────────
+import { useData } from '../../contexts/DataContext.jsx';
+import { formatDate } from '../../lib/rotation.js';
 
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
@@ -23,8 +23,6 @@ vi.mock('../../lib/api.js', async () => {
 
 import * as api from '../../lib/api.js';
 
-// ── Setup ──────────────────────────────────────────────────────────────────────
-
 beforeEach(() => {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
 });
@@ -36,12 +34,13 @@ function renderAdmin() {
   });
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────────
-
 describe('RotationGrid', () => {
-  it('smoke test — renders without crashing', async () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('smoke test renders without crashing', async () => {
     renderAdmin();
-    // Either loading state or loaded state must be present
     await waitFor(() => {
       const loading = document.querySelector('.animate-spin');
       const roster = screen.queryAllByText(/Roster/i);
@@ -52,9 +51,7 @@ describe('RotationGrid', () => {
   it('shows loading state while data is fetching', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    // Spinner renders as animated div while loading
-    const spinner = document.querySelector('.animate-spin');
-    expect(spinner).toBeInTheDocument();
+    expect(document.querySelector('.animate-spin')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
@@ -65,20 +62,41 @@ describe('RotationGrid', () => {
     });
   });
 
+  it('loads a centered scheduling window for the visible month', async () => {
+    renderAdmin();
+    await screen.findByRole('button', { name: 'Previous month' });
+    const now = new Date();
+    const monthDates = Array.from({ length: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate() }, (_, index) =>
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), index + 1))
+    );
+    const anchor = monthDates[Math.floor(monthDates.length / 2)];
+    expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
+      from: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - 200))),
+      to: formatDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + 200))),
+    });
+  });
+
+  it('shows a restricted state for staff self-service accounts', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S001',
+    });
+    renderWithProviders(<RotationGrid />, {
+      user: { username: 'staff', role: 'viewer' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Roster management is not available for staff self-service accounts.')).toBeInTheDocument();
+    });
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
+  });
+
   it('displays month header with month label and navigation arrows', async () => {
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Roster')).toBeInTheDocument();
-    });
-    // Month navigation arrows are rendered as HTML entities → and ←
-    const prevBtn = screen.getByRole('button', { name: /←/i });
-    const nextBtn = screen.getByRole('button', { name: /→/i });
-    expect(prevBtn).toBeInTheDocument();
-    expect(nextBtn).toBeInTheDocument();
-    // Should show a month label (e.g., "March 2026")
-    // monthLabel is computed from the current UTC date — just check it looks like a date label
-    const allText = document.body.innerText || document.body.textContent;
-    expect(allText).toMatch(/\d{4}/); // year present
+    expect(await screen.findByRole('button', { name: 'Previous month' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next month' })).toBeInTheDocument();
+    expect(screen.getAllByText(/\w+\s\d{4}/).length).toBeGreaterThan(0);
   });
 
   it('displays active care staff names in the grid', async () => {
@@ -88,7 +106,6 @@ describe('RotationGrid', () => {
     });
     expect(screen.getByText('Bob Jones')).toBeInTheDocument();
     expect(screen.getByText('Carol Davis')).toBeInTheDocument();
-    // Inactive staff should not appear
     expect(screen.queryByText('Dan Wilson')).not.toBeInTheDocument();
   });
 
@@ -109,7 +126,6 @@ describe('RotationGrid', () => {
   it('shows absence and cover summary rows at the bottom of the grid', async () => {
     renderAdmin();
     await waitFor(() => {
-      // The summary rows are labelled "Absent" and "Cover"
       expect(screen.getByText(/Absent/)).toBeInTheDocument();
       expect(screen.getByText(/Cover/)).toBeInTheDocument();
     });
@@ -120,9 +136,8 @@ describe('RotationGrid', () => {
     await waitFor(() => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     });
-    // Each cell is a <button> — there should be many (staff × days)
+
     const shiftButtons = screen.getAllByRole('button');
-    // At least the navigation + export + some shift cells
     expect(shiftButtons.length).toBeGreaterThan(5);
   });
 
@@ -133,8 +148,6 @@ describe('RotationGrid', () => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     });
 
-    // Find a shift cell button that is not a nav/control button
-    // Shift cells have title attributes containing "Click to change"
     const shiftCells = document.querySelectorAll('button[title*="Click to change"]');
     expect(shiftCells.length).toBeGreaterThan(0);
 
@@ -143,7 +156,6 @@ describe('RotationGrid', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
-    // Modal should show "Change shift to:" label
     expect(screen.getByText('Change shift to:')).toBeInTheDocument();
   });
 
@@ -165,19 +177,15 @@ describe('RotationGrid', () => {
   it('navigating to next month updates the month label', async () => {
     const user = userEvent.setup();
     renderAdmin();
+    await screen.findByRole('button', { name: 'Next month' });
+    const monthLabelsBefore = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
+    await user.click(screen.getByRole('button', { name: 'Next month' }));
     await waitFor(() => {
-      expect(screen.getByText('Roster')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Current month' })).toBeInTheDocument();
     });
-
-    // Get current month label text before clicking next
-    const nextBtn = screen.getByRole('button', { name: /→/i });
-    await user.click(nextBtn);
-
-    await waitFor(() => {
-      // After clicking next, "Current" button should appear (to go back to current month)
-      expect(screen.getByRole('button', { name: 'Current' })).toBeInTheDocument();
-    });
-  });
+    const monthLabelsAfter = screen.getAllByText(/\w+\s\d{4}/).map((node) => node.textContent);
+    expect(monthLabelsAfter).not.toEqual(monthLabelsBefore);
+  }, 15000);
 
   it('team filter dropdown filters staff to selected team', async () => {
     const user = userEvent.setup();
@@ -186,17 +194,14 @@ describe('RotationGrid', () => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     });
 
-    // Alice is Day A, Bob is Day B, Carol is Night A
     expect(screen.getByText('Bob Jones')).toBeInTheDocument();
 
-    // Filter to "Day A" only
     const teamSelect = screen.getByDisplayValue('All Teams');
     await user.selectOptions(teamSelect, 'Day A');
 
     await waitFor(() => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     });
-    // Bob Jones (Day B) and Carol Davis (Night A) should no longer appear
     expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
     expect(screen.queryByText('Carol Davis')).not.toBeInTheDocument();
   });

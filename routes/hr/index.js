@@ -107,7 +107,7 @@ router.put('/grievance-actions/:id', requireAuth, requireHomeAccess, requireModu
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
     const parsed = grievanceActionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, parsed.data);
+    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, parsed.data, null, parsed.data._version);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
     await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, { id: result.id });
     res.json(result);

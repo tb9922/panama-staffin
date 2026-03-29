@@ -35,7 +35,7 @@ const STATUSES = [
 
 const EMPTY_FORM = {
   staff_id: '', status: 'pending_assessment',
-  enrolled_date: '', opt_out_date: '', re_enrolled_date: '',
+  enrolled_date: '', opted_out_date: '', reassessment_date: '',
   contribution_override_employee: '', contribution_override_employer: '',
   notes: '',
 };
@@ -86,7 +86,7 @@ export default function PensionManager() {
       setError(null);
       const [enrs, cfg] = await Promise.all([
         getPensionEnrolments(homeSlug),
-        getPensionConfig(),
+        getPensionConfig(homeSlug),
       ]);
       setEnrolments(enrs);
       setConfig(cfg);
@@ -121,8 +121,8 @@ export default function PensionManager() {
       staff_id:                       enr.staff_id,
       status:                         enr.status,
       enrolled_date:                 enr.enrolled_date || '',
-      opt_out_date:                   enr.opt_out_date || '',
-      re_enrolled_date:              enr.re_enrolled_date || '',
+      opted_out_date:                enr.opted_out_date || '',
+      reassessment_date:             enr.reassessment_date || '',
       contribution_override_employee: enr.contribution_override_employee != null
         ? String(enr.contribution_override_employee * 100) : '',
       contribution_override_employer: enr.contribution_override_employer != null
@@ -146,9 +146,9 @@ export default function PensionManager() {
           ? parseFloat(form.contribution_override_employee) / 100 : null,
         contribution_override_employer: form.contribution_override_employer !== ''
           ? parseFloat(form.contribution_override_employer) / 100 : null,
-        enrolled_date:    form.enrolled_date    || null,
-        opt_out_date:      form.opt_out_date      || null,
-        re_enrolled_date: form.re_enrolled_date || null,
+        enrolled_date:     form.enrolled_date || null,
+        opted_out_date:    form.opted_out_date || null,
+        reassessment_date: form.reassessment_date || null,
       });
       setShowModal(false);
       await load();
@@ -196,8 +196,8 @@ export default function PensionManager() {
           {[
             { label: 'Employee contribution', value: fmtPct(config.employee_rate) },
             { label: 'Employer contribution', value: fmtPct(config.employer_rate) },
-            { label: 'Lower earnings', value: `${fmt(config.lower_weekly)} /wk` },
-            { label: 'Upper earnings', value: `${fmt(config.upper_weekly)} /wk` },
+            { label: 'Lower earnings', value: `${fmt(config.lower_qualifying_weekly)} /wk` },
+            { label: 'Upper earnings', value: `${fmt(config.upper_qualifying_weekly)} /wk` },
           ].map(({ label, value }) => (
             <div key={label} className={`${CARD.padded} text-center`}>
               <div className="text-xs text-gray-500 mb-1">{label}</div>
@@ -246,8 +246,8 @@ export default function PensionManager() {
             )}
             {enrolments.map(enr => {
               const staff = staffMap[enr.staff_id];
-              const reEnrolmentWarning = enr.re_enrolled_date &&
-                new Date(enr.re_enrolled_date) <= new Date(Date.now() + 30 * 86400 * 1000);
+              const reEnrolmentWarning = enr.reassessment_date &&
+                new Date(enr.reassessment_date) <= new Date(Date.now() + 30 * 86400 * 1000);
               const eeRate = enr.contribution_override_employee != null
                 ? fmtPct(enr.contribution_override_employee)
                 : config ? fmtPct(config.employee_rate) : '—';
@@ -266,11 +266,11 @@ export default function PensionManager() {
                     </span>
                   </td>
                   <td className={TABLE.td}>{enr.enrolled_date || <span className="text-gray-400">—</span>}</td>
-                  <td className={TABLE.td}>{enr.opt_out_date || <span className="text-gray-400">—</span>}</td>
+                  <td className={TABLE.td}>{enr.opted_out_date || <span className="text-gray-400">—</span>}</td>
                   <td className={TABLE.td}>
-                    {enr.re_enrolled_date ? (
+                    {enr.reassessment_date ? (
                       <span className={reEnrolmentWarning ? 'text-amber-700 font-medium' : ''}>
-                        {enr.re_enrolled_date}
+                        {enr.reassessment_date}
                         {reEnrolmentWarning && ' ⚠'}
                       </span>
                     ) : (
@@ -390,16 +390,16 @@ export default function PensionManager() {
             <div>
               <label className={INPUT.label}>Opt-Out Date</label>
               <input type="date" className={INPUT.base}
-                value={form.opt_out_date}
-                onChange={e => field('opt_out_date', e.target.value)} />
+                value={form.opted_out_date}
+                onChange={e => field('opted_out_date', e.target.value)} />
             </div>
           </div>
 
           <div>
             <label className={INPUT.label}>Re-enrolment Date</label>
             <input type="date" className={INPUT.base}
-              value={form.re_enrolled_date}
-              onChange={e => field('re_enrolled_date', e.target.value)} />
+              value={form.reassessment_date}
+              onChange={e => field('reassessment_date', e.target.value)} />
             <p className="text-xs text-gray-400 mt-1">Typically 3 years after opt-out date.</p>
           </div>
 

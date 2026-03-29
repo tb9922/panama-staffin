@@ -12,6 +12,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
+import * as homeRepo from '../../repositories/homeRepo.js';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -241,5 +242,67 @@ describe('role assignment boundaries', () => {
     expect(byUser[FINANCE_USER]).toBe('finance_officer');
     // Only users with explicit role assignments should be present
     expect(Object.keys(byUser).length).toBe(3);
+  });
+});
+
+describe('home config save integrity', () => {
+  it('preserves edit_lock_pin when the client payload omits it', async () => {
+    await pool.query(
+      `UPDATE homes
+       SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{edit_lock_pin}', '"1234"'::jsonb, true),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [homeId]
+    );
+    const { rows: [before] } = await pool.query(`SELECT config, updated_at FROM homes WHERE id = $1`, [homeId]);
+
+    const payload = {
+      config: {
+        ...before.config,
+        home_name: 'RBAC Test Home Pinned',
+      },
+      _clientUpdatedAt: before.updated_at.toISOString(),
+    };
+    delete payload.config.edit_lock_pin;
+
+    const res = await request(app)
+      .put(`/api/homes/config?home=${homeSlug}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    const { rows: [after] } = await pool.query(`SELECT config FROM homes WHERE id = $1`, [homeId]);
+    expect(after.config.edit_lock_pin).toBe('1234');
+    expect(after.config.home_name).toBe('RBAC Test Home Pinned');
+  });
+
+  it('returns 409 when config is stale after a training config update', async () => {
+    const { rows: [before] } = await pool.query(`SELECT config, updated_at FROM homes WHERE id = $1`, [homeId]);
+    const staleUpdatedAt = before.updated_at.toISOString();
+
+    await homeRepo.updateTrainingTypesConfig(homeId, [
+      {
+        id: 'moving-handling',
+        name: 'Moving & Handling',
+        category: 'mandatory',
+        refresher_months: 12,
+        roles: ['Carer'],
+        active: true,
+      },
+    ], null, staleUpdatedAt);
+
+    const res = await request(app)
+      .put(`/api/homes/config?home=${homeSlug}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        config: {
+          ...before.config,
+          home_name: 'Stale home config',
+        },
+        _clientUpdatedAt: staleUpdatedAt,
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/modified by another user/i);
   });
 });

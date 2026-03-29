@@ -13,10 +13,11 @@ import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 const staffIdSchema = z.string().min(1).max(20);
 const typeIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
 
@@ -38,7 +39,7 @@ const trainingTypeSchema = z.object({
 const trainingTypesArraySchema = z.array(trainingTypeSchema).max(100);
 const trainingTypesUpdateSchema = z.object({
   trainingTypes: trainingTypesArraySchema,
-  _clientUpdatedAt: z.string().max(50).optional(),
+  _clientUpdatedAt: z.string().max(50),
 });
 
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ const trainingRecordSchema = z.object({
   _clientUpdatedAt: z.string().max(50).optional(),
 });
 
-const supervisionSchema = z.object({
+const supervisionBaseSchema = z.object({
   staffId:    staffIdSchema,
   date:       dateSchema,
   supervisor: z.string().max(200).nullable().optional(),
@@ -65,7 +66,12 @@ const supervisionSchema = z.object({
   _clientUpdatedAt: z.string().max(50).optional(),
 });
 
-const appraisalSchema = z.object({
+const supervisionCreateSchema = supervisionBaseSchema;
+const supervisionUpdateSchema = supervisionBaseSchema.extend({
+  _clientUpdatedAt: z.string().max(50),
+});
+
+const appraisalBaseSchema = z.object({
   staffId:          staffIdSchema,
   date:             dateSchema,
   appraiser:        z.string().max(200).nullable().optional(),
@@ -77,7 +83,12 @@ const appraisalSchema = z.object({
   _clientUpdatedAt: z.string().max(50).optional(),
 });
 
-const fireDrillSchema = z.object({
+const appraisalCreateSchema = appraisalBaseSchema;
+const appraisalUpdateSchema = appraisalBaseSchema.extend({
+  _clientUpdatedAt: z.string().max(50),
+});
+
+const fireDrillBaseSchema = z.object({
   date:                    dateSchema,
   time:                    z.string().max(10).nullable().optional(),
   scenario:                z.string().max(2000).nullable().optional(),
@@ -89,6 +100,11 @@ const fireDrillSchema = z.object({
   conducted_by:            z.string().max(200).nullable().optional(),
   notes:                   z.string().max(5000).nullable().optional(),
   _clientUpdatedAt:        z.string().max(50).optional(),
+});
+
+const fireDrillCreateSchema = fireDrillBaseSchema;
+const fireDrillUpdateSchema = fireDrillBaseSchema.extend({
+  _clientUpdatedAt: z.string().max(50),
 });
 
 // GET /api/training?home=X — one-shot load for TrainingMatrix
@@ -147,7 +163,7 @@ router.put('/config/types', writeRateLimiter, requireAuth, requireHomeAccess, re
 // POST /api/training/supervisions?home=X — create supervision
 router.post('/supervisions', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
-    const parsed = supervisionSchema.safeParse(req.body);
+    const parsed = supervisionCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `sup-${randomUUID()}` };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
@@ -161,7 +177,7 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const parsed = supervisionSchema.safeParse(req.body);
+    const parsed = supervisionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
@@ -185,7 +201,7 @@ router.delete('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAcc
 // POST /api/training/appraisals?home=X — create appraisal
 router.post('/appraisals', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
-    const parsed = appraisalSchema.safeParse(req.body);
+    const parsed = appraisalCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `apr-${randomUUID()}` };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
@@ -199,7 +215,7 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const parsed = appraisalSchema.safeParse(req.body);
+    const parsed = appraisalUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
@@ -223,7 +239,7 @@ router.delete('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAcces
 // POST /api/training/fire-drills?home=X — create fire drill
 router.post('/fire-drills', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
-    const parsed = fireDrillSchema.safeParse(req.body);
+    const parsed = fireDrillCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: `fd-${randomUUID()}` };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
@@ -237,7 +253,7 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
   try {
     const idParsed = recordIdSchema.safeParse(req.params.id);
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
-    const parsed = fireDrillSchema.safeParse(req.body);
+    const parsed = fireDrillUpdateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);

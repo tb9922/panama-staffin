@@ -62,7 +62,7 @@ export default function SickPayTracker() {
       setError(null);
       const [perds, cfg] = await Promise.all([
         getSickPeriods(homeSlug),
-        getSSPConfig(),
+        getSSPConfig(homeSlug),
       ]);
       setPeriods(perds);
       setSSPConfig(cfg);

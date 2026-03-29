@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
-
-const ts = v => v instanceof Date ? v.toISOString() : v;
+import { paginateResult } from '../lib/pagination.js';
+import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
 const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, description,
@@ -27,7 +27,7 @@ function shapeRow(row) {
     staff_involved: row.staff_involved, immediate_action: row.immediate_action,
     medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
     cqc_notifiable: row.cqc_notifiable, cqc_notification_type: row.cqc_notification_type,
-    cqc_notification_deadline: ts(row.cqc_notification_deadline),
+    cqc_notification_deadline: toIsoOrNull(row.cqc_notification_deadline),
     cqc_notified: row.cqc_notified, cqc_notified_date: row.cqc_notified_date, cqc_reference: row.cqc_reference,
     riddor_reportable: row.riddor_reportable, riddor_category: row.riddor_category,
     riddor_reported: row.riddor_reported, riddor_reported_date: row.riddor_reported_date, riddor_reference: row.riddor_reference,
@@ -44,13 +44,8 @@ function shapeRow(row) {
     investigation_lead: row.investigation_lead, investigation_review_date: row.investigation_review_date,
     root_cause: row.root_cause, lessons_learned: row.lessons_learned, investigation_closed_date: row.investigation_closed_date,
     corrective_actions: row.corrective_actions, reported_by: row.reported_by,
-    reported_at: ts(row.reported_at), updated_at: ts(row.updated_at), frozen_at: ts(row.frozen_at),
+    reported_at: toIsoOrNull(row.reported_at), updated_at: toIsoOrNull(row.updated_at), frozen_at: toIsoOrNull(row.frozen_at),
   };
-}
-
-function paginate(rows, shapeFn) {
-  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
-  return { rows: rows.map(r => { const { _total, ...rest } = r; return shapeFn(rest); }), total };
 }
 
 /**
@@ -66,7 +61,7 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
      LIMIT $2 OFFSET $3`,
     [homeId, Math.min(limit, 500), Math.max(offset, 0)]
   );
-  return paginate(rows, shapeRow);
+  return paginateResult(rows, shapeRow);
 }
 
 /**
@@ -226,7 +221,7 @@ export async function sync(homeId, incidentsArr, client) {
  */
 export async function freeze(incidentId, homeId) {
   const { rowCount } = await pool.query(
-    `UPDATE incidents SET frozen_at = NOW()
+    `UPDATE incidents SET frozen_at = NOW(), updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND frozen_at IS NULL AND deleted_at IS NULL`,
     [incidentId, homeId]
   );
@@ -241,7 +236,7 @@ export async function freeze(incidentId, homeId) {
  */
 export async function isFrozen(incidentId, homeId) {
   const { rows } = await pool.query(
-    'SELECT frozen_at FROM incidents WHERE id = $1 AND home_id = $2',
+    'SELECT frozen_at FROM incidents WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
     [incidentId, homeId]
   );
   return rows.length > 0 && rows[0].frozen_at != null;
@@ -259,10 +254,15 @@ export async function isFrozen(incidentId, homeId) {
 export async function addAddendum(incidentId, homeId, author, content) {
   const { rows } = await pool.query(
     `INSERT INTO incident_addenda (incident_id, home_id, author, content)
-     VALUES ($1, $2, $3, $4) RETURNING ${ADDENDUM_COLS}`,
+     SELECT $1::varchar, $2::integer, $3::varchar, $4::text
+     WHERE EXISTS (
+       SELECT 1 FROM incidents
+       WHERE id = $1::varchar AND home_id = $2::integer AND deleted_at IS NULL
+     )
+     RETURNING ${ADDENDUM_COLS}`,
     [incidentId, homeId, author, content]
   );
-  return rows[0];
+  return rows[0] || null;
 }
 
 /**
@@ -321,9 +321,9 @@ export async function upsert(homeId, data) {
        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
      )
-     ON CONFLICT (home_id, id) DO UPDATE SET
-       date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
-       person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
+      ON CONFLICT (home_id, id) DO UPDATE SET
+        date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
+        person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
        medical_attention=$13,hospital_attendance=$14,
        cqc_notifiable=$15,cqc_notification_type=$16,cqc_notification_deadline=$17,
        cqc_notified=$18,cqc_notified_date=$19,cqc_reference=$20,
@@ -331,13 +331,14 @@ export async function upsert(homeId, data) {
        safeguarding_referral=$26,safeguarding_to=$27,safeguarding_reference=$28,safeguarding_date=$29,
        witnesses=$30,duty_of_candour_applies=$31,candour_notification_date=$32,candour_letter_sent_date=$33,candour_recipient=$34,
        police_involved=$35,police_reference=$36,police_contact_date=$37,
-       msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
-       investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
-       investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
-       corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
-       deleted_at=NULL
-     WHERE incidents.frozen_at IS NULL
-     RETURNING ${INCIDENT_COLS}`,
+        msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
+        investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
+        investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
+        corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
+        version = incidents.version + 1,
+        deleted_at=NULL
+      WHERE incidents.frozen_at IS NULL
+      RETURNING ${INCIDENT_COLS}`,
     [
       id, homeId, data.date || null, data.time || null, data.location || null,
       data.type || null, data.severity || null, data.description || null,

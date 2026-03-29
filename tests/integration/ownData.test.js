@@ -45,6 +45,7 @@ beforeAll(async () => {
       home_name: 'Own Data Test Home',
       registered_beds: 30,
       cycle_start_date: '2025-01-06',
+      edit_lock_pin: '2468',
       shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
       agency_rate_day: 25, agency_rate_night: 30, ot_premium: 5, bh_premium_multiplier: 1.5,
     })]
@@ -211,6 +212,8 @@ describe('staff_member: GET /api/scheduling', () => {
     const config = res.body.config;
     expect(config.home_name).toBe('Own Data Test Home');
     expect(config.shifts).toBeDefined();
+    expect(config.edit_lock_enabled).toBe(true);
+    expect(config.edit_lock_pin).toBeUndefined();
     // Cost parameters stripped
     expect(config.agency_rate_day).toBeUndefined();
     expect(config.agency_rate_night).toBeUndefined();
@@ -233,6 +236,13 @@ describe('staff_member: GET /api/scheduling', () => {
 describe('staff_member: GET /api/data', () => {
   it('returns 403 for staff_member', async () => {
     const res = await authGet(`/api/data?home=${homeSlug}`, staffToken);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('staff_member: GET /api/dashboard/summary', () => {
+  it('returns 403 for staff_member', async () => {
+    const res = await authGet(`/api/dashboard/summary?home=${homeSlug}`, staffToken);
     expect(res.status).toBe(403);
   });
 });

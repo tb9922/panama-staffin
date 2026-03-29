@@ -765,6 +765,10 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // - payroll_ytd: cumulative tax year totals, retained alongside payroll_lines (reconstructable)
     // - sick_periods: dates retained per Limitation Act 1980 s.11 (6 years), notes cleared above
     // - pension_enrolments/contributions: retained per Pension Schemes Act 1993 (6 years)
+    await client.query(
+      `UPDATE pension_enrolments SET notes = NULL WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
     // - shift_overrides: dates/shift codes retained as operational data, reason cleared above
     // - hr_contracts, hr_family_leave, hr_flexible_working: structure/dates retained per Limitation
     //   Act (6 years); free-text notes/reason cleared above

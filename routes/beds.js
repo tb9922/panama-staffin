@@ -5,11 +5,12 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as bedService from '../services/bedService.js';
 import { STATUSES, ROOM_TYPES } from '../lib/beds.js';
+import { nullableDateInput } from '../lib/zodHelpers.js';
 
 const router = Router();
 
 const idSchema = z.coerce.number().int().positive();
-const dateSchema = z.preprocess(v => v === '' ? null : v, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable());
+const dateSchema = nullableDateInput;
 
 const statusValues = Object.values(STATUSES);
 const roomTypeValues = Object.values(ROOM_TYPES);
@@ -22,6 +23,10 @@ const createBedSchema = z.object({
   room_type:   z.enum(roomTypeValues).optional(),
   floor:       z.string().max(20).nullable().optional(),
   notes:       z.string().max(2000).nullable().optional(),
+});
+
+const updateBedSchema = createBedSchema.extend({
+  clientUpdatedAt: z.string(),
 });
 
 const setupBedSchema = createBedSchema.extend({
@@ -52,6 +57,10 @@ const revertSchema = z.object({
 const moveSchema = z.object({
   fromBedId: z.number().int().positive(),
   toBedId:   z.number().int().positive(),
+});
+
+const deleteBedSchema = z.object({
+  clientUpdatedAt: z.string(),
 });
 
 // ── Read endpoints ──────────────────────────────────────────────────────────
@@ -129,6 +138,24 @@ router.put('/move', writeRateLimiter, requireAuth, requireHomeAccess, requireMod
   } catch (err) { next(err); }
 });
 
+// PUT /api/beds/:bedId?home=slug — edit bed metadata
+router.put('/:bedId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.bedId);
+    if (!idParsed.success) return zodError(res, idParsed);
+    const parsed = updateBedSchema.safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed);
+    const bed = await bedService.updateBed(
+      idParsed.data,
+      req.home.id,
+      req.home.slug,
+      parsed.data,
+      req.user.username,
+    );
+    res.json(bed);
+  } catch (err) { next(err); }
+});
+
 // PUT /api/beds/:bedId/status?home=slug — transition bed status
 router.put('/:bedId/status', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
   try {
@@ -161,6 +188,24 @@ router.put('/:bedId/revert', writeRateLimiter, requireAuth, requireHomeAccess, r
       parsed.data.reason,
     );
     res.json(bed);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/beds/:bedId?home=slug — delete an available bed
+router.delete('/:bedId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.bedId);
+    if (!idParsed.success) return zodError(res, idParsed);
+    const parsed = deleteBedSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
+    const deleted = await bedService.deleteBed(
+      idParsed.data,
+      req.home.id,
+      req.home.slug,
+      req.user.username,
+      parsed.data.clientUpdatedAt,
+    );
+    res.json(deleted);
   } catch (err) { next(err); }
 });
 

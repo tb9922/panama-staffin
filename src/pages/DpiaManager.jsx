@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useData } from '../contexts/DataContext.jsx';
-import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment } from '../lib/api.js';
+import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment, deleteDpiaAssessment } from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
 
 const EMPTY_FORM = {
@@ -15,11 +16,13 @@ const EMPTY_FORM = {
 const STATUS_BADGES = { screening: 'gray', in_progress: 'amber', completed: 'blue', approved: 'green', review_due: 'red' };
 const RISK_BADGES = { low: 'green', medium: 'amber', high: 'red', very_high: 'purple' };
 const STATUS_LABELS = { screening: 'Screening', in_progress: 'In Progress', completed: 'Completed', approved: 'Approved', review_due: 'Review Due' };
+const SCREENING_LABELS = { required: 'DPIA Required', recommended: 'Recommended', not_required: 'Not Required' };
 
 export default function DpiaManager() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -69,6 +72,16 @@ export default function DpiaManager() {
   async function handleStatusChange(id, status, version) {
     try { await updateDpiaAssessment(home, id, { status, _version: version }); load(); }
     catch (e) { setError(e.message); }
+  }
+
+  async function handleDelete(id) {
+    if (!await confirm('Archive this DPIA?')) return;
+    try {
+      await deleteDpiaAssessment(home, id);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   const stats = useMemo(() => ({
@@ -121,7 +134,7 @@ export default function DpiaManager() {
                     <div className="font-medium">{item.title}</div>
                     <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.processing_description}</div>
                   </td>
-                  <td className={TABLE.td}><span className={BADGE[item.screening_result === 'required' ? 'red' : item.screening_result === 'recommended' ? 'amber' : 'green']}>{item.screening_result?.replace(/_/g, ' ')}</span></td>
+                  <td className={TABLE.td}><span className={BADGE[item.screening_result === 'required' ? 'red' : item.screening_result === 'recommended' ? 'amber' : 'green']}>{SCREENING_LABELS[item.screening_result] || item.screening_result?.replace(/_/g, ' ')}</span></td>
                   <td className={TABLE.td}>{item.risk_level && <span className={BADGE[RISK_BADGES[item.risk_level] || 'gray']}>{item.risk_level?.replace(/_/g, ' ')}</span>}</td>
                   <td className={TABLE.td}><span className={BADGE[STATUS_BADGES[item.status] || 'gray']}>{STATUS_LABELS[item.status] || item.status}</span></td>
                   {canEdit && (
@@ -131,6 +144,7 @@ export default function DpiaManager() {
                         {item.status === 'screening' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'in_progress', item.version)}>Start</button>}
                         {item.status === 'in_progress' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'completed', item.version)}>Complete</button>}
                         {item.status === 'completed' && <button className={`${BTN.success} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'approved', item.version)}>Approve</button>}
+                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleDelete(item.id)}>Archive</button>
                       </div>
                     </td>
                   )}
@@ -145,12 +159,12 @@ export default function DpiaManager() {
         <div className="space-y-4">
           {formError && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{formError}</div>}
           <div>
-            <label className={INPUT.label}>Title *</label>
-            <input className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. New biometric clock-in system" />
+            <label className={INPUT.label} htmlFor="dpia-title">Title *</label>
+            <input id="dpia-title" className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. New biometric clock-in system" />
           </div>
           <div>
-            <label className={INPUT.label}>Processing Description *</label>
-            <textarea className={INPUT.base} rows={3} value={form.processing_description} onChange={e => setForm({ ...form, processing_description: e.target.value })} placeholder="Describe the processing activity that requires assessment..." />
+            <label className={INPUT.label} htmlFor="dpia-processing-description">Processing Description *</label>
+            <textarea id="dpia-processing-description" className={INPUT.base} rows={3} value={form.processing_description} onChange={e => setForm({ ...form, processing_description: e.target.value })} placeholder="Describe the processing activity that requires assessment..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -183,6 +197,7 @@ export default function DpiaManager() {
           <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
         </div>
       </Modal>
+      {ConfirmDialog}
     </div>
   );
 }
