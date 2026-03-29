@@ -239,9 +239,13 @@ app.use((err, req, res, next) => {
 // Export app for testing (supertest)
 export { app };
 
-// Only listen when run directly (not when imported by tests)
-const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
-const server = isMainModule ? app.listen(config.port, async () => {
+// Start the HTTP server for normal execution, including PM2 workers.
+// Tests import the app object directly and should not bind a port.
+const isDirectRun = Boolean(process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')));
+const isPm2Process = process.env.pm_id != null || process.env.NODE_APP_INSTANCE != null;
+const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+const shouldListen = !isTestProcess && (isDirectRun || isPm2Process);
+const server = shouldListen ? app.listen(config.port, async () => {
   // Request + connection timeouts
   server.setTimeout(30000);        // 30s max request duration
   server.keepAliveTimeout = 65000; // slightly above typical LB idle (60s)
