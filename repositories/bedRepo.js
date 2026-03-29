@@ -202,17 +202,6 @@ export async function deleteById(bedId, homeId, client) {
   return shapeBed(rows[0]);
 }
 
-export async function deleteById(bedId, homeId, client) {
-  const conn = client || pool;
-  const { rows } = await conn.query(
-    `/* bedRepo – deleteById */
-     DELETE FROM beds
-     WHERE id = $1 AND home_id = $2
-     RETURNING ${BED_COLS}`,
-    [bedId, homeId]
-  );
-  return shapeBed(rows[0]);
-}
 
 export async function getOccupancySummary(homeId, client) {
   const conn = client || pool;
