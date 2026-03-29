@@ -198,7 +198,7 @@ if (config.nodeEnv === 'production') {
       }
     },
   }));
-  app.get('*', (req, res) => {
+  app.get('/{*splat}', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(distDir, 'index.html'));
   });
