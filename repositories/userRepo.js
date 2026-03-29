@@ -106,6 +106,14 @@ export async function updatePassword(id, newHash, client) {
   );
 }
 
+export async function setPlatformAdmin(username, isPlatformAdmin, client) {
+  const conn = client || pool;
+  await conn.query(
+    'UPDATE users SET is_platform_admin = $1, updated_at = NOW() WHERE username = $2',
+    [isPlatformAdmin, username]
+  );
+}
+
 export async function bumpSessionVersionById(id, client) {
   const conn = client || pool;
   await conn.query(

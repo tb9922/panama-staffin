@@ -11,6 +11,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
+import { config } from '../../config.js';
 import { app } from '../../server.js';
 import { validatePassword } from '../../services/userService.js';
 import * as userService from '../../services/userService.js';
@@ -267,6 +268,39 @@ describe('Session and logout hardening', () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith(ADMIN_USER);
+  });
+});
+
+describe('Bootstrap admin seeding', () => {
+  it('repairs an env-seeded admin to platform admin', async () => {
+    const seedUsername = `${TEST_PREFIX}-seed-admin`;
+    const seedHash = await bcrypt.hash('SeedAdminPass1X', 4);
+    const originalUsers = config.users;
+
+    try {
+      config.users = [{ username: seedUsername, hash: seedHash, role: 'admin' }];
+
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [seedUsername]).catch(() => {});
+
+      await pool.query(
+        `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
+         VALUES ($1, $2, 'admin', true, 'Seed Admin', 'system', false)`,
+        [seedUsername, seedHash]
+      );
+
+      await userService.ensureSeedUsers();
+
+      const repaired = await userRepo.findByUsername(seedUsername);
+      expect(repaired).toBeTruthy();
+      expect(repaired.is_platform_admin).toBe(true);
+    } finally {
+      config.users = originalUsers;
+      await pool.query('DELETE FROM user_home_roles WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM token_denylist WHERE username = $1', [seedUsername]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE username = $1', [seedUsername]).catch(() => {});
+    }
   });
 });
 

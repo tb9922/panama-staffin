@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import AppLayout from '../AppLayout.jsx';
 
@@ -199,6 +199,7 @@ describe('AppLayout', () => {
       homeRole: 'deputy_manager',
     });
     renderLayout({ username: 'deputy', role: 'admin' });
+    fireEvent.click(screen.getByRole('button', { name: 'System' }));
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   });
@@ -214,6 +215,15 @@ describe('AppLayout', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: false });
     renderLayout();
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
+  });
+
+  it('lets a platform admin with no homes reach platform setup', () => {
+    mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: true });
+    mockData({ homes: [], activeHome: null, homeRole: null });
+    renderWithProviders(<AppLayout />, { route: '/platform/homes', path: '*', user: { ...ADMIN_USER, isPlatformAdmin: true } });
+    expect(screen.getByText('Platform Setup')).toBeInTheDocument();
+    expect(screen.getByText(/Create the first home below/)).toBeInTheDocument();
+    expect(screen.getByTestId('app-routes')).toBeInTheDocument();
   });
 
   // 9. Viewer sees read-only mode banner

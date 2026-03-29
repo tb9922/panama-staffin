@@ -1,5 +1,5 @@
 import { useState, Suspense } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Navigate, useLocation } from 'react-router-dom';
 import { changeOwnPassword } from '../lib/api.js';
 import { BTN, INPUT, MODAL } from '../lib/design.js';
 import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
@@ -14,6 +14,7 @@ export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
+  const location = useLocation();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
@@ -44,6 +45,37 @@ export default function AppLayout() {
       </div>
     </div>
   );
+
+  if (!activeHome && isPlatformAdmin) {
+    if (location.pathname !== '/platform/homes') {
+      return <Navigate to="/platform/homes" replace />;
+    }
+
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <main id="main-content" className="max-w-6xl mx-auto px-4 py-8">
+          <div className="bg-white border border-blue-200 rounded-2xl shadow-sm p-6 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h6m-6 4h6m-6 4h3" />
+                </svg>
+              </div>
+              <h2 className="text-blue-900 font-semibold text-lg">Platform Setup</h2>
+            </div>
+            <p className="text-blue-800 text-sm">Your platform admin account is active, but there are no homes configured yet.</p>
+            <p className="text-gray-500 text-xs mt-3">Create the first home below, then you can switch into it and use the rest of the app normally.</p>
+            <div className="mt-5">
+              <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.secondary}>Logout</button>
+            </div>
+          </div>
+          <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading...</div>}>
+            <AppRoutes />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
 
   if (!activeHome) return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50">
