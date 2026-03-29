@@ -38,6 +38,7 @@ describe('AuditLog', () => {
   it('renders the page heading', async () => {
     renderWithProviders(<AuditLog />);
     expect(screen.getByText('Audit Log')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('login')).toBeInTheDocument());
   });
 
   it('shows empty state when no entries', async () => {

@@ -57,10 +57,10 @@ export async function paginate(conn, sql, params, orderBy, shaper, pag = {}) {
   const offset = Math.max(parseInt(pag.offset) || 0, 0);
   const countSql = `SELECT COUNT(*) FROM (${sql}) _c`;
   const dataSql = `${sql} ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-  const [dataRes, countRes] = await Promise.all([
-    conn.query(dataSql, [...params, limit, offset]),
-    conn.query(countSql, params),
-  ]);
+  // Serialize these queries for a single pg client so transactional tests
+  // do not trip the overlapping-client deprecation warning.
+  const dataRes = await conn.query(dataSql, [...params, limit, offset]);
+  const countRes = await conn.query(countSql, params);
   return { rows: dataRes.rows.map(shaper), total: parseInt(countRes.rows[0].count, 10) };
 }
 

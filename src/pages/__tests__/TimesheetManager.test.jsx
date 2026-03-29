@@ -80,11 +80,13 @@ describe('TimesheetManager', () => {
   it('renders page heading', async () => {
     renderWithProviders(<TimesheetManager />);
     expect(screen.getByText('Timesheets')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
   });
 
   it('shows loading state initially', async () => {
     let resolve;
     api.getTimesheets.mockReturnValue(new Promise(r => { resolve = r; }));
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<TimesheetManager />);
     expect(screen.getByText('Loading timesheets…')).toBeInTheDocument();
     await act(async () => { resolve(MOCK_ENTRIES); });

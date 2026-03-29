@@ -63,6 +63,7 @@ describe('PayrollDashboard', () => {
   it('renders the page heading', async () => {
     renderWithProviders(<PayrollDashboard />);
     expect(screen.getByText('Payroll Runs')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
   });
 
   it('shows loading state while fetching', async () => {
@@ -71,6 +72,7 @@ describe('PayrollDashboard', () => {
     renderWithProviders(<PayrollDashboard />);
     expect(screen.getByText('Loading payroll runs…')).toBeInTheDocument();
     await act(async () => { resolve(MOCK_RUNS); });
+    await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
   });
 
   it('renders runs table with correct data after load', async () => {

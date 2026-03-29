@@ -87,7 +87,7 @@ describe('SickPayTracker', () => {
   it('shows loading state initially', () => {
     api.getSickPeriods.mockReturnValue(new Promise(() => {}));
     api.getSSPConfig.mockReturnValue(new Promise(() => {}));
-    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<SickPayTracker />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
