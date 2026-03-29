@@ -26,6 +26,7 @@ export const pool = new Pool({
   max: config.db.poolMax,
   idleTimeoutMillis: config.db.idleTimeoutMs,
   connectionTimeoutMillis: config.db.connectionTimeoutMs,
+  options: `-c statement_timeout=${30_000} -c lock_timeout=${10_000} -c idle_in_transaction_session_timeout=${config.db.idleInTransactionTimeoutMs}`,
   ...(config.db.ssl ? { ssl: config.db.ssl } : {}),
 });
 
@@ -34,18 +35,6 @@ pool.on('error', (err) => {
 });
 
 // Set per-connection safeguards so queries, locks, and idle transactions do not linger forever.
-pool.on('connect', (client) => {
-  (async () => {
-    try {
-      await client.query(`SET statement_timeout = ${30_000}`);
-      await client.query(`SET lock_timeout = ${10_000}`);
-      await client.query(`SET idle_in_transaction_session_timeout = ${config.db.idleInTransactionTimeoutMs}`);
-    } catch (err) {
-      logger.warn({ error: err.message }, 'Failed to set timeouts on new connection');
-    }
-  })();
-});
-
 // Periodic pool stats - warn when clients are waiting for connections.
 setInterval(() => {
   const { totalCount, idleCount, waitingCount } = pool;

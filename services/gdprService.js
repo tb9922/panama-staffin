@@ -13,6 +13,14 @@ function dedupeById(rows) {
   return rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
 }
 
+async function runSequentialQueries(tasks) {
+  const results = [];
+  for (const task of tasks) {
+    results.push(await task());
+  }
+  return results;
+}
+
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
 
 /**
@@ -52,73 +60,73 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         consentRecords, dataRequests, dpComplaints,
         // Operational tables matched by name (no staff FK)
         agencyShifts, complaintSurveys,
-      ] = await Promise.all([
-        conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM appraisals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(
+      ] = await runSequentialQueries([
+        () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM appraisals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(
           `SELECT pl.* FROM payroll_lines pl
            JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
            WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(
+        () => conn.query(`SELECT * FROM tax_codes WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM sick_periods WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
         // access_log has no home_id column (global table) — user_name stores the login username.
         // Resolve username from users table (matching by display_name or username) then query.
         // All homes' access entries for this user are included in the SAR per Article 15.
-        staffName
+        () => staffName
           ? conn.query(
               `SELECT * FROM access_log WHERE user_name = $1
                  OR user_name IN (SELECT username FROM users WHERE display_name = $1)
                ORDER BY ts DESC LIMIT 500`, [staffName])
           : { rows: [] },
         // Staff appears in incident staff_involved JSONB array
-        conn.query(
+        () => conn.query(
           `SELECT * FROM incidents WHERE home_id = $1 AND staff_involved @> jsonb_build_array($2::text) AND deleted_at IS NULL`,
           [homeId, subjectId]),
         // Staff appears in fire drill staff_present JSONB array
-        conn.query(
+        () => conn.query(
           `SELECT * FROM fire_drills WHERE home_id = $1 AND staff_present @> jsonb_build_array($2::text)`,
           [homeId, subjectId]),
-        staffName
+        () => staffName
           ? conn.query(`SELECT * FROM handover_entries WHERE home_id = $1 AND author = $2`, [homeId, staffName])
           : { rows: [] },
         // HR module — disciplinary, grievance, performance cases
-        conn.query(`SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(
+        () => conn.query(`SELECT * FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(
           `SELECT ga.* FROM hr_grievance_actions ga
            JOIN hr_grievance_cases gc ON gc.id = ga.grievance_id
            WHERE gc.home_id = $1 AND gc.staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — absence management
-        conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_rtw_interviews WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_oh_referrals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — contracts, family leave, flexible working, EDI
-        conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — TUPE: not auto-included in SAR. The employees JSONB field has no
         // guaranteed staff_id, so reliable subject-scoped filtering is not possible.
         // Including all home-level TUPE records would over-disclose other employees' data
         // (UK GDPR Recital 63 — must not adversely affect others' rights/freedoms).
         // A data controller note is included in the response; manual review is required.
-        Promise.resolve({ rows: [] }),
+        () => Promise.resolve({ rows: [] }),
         // HR module — DBS/RTW renewals
-        conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — case notes authored by this staff member (pre-resolved name)
-        staffName
+        () => staffName
           ? conn.query(`SELECT * FROM hr_case_notes WHERE home_id = $1 AND author = $2`, [homeId, staffName])
           : { rows: [] },
         // HR module — case notes on this staff member's cases (written by anyone)
-        conn.query(
+        () => conn.query(
           `SELECT cn.* FROM hr_case_notes cn
            WHERE cn.home_id = $1 AND (
              (cn.case_type = 'disciplinary' AND cn.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
@@ -126,25 +134,25 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              OR (cn.case_type = 'performance' AND cn.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
            )`, [homeId, subjectId]),
         // Onboarding data (DBS, RTW, references, etc.)
-        conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Care Certificate progress
-        conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Complaints where staff is the complainant (pre-resolved name)
-        staffName
+        () => staffName
           ? conn.query(
               `SELECT * FROM complaints WHERE home_id = $1 AND deleted_at IS NULL AND raised_by_name = $2`,
               [homeId, staffName])
           : { rows: [] },
         // Post-freeze addenda authored by this staff member (pre-resolved name)
-        staffName
+        () => staffName
           ? conn.query(
               `SELECT * FROM incident_addenda WHERE home_id = $1 AND author = $2 ORDER BY created_at ASC`,
               [homeId, staffName])
           : { rows: [] },
         // Payroll year-to-date accumulations
-        conn.query(`SELECT * FROM payroll_ytd WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM payroll_ytd WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR investigation meetings (linked via case tables)
-        conn.query(
+        () => conn.query(
           `SELECT m.* FROM hr_investigation_meetings m
            WHERE m.home_id = $1 AND (
              (m.case_type = 'disciplinary' AND m.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
@@ -152,7 +160,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              OR (m.case_type = 'performance' AND m.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
            )`, [homeId, subjectId]),
         // HR file attachments (linked via case tables)
-        conn.query(
+        () => conn.query(
           `SELECT a.* FROM hr_file_attachments a
            WHERE a.home_id = $1 AND (
              (a.case_type = 'disciplinary' AND a.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
@@ -160,13 +168,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
            )`, [homeId, subjectId]),
         // Payroll shift detail (per-day hours, rates, amounts)
-        conn.query(
+        () => conn.query(
           `SELECT pls.* FROM payroll_line_shifts pls
            JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
            JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
            WHERE pr.home_id = $1 AND pl.staff_id = $2`, [homeId, subjectId]),
         // System user account (if staff member has a login)
-        staffName
+        () => staffName
           ? conn.query(
               `SELECT u.id, u.username, u.display_name, u.role, u.is_platform_admin, u.active, u.last_login_at, u.created_at
                FROM users u
@@ -175,25 +183,25 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               [staffName, homeId])
           : { rows: [] },
         // Home role assignments — scoped to this home only (user_home_roles uses username)
-        staffName
+        () => staffName
           ? conn.query(
               `SELECT uhr.* FROM user_home_roles uhr
                JOIN users u ON u.username = uhr.username
                WHERE (u.display_name = $1 OR u.username = $1) AND uhr.home_id = $2`, [staffName, homeId])
           : { rows: [] },
         // GDPR module own tables — consent records and data requests where subject is this staff member
-        conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
         // DP complaints where this staff member is the complainant (matched by name)
-        staffName
+        () => staffName
           ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, staffName])
           : { rows: [] },
         // Agency shifts where this staff member was the worker (matched by name — no staff FK)
-        staffName
+        () => staffName
           ? conn.query(`SELECT * FROM agency_shifts WHERE home_id = $1 AND worker_name = $2`, [homeId, staffName])
           : { rows: [] },
         // Complaint surveys conducted by this staff member (matched by name — no staff FK)
-        staffName
+        () => staffName
           ? conn.query(`SELECT * FROM complaint_surveys WHERE home_id = $1 AND conducted_by = $2 AND deleted_at IS NULL`, [homeId, staffName])
           : { rows: [] },
       ]);
@@ -269,14 +277,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         // Prefer resident_id FK when available, fall back to resident_name.
         // Null params with unknown type cause PG "could not determine data type" errors,
         // so use separate query strings with reindexed params for each branch.
-        subjectName
+        () => subjectName
           ? conn.query(
               residentPk
                 ? `SELECT * FROM dols WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
                 : `SELECT * FROM dols WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`,
               residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName])
           : { rows: [] },
-        subjectName
+        () => subjectName
           ? conn.query(
               residentPk
                 ? `SELECT * FROM mca_assessments WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3) AND deleted_at IS NULL`
@@ -284,10 +292,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName])
           : { rows: [] },
         // Finance: resident record, invoices, fee changes, invoice lines, payment schedule, chase
-        subjectName
+        () => subjectName
           ? conn.query(`SELECT * FROM finance_residents WHERE home_id = $1 AND resident_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
           : { rows: [] },
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT fi.* FROM finance_invoices fi
                JOIN finance_residents fr ON fr.id = fi.resident_id AND fr.home_id = fi.home_id
@@ -295,13 +303,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
               [homeId, subjectName])
           : { rows: [] },
         // Beds and bed transitions — linked via finance_residents by name
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT b.* FROM beds b
                JOIN finance_residents fr ON fr.id = b.resident_id AND fr.home_id = b.home_id
                WHERE b.home_id = $1 AND fr.resident_name = $2`, [homeId, subjectName])
           : { rows: [] },
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT bt.* FROM bed_transitions bt
                JOIN beds b ON b.id = bt.bed_id AND b.home_id = bt.home_id
@@ -309,13 +317,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE bt.home_id = $1 AND fr.resident_name = $2 ORDER BY bt.changed_at DESC`, [homeId, subjectName])
           : { rows: [] },
         // Finance detail tables (linked via resident_id on finance_residents)
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT fc.* FROM finance_fee_changes fc
                JOIN finance_residents fr ON fr.id = fc.resident_id AND fr.home_id = $1
                WHERE fr.resident_name = $2`, [homeId, subjectName])
           : { rows: [] },
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT fil.* FROM finance_invoice_lines fil
                JOIN finance_invoices fi ON fi.id = fil.invoice_id
@@ -325,7 +333,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           : { rows: [] },
         // finance_payment_schedule is AP (supplier schedules) — no resident_id column.
         // Not included in resident SAR.
-        subjectName
+        () => subjectName
           ? conn.query(
               `SELECT ic.* FROM finance_invoice_chase ic
                JOIN finance_invoices fi ON fi.id = ic.invoice_id
@@ -333,28 +341,28 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE fi.home_id = $1 AND fr.resident_name = $2`, [homeId, subjectName])
           : { rows: [] },
         // GDPR module own tables — consent records and data requests by subject_id
-        conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
-        conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
         // DP complaints matched by resident name (dp_complaints has no resident_id FK)
-        subjectName
+        () => subjectName
           ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
           : { rows: [] },
       ];
       // Name-based queries for incidents/complaints
       if (subjectName) {
         queries.push(
-          conn.query(
+          () => conn.query(
             residentPk
               ? `SELECT * FROM incidents WHERE home_id = $1 AND (resident_id = $2 OR person_affected_name = $3) AND deleted_at IS NULL`
               : `SELECT * FROM incidents WHERE home_id = $1 AND person_affected_name = $2 AND deleted_at IS NULL`,
             residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
-          conn.query(
+          () => conn.query(
             residentPk
               ? `SELECT * FROM complaints WHERE home_id = $1 AND (resident_id = $2 OR raised_by_name = $3) AND deleted_at IS NULL`
               : `SELECT * FROM complaints WHERE home_id = $1 AND raised_by_name = $2 AND deleted_at IS NULL`,
             residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
           // Post-freeze addenda on incidents involving this resident (Article 15 completeness)
-          conn.query(
+          () => conn.query(
             residentPk
               ? `SELECT ia.* FROM incident_addenda ia
                  JOIN incidents i ON i.id = ia.incident_id AND i.home_id = ia.home_id
@@ -367,7 +375,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
             residentPk ? [homeId, residentPk, subjectName] : [homeId, subjectName]),
         );
       }
-      const results = await Promise.all(queries);
+      const results = await runSequentialQueries(queries);
       return {
         subject_type: 'resident',
         subject_id: subjectId,
