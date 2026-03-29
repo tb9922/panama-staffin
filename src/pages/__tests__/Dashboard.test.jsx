@@ -217,12 +217,14 @@ describe('Dashboard', () => {
   it('shows degraded messaging instead of a false all-clear when summary data fails', async () => {
     api.getSchedulingData.mockResolvedValue(buildCleanDashboardData());
     api.getDashboardSummary.mockRejectedValue(new Error('summary down'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     renderDashboard();
 
     await waitFor(() =>
       expect(screen.getByText(/Some dashboard data could not be loaded/)).toBeInTheDocument()
     );
     expect(screen.getByText('No alerts available while some dashboard data is unavailable')).toBeInTheDocument();
+    warnSpy.mockRestore();
     expect(screen.queryByText('All clear — full coverage this cycle')).not.toBeInTheDocument();
   });
 

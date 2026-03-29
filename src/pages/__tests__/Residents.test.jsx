@@ -134,10 +134,12 @@ describe('Residents', () => {
   it('handles beds API failure gracefully', async () => {
     api.getResidentsWithBeds.mockResolvedValue(MOCK_RESIDENTS);
     api.getBeds.mockRejectedValue(new Error('Beds not found'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     renderWithProviders(<Residents />);
     // Page should still render residents despite beds failure
     await waitFor(() =>
       expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument()
     );
+    warnSpy.mockRestore();
   });
 });
