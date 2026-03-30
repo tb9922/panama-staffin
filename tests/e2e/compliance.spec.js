@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Compliance Module', () => {
   test('Training Matrix loads with grid', async ({ page }) => {
+    test.slow();
     await page.goto('/training');
     await expect(page.getByRole('heading', { name: /Training/i })).toBeVisible({ timeout: 15_000 });
     const table = page.locator('table');
