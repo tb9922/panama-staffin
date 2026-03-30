@@ -115,7 +115,14 @@ export default function IpcAuditTracker() {
       ...form,
       overall_score: form.overall_score !== '' ? Number(form.overall_score) : null,
       compliance_pct: form.compliance_pct !== '' ? Number(form.compliance_pct) : null,
-      outbreak: form.outbreak.suspected ? form.outbreak : null,
+      outbreak: form.outbreak.suspected ? {
+        ...form.outbreak,
+        type: form.outbreak.type || null,
+        start_date: form.outbreak.start_date || null,
+        end_date: form.outbreak.end_date || null,
+        status: form.outbreak.status || null,
+        measures: form.outbreak.measures || null,
+      } : null,
       _version: form._version,
     };
 

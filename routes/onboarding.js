@@ -26,7 +26,7 @@ const onboardingSectionSchema = z.object({
   notes:          z.string().max(5000).nullable().optional(),
   verified_by:    z.string().max(200).nullable().optional(),
   verified_date:  dateSchema.optional(),
-}).strict();
+}).passthrough();
 
 // GET /api/onboarding?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
