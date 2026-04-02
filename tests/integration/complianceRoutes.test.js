@@ -15,15 +15,18 @@ const PREFIX = 'compliance-route-test';
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'CompliancePass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
+const STAFF_ID = `${PREFIX}-staff-01`;
 
 let token;
 let homeId;
 
 beforeAll(async () => {
+  await pool.query(`DELETE FROM onboarding WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM incident_addenda WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM incidents WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM mca_assessments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM dols WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
   await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
@@ -34,6 +37,12 @@ beforeAll(async () => {
     [HOME_SLUG]
   );
   homeId = home.id;
+
+  await pool.query(
+    `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date)
+     VALUES ($1, $2, 'Compliance Route Staff', 'Carer', 'Day A', 'E', 1, 13.00, true, false, '2026-01-01')`,
+    [STAFF_ID, homeId]
+  );
 
   const passwordHash = await bcrypt.hash(PASSWORD, 4);
   await pool.query(
@@ -55,10 +64,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await pool.query(`DELETE FROM onboarding WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM incident_addenda WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM incidents WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM mca_assessments WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM dols WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
   await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
   await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
@@ -143,5 +154,55 @@ describe('Compliance route create flows', () => {
       .expect(200);
 
     expect(listRes.body.dols.some(record => record.id === createRes.body.id)).toBe(true);
+  });
+
+  it('accepts onboarding section-specific keys from the tracker UI', async () => {
+    const saveRes = await request(app)
+      .put(`/api/onboarding/${STAFF_ID}/contract`)
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        status: 'completed',
+        contract_type: 'permanent',
+        document_type: 'written_statement',
+        notes: 'Saved from onboarding tracker',
+      })
+      .expect(200);
+
+    expect(saveRes.body.contract.contract_type).toBe('permanent');
+    expect(saveRes.body.contract.document_type).toBe('written_statement');
+  });
+
+  it('normalizes legacy IPC outbreak status values on update', async () => {
+    const createRes = await request(app)
+      .post('/api/ipc')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        audit_date: '2026-03-28',
+        audit_type: 'outbreak',
+        outbreak: {
+          suspected: true,
+          type: 'Norovirus',
+          status: 'confirmed',
+        },
+      })
+      .expect(201);
+
+    const updateRes = await request(app)
+      .put(`/api/ipc/${createRes.body.id}`)
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        _version: createRes.body.version,
+        outbreak: {
+          suspected: true,
+          type: 'Norovirus',
+          status: 'open',
+        },
+      })
+      .expect(200);
+
+    expect(updateRes.body.outbreak.status).toBe('suspected');
   });
 });

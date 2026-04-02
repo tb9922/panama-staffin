@@ -8,6 +8,7 @@ import { downloadXLSX } from '../lib/excel.js';
 import {
   getIpcStats,
   DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
+  normalizeOutbreakStatus,
 } from '../lib/ipc.js';
 import {
   getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, } from '../lib/api.js';
@@ -99,7 +100,9 @@ export default function IpcAuditTracker() {
       compliance_pct: audit.compliance_pct ?? '',
       risk_areas: audit.risk_areas || [],
       corrective_actions: audit.corrective_actions || [],
-      outbreak: audit.outbreak ? { ...EMPTY_FORM.outbreak, ...audit.outbreak } : { ...EMPTY_FORM.outbreak },
+      outbreak: audit.outbreak
+        ? { ...EMPTY_FORM.outbreak, ...audit.outbreak, status: normalizeOutbreakStatus(audit.outbreak.status) || '' }
+        : { ...EMPTY_FORM.outbreak },
       notes: audit.notes || '',
       _version: audit.version,
     });
@@ -115,7 +118,7 @@ export default function IpcAuditTracker() {
       ...form,
       overall_score: form.overall_score !== '' ? Number(form.overall_score) : null,
       compliance_pct: form.compliance_pct !== '' ? Number(form.compliance_pct) : null,
-      outbreak: form.outbreak.suspected ? form.outbreak : null,
+      outbreak: form.outbreak.suspected ? { ...form.outbreak, status: normalizeOutbreakStatus(form.outbreak.status) } : null,
       _version: form._version,
     };
 
@@ -150,7 +153,8 @@ export default function IpcAuditTracker() {
       const riskCount = (audit.risk_areas || []).length;
       const actionsDone = (audit.corrective_actions || []).filter(a => a.status === 'completed').length;
       const actionsTotal = (audit.corrective_actions || []).length;
-      const hasOutbreak = audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed');
+      const outbreakStatus = normalizeOutbreakStatus(audit.outbreak?.status);
+      const hasOutbreak = audit.outbreak && (outbreakStatus === 'suspected' || outbreakStatus === 'confirmed');
       return [
         audit.audit_date,
         typeDef?.name || audit.audit_type,
@@ -274,7 +278,8 @@ export default function IpcAuditTracker() {
                 const riskCount = (audit.risk_areas || []).length;
                 const actionsDone = (audit.corrective_actions || []).filter(a => a.status === 'completed').length;
                 const actionsTotal = (audit.corrective_actions || []).length;
-                const hasOutbreak = audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed');
+                const outbreakStatus = normalizeOutbreakStatus(audit.outbreak?.status);
+                const hasOutbreak = audit.outbreak && (outbreakStatus === 'suspected' || outbreakStatus === 'confirmed');
                 return (
                   <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(audit))}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
@@ -295,8 +300,8 @@ export default function IpcAuditTracker() {
                     </td>
                     <td className={TABLE.td}>
                       {hasOutbreak ? (
-                        <span className={outbreakBadge(audit.outbreak.status)}>
-                          {OUTBREAK_STATUSES.find(s => s.id === audit.outbreak.status)?.name || audit.outbreak.status}
+                        <span className={outbreakBadge(outbreakStatus)}>
+                          {OUTBREAK_STATUSES.find(s => s.id === outbreakStatus)?.name || outbreakStatus}
                         </span>
                       ) : <span className="text-gray-300">-</span>}
                     </td>

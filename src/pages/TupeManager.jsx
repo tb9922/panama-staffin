@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
@@ -32,6 +32,17 @@ export default function TupeManager() {
   const [offset, setOffset] = useState(0);
 
   const home = getCurrentHome();
+  const transferTypeId = useId();
+  const transferDateId = useId();
+  const transferorNameId = useId();
+  const transfereeNameId = useId();
+  const tupeStatusId = useId();
+  const staffAffectedId = useId();
+  const consultationStartId = useId();
+  const consultationEndId = useId();
+  const eliSentDateId = useId();
+  const measuresProposedId = useId();
+  const tupeNotesId = useId();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
@@ -88,6 +99,7 @@ export default function TupeManager() {
     setError(null);
     if (!form.transfer_date) { setFormError('Transfer date is required'); return; }
     if (!form.transferor_name) { setFormError('Transferor name is required'); return; }
+    if (!form.transferee_name) { setFormError('Transferee name is required'); return; }
     setSaving(true);
     try {
       const payload = {
@@ -189,59 +201,59 @@ export default function TupeManager() {
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Transfer Type</label>
-                  <select className={INPUT.select} value={form.transfer_type} onChange={e => f('transfer_type', e.target.value)}>
+                  <label htmlFor={transferTypeId} className={INPUT.label}>Transfer Type</label>
+                  <select id={transferTypeId} className={INPUT.select} value={form.transfer_type} onChange={e => f('transfer_type', e.target.value)}>
                     {TRANSFER_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Transfer Date</label>
-                  <input type="date" className={INPUT.base} value={form.transfer_date} onChange={e => f('transfer_date', e.target.value)} />
+                  <label htmlFor={transferDateId} className={INPUT.label}>Transfer Date</label>
+                  <input id={transferDateId} type="date" className={INPUT.base} value={form.transfer_date} onChange={e => f('transfer_date', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Transferor Name</label>
-                  <input className={INPUT.base} value={form.transferor_name} onChange={e => f('transferor_name', e.target.value)} placeholder="Entity transferring staff" />
+                  <label htmlFor={transferorNameId} className={INPUT.label}>Transferor Name</label>
+                  <input id={transferorNameId} className={INPUT.base} value={form.transferor_name} onChange={e => f('transferor_name', e.target.value)} placeholder="Entity transferring staff" />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Transferee Name</label>
-                  <input className={INPUT.base} value={form.transferee_name} onChange={e => f('transferee_name', e.target.value)} placeholder="Entity receiving staff" />
+                  <label htmlFor={transfereeNameId} className={INPUT.label}>Transferee Name</label>
+                  <input id={transfereeNameId} className={INPUT.base} value={form.transferee_name} onChange={e => f('transferee_name', e.target.value)} placeholder="Entity receiving staff" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => f('status', e.target.value)}>
+                  <label htmlFor={tupeStatusId} className={INPUT.label}>Status</label>
+                  <select id={tupeStatusId} className={INPUT.select} value={form.status} onChange={e => f('status', e.target.value)}>
                     {TUPE_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Staff Affected</label>
-                  <input type="number" className={INPUT.base} value={form.staff_affected} onChange={e => f('staff_affected', e.target.value)} />
+                  <label htmlFor={staffAffectedId} className={INPUT.label}>Staff Affected</label>
+                  <input id={staffAffectedId} type="number" className={INPUT.base} value={form.staff_affected} onChange={e => f('staff_affected', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Consultation Start</label>
-                  <input type="date" className={INPUT.base} value={form.consultation_start} onChange={e => f('consultation_start', e.target.value)} />
+                  <label htmlFor={consultationStartId} className={INPUT.label}>Consultation Start</label>
+                  <input id={consultationStartId} type="date" className={INPUT.base} value={form.consultation_start} onChange={e => f('consultation_start', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Consultation End</label>
-                  <input type="date" className={INPUT.base} value={form.consultation_end} onChange={e => f('consultation_end', e.target.value)} />
+                  <label htmlFor={consultationEndId} className={INPUT.label}>Consultation End</label>
+                  <input id={consultationEndId} type="date" className={INPUT.base} value={form.consultation_end} onChange={e => f('consultation_end', e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>ELI Sent Date</label>
-                <input type="date" className={INPUT.base} value={form.eli_sent_date} onChange={e => f('eli_sent_date', e.target.value)} />
+                <label htmlFor={eliSentDateId} className={INPUT.label}>ELI Sent Date</label>
+                <input id={eliSentDateId} type="date" className={INPUT.base} value={form.eli_sent_date} onChange={e => f('eli_sent_date', e.target.value)} />
               </div>
               <div>
-                <label className={INPUT.label}>Measures Proposed</label>
-                <textarea className={INPUT.base} rows={3} value={form.measures_proposed} onChange={e => f('measures_proposed', e.target.value)} placeholder="Proposed measures affecting transferred staff..." />
+                <label htmlFor={measuresProposedId} className={INPUT.label}>Measures Proposed</label>
+                <textarea id={measuresProposedId} className={INPUT.base} rows={3} value={form.measures_proposed} onChange={e => f('measures_proposed', e.target.value)} placeholder="Proposed measures affecting transferred staff..." />
               </div>
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={2} value={form.notes} onChange={e => f('notes', e.target.value)} />
+                <label htmlFor={tupeNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={tupeNotesId} className={INPUT.base} rows={2} value={form.notes} onChange={e => f('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="tupe" caseId={editing?.id} />

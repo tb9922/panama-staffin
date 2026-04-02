@@ -18,7 +18,9 @@ vi.mock('../../lib/api.js', async () => {
     getHrOhReferrals: vi.fn(),
     createHrOhReferral: vi.fn(),
     updateHrOhReferral: vi.fn(),
-    getHrStaffList: vi.fn().mockResolvedValue([]),
+    getHrStaffList: vi.fn().mockResolvedValue([
+      { id: 'S001', name: 'Alice Carer', role: 'Carer', active: true },
+    ]),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -65,6 +67,9 @@ function setupMocks() {
   api.getAbsenceSummary.mockResolvedValue(MOCK_SUMMARY);
   api.getHrRtwInterviews.mockResolvedValue(MOCK_RTW);
   api.getHrOhReferrals.mockResolvedValue(MOCK_OH);
+  api.getHrStaffList.mockResolvedValue([
+    { id: 'S001', name: 'Alice Carer', role: 'Carer', active: true },
+  ]);
 }
 
 function renderPage() {
@@ -158,5 +163,22 @@ describe('AbsenceManager', () => {
     await waitFor(() =>
       expect(screen.getByText('No absence data')).toBeInTheDocument()
     );
+  });
+
+  it('requires Conducted By before saving a new RTW interview', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'RTW Interviews' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'RTW Interviews' }));
+    await user.click(screen.getByRole('button', { name: 'New RTW Interview' }));
+    await user.selectOptions(screen.getByLabelText('Staff Member'), 'S001');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(screen.getByText('Conducted By is required')).toBeInTheDocument();
+    expect(api.createHrRtwInterview).not.toHaveBeenCalled();
   });
 });

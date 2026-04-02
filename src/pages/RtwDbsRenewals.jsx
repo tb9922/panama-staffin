@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
@@ -8,6 +8,14 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+
+const RTW_DOCUMENT_TYPE_OPTIONS = [
+  { id: 'passport', name: 'Passport' },
+  { id: 'brp', name: 'BRP' },
+  { id: 'share_code', name: 'Share Code' },
+  { id: 'settled_status', name: 'Settled Status' },
+  { id: 'pre_settled', name: 'Pre-Settled Status' },
+];
 
 function checkTypeName(id) {
   return RENEWAL_CHECK_TYPES.find(t => t.id === id)?.name || id;
@@ -52,6 +60,15 @@ export default function RtwDbsRenewals() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const home = getCurrentHome();
+  const renewalCheckTypeId = useId();
+  const renewalLastCheckedId = useId();
+  const renewalExpiryDateId = useId();
+  const renewalStatusId = useId();
+  const renewalReferenceId = useId();
+  const renewalCheckedById = useId();
+  const renewalCertificateNumberId = useId();
+  const renewalDocumentTypeId = useId();
+  const renewalNotesId = useId();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
   useDirtyGuard(showModal);
@@ -240,58 +257,61 @@ export default function RtwDbsRenewals() {
               <div className="grid grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => set('staff_id', val)} label="Staff Member" required />
                 <div>
-                  <label className={INPUT.label}>Check Type *</label>
-                  <select className={INPUT.select} value={form.check_type} onChange={e => set('check_type', e.target.value)}>
+                  <label htmlFor={renewalCheckTypeId} className={INPUT.label}>Check Type *</label>
+                  <select id={renewalCheckTypeId} className={INPUT.select} value={form.check_type} onChange={e => set('check_type', e.target.value)}>
                     {RENEWAL_CHECK_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Last Checked</label>
-                  <input type="date" className={INPUT.base} value={form.last_checked} onChange={e => set('last_checked', e.target.value)} />
+                  <label htmlFor={renewalLastCheckedId} className={INPUT.label}>Last Checked</label>
+                  <input id={renewalLastCheckedId} type="date" className={INPUT.base} value={form.last_checked} onChange={e => set('last_checked', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Expiry Date</label>
-                  <input type="date" className={INPUT.base} value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)} />
+                  <label htmlFor={renewalExpiryDateId} className={INPUT.label}>Expiry Date</label>
+                  <input id={renewalExpiryDateId} type="date" className={INPUT.base} value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
+                  <label htmlFor={renewalStatusId} className={INPUT.label}>Status</label>
+                  <select id={renewalStatusId} className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
                     {RENEWAL_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Reference</label>
-                  <input className={INPUT.base} value={form.reference} onChange={e => set('reference', e.target.value)} placeholder="Reference number" />
+                  <label htmlFor={renewalReferenceId} className={INPUT.label}>Reference</label>
+                  <input id={renewalReferenceId} className={INPUT.base} value={form.reference} onChange={e => set('reference', e.target.value)} placeholder="Reference number" />
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Checked By</label>
-                <input className={INPUT.base} value={form.checked_by} onChange={e => set('checked_by', e.target.value)} />
+                <label htmlFor={renewalCheckedById} className={INPUT.label}>Checked By</label>
+                <input id={renewalCheckedById} className={INPUT.base} value={form.checked_by} onChange={e => set('checked_by', e.target.value)} />
               </div>
 
               {/* DBS-specific */}
               {form.check_type === 'dbs' && (
                 <div>
-                  <label className={INPUT.label}>Certificate Number</label>
-                  <input className={INPUT.base} value={form.certificate_number} onChange={e => set('certificate_number', e.target.value)} placeholder="DBS certificate number" />
+                  <label htmlFor={renewalCertificateNumberId} className={INPUT.label}>Certificate Number</label>
+                  <input id={renewalCertificateNumberId} className={INPUT.base} value={form.certificate_number} onChange={e => set('certificate_number', e.target.value)} placeholder="DBS certificate number" />
                 </div>
               )}
 
               {/* RTW-specific */}
               {form.check_type === 'rtw' && (
                 <div>
-                  <label className={INPUT.label}>Document Type</label>
-                  <input className={INPUT.base} value={form.document_type} onChange={e => set('document_type', e.target.value)} placeholder="e.g. Passport, BRP, Share Code" />
+                  <label htmlFor={renewalDocumentTypeId} className={INPUT.label}>Document Type</label>
+                  <select id={renewalDocumentTypeId} className={INPUT.select} value={form.document_type} onChange={e => set('document_type', e.target.value)}>
+                    <option value="">Select document type</option>
+                    {RTW_DOCUMENT_TYPE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </select>
                 </div>
               )}
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
+                <label htmlFor={renewalNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={renewalNotesId} className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="renewal" caseId={editing?.id} />

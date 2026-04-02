@@ -51,12 +51,18 @@ export async function createTupe(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_tupe_transfers
        (home_id, transfer_type, transfer_date, signed_date, transferor_name, transferee_name,
-        employees, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
+        employees, consultation_start_date, consultation_end_date, measures_letter_date, measures_description,
+        employee_reps_consulted, rep_names, eli_received_date, eli_complete, eli_items,
+        dd_notes, outstanding_claims, outstanding_tribunal_claims, status, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING ${COLS}`,
     [homeId, data.transfer_type, data.transfer_date, data.signed_date || null,
      data.transferor_name, data.transferee_name,
-     JSON.stringify(data.employees || []), data.status ?? 'planned',
-     data.notes || null, data.created_by || null]
+     JSON.stringify(data.employees || []), data.consultation_start_date || null, data.consultation_end_date || null,
+     data.measures_letter_date || null, data.measures_description || null,
+     data.employee_reps_consulted ?? false, data.rep_names || null,
+     data.eli_received_date || null, data.eli_complete ?? false, JSON.stringify(data.eli_items || {}),
+     data.dd_notes || null, data.outstanding_claims || null, data.outstanding_tribunal_claims || null,
+     data.status ?? 'planned', data.notes || null, data.created_by || null]
   );
   return shapeTupe(rows[0]);
 }

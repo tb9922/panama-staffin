@@ -1,0 +1,155 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import request from 'supertest';
+import bcrypt from 'bcryptjs';
+import { pool } from '../../db.js';
+import { app } from '../../server.js';
+
+const PREFIX = 'hr-seam-test';
+const USERNAME = `${PREFIX}-manager`;
+const PASSWORD = 'HrSeamPass1Test';
+const HOME_SLUG = `${PREFIX}-home`;
+const STAFF_ID = `${PREFIX}-staff-01`;
+
+let token;
+let homeId;
+
+beforeAll(async () => {
+  await pool.query(`DELETE FROM hr_flexible_working WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_edi_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_tupe_transfers WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_rtw_dbs_renewals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]).catch(() => {});
+
+  const { rows: [home] } = await pool.query(
+    `INSERT INTO homes (slug, name, config) VALUES ($1, 'HR Seam Test Home', '{}') RETURNING id`,
+    [HOME_SLUG]
+  );
+  homeId = home.id;
+
+  await pool.query(
+    `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date)
+     VALUES ($1, $2, 'HR Seam Staff', 'Carer', 'Day A', 'E', 1, 13.00, true, false, '2026-01-01')`,
+    [STAFF_ID, homeId]
+  );
+
+  const passwordHash = await bcrypt.hash(PASSWORD, 4);
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+     VALUES ($1, $2, 'admin', true, 'HR Seam Manager', 'test-setup')`,
+    [USERNAME, passwordHash]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+     VALUES ($1, $2, 'home_manager', 'test-setup')`,
+    [USERNAME, homeId]
+  );
+
+  const loginRes = await request(app)
+    .post('/api/login')
+    .send({ username: USERNAME, password: PASSWORD })
+    .expect(200);
+  token = loginRes.body.token;
+});
+
+afterAll(async () => {
+  await pool.query(`DELETE FROM hr_flexible_working WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_edi_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_tupe_transfers WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_rtw_dbs_renewals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM staff WHERE id = $1`, [STAFF_ID]).catch(() => {});
+  await pool.query(`DELETE FROM user_home_roles WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM users WHERE username = $1`, [USERNAME]).catch(() => {});
+  await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]).catch(() => {});
+});
+
+function authed(method, path) {
+  return request(app)[method](path)
+    .query({ home: HOME_SLUG })
+    .set('Authorization', `Bearer ${token}`);
+}
+
+describe('HR route save seams', () => {
+  it('allows withdrawing a flexible working request with free-text decision notes', async () => {
+    const createRes = await authed('post', '/api/hr/flexible-working').send({
+      staff_id: STAFF_ID,
+      request_date: '2026-03-01',
+      requested_change: 'Compressed hours over 4 days',
+      decision_deadline: '2026-05-01',
+      status: 'pending',
+    }).expect(201);
+
+    const updateRes = await authed('put', `/api/hr/flexible-working/${createRes.body.id}`).send({
+      _version: createRes.body.version,
+      decision: 'withdrawn',
+      status: 'withdrawn',
+      decision_reason: 'Employee withdrew request',
+    }).expect(200);
+
+    expect(updateRes.body.status).toBe('withdrawn');
+    expect(updateRes.body.decision).toBe('withdrawn');
+    expect(updateRes.body.decision_reason).toBe('Employee withdrew request');
+  });
+
+  it('creates and updates a reasonable adjustment EDI record with free-text category', async () => {
+    const createRes = await authed('post', '/api/hr/edi').send({
+      record_type: 'reasonable_adjustment',
+      staff_id: STAFF_ID,
+      date_recorded: '2026-03-02',
+      category: 'Physical',
+      condition_description: 'Back injury requiring adapted workstation',
+      adjustments: 'Height-adjustable desk',
+      status: 'open',
+    }).expect(201);
+
+    expect(createRes.body.category).toBe('Physical');
+
+    const updateRes = await authed('put', `/api/hr/edi/${createRes.body.id}`).send({
+      _version: createRes.body.version,
+      category: 'Sensory',
+      adjustments: 'Screen reader software',
+    }).expect(200);
+
+    expect(updateRes.body.category).toBe('Sensory');
+  });
+
+  it('persists TUPE consultation, ELI, and measures fields on create', async () => {
+    const createRes = await authed('post', '/api/hr/tupe').send({
+      transfer_type: 'incoming',
+      transfer_date: '2026-06-01',
+      transferor_name: 'OldCo Care Services',
+      transferee_name: 'NewCo Care Group',
+      staff_affected: 12,
+      consultation_start: '2026-04-01',
+      consultation_end: '2026-05-15',
+      eli_sent_date: '2026-03-15',
+      measures_proposed: 'No redundancies planned',
+      status: 'consultation',
+    }).expect(201);
+
+    expect(createRes.body.staff_affected).toBe(12);
+    expect(createRes.body.consultation_start).toBe('2026-04-01');
+    expect(createRes.body.consultation_end).toBe('2026-05-15');
+    expect(createRes.body.eli_sent_date).toBe('2026-03-15');
+    expect(createRes.body.measures_proposed).toBe('No redundancies planned');
+  });
+
+  it('accepts user-facing RTW document labels and normalizes them', async () => {
+    const createRes = await authed('post', '/api/hr/renewals').send({
+      staff_id: STAFF_ID,
+      check_type: 'rtw',
+      last_checked: '2026-03-03',
+      expiry_date: '2027-03-03',
+      document_type: 'BRP',
+      status: 'current',
+    }).expect(201);
+
+    expect(createRes.body.document_type).toBe('brp');
+    expect(createRes.body.last_checked).toBe('2026-03-03');
+    expect(createRes.body.expiry_date).toBe('2027-03-03');
+  });
+});

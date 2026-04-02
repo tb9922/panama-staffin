@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
   mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
-  mapFlexFields, mapEdiFields, mapTupeFields, mapRenewalFields,
+  mapFlexFields, mapEdiFields, mapTupeFields, mapRenewalFields, normalizeRtwDocumentType,
   diffFields,
 } from '../../lib/hrFieldMappers.js';
 
@@ -220,9 +220,17 @@ describe('mapFamilyLeaveFields', () => {
 // ── mapFlexFields ────────────────────────────────────────────────────────────
 
 describe('mapFlexFields', () => {
-  it('renames decision_reason to refusal_reason', () => {
-    const result = mapFlexFields({ decision_reason: 'Service impact' });
-    expect(result.refusal_reason).toBe('Service impact');
+  it('maps statutory refusal decision_reason to refusal_reason', () => {
+    const result = mapFlexFields({ decision: 'refused', decision_reason: 'detrimental_to_quality' });
+    expect(result.refusal_reason).toBe('detrimental_to_quality');
+    expect(result.decision_reason).toBeUndefined();
+  });
+
+  it('maps free-text reasons to refusal_explanation and syncs withdrawn status', () => {
+    const result = mapFlexFields({ decision: 'withdrawn', decision_reason: 'Employee withdrew request' });
+    expect(result.refusal_explanation).toBe('Employee withdrew request');
+    expect(result.refusal_reason).toBeUndefined();
+    expect(result.status).toBe('withdrawn');
     expect(result.decision_reason).toBeUndefined();
   });
 
@@ -242,9 +250,15 @@ describe('mapEdiFields', () => {
     expect(result.date_recorded).toBeUndefined();
   });
 
-  it('renames category to harassment_category', () => {
-    const result = mapEdiFields({ category: 'race' });
-    expect(result.harassment_category).toBe('race');
+  it('renames harassment category to harassment_category', () => {
+    const result = mapEdiFields({ record_type: 'harassment_complaint', category: 'racial' });
+    expect(result.harassment_category).toBe('racial');
+  });
+
+  it('maps reasonable adjustment category into description instead of harassment_category', () => {
+    const result = mapEdiFields({ record_type: 'reasonable_adjustment', category: 'Physical' });
+    expect(result.description).toBe('Physical');
+    expect(result.harassment_category).toBeUndefined();
   });
 
   it('renames respondent_role to respondent_type', () => {
@@ -316,11 +330,16 @@ describe('mapRenewalFields', () => {
       check_type: 'rtw',
       last_checked: '2026-01-01',
       expiry_date: '2027-01-01',
-      document_type: 'passport',
+      document_type: 'BRP',
     });
     expect(result.rtw_check_date).toBe('2026-01-01');
     expect(result.rtw_document_expiry).toBe('2027-01-01');
-    expect(result.rtw_document_type).toBe('passport');
+    expect(result.rtw_document_type).toBe('brp');
+  });
+
+  it('normalizes RTW document labels into stored enum values', () => {
+    expect(normalizeRtwDocumentType('Share Code')).toBe('share_code');
+    expect(normalizeRtwDocumentType('Pre-Settled')).toBe('pre_settled');
   });
 
   it('maps certificate_number to dbs_certificate_number for DBS', () => {

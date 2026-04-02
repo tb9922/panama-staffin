@@ -23,6 +23,23 @@ export const OUTBREAK_STATUSES = [
   { id: 'resolved',  name: 'Resolved',  badgeKey: 'green' },
 ];
 
+const LEGACY_OUTBREAK_STATUS_MAP = {
+  open: 'suspected',
+  active: 'suspected',
+  ongoing: 'confirmed',
+  contained: 'contained',
+  closed: 'resolved',
+  complete: 'resolved',
+  completed: 'resolved',
+  resolved: 'resolved',
+};
+
+export function normalizeOutbreakStatus(value) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return LEGACY_OUTBREAK_STATUS_MAP[normalized] || normalized;
+}
+
 // ── IPC Audit Statuses ──────────────────────────────────────────────────────
 
 export const IPC_AUDIT_STATUSES = [
@@ -71,7 +88,7 @@ export function getIpcStats(audits, asOfDate) {
 
   // Active outbreaks: suspected or confirmed
   const activeOutbreaks = arr.filter(a =>
-    a.outbreak && (a.outbreak.status === 'suspected' || a.outbreak.status === 'confirmed')
+    a.outbreak && ['suspected', 'confirmed'].includes(normalizeOutbreakStatus(a.outbreak.status))
   ).length;
 
   // Corrective action completion %
@@ -123,8 +140,9 @@ export function getIpcAlerts(audits, asOfDate, config) {
   // Active outbreaks — deduplicate by type+status to avoid repeated alerts across audits
   const seenOutbreaks = new Set();
   for (const audit of arr) {
-    if (audit.outbreak && (audit.outbreak.status === 'suspected' || audit.outbreak.status === 'confirmed')) {
-      const key = `${audit.outbreak.type || 'unspecified'}-${audit.outbreak.status}`;
+    const outbreakStatus = normalizeOutbreakStatus(audit.outbreak?.status);
+    if (audit.outbreak && ['suspected', 'confirmed'].includes(outbreakStatus)) {
+      const key = `${audit.outbreak.type || 'unspecified'}-${outbreakStatus}`;
       if (seenOutbreaks.has(key)) continue;
       seenOutbreaks.add(key);
       alerts.push({ type: 'error', msg: `IPC: Active outbreak (${audit.outbreak.status}) — ${audit.outbreak.type || 'unspecified type'}` });

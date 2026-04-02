@@ -217,4 +217,36 @@ describe('IpcAuditTracker', () => {
       expect(screen.getByText('John Manager')).toBeInTheDocument();
     });
   });
+
+  it('normalizes legacy outbreak statuses before submitting updates', async () => {
+    const user = userEvent.setup();
+    api.getIpcAudits.mockResolvedValue({
+      audits: [{
+        ...MOCK_AUDITS[1],
+        outbreak: { ...MOCK_AUDITS[1].outbreak, status: 'open' },
+        version: 3,
+      }],
+      auditTypes: MOCK_AUDIT_TYPES,
+    });
+    api.updateIpcAudit.mockResolvedValue({});
+
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('John Manager')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('John Manager'));
+    await waitFor(() => {
+      expect(screen.getByText('Edit IPC Audit')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Update' }));
+
+    await waitFor(() => {
+      expect(api.updateIpcAudit).toHaveBeenCalled();
+    });
+
+    expect(api.updateIpcAudit.mock.calls[0][2].outbreak.status).toBe('suspected');
+  });
 });

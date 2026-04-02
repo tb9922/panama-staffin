@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import TupeManager from '../TupeManager.jsx';
 
@@ -134,5 +135,22 @@ describe('TupeManager', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /New Transfer/i })).toBeInTheDocument();
     });
+  });
+
+  it('requires transferee name before saving', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TupeManager />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Transfer/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Transfer/i }));
+    await user.type(screen.getByLabelText('Transfer Date'), '2026-06-01');
+    await user.type(screen.getByLabelText('Transferor Name'), 'OldCo Care Services');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(screen.getByText('Transferee name is required')).toBeInTheDocument();
+    expect(api.createHrTupe).not.toHaveBeenCalled();
   });
 });

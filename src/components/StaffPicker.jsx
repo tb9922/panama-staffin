@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { INPUT } from '../lib/design.js';
 import { getCurrentHome, getHrStaffList } from '../lib/api.js';
 
@@ -6,6 +6,7 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(false);
   const home = getCurrentHome();
+  const selectId = useId();
 
   useEffect(() => {
     if (!home) return;
@@ -23,8 +24,9 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
 
   return (
     <div>
-      {label && <label className={INPUT.label}>{label}{required && ' *'}</label>}
+      {label && <label htmlFor={selectId} className={INPUT.label}>{label}{required && ' *'}</label>}
       <select
+        id={selectId}
         className={small ? INPUT.sm : INPUT.select}
         value={value || ''}
         onChange={e => onChange(e.target.value)}
