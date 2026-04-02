@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import FlexWorkingTracker from '../FlexWorkingTracker.jsx';
 
@@ -122,5 +123,28 @@ describe('FlexWorkingTracker', () => {
     await waitFor(() => {
       expect(screen.getByText(/overdue/i)).toBeInTheDocument();
     });
+  });
+
+  it('surfaces the deeper meeting, approval, refusal, and appeal fields in the modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FlexWorkingTracker />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Request/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Request/i }));
+    expect(screen.getByLabelText('Effective Date Requested')).toBeInTheDocument();
+    expect(screen.getByLabelText('Meeting Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Decision By')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Decision'), 'refused');
+    expect(screen.getByLabelText('Refusal Explanation')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Decision'), 'approved');
+    expect(screen.getByLabelText('Approved Pattern')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Appeal Date'), '2026-05-01');
+    expect(screen.getByLabelText('Appeal Grounds')).toBeInTheDocument();
   });
 });

@@ -154,6 +154,11 @@ describe('mapOhFields', () => {
     expect(result.adjustments_recommended).toBe('Light duties');
   });
 
+  it('splits multiline OH questions into an array', () => {
+    const result = mapOhFields({ questions_for_oh: 'Can they return?\nWhat adjustments are needed?\n' });
+    expect(result.questions_for_oh).toEqual(['Can they return?', 'What adjustments are needed?']);
+  });
+
   it('strips ghost field: report_received', () => {
     const result = mapOhFields({ report_received: true, status: 'pending' });
     expect(result.report_received).toBeUndefined();
@@ -253,6 +258,17 @@ describe('mapEdiFields', () => {
   it('renames harassment category to harassment_category', () => {
     const result = mapEdiFields({ record_type: 'harassment_complaint', category: 'racial' });
     expect(result.harassment_category).toBe('racial');
+  });
+
+  it('still maps harassment category when description is also supplied', () => {
+    const result = mapEdiFields({
+      record_type: 'harassment_complaint',
+      category: 'race',
+      description: 'Family member used racist language',
+    });
+    expect(result.harassment_category).toBe('race');
+    expect(result.description).toBe('Family member used racist language');
+    expect(result.category).toBeUndefined();
   });
 
   it('maps reasonable adjustment category into description instead of harassment_category', () => {

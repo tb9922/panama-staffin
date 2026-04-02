@@ -25,13 +25,18 @@ const emptyRtw = () => ({
   staff_id: '', absence_start_date: '', absence_end_date: '',
   rtw_date: new Date().toISOString().slice(0, 10), conducted_by: '',
   absence_reason: '', fit_for_work: true, adjustments: '',
-  referral_needed: false, notes: '',
+  referral_needed: false, underlying_condition: false, follow_up_date: '',
+  fit_note_received: false, fit_note_date: '', fit_note_type: '', fit_note_adjustments: '',
+  fit_note_review_date: '', bradford_score_after: '', trigger_reached: '', action_taken: '',
+  notes: '',
 });
 
 const emptyOh = () => ({
   staff_id: '', referral_date: new Date().toISOString().slice(0, 10),
-  reason: '', provider: '', appointment_date: '',
+  reason: '', referred_by: '', provider: '', appointment_date: '',
   report_received: false, report_date: '', recommendations: '',
+  employee_consent_obtained: false, consent_date: '', questions_for_oh: '',
+  report_summary: '', fit_for_role: '', disability_likely: '', estimated_return_date: '',
   follow_up_date: '', notes: '',
 });
 
@@ -74,12 +79,30 @@ export default function AbsenceManager() {
   const rtwConductedById = useId();
   const rtwAbsenceReasonId = useId();
   const rtwAdjustmentsId = useId();
+  const rtwUnderlyingConditionId = useId();
+  const rtwFollowUpDateId = useId();
+  const rtwFitNoteReceivedId = useId();
+  const rtwFitNoteDateId = useId();
+  const rtwFitNoteTypeId = useId();
+  const rtwFitNoteAdjustmentsId = useId();
+  const rtwFitNoteReviewDateId = useId();
+  const rtwBradfordScoreId = useId();
+  const rtwTriggerReachedId = useId();
+  const rtwActionTakenId = useId();
   const rtwNotesId = useId();
   const ohReferralDateId = useId();
   const ohReasonId = useId();
+  const ohReferredById = useId();
   const ohProviderId = useId();
   const ohAppointmentDateId = useId();
+  const ohConsentObtainedId = useId();
+  const ohConsentDateId = useId();
+  const ohQuestionsId = useId();
   const ohReportDateId = useId();
+  const ohReportSummaryId = useId();
+  const ohFitForRoleId = useId();
+  const ohDisabilityLikelyId = useId();
+  const ohEstimatedReturnDateId = useId();
   const ohRecommendationsId = useId();
   const ohFollowUpDateId = useId();
   const ohNotesId = useId();
@@ -126,7 +149,18 @@ export default function AbsenceManager() {
       absence_end_date: item.absence_end_date || '', rtw_date: item.rtw_date || '',
       conducted_by: item.conducted_by || '', absence_reason: item.absence_reason || '',
       fit_for_work: item.fit_for_work ?? true, adjustments: item.adjustments || '',
-      referral_needed: item.referral_needed ?? false, notes: item.notes || '',
+      referral_needed: item.referral_needed ?? false,
+      underlying_condition: item.underlying_condition ?? false,
+      follow_up_date: item.follow_up_date || '',
+      fit_note_received: item.fit_note_received ?? false,
+      fit_note_date: item.fit_note_date || '',
+      fit_note_type: item.fit_note_type || '',
+      fit_note_adjustments: item.fit_note_adjustments || '',
+      fit_note_review_date: item.fit_note_review_date || '',
+      bradford_score_after: item.bradford_score_after ?? '',
+      trigger_reached: item.trigger_reached || '',
+      action_taken: item.action_taken || '',
+      notes: item.notes || '',
     });
     setFormError('');
     setShowRtwModal(true);
@@ -139,8 +173,12 @@ export default function AbsenceManager() {
     if (!rtwForm.conducted_by?.trim()) { setFormError('Conducted By is required'); return; }
     setSaving(true);
     try {
-      if (editingRtw) await updateHrRtwInterview(editingRtw.id, { ...rtwForm, _version: editingRtw.version });
-      else await createHrRtwInterview(home, rtwForm);
+      const payload = {
+        ...rtwForm,
+        bradford_score_after: rtwForm.bradford_score_after === '' ? null : Number(rtwForm.bradford_score_after),
+      };
+      if (editingRtw) await updateHrRtwInterview(editingRtw.id, { ...payload, _version: editingRtw.version });
+      else await createHrRtwInterview(home, payload);
       setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -156,10 +194,13 @@ export default function AbsenceManager() {
     setEditingOh(item);
     setOhForm({
       staff_id: item.staff_id || '', referral_date: item.referral_date || '',
-      reason: item.reason || '', provider: item.provider || '',
+      reason: item.reason || '', referred_by: item.referred_by || '', provider: item.provider || '',
       appointment_date: item.appointment_date || '',
       report_received: item.report_received ?? false, report_date: item.report_date || '',
-      recommendations: item.recommendations || '', follow_up_date: item.follow_up_date || '',
+      recommendations: item.recommendations || '', employee_consent_obtained: item.employee_consent_obtained ?? false,
+      consent_date: item.consent_date || '', questions_for_oh: Array.isArray(item.questions_for_oh) ? item.questions_for_oh.join('\n') : (item.questions_for_oh || ''),
+      report_summary: item.report_summary || '', fit_for_role: item.fit_for_role || '', disability_likely: item.disability_likely || '',
+      estimated_return_date: item.estimated_return_date || '', follow_up_date: item.follow_up_date || '',
       notes: item.notes || '',
     });
     setFormError('');
@@ -170,6 +211,7 @@ export default function AbsenceManager() {
     setError(null);
     if (!ohForm.staff_id) { setFormError('Staff member is required'); return; }
     if (!ohForm.referral_date) { setFormError('Referral date is required'); return; }
+    if (!ohForm.referred_by?.trim()) { setFormError('Referred By is required'); return; }
     setSaving(true);
     try {
       if (editingOh) await updateHrOhReferral(editingOh.id, { ...ohForm, _version: editingOh.version });
@@ -456,9 +498,79 @@ export default function AbsenceManager() {
               OH Referral Needed
             </label>
           </div>
+          <div className="flex items-center gap-2">
+            <input id={rtwUnderlyingConditionId} type="checkbox" checked={rtwForm.underlying_condition} onChange={e => rf('underlying_condition', e.target.checked)} />
+            <label htmlFor={rtwUnderlyingConditionId} className="text-sm text-gray-700">Underlying Condition Suspected</label>
+          </div>
           <div>
             <label htmlFor={rtwAdjustmentsId} className={INPUT.label}>Adjustments</label>
             <textarea id={rtwAdjustmentsId} className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
+          </div>
+          <div>
+            <label htmlFor={rtwFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
+            <input id={rtwFollowUpDateId} type="date" className={INPUT.base} value={rtwForm.follow_up_date} onChange={e => rf('follow_up_date', e.target.value)} />
+          </div>
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-xs font-semibold">Fit Note</p>
+            <div className="flex items-center gap-2">
+              <input id={rtwFitNoteReceivedId} type="checkbox" checked={rtwForm.fit_note_received} onChange={e => rf('fit_note_received', e.target.checked)} />
+              <label htmlFor={rtwFitNoteReceivedId} className="text-sm text-gray-700">Fit Note Received</label>
+            </div>
+            {rtwForm.fit_note_received && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor={rtwFitNoteDateId} className={INPUT.label}>Fit Note Date</label>
+                    <input id={rtwFitNoteDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_date} onChange={e => rf('fit_note_date', e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor={rtwFitNoteTypeId} className={INPUT.label}>Fit Note Type</label>
+                    <select id={rtwFitNoteTypeId} className={INPUT.select} value={rtwForm.fit_note_type} onChange={e => rf('fit_note_type', e.target.value)}>
+                      <option value="">Select...</option>
+                      <option value="not_fit">Not Fit for Work</option>
+                      <option value="may_be_fit">May Be Fit for Work</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor={rtwFitNoteAdjustmentsId} className={INPUT.label}>Fit Note Adjustments</label>
+                  <textarea id={rtwFitNoteAdjustmentsId} className={INPUT.base} rows={2} value={rtwForm.fit_note_adjustments} onChange={e => rf('fit_note_adjustments', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={rtwFitNoteReviewDateId} className={INPUT.label}>Fit Note Review Date</label>
+                  <input id={rtwFitNoteReviewDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_review_date} onChange={e => rf('fit_note_review_date', e.target.value)} />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-xs font-semibold">Trigger Assessment</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label htmlFor={rtwBradfordScoreId} className={INPUT.label}>Bradford Score After RTW</label>
+                <input id={rtwBradfordScoreId} type="number" className={INPUT.base} value={rtwForm.bradford_score_after} onChange={e => rf('bradford_score_after', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor={rtwTriggerReachedId} className={INPUT.label}>Trigger Reached</label>
+                <select id={rtwTriggerReachedId} className={INPUT.select} value={rtwForm.trigger_reached} onChange={e => rf('trigger_reached', e.target.value)}>
+                  <option value="">None</option>
+                  <option value="informal">Informal</option>
+                  <option value="formal_1">Formal Stage 1</option>
+                  <option value="formal_2">Formal Stage 2</option>
+                  <option value="final">Final</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor={rtwActionTakenId} className={INPUT.label}>Action Taken</label>
+                <select id={rtwActionTakenId} className={INPUT.select} value={rtwForm.action_taken} onChange={e => rf('action_taken', e.target.value)}>
+                  <option value="">None</option>
+                  <option value="none">None</option>
+                  <option value="informal_chat">Informal Chat</option>
+                  <option value="formal_meeting">Formal Meeting</option>
+                  <option value="referral">OH Referral</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div>
             <label htmlFor={rtwNotesId} className={INPUT.label}>Notes</label>
@@ -494,13 +606,36 @@ export default function AbsenceManager() {
               <input id={ohReasonId} className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
             </div>
             <div>
+              <label htmlFor={ohReferredById} className={INPUT.label}>Referred By</label>
+              <input id={ohReferredById} className={INPUT.base} value={ohForm.referred_by} onChange={e => ohf('referred_by', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <label htmlFor={ohProviderId} className={INPUT.label}>Provider</label>
               <input id={ohProviderId} className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
             </div>
+            <div>
+              <label htmlFor={ohAppointmentDateId} className={INPUT.label}>Appointment Date</label>
+              <input id={ohAppointmentDateId} type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
+            </div>
+          </div>
+          <div className="border rounded-lg p-3 space-y-3">
+            <p className="text-xs font-semibold">Employee Consent (GDPR Article 9)</p>
+            <div className="flex items-center gap-2">
+              <input id={ohConsentObtainedId} type="checkbox" checked={ohForm.employee_consent_obtained} onChange={e => ohf('employee_consent_obtained', e.target.checked)} />
+              <label htmlFor={ohConsentObtainedId} className="text-sm text-gray-700">Consent Obtained</label>
+            </div>
+            {ohForm.employee_consent_obtained && (
+              <div>
+                <label htmlFor={ohConsentDateId} className={INPUT.label}>Consent Date</label>
+                <input id={ohConsentDateId} type="date" className={INPUT.base} value={ohForm.consent_date} onChange={e => ohf('consent_date', e.target.value)} />
+              </div>
+            )}
           </div>
           <div>
-            <label htmlFor={ohAppointmentDateId} className={INPUT.label}>Appointment Date</label>
-            <input id={ohAppointmentDateId} type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
+            <label htmlFor={ohQuestionsId} className={INPUT.label}>Questions for OH Provider</label>
+            <textarea id={ohQuestionsId} className={INPUT.base} rows={3} value={ohForm.questions_for_oh} onChange={e => ohf('questions_for_oh', e.target.value)} placeholder="One question per line" />
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="oh_report" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
@@ -511,6 +646,39 @@ export default function AbsenceManager() {
               <label htmlFor={ohReportDateId} className={INPUT.label}>Report Date</label>
               <input id={ohReportDateId} type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
             </div>
+          )}
+          {ohForm.report_received && (
+            <>
+              <div>
+                <label htmlFor={ohReportSummaryId} className={INPUT.label}>Report Summary</label>
+                <textarea id={ohReportSummaryId} className={INPUT.base} rows={3} value={ohForm.report_summary} onChange={e => ohf('report_summary', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={ohFitForRoleId} className={INPUT.label}>Fit for Role</label>
+                  <select id={ohFitForRoleId} className={INPUT.select} value={ohForm.fit_for_role} onChange={e => ohf('fit_for_role', e.target.value)}>
+                    <option value="">Not assessed</option>
+                    <option value="yes">Yes</option>
+                    <option value="yes_with_adjustments">Yes, with adjustments</option>
+                    <option value="no_currently">No, currently</option>
+                    <option value="no_permanently">No, permanently</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor={ohDisabilityLikelyId} className={INPUT.label}>Disability Likely</label>
+                  <select id={ohDisabilityLikelyId} className={INPUT.select} value={ohForm.disability_likely} onChange={e => ohf('disability_likely', e.target.value)}>
+                    <option value="">Not assessed</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                    <option value="possible">Possible</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor={ohEstimatedReturnDateId} className={INPUT.label}>Estimated Return Date</label>
+                <input id={ohEstimatedReturnDateId} type="date" className={INPUT.base} value={ohForm.estimated_return_date} onChange={e => ohf('estimated_return_date', e.target.value)} />
+              </div>
+            </>
           )}
           <div>
             <label htmlFor={ohRecommendationsId} className={INPUT.label}>Recommendations</label>

@@ -18,7 +18,12 @@ const shapeOh = createShaper({
   ],
   dates: ['referral_date', 'consent_date', 'appointment_date', 'report_received_date', 'estimated_return_date', 'follow_up_date'],
   jsonArrays: ['questions_for_oh', 'adjustments_implemented'],
-  aliases: { provider: 'oh_provider', report_date: 'report_received_date', recommendations: 'adjustments_recommended' },
+  aliases: {
+    provider: 'oh_provider',
+    report_date: 'report_received_date',
+    recommendations: 'adjustments_recommended',
+    report_received: (row, out) => Boolean(out.report_received_date),
+  },
 });
 
 export async function findOhReferralById(id, homeId, client) {
@@ -42,12 +47,18 @@ export async function createOhReferral(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_oh_referrals
        (home_id, staff_id, referral_date, referred_by, reason, questions_for_oh,
-        employee_consent_obtained, consent_date, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${COLS}`,
+         employee_consent_obtained, consent_date, oh_provider, appointment_date,
+         report_received_date, report_summary, fit_for_role, adjustments_recommended,
+         estimated_return_date, disability_likely, follow_up_date, status, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.referral_date, data.referred_by,
-     data.reason, JSON.stringify(data.questions_for_oh || []),
-     data.employee_consent_obtained ?? false, data.consent_date || null,
-     data.status ?? 'pending', data.created_by || null]
+      data.reason, JSON.stringify(data.questions_for_oh || []),
+      data.employee_consent_obtained ?? false, data.consent_date || null,
+      data.oh_provider || null, data.appointment_date || null,
+      data.report_received_date || null, data.report_summary || null, data.fit_for_role || null,
+      data.adjustments_recommended || null, data.estimated_return_date || null,
+      data.disability_likely || null, data.follow_up_date || null,
+      data.status ?? 'pending', data.notes || null, data.created_by || null]
   );
   return shapeOh(rows[0]);
 }

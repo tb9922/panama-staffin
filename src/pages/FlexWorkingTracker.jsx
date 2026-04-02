@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
@@ -31,9 +31,14 @@ function isOverdue(item) {
 const blankForm = () => ({
   staff_id: '', request_date: new Date().toISOString().slice(0, 10),
   requested_change: '', decision_deadline: '', status: 'pending',
-  reason: '', current_pattern: '',
-  decision: '', decision_date: '', decision_reason: '',
-  trial_period_end: '', appeal_date: '', appeal_outcome: '', notes: '',
+  reason: '', current_pattern: '', effective_date_requested: '',
+  employee_assessment_of_impact: '', meeting_date: '', meeting_notes: '',
+  decision: '', decision_date: '', decision_by: '',
+  refusal_reason: '', refusal_explanation: '',
+  approved_pattern: '', approved_effective_date: '',
+  trial_period: false, trial_period_end: '',
+  appeal_date: '', appeal_grounds: '', appeal_outcome: '', appeal_outcome_date: '',
+  notes: '',
 });
 
 export default function FlexWorkingTracker() {
@@ -55,6 +60,30 @@ export default function FlexWorkingTracker() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const requestDateId = useId();
+  const requestedChangeId = useId();
+  const requestReasonId = useId();
+  const currentPatternId = useId();
+  const effectiveDateRequestedId = useId();
+  const employeeImpactId = useId();
+  const decisionDeadlineId = useId();
+  const requestStatusId = useId();
+  const meetingDateId = useId();
+  const decisionById = useId();
+  const meetingNotesId = useId();
+  const decisionId = useId();
+  const decisionDateId = useId();
+  const refusalReasonId = useId();
+  const refusalExplanationId = useId();
+  const approvedPatternId = useId();
+  const approvedEffectiveDateId = useId();
+  const trialPeriodId = useId();
+  const trialPeriodEndId = useId();
+  const appealDateId = useId();
+  const appealGroundsId = useId();
+  const appealOutcomeId = useId();
+  const appealOutcomeDateId = useId();
+  const flexNotesId = useId();
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -110,12 +139,23 @@ export default function FlexWorkingTracker() {
       status: item.status || 'pending',
       reason: item.reason || '',
       current_pattern: item.current_pattern || '',
+      effective_date_requested: item.effective_date_requested || '',
+      employee_assessment_of_impact: item.employee_assessment_of_impact || '',
+      meeting_date: item.meeting_date || '',
+      meeting_notes: item.meeting_notes || '',
       decision: item.decision || '',
       decision_date: item.decision_date || '',
-      decision_reason: item.decision_reason || '',
+      decision_by: item.decision_by || '',
+      refusal_reason: item.refusal_reason || '',
+      refusal_explanation: item.refusal_explanation || '',
+      approved_pattern: item.approved_pattern || '',
+      approved_effective_date: item.approved_effective_date || '',
+      trial_period: item.trial_period ?? false,
       trial_period_end: item.trial_period_end || '',
       appeal_date: item.appeal_date || '',
+      appeal_grounds: item.appeal_grounds || '',
       appeal_outcome: item.appeal_outcome || '',
+      appeal_outcome_date: item.appeal_outcome_date || '',
       notes: item.notes || '',
     });
     setShowModal(true);
@@ -129,10 +169,18 @@ export default function FlexWorkingTracker() {
     if (!form.requested_change) { setFormError('Requested change is required'); return; }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        trial_period: !!form.trial_period,
+      };
+      if (payload.decision === 'withdrawn' || payload.status === 'withdrawn') {
+        payload.decision = 'withdrawn';
+        payload.status = 'withdrawn';
+      }
       if (editing) {
-        await updateHrFlexWorking(editing.id, { ...form, _version: editing.version });
+        await updateHrFlexWorking(editing.id, { ...payload, _version: editing.version });
       } else {
-        await createHrFlexWorking(home, form);
+        await createHrFlexWorking(home, payload);
       }
       setShowModal(false);
       setForm(blankForm());
@@ -239,33 +287,61 @@ export default function FlexWorkingTracker() {
               <div className="grid grid-cols-2 gap-4">
                 <StaffPicker value={form.staff_id || ''} onChange={val => set('staff_id', val)} label="Staff Member" required />
                 <div>
-                  <label className={INPUT.label}>Request Date *</label>
-                  <input type="date" className={INPUT.base} value={form.request_date} onChange={e => set('request_date', e.target.value)} />
+                  <label htmlFor={requestDateId} className={INPUT.label}>Request Date *</label>
+                  <input id={requestDateId} type="date" className={INPUT.base} value={form.request_date} onChange={e => set('request_date', e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Requested Change *</label>
-                <textarea className={INPUT.base} rows={3} value={form.requested_change} onChange={e => set('requested_change', e.target.value)} placeholder="Describe the flexible working arrangement requested" />
+                <label htmlFor={requestedChangeId} className={INPUT.label}>Requested Change *</label>
+                <textarea id={requestedChangeId} className={INPUT.base} rows={3} value={form.requested_change} onChange={e => set('requested_change', e.target.value)} placeholder="Describe the flexible working arrangement requested" />
               </div>
               <div>
-                <label className={INPUT.label}>Reason for Request</label>
-                <textarea className={INPUT.base} rows={2} value={form.reason} onChange={e => set('reason', e.target.value)} />
+                <label htmlFor={requestReasonId} className={INPUT.label}>Reason for Request</label>
+                <textarea id={requestReasonId} className={INPUT.base} rows={2} value={form.reason} onChange={e => set('reason', e.target.value)} />
               </div>
               <div>
-                <label className={INPUT.label}>Current Pattern</label>
-                <input className={INPUT.base} value={form.current_pattern} onChange={e => set('current_pattern', e.target.value)} placeholder="e.g. Mon-Fri 9-5" />
+                <label htmlFor={currentPatternId} className={INPUT.label}>Current Pattern</label>
+                <input id={currentPatternId} className={INPUT.base} value={form.current_pattern} onChange={e => set('current_pattern', e.target.value)} placeholder="e.g. Mon-Fri 9-5" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Decision Deadline</label>
-                  <input type="date" className={INPUT.base} value={form.decision_deadline} onChange={e => set('decision_deadline', e.target.value)} />
+                  <label htmlFor={effectiveDateRequestedId} className={INPUT.label}>Effective Date Requested</label>
+                  <input id={effectiveDateRequestedId} type="date" className={INPUT.base} value={form.effective_date_requested} onChange={e => set('effective_date_requested', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
+                  <label htmlFor={decisionDeadlineId} className={INPUT.label}>Decision Deadline</label>
+                  <input id={decisionDeadlineId} type="date" className={INPUT.base} value={form.decision_deadline} onChange={e => set('decision_deadline', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label htmlFor={employeeImpactId} className={INPUT.label}>Employee Assessment of Impact</label>
+                <textarea id={employeeImpactId} className={INPUT.base} rows={2} value={form.employee_assessment_of_impact} onChange={e => set('employee_assessment_of_impact', e.target.value)} placeholder="Employee's view on how the change would affect the service" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={requestStatusId} className={INPUT.label}>Status</label>
+                  <select id={requestStatusId} className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
                     {FLEX_WORKING_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
+              </div>
+
+              <hr className="border-gray-100" />
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Meeting</p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={meetingDateId} className={INPUT.label}>Meeting Date</label>
+                  <input id={meetingDateId} type="date" className={INPUT.base} value={form.meeting_date} onChange={e => set('meeting_date', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={decisionById} className={INPUT.label}>Decision By</label>
+                  <input id={decisionById} className={INPUT.base} value={form.decision_by} onChange={e => set('decision_by', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label htmlFor={meetingNotesId} className={INPUT.label}>Meeting Notes</label>
+                <textarea id={meetingNotesId} className={INPUT.base} rows={3} value={form.meeting_notes} onChange={e => set('meeting_notes', e.target.value)} />
               </div>
 
               <hr className="border-gray-100" />
@@ -273,53 +349,90 @@ export default function FlexWorkingTracker() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Decision</label>
-                  <select className={INPUT.select} value={form.decision} onChange={e => set('decision', e.target.value)}>
+                  <label htmlFor={decisionId} className={INPUT.label}>Decision</label>
+                  <select id={decisionId} className={INPUT.select} value={form.decision} onChange={e => set('decision', e.target.value)}>
                     {DECISION_OPTIONS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Decision Date</label>
-                  <input type="date" className={INPUT.base} value={form.decision_date} onChange={e => set('decision_date', e.target.value)} />
+                  <label htmlFor={decisionDateId} className={INPUT.label}>Decision Date</label>
+                  <input id={decisionDateId} type="date" className={INPUT.base} value={form.decision_date} onChange={e => set('decision_date', e.target.value)} />
                 </div>
               </div>
 
               {form.decision === 'refused' && (
-                <div>
-                  <label className={INPUT.label}>Refusal Reason (statutory)</label>
-                  <select className={INPUT.select} value={form.decision_reason} onChange={e => set('decision_reason', e.target.value)}>
-                    <option value="">— Select reason —</option>
-                    {FLEX_REFUSAL_REASONS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
+                <>
+                  <div>
+                    <label htmlFor={refusalReasonId} className={INPUT.label}>Refusal Reason (statutory)</label>
+                    <select id={refusalReasonId} className={INPUT.select} value={form.refusal_reason} onChange={e => set('refusal_reason', e.target.value)}>
+                      <option value="">— Select reason —</option>
+                      {FLEX_REFUSAL_REASONS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={refusalExplanationId} className={INPUT.label}>Refusal Explanation</label>
+                    <textarea id={refusalExplanationId} className={INPUT.base} rows={3} value={form.refusal_explanation} onChange={e => set('refusal_explanation', e.target.value)} />
+                  </div>
+                </>
+              )}
+
+              {(form.decision === 'approved' || form.decision === 'approved_modified') && (
+                <>
+                  <div>
+                    <label htmlFor={approvedPatternId} className={INPUT.label}>Approved Pattern</label>
+                    <input id={approvedPatternId} className={INPUT.base} value={form.approved_pattern} onChange={e => set('approved_pattern', e.target.value)} placeholder="e.g. Mon-Wed 7am-3pm, Thu-Fri WFH" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor={approvedEffectiveDateId} className={INPUT.label}>Approved Effective Date</label>
+                      <input id={approvedEffectiveDateId} type="date" className={INPUT.base} value={form.approved_effective_date} onChange={e => set('approved_effective_date', e.target.value)} />
+                    </div>
+                    <div className="flex items-center gap-2 pt-7">
+                      <input id={trialPeriodId} type="checkbox" checked={form.trial_period} onChange={e => set('trial_period', e.target.checked)} />
+                      <label htmlFor={trialPeriodId} className="text-sm text-gray-700">Trial Period Agreed</label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {(form.decision && form.decision !== 'refused') && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor={trialPeriodEndId} className={INPUT.label}>Trial Period End</label>
+                    <input id={trialPeriodEndId} type="date" className={INPUT.base} value={form.trial_period_end} onChange={e => set('trial_period_end', e.target.value)} />
+                  </div>
                 </div>
               )}
 
-              {form.decision && form.decision !== 'refused' && (
-                <div>
-                  <label className={INPUT.label}>Decision Reason / Notes</label>
-                  <textarea className={INPUT.base} rows={2} value={form.decision_reason} onChange={e => set('decision_reason', e.target.value)} />
-                </div>
-              )}
+              <hr className="border-gray-100" />
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Appeal</p>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Trial Period End</label>
-                  <input type="date" className={INPUT.base} value={form.trial_period_end} onChange={e => set('trial_period_end', e.target.value)} />
+                  <label htmlFor={appealDateId} className={INPUT.label}>Appeal Date</label>
+                  <input id={appealDateId} type="date" className={INPUT.base} value={form.appeal_date} onChange={e => set('appeal_date', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Appeal Date</label>
-                  <input type="date" className={INPUT.base} value={form.appeal_date} onChange={e => set('appeal_date', e.target.value)} />
+                  <label htmlFor={appealOutcomeDateId} className={INPUT.label}>Appeal Outcome Date</label>
+                  <input id={appealOutcomeDateId} type="date" className={INPUT.base} value={form.appeal_outcome_date} onChange={e => set('appeal_outcome_date', e.target.value)} />
                 </div>
               </div>
               {form.appeal_date && (
-                <div>
-                  <label className={INPUT.label}>Appeal Outcome</label>
-                  <input className={INPUT.base} value={form.appeal_outcome} onChange={e => set('appeal_outcome', e.target.value)} />
-                </div>
+                <>
+                  <div>
+                    <label htmlFor={appealGroundsId} className={INPUT.label}>Appeal Grounds</label>
+                    <textarea id={appealGroundsId} className={INPUT.base} rows={2} value={form.appeal_grounds} onChange={e => set('appeal_grounds', e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor={appealOutcomeId} className={INPUT.label}>Appeal Outcome</label>
+                    <input id={appealOutcomeId} className={INPUT.base} value={form.appeal_outcome} onChange={e => set('appeal_outcome', e.target.value)} />
+                  </div>
+                </>
               )}
+
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
+                <label htmlFor={flexNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={flexNotesId} className={INPUT.base} rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="flexible_working" caseId={editing?.id} />

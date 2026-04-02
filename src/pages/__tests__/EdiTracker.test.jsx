@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import EdiTracker from '../EdiTracker.jsx';
 
@@ -134,5 +135,30 @@ describe('EdiTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /New Record/i })).toBeInTheDocument();
     });
+  });
+
+  it('shows the deeper harassment and adjustment fields in the modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EdiTracker />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Record/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Record/i }));
+    expect(screen.getByLabelText('Handling Route')).toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/Third-party harassment/i));
+    expect(screen.getByLabelText('Third-Party Type')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Record Type *'), 'reasonable_adjustment');
+    expect(screen.getByLabelText('Condition Description')).toBeInTheDocument();
+    expect(screen.getByLabelText('Adjustments')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/Access to Work Applied For/i));
+    expect(screen.getByLabelText('AtW Reference')).toBeInTheDocument();
+    expect(screen.getByLabelText(/AtW Amount Awarded/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Outcome')).toBeInTheDocument();
   });
 });

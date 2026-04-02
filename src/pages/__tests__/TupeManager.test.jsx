@@ -153,4 +153,25 @@ describe('TupeManager', () => {
     expect(screen.getByText('Transferee name is required')).toBeInTheDocument();
     expect(api.createHrTupe).not.toHaveBeenCalled();
   });
+
+  it('shows the expanded consultation and due diligence fields in the modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TupeManager />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Transfer/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Transfer/i }));
+    expect(screen.getByLabelText('Signed Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Measures Letter Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('ELI Complete')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Employee Representatives Consulted'));
+    expect(screen.getByLabelText('Representative Names')).toBeInTheDocument();
+
+    expect(screen.getByLabelText('Due Diligence Notes')).toBeInTheDocument();
+    expect(screen.getByLabelText('Outstanding Claims')).toBeInTheDocument();
+    expect(screen.getByLabelText('Outstanding Tribunal Claims')).toBeInTheDocument();
+  });
 });

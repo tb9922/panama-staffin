@@ -35,9 +35,10 @@ const blankForm = () => ({
   status: 'current', reference: '',
   checked_by: '', notes: '',
   // DBS-specific
-  certificate_number: '',
+  certificate_number: '', dbs_disclosure_level: '', dbs_update_service_registered: false,
+  dbs_update_service_last_checked: '', dbs_barred_list_check: true,
   // RTW-specific
-  document_type: '',
+  document_type: '', rtw_next_check_due: '',
 });
 
 const LIMIT = 50;
@@ -67,7 +68,12 @@ export default function RtwDbsRenewals() {
   const renewalReferenceId = useId();
   const renewalCheckedById = useId();
   const renewalCertificateNumberId = useId();
+  const renewalDisclosureLevelId = useId();
+  const renewalUpdateServiceRegisteredId = useId();
+  const renewalUpdateServiceLastCheckedId = useId();
+  const renewalBarredListCheckId = useId();
   const renewalDocumentTypeId = useId();
+  const renewalRtwNextCheckDueId = useId();
   const renewalNotesId = useId();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
@@ -118,7 +124,12 @@ export default function RtwDbsRenewals() {
       checked_by: item.checked_by || '',
       notes: item.notes || '',
       certificate_number: item.certificate_number || '',
+      dbs_disclosure_level: item.dbs_disclosure_level || '',
+      dbs_update_service_registered: item.dbs_update_service_registered ?? false,
+      dbs_update_service_last_checked: item.dbs_update_service_last_checked || '',
+      dbs_barred_list_check: item.dbs_barred_list_check ?? true,
       document_type: item.document_type || '',
+      rtw_next_check_due: item.rtw_next_check_due || '',
     });
     setShowModal(true);
   }
@@ -134,9 +145,14 @@ export default function RtwDbsRenewals() {
       // Strip fields not relevant to check type
       if (payload.check_type !== 'dbs') {
         delete payload.certificate_number;
+        delete payload.dbs_disclosure_level;
+        delete payload.dbs_update_service_registered;
+        delete payload.dbs_update_service_last_checked;
+        delete payload.dbs_barred_list_check;
       }
       if (payload.check_type !== 'rtw') {
         delete payload.document_type;
+        delete payload.rtw_next_check_due;
       }
       if (editing) {
         await updateHrRenewal(editing.id, { ...payload, _version: editing.version });
@@ -292,20 +308,52 @@ export default function RtwDbsRenewals() {
 
               {/* DBS-specific */}
               {form.check_type === 'dbs' && (
-                <div>
-                  <label htmlFor={renewalCertificateNumberId} className={INPUT.label}>Certificate Number</label>
-                  <input id={renewalCertificateNumberId} className={INPUT.base} value={form.certificate_number} onChange={e => set('certificate_number', e.target.value)} placeholder="DBS certificate number" />
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor={renewalCertificateNumberId} className={INPUT.label}>Certificate Number</label>
+                    <input id={renewalCertificateNumberId} className={INPUT.base} value={form.certificate_number} onChange={e => set('certificate_number', e.target.value)} placeholder="DBS certificate number" />
+                  </div>
+                  <div>
+                    <label htmlFor={renewalDisclosureLevelId} className={INPUT.label}>Disclosure Level</label>
+                    <select id={renewalDisclosureLevelId} className={INPUT.select} value={form.dbs_disclosure_level} onChange={e => set('dbs_disclosure_level', e.target.value)}>
+                      <option value="">Select...</option>
+                      <option value="enhanced">Enhanced</option>
+                      <option value="enhanced_barred">Enhanced + Barred List</option>
+                      <option value="standard">Standard</option>
+                      <option value="basic">Basic</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input id={renewalBarredListCheckId} type="checkbox" checked={form.dbs_barred_list_check} onChange={e => set('dbs_barred_list_check', e.target.checked)} />
+                    <label htmlFor={renewalBarredListCheckId} className="text-sm text-gray-700">Barred List Checked</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input id={renewalUpdateServiceRegisteredId} type="checkbox" checked={form.dbs_update_service_registered} onChange={e => set('dbs_update_service_registered', e.target.checked)} />
+                    <label htmlFor={renewalUpdateServiceRegisteredId} className="text-sm text-gray-700">DBS Update Service Registered</label>
+                  </div>
+                  {form.dbs_update_service_registered && (
+                    <div>
+                      <label htmlFor={renewalUpdateServiceLastCheckedId} className={INPUT.label}>Last Update Service Check</label>
+                      <input id={renewalUpdateServiceLastCheckedId} type="date" className={INPUT.base} value={form.dbs_update_service_last_checked} onChange={e => set('dbs_update_service_last_checked', e.target.value)} />
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* RTW-specific */}
               {form.check_type === 'rtw' && (
-                <div>
-                  <label htmlFor={renewalDocumentTypeId} className={INPUT.label}>Document Type</label>
-                  <select id={renewalDocumentTypeId} className={INPUT.select} value={form.document_type} onChange={e => set('document_type', e.target.value)}>
-                    <option value="">Select document type</option>
-                    {RTW_DOCUMENT_TYPE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-                  </select>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor={renewalDocumentTypeId} className={INPUT.label}>Document Type</label>
+                    <select id={renewalDocumentTypeId} className={INPUT.select} value={form.document_type} onChange={e => set('document_type', e.target.value)}>
+                      <option value="">Select document type</option>
+                      {RTW_DOCUMENT_TYPE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={renewalRtwNextCheckDueId} className={INPUT.label}>Next RTW Check Due</label>
+                    <input id={renewalRtwNextCheckDueId} type="date" className={INPUT.base} value={form.rtw_next_check_due} onChange={e => set('rtw_next_check_due', e.target.value)} />
+                  </div>
                 </div>
               )}
 
