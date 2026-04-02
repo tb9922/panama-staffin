@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import RtwDbsRenewals from '../RtwDbsRenewals.jsx';
 
@@ -135,5 +136,22 @@ describe('RtwDbsRenewals', () => {
       expect(screen.getByDisplayValue('All Check Types')).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue('All Statuses')).toBeInTheDocument();
+  });
+
+  it('uses a constrained RTW document type select instead of free text', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RtwDbsRenewals />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Check/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Check/i }));
+    await user.selectOptions(screen.getByLabelText(/Check Type \*/i), 'rtw');
+
+    const documentTypeSelect = screen.getByLabelText('Document Type');
+    expect(documentTypeSelect.tagName).toBe('SELECT');
+    expect(screen.getByRole('option', { name: 'BRP' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Share Code' })).toBeInTheDocument();
   });
 });

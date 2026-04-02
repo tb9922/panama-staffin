@@ -13,6 +13,20 @@ const router = Router();
 const idSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 
+function normalizeOutbreakStatus(value) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'open' || normalized === 'active') return 'suspected';
+  if (normalized === 'ongoing') return 'confirmed';
+  if (normalized === 'closed' || normalized === 'complete' || normalized === 'completed') return 'resolved';
+  return normalized;
+}
+
+const outbreakStatusSchema = z.preprocess(
+  normalizeOutbreakStatus,
+  z.enum(['suspected', 'confirmed', 'contained', 'resolved']).nullable().optional()
+);
+
 const ipcBodySchema = z.object({
   audit_date:         dateSchema,
   audit_type:         z.string().min(1).max(200),
@@ -39,7 +53,7 @@ const ipcBodySchema = z.object({
     affected_residents: z.coerce.number().int().min(0).nullable().optional(),
     measures:           z.string().max(5000).nullable().optional(),
     end_date:           dateSchema.optional(),
-    status:             z.enum(['suspected', 'confirmed', 'contained', 'resolved']).nullable().optional(),
+    status:             outbreakStatusSchema,
   }).nullable().optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });

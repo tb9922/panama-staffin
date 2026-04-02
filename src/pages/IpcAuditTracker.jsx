@@ -99,7 +99,7 @@ export default function IpcAuditTracker() {
       compliance_pct: audit.compliance_pct ?? '',
       risk_areas: audit.risk_areas || [],
       corrective_actions: audit.corrective_actions || [],
-      outbreak: audit.outbreak ? { ...EMPTY_FORM.outbreak, ...audit.outbreak } : { ...EMPTY_FORM.outbreak },
+      outbreak: audit.outbreak ? { ...EMPTY_FORM.outbreak, ...audit.outbreak, status: normalizeOutbreakStatus(audit.outbreak.status) || '' } : { ...EMPTY_FORM.outbreak },
       notes: audit.notes || '',
       _version: audit.version,
     });
@@ -120,7 +120,7 @@ export default function IpcAuditTracker() {
         type: form.outbreak.type || null,
         start_date: form.outbreak.start_date || null,
         end_date: form.outbreak.end_date || null,
-        status: form.outbreak.status || null,
+        status: normalizeOutbreakStatus(form.outbreak.status),
         measures: form.outbreak.measures || null,
       } : null,
       _version: form._version,
@@ -510,3 +510,4 @@ export default function IpcAuditTracker() {
     </div>
   );
 }
+

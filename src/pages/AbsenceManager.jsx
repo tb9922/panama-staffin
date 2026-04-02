@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
@@ -68,6 +68,21 @@ export default function AbsenceManager() {
   const [ohForm, setOhForm] = useState(emptyOh());
 
   const home = getCurrentHome();
+  const rtwDateId = useId();
+  const rtwAbsenceStartId = useId();
+  const rtwAbsenceEndId = useId();
+  const rtwConductedById = useId();
+  const rtwAbsenceReasonId = useId();
+  const rtwAdjustmentsId = useId();
+  const rtwNotesId = useId();
+  const ohReferralDateId = useId();
+  const ohReasonId = useId();
+  const ohProviderId = useId();
+  const ohAppointmentDateId = useId();
+  const ohReportDateId = useId();
+  const ohRecommendationsId = useId();
+  const ohFollowUpDateId = useId();
+  const ohNotesId = useId();
   useDirtyGuard(showRtwModal || showOhModal);
 
   const load = useCallback(async () => {
@@ -121,6 +136,7 @@ export default function AbsenceManager() {
     setError(null);
     if (!rtwForm.staff_id) { setFormError('Staff member is required'); return; }
     if (!rtwForm.rtw_date) { setFormError('RTW date is required'); return; }
+    if (!rtwForm.conducted_by?.trim()) { setFormError('Conducted By is required'); return; }
     setSaving(true);
     try {
       if (editingRtw) await updateHrRtwInterview(editingRtw.id, { ...rtwForm, _version: editingRtw.version });
@@ -406,28 +422,28 @@ export default function AbsenceManager() {
           <div className="grid grid-cols-2 gap-4">
             <StaffPicker value={rtwForm.staff_id || ''} onChange={val => rf('staff_id', val)} label="Staff Member" />
             <div>
-              <label className={INPUT.label}>RTW Date</label>
-              <input type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
+              <label htmlFor={rtwDateId} className={INPUT.label}>RTW Date</label>
+              <input id={rtwDateId} type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Absence Start Date</label>
-              <input type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
+              <label htmlFor={rtwAbsenceStartId} className={INPUT.label}>Absence Start Date</label>
+              <input id={rtwAbsenceStartId} type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>Absence End Date</label>
-              <input type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
+              <label htmlFor={rtwAbsenceEndId} className={INPUT.label}>Absence End Date</label>
+              <input id={rtwAbsenceEndId} type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Conducted By</label>
-              <input className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
+              <label htmlFor={rtwConductedById} className={INPUT.label}>Conducted By</label>
+              <input id={rtwConductedById} className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>Absence Reason</label>
-              <input className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
+              <label htmlFor={rtwAbsenceReasonId} className={INPUT.label}>Absence Reason</label>
+              <input id={rtwAbsenceReasonId} className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
             </div>
           </div>
           <div className="flex gap-6">
@@ -441,12 +457,12 @@ export default function AbsenceManager() {
             </label>
           </div>
           <div>
-            <label className={INPUT.label}>Adjustments</label>
-            <textarea className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
+            <label htmlFor={rtwAdjustmentsId} className={INPUT.label}>Adjustments</label>
+            <textarea id={rtwAdjustmentsId} className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
           </div>
           <div>
-            <label className={INPUT.label}>Notes</label>
-            <textarea className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
+            <label htmlFor={rtwNotesId} className={INPUT.label}>Notes</label>
+            <textarea id={rtwNotesId} className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
           </div>
         </div>
         <FileAttachments caseType="rtw_interview" caseId={editingRtw?.id} />
@@ -468,23 +484,23 @@ export default function AbsenceManager() {
           <div className="grid grid-cols-2 gap-4">
             <StaffPicker value={ohForm.staff_id || ''} onChange={val => ohf('staff_id', val)} label="Staff Member" />
             <div>
-              <label className={INPUT.label}>Referral Date</label>
-              <input type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
+              <label htmlFor={ohReferralDateId} className={INPUT.label}>Referral Date</label>
+              <input id={ohReferralDateId} type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Reason</label>
-              <input className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
+              <label htmlFor={ohReasonId} className={INPUT.label}>Reason</label>
+              <input id={ohReasonId} className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>Provider</label>
-              <input className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
+              <label htmlFor={ohProviderId} className={INPUT.label}>Provider</label>
+              <input id={ohProviderId} className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>Appointment Date</label>
-            <input type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
+            <label htmlFor={ohAppointmentDateId} className={INPUT.label}>Appointment Date</label>
+            <input id={ohAppointmentDateId} type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="oh_report" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
@@ -492,21 +508,21 @@ export default function AbsenceManager() {
           </div>
           {ohForm.report_received && (
             <div>
-              <label className={INPUT.label}>Report Date</label>
-              <input type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
+              <label htmlFor={ohReportDateId} className={INPUT.label}>Report Date</label>
+              <input id={ohReportDateId} type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
             </div>
           )}
           <div>
-            <label className={INPUT.label}>Recommendations</label>
-            <textarea className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
+            <label htmlFor={ohRecommendationsId} className={INPUT.label}>Recommendations</label>
+            <textarea id={ohRecommendationsId} className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
           </div>
           <div>
-            <label className={INPUT.label}>Follow-up Date</label>
-            <input type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
+            <label htmlFor={ohFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
+            <input id={ohFollowUpDateId} type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
           </div>
           <div>
-            <label className={INPUT.label}>Notes</label>
-            <textarea className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
+            <label htmlFor={ohNotesId} className={INPUT.label}>Notes</label>
+            <textarea id={ohNotesId} className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
           </div>
         </div>
         <FileAttachments caseType="oh_referral" caseId={editingOh?.id} />

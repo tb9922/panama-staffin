@@ -26,7 +26,10 @@ const onboardingSectionSchema = z.object({
   notes:          z.string().max(5000).nullable().optional(),
   verified_by:    z.string().max(200).nullable().optional(),
   verified_date:  dateSchema.optional(),
-}).passthrough();
+}).passthrough().refine(
+  (value) => JSON.stringify(value).length <= 50000,
+  'Onboarding section payload is too large'
+);
 
 // GET /api/onboarding?home=X
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {

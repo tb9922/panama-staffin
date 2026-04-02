@@ -23,7 +23,11 @@ const shapeEdi = createShaper({
   dates: ['complaint_date'],
   floats: ['access_to_work_amount'],
   jsonArrays: ['reasonable_steps_evidence', 'adjustments'],
-  aliases: { date_recorded: 'complaint_date', category: 'harassment_category', respondent_role: 'respondent_type' },
+  aliases: {
+    date_recorded: 'complaint_date',
+    category: (row, out) => out.record_type === 'reasonable_adjustment' ? (out.description || null) : out.harassment_category,
+    respondent_role: 'respondent_type',
+  },
 });
 
 export async function findEdi(homeId, { recordType, staffId } = {}, client, pag) {
@@ -48,15 +52,20 @@ export async function createEdi(homeId, data, client) {
     `INSERT INTO hr_edi_records
        (home_id, record_type, staff_id, complaint_date, harassment_category,
         third_party, third_party_type, respondent_type, respondent_staff_id, respondent_name,
-        handling_route, condition_description, adjustments, description, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING ${COLS}`,
+        handling_route, linked_case_id, reasonable_steps_evidence,
+        condition_description, adjustments, oh_referral_id,
+        access_to_work_applied, access_to_work_reference, access_to_work_amount,
+        description, status, outcome, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING ${COLS}`,
     [homeId, data.record_type, data.staff_id || null, data.complaint_date || null,
      data.harassment_category || null, data.third_party ?? false,
      data.third_party_type || null, data.respondent_type || null,
      data.respondent_staff_id || null, data.respondent_name || null,
-     data.handling_route || null, data.condition_description || null,
-     JSON.stringify(data.adjustments || []), data.description || null,
-     data.status ?? 'open', data.created_by || null]
+     data.handling_route || null, data.linked_case_id || null,
+     JSON.stringify(data.reasonable_steps_evidence || []), data.condition_description || null,
+     JSON.stringify(data.adjustments || []), data.oh_referral_id || null,
+     data.access_to_work_applied ?? false, data.access_to_work_reference || null, data.access_to_work_amount ?? null,
+     data.description || null, data.status ?? 'open', data.outcome || null, data.notes || null, data.created_by || null]
   );
   return shapeEdi(rows[0]);
 }
@@ -66,7 +75,7 @@ export async function updateEdi(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'record_type', 'complaint_date', 'harassment_category', 'third_party', 'third_party_type',
+    'record_type', 'staff_id', 'complaint_date', 'harassment_category', 'third_party', 'third_party_type',
     'respondent_type', 'respondent_staff_id', 'respondent_name',
     'handling_route', 'linked_case_id', 'reasonable_steps_evidence',
     'condition_description', 'adjustments', 'oh_referral_id',
