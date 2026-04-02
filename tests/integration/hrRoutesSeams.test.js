@@ -107,6 +107,7 @@ describe('HR route save seams', () => {
     }).expect(201);
 
     expect(createRes.body.category).toBe('Physical');
+    expect(createRes.body.adjustments).toBe('Height-adjustable desk');
 
     const updateRes = await authed('put', `/api/hr/edi/${createRes.body.id}`).send({
       _version: createRes.body.version,
@@ -115,9 +116,10 @@ describe('HR route save seams', () => {
     }).expect(200);
 
     expect(updateRes.body.category).toBe('Sensory');
+    expect(updateRes.body.adjustments).toBe('Screen reader software');
   });
 
-  it('persists TUPE consultation, ELI, and measures fields on create', async () => {
+  it('persists TUPE consultation, ELI, and measures fields on create and update', async () => {
     const createRes = await authed('post', '/api/hr/tupe').send({
       transfer_type: 'incoming',
       transfer_date: '2026-06-01',
@@ -136,6 +138,17 @@ describe('HR route save seams', () => {
     expect(createRes.body.consultation_end).toBe('2026-05-15');
     expect(createRes.body.eli_sent_date).toBe('2026-03-15');
     expect(createRes.body.measures_proposed).toBe('No redundancies planned');
+
+    const updateRes = await authed('put', `/api/hr/tupe/${createRes.body.id}`).send({
+      _version: createRes.body.version,
+      consultation_end: '2026-05-20',
+      eli_sent_date: '2026-03-20',
+      measures_proposed: 'Revised consultation pack issued',
+    }).expect(200);
+
+    expect(updateRes.body.consultation_end).toBe('2026-05-20');
+    expect(updateRes.body.eli_sent_date).toBe('2026-03-20');
+    expect(updateRes.body.measures_proposed).toBe('Revised consultation pack issued');
   });
 
   it('accepts user-facing RTW document labels and normalizes them', async () => {

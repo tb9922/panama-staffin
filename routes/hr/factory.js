@@ -35,7 +35,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
     try {
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
-      const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
+      const mapped = mapFields ? mapFields(parsed.data, null) : parsed.data;
       const result = await repoCreate(req.home.id, { ...mapped, created_by: req.user.username });
       await auditService.log(`hr_${prefix}_create`, req.home.slug, req.user.username, { id: result.id });
       res.status(201).json(result);
@@ -68,7 +68,7 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
       const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
       if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
 
-      const mapped = mapFields ? mapFields(parsed.data) : parsed.data;
+      const mapped = mapFields ? mapFields(parsed.data, existing) : parsed.data;
       const result = await repoUpdate(idParsed.data, req.home.id, mapped, null, version);
       if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
 

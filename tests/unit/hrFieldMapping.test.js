@@ -261,6 +261,12 @@ describe('mapEdiFields', () => {
     expect(result.harassment_category).toBeUndefined();
   });
 
+  it('uses the existing record type when an update only sends category', () => {
+    const result = mapEdiFields({ category: 'Sensory' }, { record_type: 'reasonable_adjustment' });
+    expect(result.description).toBe('Sensory');
+    expect(result.harassment_category).toBeUndefined();
+  });
+
   it('renames respondent_role to respondent_type', () => {
     const result = mapEdiFields({ respondent_role: 'colleague' });
     expect(result.respondent_type).toBe('colleague');
@@ -335,6 +341,17 @@ describe('mapRenewalFields', () => {
     expect(result.rtw_check_date).toBe('2026-01-01');
     expect(result.rtw_document_expiry).toBe('2027-01-01');
     expect(result.rtw_document_type).toBe('brp');
+  });
+
+  it('uses the existing check_type when an update only sends RTW alias fields', () => {
+    const result = mapRenewalFields({
+      last_checked: '2026-01-01',
+      expiry_date: '2027-01-01',
+      document_type: 'Share Code',
+    }, { check_type: 'rtw' });
+    expect(result.rtw_check_date).toBe('2026-01-01');
+    expect(result.rtw_document_expiry).toBe('2027-01-01');
+    expect(result.rtw_document_type).toBe('share_code');
   });
 
   it('normalizes RTW document labels into stored enum values', () => {
