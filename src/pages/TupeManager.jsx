@@ -16,7 +16,9 @@ const TRANSFER_TYPES = [
 const emptyForm = () => ({
   transfer_type: 'incoming', transfer_date: '', transferor_name: '', transferee_name: '',
   status: 'planned', staff_affected: '', consultation_start: '', consultation_end: '',
-  eli_sent_date: '', measures_proposed: '', notes: '',
+  signed_date: '', eli_sent_date: '', measures_letter_date: '', measures_proposed: '',
+  employee_reps_consulted: false, rep_names: '', eli_complete: false,
+  dd_notes: '', outstanding_claims: '', outstanding_tribunal_claims: '', notes: '',
 });
 
 export default function TupeManager() {
@@ -40,8 +42,16 @@ export default function TupeManager() {
   const staffAffectedId = useId();
   const consultationStartId = useId();
   const consultationEndId = useId();
+  const signedDateId = useId();
   const eliSentDateId = useId();
+  const measuresLetterDateId = useId();
   const measuresProposedId = useId();
+  const employeeRepsConsultedId = useId();
+  const repNamesId = useId();
+  const eliCompleteId = useId();
+  const ddNotesId = useId();
+  const outstandingClaimsId = useId();
+  const outstandingTribunalClaimsId = useId();
   const tupeNotesId = useId();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
@@ -87,8 +97,16 @@ export default function TupeManager() {
       staff_affected: item.staff_affected ?? '',
       consultation_start: item.consultation_start || '',
       consultation_end: item.consultation_end || '',
+      signed_date: item.signed_date || '',
       eli_sent_date: item.eli_sent_date || '',
+      measures_letter_date: item.measures_letter_date || '',
       measures_proposed: item.measures_proposed || '',
+      employee_reps_consulted: item.employee_reps_consulted ?? false,
+      rep_names: item.rep_names || '',
+      eli_complete: item.eli_complete ?? false,
+      dd_notes: item.dd_notes || '',
+      outstanding_claims: item.outstanding_claims || '',
+      outstanding_tribunal_claims: item.outstanding_tribunal_claims || '',
       notes: item.notes || '',
     });
     setShowModal(true);
@@ -211,6 +229,10 @@ export default function TupeManager() {
                   <input id={transferDateId} type="date" className={INPUT.base} value={form.transfer_date} onChange={e => f('transfer_date', e.target.value)} />
                 </div>
               </div>
+              <div>
+                <label htmlFor={signedDateId} className={INPUT.label}>Signed Date</label>
+                <input id={signedDateId} type="date" className={INPUT.base} value={form.signed_date} onChange={e => f('signed_date', e.target.value)} />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor={transferorNameId} className={INPUT.label}>Transferor Name</label>
@@ -247,9 +269,47 @@ export default function TupeManager() {
                 <label htmlFor={eliSentDateId} className={INPUT.label}>ELI Sent Date</label>
                 <input id={eliSentDateId} type="date" className={INPUT.base} value={form.eli_sent_date} onChange={e => f('eli_sent_date', e.target.value)} />
               </div>
+              <div className="border-t pt-3 mt-3 space-y-3">
+                <p className={`text-xs font-semibold ${TABLE.th}`}>Consultation & ELI</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor={measuresLetterDateId} className={INPUT.label}>Measures Letter Date</label>
+                    <input id={measuresLetterDateId} type="date" className={INPUT.base} value={form.measures_letter_date} onChange={e => f('measures_letter_date', e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input id={employeeRepsConsultedId} type="checkbox" checked={form.employee_reps_consulted} onChange={e => f('employee_reps_consulted', e.target.checked)} />
+                  <label htmlFor={employeeRepsConsultedId} className="text-sm text-gray-700">Employee Representatives Consulted</label>
+                </div>
+                {form.employee_reps_consulted && (
+                  <div>
+                    <label htmlFor={repNamesId} className={INPUT.label}>Representative Names</label>
+                    <input id={repNamesId} className={INPUT.base} value={form.rep_names} onChange={e => f('rep_names', e.target.value)} />
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <input id={eliCompleteId} type="checkbox" checked={form.eli_complete} onChange={e => f('eli_complete', e.target.checked)} />
+                  <label htmlFor={eliCompleteId} className="text-sm text-gray-700">ELI Complete</label>
+                </div>
+              </div>
               <div>
                 <label htmlFor={measuresProposedId} className={INPUT.label}>Measures Proposed</label>
                 <textarea id={measuresProposedId} className={INPUT.base} rows={3} value={form.measures_proposed} onChange={e => f('measures_proposed', e.target.value)} placeholder="Proposed measures affecting transferred staff..." />
+              </div>
+              <div className="border-t pt-3 mt-3 space-y-3">
+                <p className={`text-xs font-semibold ${TABLE.th}`}>Due Diligence & Claims</p>
+                <div>
+                  <label htmlFor={ddNotesId} className={INPUT.label}>Due Diligence Notes</label>
+                  <textarea id={ddNotesId} className={INPUT.base} rows={3} value={form.dd_notes} onChange={e => f('dd_notes', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={outstandingClaimsId} className={INPUT.label}>Outstanding Claims</label>
+                  <textarea id={outstandingClaimsId} className={INPUT.base} rows={2} value={form.outstanding_claims} onChange={e => f('outstanding_claims', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={outstandingTribunalClaimsId} className={INPUT.label}>Outstanding Tribunal Claims</label>
+                  <textarea id={outstandingTribunalClaimsId} className={INPUT.base} rows={2} value={form.outstanding_tribunal_claims} onChange={e => f('outstanding_tribunal_claims', e.target.value)} />
+                </div>
               </div>
               <div>
                 <label htmlFor={tupeNotesId} className={INPUT.label}>Notes</label>

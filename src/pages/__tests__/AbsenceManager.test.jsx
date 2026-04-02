@@ -181,4 +181,31 @@ describe('AbsenceManager', () => {
     expect(screen.getByText('Conducted By is required')).toBeInTheDocument();
     expect(api.createHrRtwInterview).not.toHaveBeenCalled();
   });
+
+  it('surfaces the deeper RTW and OH form fields', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'RTW Interviews' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'RTW Interviews' }));
+    await user.click(screen.getByRole('button', { name: 'New RTW Interview' }));
+    expect(screen.getByLabelText('Follow-up Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fit Note Received')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Fit Note Received'));
+    expect(screen.getByLabelText('Fit Note Type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Bradford Score After RTW')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('tab', { name: 'OH Referrals' }));
+    await user.click(screen.getByRole('button', { name: 'New OH Referral' }));
+    expect(screen.getByLabelText('Referred By')).toBeInTheDocument();
+    expect(screen.getByLabelText('Questions for OH Provider')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Consent Obtained'));
+    expect(screen.getByLabelText('Consent Date')).toBeInTheDocument();
+  });
 });

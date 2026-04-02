@@ -154,4 +154,23 @@ describe('RtwDbsRenewals', () => {
     expect(screen.getByRole('option', { name: 'BRP' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Share Code' })).toBeInTheDocument();
   });
+
+  it('shows the richer DBS and RTW renewal fields in the modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RtwDbsRenewals />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Check/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Check/i }));
+    expect(screen.getByLabelText('Disclosure Level')).toBeInTheDocument();
+    expect(screen.getByLabelText('Barred List Checked')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('DBS Update Service Registered'));
+    expect(screen.getByLabelText('Last Update Service Check')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/Check Type \*/i), 'rtw');
+    expect(screen.getByLabelText('Next RTW Check Due')).toBeInTheDocument();
+  });
 });

@@ -50,6 +50,7 @@ const trainingRecordSchema = z.object({
   trainer:         z.string().max(200).nullable().optional(),
   method:          z.enum(['classroom', 'e-learning', 'practical', 'online']).nullable().optional(),
   certificate_ref: z.string().max(200).nullable().optional(),
+  evidence_ref:    z.string().max(200).nullable().optional(),
   level:           z.string().max(50).nullable().optional(),
   notes:           z.string().max(5000).nullable().optional(),
   _clientUpdatedAt: z.string().max(50).optional(),

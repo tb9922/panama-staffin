@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
@@ -26,9 +26,11 @@ const blankForm = () => ({
   date_recorded: new Date().toISOString().slice(0, 10),
   category: '', status: 'open', notes: '',
   // harassment-specific
-  third_party: false, respondent_name: '', respondent_role: '',
+  third_party: false, third_party_type: '', respondent_name: '', respondent_role: '', handling_route: '', description: '',
   // reasonable adjustment-specific
-  condition_description: '', adjustments: '',
+  condition_description: '', adjustments: '', access_to_work_applied: false, access_to_work_reference: '', access_to_work_amount: '',
+  // common
+  outcome: '',
 });
 
 export default function EdiTracker() {
@@ -50,6 +52,23 @@ export default function EdiTracker() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const recordTypeId = useId();
+  const dateRecordedId = useId();
+  const statusId = useId();
+  const categoryId = useId();
+  const harassmentDescriptionId = useId();
+  const thirdPartyId = useId();
+  const thirdPartyTypeId = useId();
+  const respondentNameId = useId();
+  const respondentRoleId = useId();
+  const handlingRouteId = useId();
+  const conditionDescriptionId = useId();
+  const adjustmentsId = useId();
+  const accessToWorkAppliedId = useId();
+  const accessToWorkReferenceId = useId();
+  const accessToWorkAmountId = useId();
+  const outcomeId = useId();
+  const ediNotesId = useId();
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -98,10 +117,17 @@ export default function EdiTracker() {
       status: item.status || 'open',
       notes: item.notes || '',
       third_party: item.third_party || false,
+      third_party_type: item.third_party_type || '',
       respondent_name: item.respondent_name || '',
       respondent_role: item.respondent_role || '',
+      handling_route: item.handling_route || '',
+      description: item.description || '',
       condition_description: item.condition_description || '',
       adjustments: item.adjustments || '',
+      access_to_work_applied: item.access_to_work_applied ?? false,
+      access_to_work_reference: item.access_to_work_reference || '',
+      access_to_work_amount: item.access_to_work_amount ?? '',
+      outcome: item.outcome || '',
     });
     setShowModal(true);
   }
@@ -115,15 +141,31 @@ export default function EdiTracker() {
     setSaving(true);
     try {
       const payload = { ...form };
+      if (payload.access_to_work_amount === '') payload.access_to_work_amount = null;
+      else if (payload.access_to_work_amount != null) {
+        const amount = Number(payload.access_to_work_amount);
+        if (Number.isNaN(amount)) {
+          setFormError('Access to Work amount must be a number');
+          setSaving(false);
+          return;
+        }
+        payload.access_to_work_amount = amount;
+      }
       // Strip fields not relevant to selected record type
       if (payload.record_type !== 'harassment_complaint') {
         delete payload.third_party;
+        delete payload.third_party_type;
         delete payload.respondent_name;
         delete payload.respondent_role;
+        delete payload.handling_route;
+        delete payload.description;
       }
       if (payload.record_type !== 'reasonable_adjustment') {
         delete payload.condition_description;
         delete payload.adjustments;
+        delete payload.access_to_work_applied;
+        delete payload.access_to_work_reference;
+        delete payload.access_to_work_amount;
       }
       if (editing) {
         await updateHrEdi(editing.id, { ...payload, _version: editing.version });
@@ -231,8 +273,8 @@ export default function EdiTracker() {
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Record Type *</label>
-                  <select className={INPUT.select} value={form.record_type} onChange={e => set('record_type', e.target.value)}>
+                  <label htmlFor={recordTypeId} className={INPUT.label}>Record Type *</label>
+                  <select id={recordTypeId} className={INPUT.select} value={form.record_type} onChange={e => set('record_type', e.target.value)}>
                     {EDI_RECORD_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
@@ -240,12 +282,12 @@ export default function EdiTracker() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Date Recorded *</label>
-                  <input type="date" className={INPUT.base} value={form.date_recorded} onChange={e => set('date_recorded', e.target.value)} />
+                  <label htmlFor={dateRecordedId} className={INPUT.label}>Date Recorded *</label>
+                  <input id={dateRecordedId} type="date" className={INPUT.base} value={form.date_recorded} onChange={e => set('date_recorded', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
+                  <label htmlFor={statusId} className={INPUT.label}>Status</label>
+                  <select id={statusId} className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
                     {EDI_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
@@ -253,14 +295,14 @@ export default function EdiTracker() {
 
               {/* Category — context-dependent */}
               <div>
-                <label className={INPUT.label}>Category</label>
+                <label htmlFor={categoryId} className={INPUT.label}>Category</label>
                 {isHarassment ? (
-                  <select className={INPUT.select} value={form.category} onChange={e => set('category', e.target.value)}>
+                  <select id={categoryId} className={INPUT.select} value={form.category} onChange={e => set('category', e.target.value)}>
                     <option value="">— Select —</option>
                     {HARASSMENT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 ) : (
-                  <input className={INPUT.base} value={form.category} onChange={e => set('category', e.target.value)} placeholder="e.g. Physical, Sensory, Neurodivergent" />
+                  <input id={categoryId} className={INPUT.base} value={form.category} onChange={e => set('category', e.target.value)} placeholder="e.g. Physical, Sensory, Neurodivergent" />
                 )}
               </div>
 
@@ -268,18 +310,44 @@ export default function EdiTracker() {
               {isHarassment && (
                 <>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="edi-third-party" checked={form.third_party} onChange={e => set('third_party', e.target.checked)} />
-                    <label htmlFor="edi-third-party" className="text-sm text-gray-700">Third-party harassment (perpetrator is not an employee)</label>
+                    <input type="checkbox" id={thirdPartyId} checked={form.third_party} onChange={e => set('third_party', e.target.checked)} />
+                    <label htmlFor={thirdPartyId} className="text-sm text-gray-700">Third-party harassment (perpetrator is not an employee)</label>
                   </div>
+                  {form.third_party && (
+                    <div>
+                      <label htmlFor={thirdPartyTypeId} className={INPUT.label}>Third-Party Type</label>
+                      <select id={thirdPartyTypeId} className={INPUT.select} value={form.third_party_type} onChange={e => set('third_party_type', e.target.value)}>
+                        <option value="">Select...</option>
+                        <option value="resident">Resident</option>
+                        <option value="family">Family Member</option>
+                        <option value="visitor">Visitor</option>
+                        <option value="contractor">Contractor</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className={INPUT.label}>Respondent Name</label>
-                      <input className={INPUT.base} value={form.respondent_name} onChange={e => set('respondent_name', e.target.value)} />
+                      <label htmlFor={respondentNameId} className={INPUT.label}>Respondent Name</label>
+                      <input id={respondentNameId} className={INPUT.base} value={form.respondent_name} onChange={e => set('respondent_name', e.target.value)} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Respondent Role</label>
-                      <input className={INPUT.base} value={form.respondent_role} onChange={e => set('respondent_role', e.target.value)} />
+                      <label htmlFor={respondentRoleId} className={INPUT.label}>Respondent Role</label>
+                      <input id={respondentRoleId} className={INPUT.base} value={form.respondent_role} onChange={e => set('respondent_role', e.target.value)} />
                     </div>
+                  </div>
+                  <div>
+                    <label htmlFor={handlingRouteId} className={INPUT.label}>Handling Route</label>
+                    <select id={handlingRouteId} className={INPUT.select} value={form.handling_route} onChange={e => set('handling_route', e.target.value)}>
+                      <option value="">Select...</option>
+                      <option value="disciplinary">Disciplinary</option>
+                      <option value="grievance">Grievance</option>
+                      <option value="informal">Informal Resolution</option>
+                      <option value="mediation">Mediation</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={harassmentDescriptionId} className={INPUT.label}>Description</label>
+                    <textarea id={harassmentDescriptionId} className={INPUT.base} rows={3} value={form.description} onChange={e => set('description', e.target.value)} />
                   </div>
                 </>
               )}
@@ -288,19 +356,42 @@ export default function EdiTracker() {
               {isAdjustment && (
                 <>
                   <div>
-                    <label className={INPUT.label}>Condition Description</label>
-                    <textarea className={INPUT.base} rows={2} value={form.condition_description} onChange={e => set('condition_description', e.target.value)} placeholder="Describe the condition or disability" />
+                    <label htmlFor={conditionDescriptionId} className={INPUT.label}>Condition Description</label>
+                    <textarea id={conditionDescriptionId} className={INPUT.base} rows={2} value={form.condition_description} onChange={e => set('condition_description', e.target.value)} placeholder="Describe the condition or disability" />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Adjustments</label>
-                    <textarea className={INPUT.base} rows={3} value={form.adjustments} onChange={e => set('adjustments', e.target.value)} placeholder="Describe the reasonable adjustments made or requested" />
+                    <label htmlFor={adjustmentsId} className={INPUT.label}>Adjustments</label>
+                    <textarea id={adjustmentsId} className={INPUT.base} rows={3} value={form.adjustments} onChange={e => set('adjustments', e.target.value)} placeholder="Describe the reasonable adjustments made or requested" />
+                  </div>
+                  <div className="border rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-semibold">Access to Work</p>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id={accessToWorkAppliedId} checked={form.access_to_work_applied} onChange={e => set('access_to_work_applied', e.target.checked)} />
+                      <label htmlFor={accessToWorkAppliedId} className="text-sm text-gray-700">Access to Work Applied For</label>
+                    </div>
+                    {form.access_to_work_applied && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor={accessToWorkReferenceId} className={INPUT.label}>AtW Reference</label>
+                          <input id={accessToWorkReferenceId} className={INPUT.base} value={form.access_to_work_reference} onChange={e => set('access_to_work_reference', e.target.value)} />
+                        </div>
+                        <div>
+                          <label htmlFor={accessToWorkAmountId} className={INPUT.label}>AtW Amount Awarded (£)</label>
+                          <input id={accessToWorkAmountId} type="number" step="0.01" className={INPUT.base} value={form.access_to_work_amount} onChange={e => set('access_to_work_amount', e.target.value)} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
 
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
+                <label htmlFor={outcomeId} className={INPUT.label}>Outcome</label>
+                <textarea id={outcomeId} className={INPUT.base} rows={2} value={form.outcome} onChange={e => set('outcome', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor={ediNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={ediNotesId} className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="edi" caseId={editing?.id} />
