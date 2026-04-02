@@ -9,6 +9,16 @@ const COLS = `id, home_id, record_type, staff_id,
   description, status, outcome, notes,
   created_at, updated_at, deleted_at, version`;
 
+function stringifyJsonText(value) {
+  return JSON.stringify(value ?? '');
+}
+
+function normalizeJsonText(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join('\n');
+  if (value == null) return '';
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
 const shapeEdi = createShaper({
   fields: [
     'id', 'home_id', 'record_type', 'staff_id',
@@ -22,8 +32,9 @@ const shapeEdi = createShaper({
   ],
   dates: ['complaint_date'],
   floats: ['access_to_work_amount'],
-  jsonArrays: ['reasonable_steps_evidence', 'adjustments'],
   aliases: {
+    reasonable_steps_evidence: (row, out) => normalizeJsonText(out.reasonable_steps_evidence),
+    adjustments: (row, out) => normalizeJsonText(out.adjustments),
     date_recorded: 'complaint_date',
     category: (row, out) => out.record_type === 'reasonable_adjustment' ? (out.description || null) : out.harassment_category,
     respondent_role: 'respondent_type',
@@ -62,8 +73,8 @@ export async function createEdi(homeId, data, client) {
      data.third_party_type || null, data.respondent_type || null,
      data.respondent_staff_id || null, data.respondent_name || null,
      data.handling_route || null, data.linked_case_id || null,
-     JSON.stringify(data.reasonable_steps_evidence || []), data.condition_description || null,
-     JSON.stringify(data.adjustments || []), data.oh_referral_id || null,
+     stringifyJsonText(data.reasonable_steps_evidence), data.condition_description || null,
+     stringifyJsonText(data.adjustments), data.oh_referral_id || null,
      data.access_to_work_applied ?? false, data.access_to_work_reference || null, data.access_to_work_amount ?? null,
      data.description || null, data.status ?? 'open', data.outcome || null, data.notes || null, data.created_by || null]
   );
@@ -82,10 +93,10 @@ export async function updateEdi(id, homeId, data, client, version) {
     'access_to_work_applied', 'access_to_work_reference', 'access_to_work_amount',
     'description', 'status', 'outcome', 'notes',
   ];
-  const jsonFields = ['reasonable_steps_evidence', 'adjustments'];
+  const jsonTextFields = new Set(['reasonable_steps_evidence', 'adjustments']);
   for (const key of settable) {
     if (key in data) {
-      params.push(jsonFields.includes(key) ? JSON.stringify(data[key]) : data[key] ?? null);
+      params.push(jsonTextFields.has(key) ? stringifyJsonText(data[key]) : data[key] ?? null);
       fields.push(`${key} = $${params.length}`);
     }
   }
