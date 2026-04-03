@@ -32,7 +32,7 @@ function isHighlighted(item) {
 const blankForm = () => ({
   staff_id: '', check_type: 'dbs',
   last_checked: '', expiry_date: '',
-  status: 'current', reference: '',
+  status: 'current',
   checked_by: '', notes: '',
   // DBS-specific
   certificate_number: '', dbs_disclosure_level: '', dbs_update_service_registered: false,
@@ -65,7 +65,6 @@ export default function RtwDbsRenewals() {
   const renewalLastCheckedId = useId();
   const renewalExpiryDateId = useId();
   const renewalStatusId = useId();
-  const renewalReferenceId = useId();
   const renewalCheckedById = useId();
   const renewalCertificateNumberId = useId();
   const renewalDisclosureLevelId = useId();
@@ -120,7 +119,6 @@ export default function RtwDbsRenewals() {
       last_checked: item.last_checked || '',
       expiry_date: item.expiry_date || '',
       status: item.status || 'current',
-      reference: item.reference || '',
       checked_by: item.checked_by || '',
       notes: item.notes || '',
       certificate_number: item.certificate_number || '',
@@ -177,10 +175,10 @@ export default function RtwDbsRenewals() {
     const { downloadXLSX } = await import('../lib/excel.js');
     downloadXLSX('rtw_dbs_renewals', [{
       name: 'Renewals',
-      headers: ['Staff ID', 'Check Type', 'Last Checked', 'Expiry Date', 'Status', 'Reference', 'Checked By', 'Certificate No', 'Document Type', 'Notes'],
+      headers: ['Staff ID', 'Check Type', 'Last Checked', 'Expiry Date', 'Status', 'Checked By', 'Certificate No', 'Document Type', 'Notes'],
       rows: items.map(i => [
         i.staff_id, checkTypeName(i.check_type), i.last_checked || '', i.expiry_date || '',
-        statusName(i.status), i.reference || '', i.checked_by || '',
+        statusName(i.status), i.checked_by || '',
         i.certificate_number || '', i.document_type || '', i.notes || '',
       ]),
     }]);
@@ -295,10 +293,6 @@ export default function RtwDbsRenewals() {
                   <select id={renewalStatusId} className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
                     {RENEWAL_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label htmlFor={renewalReferenceId} className={INPUT.label}>Reference</label>
-                  <input id={renewalReferenceId} className={INPUT.base} value={form.reference} onChange={e => set('reference', e.target.value)} placeholder="Reference number" />
                 </div>
               </div>
               <div>
