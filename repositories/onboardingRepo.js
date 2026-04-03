@@ -55,7 +55,7 @@ export async function sync(homeId, onboardingObj, client) {
   }
 }
 
-export async function upsertSection(homeId, staffId, section, sectionData) {
+export async function upsertSection(homeId, staffId, section, sectionData, username = 'system') {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       'SELECT data FROM onboarding WHERE home_id=$1 AND staff_id=$2 FOR UPDATE',
@@ -69,11 +69,16 @@ export async function upsertSection(homeId, staffId, section, sectionData) {
        ON CONFLICT (home_id, staff_id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()`,
       [homeId, staffId, JSON.stringify(merged)]
     );
+    await client.query(
+      `INSERT INTO onboarding_history (home_id, staff_id, section, data, changed_by, change_type)
+       VALUES ($1,$2,$3,$4,$5,'update')`,
+      [homeId, staffId, section, JSON.stringify(sectionData ?? {}), username]
+    );
     return merged;
   });
 }
 
-export async function clearSection(homeId, staffId, section) {
+export async function clearSection(homeId, staffId, section, username = 'system') {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       'SELECT data FROM onboarding WHERE home_id=$1 AND staff_id=$2 FOR UPDATE',
@@ -81,11 +86,32 @@ export async function clearSection(homeId, staffId, section) {
     );
     if (!rows[0]) return null;
     const existing = rows[0].data ?? {};
+    const cleared = existing[section] || {};
     delete existing[section];
     await client.query(
       'UPDATE onboarding SET data=$3, updated_at=NOW() WHERE home_id=$1 AND staff_id=$2',
       [homeId, staffId, JSON.stringify(existing)]
     );
+    await client.query(
+      `INSERT INTO onboarding_history (home_id, staff_id, section, data, changed_by, change_type)
+       VALUES ($1,$2,$3,$4,$5,'clear')`,
+      [homeId, staffId, section, JSON.stringify(cleared), username]
+    );
     return existing;
   });
+}
+
+export async function getHistory(homeId, staffId, section, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT id, changed_by, change_type, data, changed_at
+       FROM onboarding_history
+      WHERE home_id = $1
+        AND staff_id = $2
+        AND section = $3
+      ORDER BY changed_at DESC
+      LIMIT 50`,
+    [homeId, staffId, section]
+  );
+  return rows;
 }

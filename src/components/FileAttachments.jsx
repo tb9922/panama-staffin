@@ -9,7 +9,16 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function FileAttachments({ caseType, caseId, readOnly = false }) {
+export default function FileAttachments({
+  caseType,
+  caseId,
+  readOnly = false,
+  getFiles = getHrAttachments,
+  uploadFile = uploadHrAttachment,
+  deleteFile = deleteHrAttachment,
+  downloadFile = downloadHrAttachment,
+  title = 'Attached Documents',
+}) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -26,7 +35,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
     setLoading(true);
     setError(null);
     try {
-      const data = await getHrAttachments(caseType, caseId);
+      const data = await getFiles(caseType, caseId);
       setFiles(data);
     } catch (err) {
       setError(err.message);
@@ -41,7 +50,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
     setUploading(true);
     setError(null);
     try {
-      await uploadHrAttachment(caseType, caseId, file, description);
+      await uploadFile(caseType, caseId, file, description);
       setDescription('');
       fileInputRef.current.value = '';
       await loadFiles();
@@ -55,7 +64,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
   async function handleDelete(att) {
     if (!await confirm(`Delete "${att.original_name}"?`)) return;
     try {
-      await deleteHrAttachment(att.id);
+      await deleteFile(att.id);
       await loadFiles();
     } catch (err) {
       setError(err.message);
@@ -64,7 +73,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
 
   async function handleDownload(att) {
     try {
-      await downloadHrAttachment(att.id, att.original_name);
+      await downloadFile(att.id, att.original_name);
     } catch (err) {
       setError(err.message);
     }
@@ -76,7 +85,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
 
   return (
     <div className="space-y-3">
-      <h4 className="text-sm font-semibold text-gray-700">Attached Documents</h4>
+      <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

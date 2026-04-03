@@ -3,14 +3,17 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
   getIpcStats,
-  DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
+  DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES, normalizeOutbreakStatus,
 } from '../lib/ipc.js';
 import {
-  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit, } from '../lib/api.js';
+  getCurrentHome, getIpcAudits, createIpcAudit, updateIpcAudit, deleteIpcAudit,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -489,6 +492,18 @@ export default function IpcAuditTracker() {
                 </div>
               )}
             </div>
+          )}
+          {editingId && (
+            <FileAttachments
+              caseType="ipc_audit"
+              caseId={editingId}
+              readOnly={!canEdit}
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+              title="Audit Evidence"
+            />
           )}
         </div>
 

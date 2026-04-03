@@ -5,6 +5,7 @@ import { formatDate, addDays, parseDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getMaintenanceStats,
@@ -12,6 +13,7 @@ import {
 } from '../lib/maintenance.js';
 import {
   getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -368,6 +370,19 @@ export default function MaintenanceTracker() {
                   </div>
                 ) : null;
               })()}
+
+              {editingId && (
+                <FileAttachments
+                  caseType="maintenance"
+                  caseId={editingId}
+                  readOnly={!canEdit}
+                  getFiles={getRecordAttachments}
+                  uploadFile={uploadRecordAttachment}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                  title="Maintenance Certificates & Evidence"
+                />
+              )}
             </div>
 
             <div className={MODAL.footer}>

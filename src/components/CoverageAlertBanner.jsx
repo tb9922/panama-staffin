@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getStaffForDay, parseDate } from '../lib/rotation.js';
 import { getDayCoverageStatus } from '../lib/escalation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
-import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, isAbortLikeError } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 export default function CoverageAlertBanner() {
@@ -13,13 +13,24 @@ export default function CoverageAlertBanner() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    const homeSlug = getCurrentHome();
-    if (!homeSlug) return;
+    const homeSlug = activeHome || getCurrentHome();
+    if (!homeSlug) {
+      setData(null);
+      return undefined;
+    }
+    const controller = new AbortController();
     let cancelled = false;
-    getSchedulingData(homeSlug)
+    setData(null);
+    getSchedulingData(homeSlug, { signal: controller.signal })
       .then(result => { if (!cancelled) setData(result); })
-      .catch(e => { if (!cancelled) console.warn('CoverageAlertBanner fetch failed:', e.message); });
-    return () => { cancelled = true; };
+      .catch((e) => {
+        if (cancelled || isAbortLikeError(e, controller.signal)) return;
+        console.warn('CoverageAlertBanner fetch failed:', e.message);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [today, activeHome]);
 
   const todayCoverage = useMemo(() => {

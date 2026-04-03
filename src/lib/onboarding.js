@@ -185,9 +185,10 @@ export function getOnboardingAlerts(activeStaff, onboardingData) {
  * Get blocking reasons for a staff member — if non-empty, they should not be rostered unsupervised.
  * Checks critical pre-employment items: DBS, RTW, references, identity.
  */
-export function getOnboardingBlockingReasons(staffId, onboardingData) {
+export function getOnboardingBlockingReasons(staffId, onboardingData, staffList = []) {
   const reasons = [];
   const staffOnb = onboardingData?.[staffId] || {};
+  const staffMember = Array.isArray(staffList) ? staffList.find((staff) => staff.id === staffId) : null;
 
   const dbs = staffOnb.dbs_check;
   if (!dbs || dbs.status !== ONBOARDING_STATUS.COMPLETED) {
@@ -210,6 +211,18 @@ export function getOnboardingBlockingReasons(staffId, onboardingData) {
   const identity = staffOnb.identity_check;
   if (!identity || identity.status !== ONBOARDING_STATUS.COMPLETED) {
     reasons.push('Identity verification not completed');
+  }
+
+  const health = staffOnb.health_declaration;
+  if (!health || health.status !== ONBOARDING_STATUS.COMPLETED) {
+    reasons.push('Health declaration not completed');
+  }
+
+  if (staffMember && /nurse/i.test(staffMember.role || '')) {
+    const quals = staffOnb.qualifications;
+    if (!quals || quals.status !== ONBOARDING_STATUS.COMPLETED) {
+      reasons.push('Nursing qualifications not verified');
+    }
   }
 
   return reasons;

@@ -14,6 +14,11 @@ vi.mock('../../lib/api.js', async () => {
     getOnboardingData: vi.fn(),
     upsertOnboardingSection: vi.fn(),
     clearOnboardingSection: vi.fn(),
+    getOnboardingHistory: vi.fn(),
+    getOnboardingFiles: vi.fn(),
+    uploadOnboardingFile: vi.fn(),
+    deleteOnboardingFile: vi.fn(),
+    downloadOnboardingFile: vi.fn(),
   };
 });
 
@@ -86,6 +91,11 @@ beforeEach(() => {
   api.getOnboardingData.mockResolvedValue(MOCK_RESPONSE);
   api.upsertOnboardingSection.mockResolvedValue({});
   api.clearOnboardingSection.mockResolvedValue({});
+  api.getOnboardingHistory.mockResolvedValue([]);
+  api.getOnboardingFiles.mockResolvedValue([]);
+  api.uploadOnboardingFile.mockResolvedValue({});
+  api.deleteOnboardingFile.mockResolvedValue({});
+  api.downloadOnboardingFile.mockResolvedValue({});
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -210,5 +220,45 @@ describe('OnboardingTracker', () => {
       expect(screen.getByText('Staff Onboarding')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
+  });
+
+  it('shows section documents and change history inside the section modal', async () => {
+    const user = userEvent.setup();
+    api.getOnboardingHistory.mockResolvedValue([
+      {
+        id: 1,
+        change_type: 'update',
+        changed_by: 'admin',
+        changed_at: '2026-04-03T12:00:00.000Z',
+        data: { status: 'completed', verified_by: 'HR Lead' },
+      },
+    ]);
+    api.getOnboardingFiles.mockResolvedValue([
+      {
+        id: 10,
+        original_name: 'dbs-certificate.pdf',
+        size_bytes: 4096,
+        description: 'Scanned certificate',
+        uploaded_by: 'admin',
+        created_at: '2026-04-03T12:00:00.000Z',
+      },
+    ]);
+
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    const aliceNameEl = screen.getByText('Alice Smith');
+    await user.click(aliceNameEl.closest('.cursor-pointer'));
+    await user.click(screen.getByText('Enhanced DBS Check'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Section Documents')).toBeInTheDocument();
+    });
+    expect(screen.getByText('dbs-certificate.pdf')).toBeInTheDocument();
+    expect(screen.getByText('Recent Changes')).toBeInTheDocument();
+    expect(screen.getByText(/Updated/)).toBeInTheDocument();
+    expect(screen.getAllByText(/admin/)).toHaveLength(2);
   });
 });

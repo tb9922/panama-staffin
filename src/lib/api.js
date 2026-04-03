@@ -53,6 +53,14 @@ async function apiFetch(url, options = {}) {
   return res.json();
 }
 
+export function isAbortLikeError(err, signal) {
+  if (signal?.aborted) return true;
+  if (!err) return false;
+  if (err.name === 'AbortError') return true;
+  if (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') return true;
+  return false;
+}
+
 export async function loadHomes() {
   return apiFetch(`${API_BASE}/homes`, { headers: authHeaders() });
 }
@@ -961,9 +969,9 @@ export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
 }
 
 // ── HR Staff List ───────────────────────────────────────────────────────────
-export async function getHrStaffList(homeSlug) {
+export async function getHrStaffList(homeSlug, options = {}) {
   const home = homeSlug || getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders(), ...options });
 }
 
 // ── HR File Attachments ─────────────────────────────────────────────────────
@@ -1025,6 +1033,65 @@ export async function downloadHrAttachment(id, originalName) {
 }
 
 // ── HR Investigation Meetings ───────────────────────────────────────────────
+export async function getRecordAttachments(moduleId, recordId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadRecordAttachment(moduleId, recordId, file, description) {
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const res = await fetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+    body: formData,
+  });
+  if (res.status === 401) {
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteRecordAttachment(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadRecordAttachment(id, originalName) {
+  const home = getCurrentHome();
+  const res = await fetch(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export async function getHrMeetings(caseType, caseId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
@@ -1325,7 +1392,138 @@ export async function clearOnboardingSection(homeSlug, staffId, section) {
   });
 }
 
+export async function getOnboardingHistory(homeSlug, staffId, section) {
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/history?home=${h(homeSlug)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function getOnboardingFiles(_caseType, staffIdAndSection) {
+  const [staffId, section] = String(staffIdAndSection).split('::');
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadOnboardingFile(_caseType, staffIdAndSection, file, description) {
+  const [staffId, section] = String(staffIdAndSection).split('::');
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const res = await fetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${encodeURIComponent(home)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+    body: formData,
+  });
+  if (res.status === 401) {
+    const err = new Error('Session expired â€” please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteOnboardingFile(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadOnboardingFile(id, originalName) {
+  const home = getCurrentHome();
+  const res = await fetch(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, {
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Staff CRUD ───────────────────────────────────────────────────────────────
+
+export async function getTrainingFiles(_caseType, staffIdAndType) {
+  const [staffId, typeId] = String(staffIdAndType).split('::');
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadTrainingFile(_caseType, staffIdAndType, file, description) {
+  const [staffId, typeId] = String(staffIdAndType).split('::');
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const res = await fetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${encodeURIComponent(home)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+    body: formData,
+  });
+  if (res.status === 401) {
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteTrainingFile(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/training/files/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadTrainingFile(id, originalName) {
+  const home = getCurrentHome();
+  const res = await fetch(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export async function createStaff(homeSlug, staffData) {
   return apiFetch(`${API_BASE}/staff?home=${h(homeSlug)}`, {
@@ -1360,11 +1558,11 @@ export async function saveConfig(homeSlug, config, { clientUpdatedAt } = {}) {
 
 // ── Scheduling (Phase 2d) ─────────────────────────────────────────────────────
 
-export async function getSchedulingData(homeSlug, { from, to } = {}) {
+export async function getSchedulingData(homeSlug, { from, to, ...options } = {}) {
   let url = `${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`;
   if (from) url += `&from=${encodeURIComponent(from)}`;
   if (to) url += `&to=${encodeURIComponent(to)}`;
-  return apiFetch(url, { headers: authHeaders() });
+  return apiFetch(url, { headers: authHeaders(), ...options });
 }
 
 function schedulingHeaders(editLockPin) {

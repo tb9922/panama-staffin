@@ -56,6 +56,7 @@ import assessmentRouter from './routes/assessment.js';
 import ropaRouter from './routes/ropa.js';
 import dpiaRouter from './routes/dpia.js';
 import importRouter from './routes/import.js';
+import recordAttachmentsRouter from './routes/recordAttachments.js';
 import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
@@ -139,6 +140,7 @@ app.use('/api/assessment', assessmentRouter);
 app.use('/api/ropa', ropaRouter);
 app.use('/api/dpia', dpiaRouter);
 app.use('/api/import', importRouter);
+app.use('/api/record-attachments', recordAttachmentsRouter);
 
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;

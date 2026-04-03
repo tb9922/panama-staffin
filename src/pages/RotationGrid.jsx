@@ -600,7 +600,7 @@ export default function RotationGrid() {
                     {(() => {
                       const blockReasons = [];
                       if (schedData.config.enforce_onboarding_blocking && isCareRole(s.role))
-                        blockReasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding));
+                        blockReasons.push(...getOnboardingBlockingReasons(s.id, schedData.onboarding, schedData.staff));
                       if (schedData.config.enforce_training_blocking && isCareRole(s.role))
                         blockReasons.push(...getTrainingBlockingReasons(s.id, s.role, schedData.training, schedData.config, formatDate(monthDates[monthDates.length - 1] || new Date())));
                       return (

@@ -11,11 +11,30 @@ import {
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getOnboardingData,
+  upsertOnboardingSection,
+  clearOnboardingSection,
+  getOnboardingHistory,
+  getOnboardingFiles,
+  uploadOnboardingFile,
+  deleteOnboardingFile,
+  downloadOnboardingFile,
+} from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
+
+function summarizeHistoryData(data) {
+  if (!data || typeof data !== 'object') return 'No captured field data';
+  const keys = Object.keys(data);
+  if (keys.length === 0) return 'No captured field data';
+  const preview = keys.slice(0, 4).join(', ');
+  return keys.length > 4 ? `${preview} +${keys.length - 4} more` : preview;
+}
 
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
@@ -35,6 +54,8 @@ export default function OnboardingTracker() {
   const [modalSection, setModalSection] = useState(null);
   const [modalStaffId, setModalStaffId] = useState(null);
   const [modalForm, setModalForm] = useState({});
+  const [modalHistory, setModalHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   useDirtyGuard(showModal);
 
@@ -50,6 +71,29 @@ export default function OnboardingTracker() {
     })();
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
+
+  useEffect(() => {
+    if (!showModal || !modalStaffId || !modalSection) {
+      setModalHistory([]);
+      setHistoryLoading(false);
+      return;
+    }
+    let stale = false;
+    setHistoryLoading(true);
+    getOnboardingHistory(homeSlug, modalStaffId, modalSection)
+      .then((history) => {
+        if (!stale) {
+          setModalHistory(Array.isArray(history) ? history : []);
+        }
+      })
+      .catch(() => {
+        if (!stale) setModalHistory([]);
+      })
+      .finally(() => {
+        if (!stale) setHistoryLoading(false);
+      });
+    return () => { stale = true; };
+  }, [homeSlug, showModal, modalStaffId, modalSection, refreshKey]);
 
   const activeStaff = useMemo(() => (state?.staff || []).filter(s => s.active !== false), [state]);
   const onboardingData = useMemo(() => state?.onboarding || {}, [state]);
@@ -916,6 +960,46 @@ export default function OnboardingTracker() {
               </select>
             </div>
             {renderModalFields()}
+            {modalStaffId && modalSection && (
+              <FileAttachments
+                caseType="onboarding"
+                caseId={`${modalStaffId}::${modalSection}`}
+                readOnly={!canEdit}
+                getFiles={getOnboardingFiles}
+                uploadFile={uploadOnboardingFile}
+                deleteFile={deleteOnboardingFile}
+                downloadFile={downloadOnboardingFile}
+                title="Section Documents"
+              />
+            )}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-700">Recent Changes</h4>
+                {historyLoading && <span className="text-xs text-gray-400">Loading...</span>}
+              </div>
+              {!historyLoading && modalHistory.length === 0 && (
+                <p className="text-sm text-gray-400">No previous versions recorded for this section yet.</p>
+              )}
+              {modalHistory.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {modalHistory.map((entry) => (
+                    <details key={entry.id} className="rounded border border-gray-200 bg-white px-3 py-2">
+                      <summary className="cursor-pointer text-sm text-gray-700">
+                        <span className="font-medium">{entry.change_type === 'clear' ? 'Cleared' : 'Updated'}</span>
+                        {' by '}
+                        <span className="font-medium">{entry.changed_by}</span>
+                        {' on '}
+                        {new Date(entry.changed_at).toLocaleString('en-GB')}
+                        <span className="ml-2 text-xs text-gray-500">({summarizeHistoryData(entry.data)})</span>
+                      </summary>
+                      <pre className="mt-2 overflow-x-auto rounded bg-gray-900/95 p-2 text-[11px] text-gray-100">
+                        {JSON.stringify(entry.data, null, 2)}
+                      </pre>
+                    </details>
+                  ))}
+                </div>
+              )}
+            </div>
             <div>
               <label className={INPUT.label}>Notes</label>
               <input type="text" value={modalForm.notes || ''} onChange={e => setField('notes', e.target.value)} className={INPUT.base} placeholder="Optional notes" />

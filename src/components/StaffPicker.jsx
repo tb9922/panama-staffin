@@ -1,6 +1,6 @@
 import { useState, useEffect, useId } from 'react';
 import { INPUT } from '../lib/design.js';
-import { getCurrentHome, getHrStaffList } from '../lib/api.js';
+import { getCurrentHome, getHrStaffList, isAbortLikeError } from '../lib/api.js';
 
 export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
   const [staff, setStaff] = useState([]);
@@ -9,13 +9,25 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
   const selectId = useId();
 
   useEffect(() => {
-    if (!home) return;
+    if (!home) {
+      setStaff([]);
+      setLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    getHrStaffList(home).then(list => {
+    getHrStaffList(home, { signal: controller.signal }).then(list => {
       if (!cancelled) { setStaff(list); setLoading(false); }
-    }).catch((err) => { if (!cancelled) { setLoading(false); console.error('Failed to load staff list', err); } });
-    return () => { cancelled = true; };
+    }).catch((err) => {
+      if (cancelled || isAbortLikeError(err, controller.signal)) return;
+      setLoading(false);
+      console.error('Failed to load staff list', err);
+    });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [home]);
 
   const active = staff.filter(s => s.active).sort((a, b) => a.name.localeCompare(b.name));

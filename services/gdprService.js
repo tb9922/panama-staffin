@@ -46,6 +46,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
 
       const [
         staff, overrides, training, supervisions, appraisals,
+        trainingAttachments,
         timesheets, payrollLines, taxCodes, sspPeriods,
         pensionEnrolment, pensionContributions, accessLog,
         incidents, fireDrills, handoverEntries,
@@ -53,7 +54,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hrDisciplinary, hrGrievance, hrGrievanceActions, hrPerformance,
         hrRtwInterviews, hrOhReferrals, hrContracts, hrFamilyLeave,
         hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes, hrCaseNotesOnCases,
-        onboarding, careCertificates, complaints, incidentAddenda,
+        onboarding, onboardingAttachments, onboardingHistory, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
         payrollLineShifts, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
@@ -64,6 +65,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM appraisals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -135,6 +137,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
            )`, [homeId, subjectId]),
         // Onboarding data (DBS, RTW, references, etc.)
         () => conn.query(`SELECT * FROM onboarding WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
+        () => conn.query(`SELECT * FROM onboarding_history WHERE home_id = $1 AND staff_id = $2 ORDER BY changed_at DESC`, [homeId, subjectId]),
         // Care Certificate progress
         () => conn.query(`SELECT * FROM care_certificates WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // Complaints where staff is the complainant (pre-resolved name)
@@ -214,6 +218,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           staff: staff.rows,
           shift_overrides: overrides.rows,
           training_records: training.rows,
+          training_file_attachments: trainingAttachments.rows,
           supervisions: supervisions.rows,
           appraisals: appraisals.rows,
           timesheet_entries: timesheets.rows,
@@ -242,6 +247,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           hr_rtw_dbs_renewals: hrRenewals.rows,
           hr_case_notes: dedupeById([...hrCaseNotes.rows, ...hrCaseNotesOnCases.rows]),
           onboarding: onboarding.rows,
+          onboarding_file_attachments: onboardingAttachments.rows,
+          onboarding_history: onboardingHistory.rows,
           care_certificates: careCertificates.rows,
           complaints: complaints.rows,
           incident_addenda: incidentAddenda.rows,
@@ -459,6 +466,21 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `DELETE FROM training_records WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
+    // Delete training certificate/evidence attachments from disk and DB
+    const { rows: trainingFiles } = await client.query(
+      `SELECT stored_name, training_type
+         FROM training_file_attachments
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    for (const file of trainingFiles) {
+      const filePath = path.join(appConfig.upload.dir, String(homeId), 'training', staffId, file.training_type, file.stored_name);
+      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+    }
+    await client.query(
+      `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
 
     // Anonymise tax codes
     await client.query(
@@ -663,6 +685,27 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Remove onboarding data (pre-employment checks — not needed after erasure)
     await client.query(
       `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    // Delete onboarding documents from disk and DB, but retain redacted history for audit trace.
+    const { rows: onboardingFiles } = await client.query(
+      `SELECT stored_name, section
+         FROM onboarding_file_attachments
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    for (const file of onboardingFiles) {
+      const filePath = path.join(appConfig.upload.dir, String(homeId), 'onboarding', staffId, file.section, file.stored_name);
+      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+    }
+    await client.query(
+      `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    await client.query(
+      `UPDATE onboarding_history
+          SET data = '{"redacted": true}'::jsonb
+        WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
     // Clear care certificate progress (supervisor name and assessment notes)

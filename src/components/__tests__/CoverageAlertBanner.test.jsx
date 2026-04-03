@@ -95,7 +95,7 @@ describe('CoverageAlertBanner', () => {
   });
 
   it('smoke test — renders without crashing', () => {
-    api.getSchedulingData.mockResolvedValue(makeSchedulingData());
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     expect(() => renderBanner()).not.toThrow();
   });
 
@@ -106,7 +106,9 @@ describe('CoverageAlertBanner', () => {
 
     // Wait for async data load to complete
     await waitFor(() => {
-      expect(api.getSchedulingData).toHaveBeenCalledWith('test-home');
+      expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }));
     });
 
     // Banner should not be in the document
@@ -160,7 +162,25 @@ describe('CoverageAlertBanner', () => {
     renderBanner();
 
     await waitFor(() => {
-      expect(api.getSchedulingData).toHaveBeenCalledWith('oakwood');
+      expect(api.getSchedulingData).toHaveBeenCalledWith('oakwood', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }));
     });
+  });
+
+  it('does not warn when the scheduling request is aborted during teardown', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    api.getSchedulingData.mockImplementation((_home, options = {}) => new Promise((_, reject) => {
+      options.signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      }, { once: true });
+    }));
+
+    const { unmount } = renderBanner();
+    unmount();
+    await Promise.resolve();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect, useId } from 'react';
 import { formatDate } from '../../lib/rotation.js';
 import { calculateExpiry, TRAINING_METHODS, getRequiredLevel } from '../../lib/training.js';
 import { MODAL, INPUT, BTN } from '../../lib/design.js';
-import { upsertTrainingRecord, deleteTrainingRecord } from '../../lib/api.js';
+import { upsertTrainingRecord, deleteTrainingRecord, getTrainingFiles, uploadTrainingFile, deleteTrainingFile, downloadTrainingFile } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import FileAttachments from '../FileAttachments.jsx';
 
 export default function TrainingRecordModal({ isOpen, onClose, staffId, staffName, typeId, typeName, type, existing, homeSlug, staff, onSaved, readOnly = false }) {
   const today = formatDate(new Date());
@@ -153,6 +154,16 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
             disabled={readOnly}
             className={INPUT.base} placeholder="Optional notes" />
         </div>
+        <FileAttachments
+          caseType="training"
+          caseId={existing ? `${staffId}::${typeId}` : null}
+          readOnly={readOnly}
+          getFiles={getTrainingFiles}
+          uploadFile={uploadTrainingFile}
+          deleteFile={deleteTrainingFile}
+          downloadFile={downloadTrainingFile}
+          title="Training Certificates & Evidence"
+        />
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
       <div className={MODAL.footer}>

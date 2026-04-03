@@ -1,7 +1,9 @@
 import ModalWrapper from '../Modal.jsx';
 import TabBar from '../TabBar.jsx';
 import ResidentPicker from '../ResidentPicker.jsx';
+import FileAttachments from '../FileAttachments.jsx';
 import { BADGE, BTN, INPUT, MODAL } from '../../lib/design.js';
+import { getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../../lib/api.js';
 import {
   INVESTIGATION_STATUSES,
   LOCATIONS,
@@ -529,6 +531,19 @@ export default function IncidentTrackerModal({
             <button onClick={handleAddAddendum} disabled={saving || !addendumText.trim()} className={`${BTN.primary} ${BTN.sm} mt-2`}>Add Note</button>
           </div>
         </div>
+      )}
+
+      {editingId && (
+        <FileAttachments
+          caseType="incident"
+          caseId={editingId}
+          readOnly={!canEdit}
+          getFiles={getRecordAttachments}
+          uploadFile={uploadRecordAttachment}
+          deleteFile={deleteRecordAttachment}
+          downloadFile={downloadRecordAttachment}
+          title="Incident Evidence"
+        />
       )}
 
       <div className={MODAL.footer}>
