@@ -381,6 +381,17 @@ describe('mapRenewalFields', () => {
     expect(result.certificate_number).toBeUndefined();
   });
 
+  it('prefers certificate_number over legacy reference when both are sent for DBS', () => {
+    const result = mapRenewalFields({
+      check_type: 'dbs',
+      reference: 'OLD-REF-123',
+      certificate_number: 'CERT-456',
+    });
+    expect(result.dbs_certificate_number).toBe('CERT-456');
+    expect(result.reference).toBeUndefined();
+    expect(result.certificate_number).toBeUndefined();
+  });
+
   it('does NOT map certificate_number for RTW records', () => {
     const result = mapRenewalFields({ check_type: 'rtw', certificate_number: 'X-999' });
     expect(result.dbs_certificate_number).toBeUndefined();
