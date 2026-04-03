@@ -69,6 +69,7 @@ export async function updateRenewal(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
+    'check_type',
     'dbs_certificate_number', 'dbs_disclosure_level', 'dbs_check_date', 'dbs_next_renewal_due',
     'dbs_update_service_registered', 'dbs_update_service_last_checked', 'dbs_barred_list_check',
     'rtw_document_type', 'rtw_check_date', 'rtw_document_expiry', 'rtw_next_check_due',

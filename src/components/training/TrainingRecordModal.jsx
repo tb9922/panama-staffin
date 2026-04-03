@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useId } from 'react';
 import { formatDate } from '../../lib/rotation.js';
 import { calculateExpiry, TRAINING_METHODS, getRequiredLevel } from '../../lib/training.js';
 import { MODAL, INPUT, BTN } from '../../lib/design.js';
@@ -21,6 +21,13 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   const [form, setForm] = useState(initForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const completedId = useId();
+  const trainerId = useId();
+  const methodId = useId();
+  const levelId = useId();
+  const certificateRefId = useId();
+  const evidenceRefId = useId();
+  const notesId = useId();
 
   // Reset form when modal opens for a different cell
   useEffect(() => { if (isOpen) setForm(initForm()); }, [isOpen, staffId, typeId]); // eslint-disable-line react-hooks/exhaustive-deps -- initForm derives from existing+today which are stable per open
@@ -92,8 +99,8 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={INPUT.label}>Completion Date</label>
-            <input type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} disabled={readOnly} />
+            <label htmlFor={completedId} className={INPUT.label}>Completion Date</label>
+            <input id={completedId} type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} disabled={readOnly} />
           </div>
           <div>
             <label className={INPUT.label}>Expiry Date (auto)</label>
@@ -103,22 +110,22 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={INPUT.label}>Trainer / Provider</label>
-              <input type="text" value={form.trainer} onChange={e => setForm({ ...form, trainer: e.target.value })}
+            <label htmlFor={trainerId} className={INPUT.label}>Trainer / Provider</label>
+              <input id={trainerId} type="text" value={form.trainer} onChange={e => setForm({ ...form, trainer: e.target.value })}
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Name or organisation" />
           </div>
           <div>
-            <label className={INPUT.label}>Method</label>
-              <select value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} className={INPUT.select} disabled={readOnly}>
+            <label htmlFor={methodId} className={INPUT.label}>Method</label>
+              <select id={methodId} value={form.method} onChange={e => setForm({ ...form, method: e.target.value })} className={INPUT.select} disabled={readOnly}>
               {TRAINING_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
         </div>
         {typeLevels && (
           <div>
-            <label className={INPUT.label}>Level Achieved</label>
-            <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className={INPUT.select} disabled={readOnly}>
+            <label htmlFor={levelId} className={INPUT.label}>Level Achieved</label>
+            <select id={levelId} value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className={INPUT.select} disabled={readOnly}>
               <option value="">Select level...</option>
               {typeLevels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
@@ -128,21 +135,21 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
           </div>
         )}
         <div>
-          <label className={INPUT.label}>Certificate Reference</label>
-          <input type="text" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}
+          <label htmlFor={certificateRefId} className={INPUT.label}>Certificate Reference</label>
+          <input id={certificateRefId} type="text" value={form.certificate_ref} onChange={e => setForm({ ...form, certificate_ref: e.target.value })}
             disabled={readOnly}
             className={INPUT.base} placeholder="e.g. FS-2025-042" />
         </div>
         <div>
-          <label className={INPUT.label}>Evidence File Reference</label>
-          <input type="text" value={form.evidence_ref} onChange={e => setForm({ ...form, evidence_ref: e.target.value })}
+          <label htmlFor={evidenceRefId} className={INPUT.label}>Evidence File Reference</label>
+          <input id={evidenceRefId} type="text" value={form.evidence_ref} onChange={e => setForm({ ...form, evidence_ref: e.target.value })}
             disabled={readOnly}
             className={INPUT.base} placeholder="e.g. /training/fire-safety/JS-2025.pdf" />
           <p className="text-[10px] text-gray-400 mt-0.5">File path or reference for offline evidence management</p>
         </div>
         <div>
-          <label className={INPUT.label}>Notes</label>
-          <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+          <label htmlFor={notesId} className={INPUT.label}>Notes</label>
+          <input id={notesId} type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
             disabled={readOnly}
             className={INPUT.base} placeholder="Optional notes" />
         </div>
