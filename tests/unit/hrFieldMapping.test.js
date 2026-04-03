@@ -244,6 +244,19 @@ describe('mapFlexFields', () => {
     expect(result.proposed_pattern).toBeUndefined();
     expect(result.status).toBe('pending');
   });
+
+  it('normalizes blank optional fields and still syncs withdrawn decision state', () => {
+    const result = mapFlexFields({
+      status: 'withdrawn',
+      decision: '',
+      appeal_outcome: '',
+      notes: '',
+    });
+    expect(result.status).toBe('withdrawn');
+    expect(result.decision).toBe('withdrawn');
+    expect(result.appeal_outcome).toBeNull();
+    expect(result.notes).toBeNull();
+  });
 });
 
 // ── mapEdiFields ─────────────────────────────────────────────────────────────
