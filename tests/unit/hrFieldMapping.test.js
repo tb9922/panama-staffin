@@ -392,9 +392,28 @@ describe('mapRenewalFields', () => {
     expect(result.certificate_number).toBeUndefined();
   });
 
+  it('switches to RTW cleanly and clears stale DBS-only fields', () => {
+    const result = mapRenewalFields({
+      check_type: 'rtw',
+      last_checked: '2026-04-03',
+      expiry_date: '2027-04-03',
+      document_type: 'Share Code',
+    }, {
+      check_type: 'dbs',
+      dbs_certificate_number: 'CERT-OLD',
+      dbs_disclosure_level: 'enhanced',
+    });
+    expect(result.check_type).toBe('rtw');
+    expect(result.rtw_check_date).toBe('2026-04-03');
+    expect(result.rtw_document_expiry).toBe('2027-04-03');
+    expect(result.rtw_document_type).toBe('share_code');
+    expect(result.dbs_certificate_number).toBeNull();
+    expect(result.dbs_disclosure_level).toBeNull();
+  });
+
   it('does NOT map certificate_number for RTW records', () => {
     const result = mapRenewalFields({ check_type: 'rtw', certificate_number: 'X-999' });
-    expect(result.dbs_certificate_number).toBeUndefined();
+    expect(result.dbs_certificate_number).toBeNull();
     expect(result.certificate_number).toBe('X-999');
   });
 
