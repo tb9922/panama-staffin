@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
-import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents } from '../lib/api.js';
+import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents, isAbortLikeError } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
@@ -61,7 +61,20 @@ export default function HandoverNotes() {
   useEffect(() => {
     const h = getCurrentHome();
     if (!h) return;
-    getIncidents(h).then(r => setIncidents(r.incidents || [])).catch(e => console.warn('HandoverNotes incidents fetch failed:', e.message));
+    const controller = new AbortController();
+    let cancelled = false;
+    getIncidents(h, { signal: controller.signal })
+      .then(r => {
+        if (!cancelled) setIncidents(r.incidents || []);
+      })
+      .catch(e => {
+        if (cancelled || isAbortLikeError(e, controller.signal)) return;
+        setIncidents([]);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [slug]);
 
   function goDay(delta) {
