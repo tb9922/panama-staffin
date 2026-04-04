@@ -25,7 +25,7 @@ export default function CoverageAlertBanner() {
       .then(result => { if (!cancelled) setData(result); })
       .catch((e) => {
         if (cancelled || isAbortLikeError(e, controller.signal)) return;
-        console.warn('CoverageAlertBanner fetch failed:', e.message);
+        setData(null);
       });
     return () => {
       cancelled = true;
