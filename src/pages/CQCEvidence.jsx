@@ -12,7 +12,7 @@ import {
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
   getCqcEvidence, createCqcEvidence,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
-  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
+  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot, isAbortLikeError,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -60,25 +60,32 @@ export default function CQCEvidence() {
   useEffect(() => {
     if (!homeSlug) return;
     let cancelled = false;
+    const controller = new AbortController();
     // CQC scoring needs up to 365 days of overrides for the 1-year view
     const now = new Date();
     const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
       .toISOString().slice(0, 10);
     const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7))
       .toISOString().slice(0, 10);
+    const readFallback = (label, fallback) => (e) => {
+      if (!cancelled && !isAbortLikeError(e, controller.signal)) {
+        console.warn(`Failed to load ${label}:`, e.message);
+      }
+      return fallback;
+    };
 
     Promise.all([
-      getSchedulingData(homeSlug, { from, to }),
-      getTrainingData(homeSlug).catch(e => { console.warn('Failed to load training data:', e.message); return {}; }),
-      getIncidents(homeSlug).catch(e => { console.warn('Failed to load incidents:', e.message); return { incidents: [] }; }),
-      getComplaints(homeSlug).catch(e => { console.warn('Failed to load complaints:', e.message); return { complaints: [], surveys: [] }; }),
-      getMaintenance(homeSlug).catch(e => { console.warn('Failed to load maintenance:', e.message); return { checks: [] }; }),
-      getIpcAudits(homeSlug).catch(e => { console.warn('Failed to load IPC audits:', e.message); return { audits: [] }; }),
-      getRisks(homeSlug).catch(e => { console.warn('Failed to load risks:', e.message); return { risks: [] }; }),
-      getPolicies(homeSlug).catch(e => { console.warn('Failed to load policies:', e.message); return { policies: [] }; }),
-      getWhistleblowingConcerns(homeSlug).catch(e => { console.warn('Failed to load whistleblowing:', e.message); return { concerns: [] }; }),
-      getDols(homeSlug).catch(e => { console.warn('Failed to load DoLS:', e.message); return { dols: [], mcaAssessments: [] }; }),
-      getCareCertData(homeSlug).catch(e => { console.warn('Failed to load care cert:', e.message); return { careCert: {} }; }),
+      getSchedulingData(homeSlug, { from, to, signal: controller.signal }),
+      getTrainingData(homeSlug, { signal: controller.signal }).catch(readFallback('training data', {})),
+      getIncidents(homeSlug, { signal: controller.signal }).catch(readFallback('incidents', { incidents: [] })),
+      getComplaints(homeSlug, { signal: controller.signal }).catch(readFallback('complaints', { complaints: [], surveys: [] })),
+      getMaintenance(homeSlug, { signal: controller.signal }).catch(readFallback('maintenance', { checks: [] })),
+      getIpcAudits(homeSlug, { signal: controller.signal }).catch(readFallback('IPC audits', { audits: [] })),
+      getRisks(homeSlug, { signal: controller.signal }).catch(readFallback('risks', { risks: [] })),
+      getPolicies(homeSlug, { signal: controller.signal }).catch(readFallback('policies', { policies: [] })),
+      getWhistleblowingConcerns(homeSlug, { signal: controller.signal }).catch(readFallback('whistleblowing', { concerns: [] })),
+      getDols(homeSlug, { signal: controller.signal }).catch(readFallback('DoLS', { dols: [], mcaAssessments: [] })),
+      getCareCertData(homeSlug, { signal: controller.signal }).catch(readFallback('care cert', { careCert: {} })),
     ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
       if (cancelled) return;
       setModuleData({
@@ -102,9 +109,16 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
+    }).catch(e => {
+      if (!cancelled && !isAbortLikeError(e, controller.signal)) {
+        setError(e.message || 'Failed to load CQC data');
+      }
+    })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
@@ -140,36 +154,50 @@ function CQCEvidenceInner({ data }) {
 
   useDirtyGuard(showAddEvidence);
 
-  const loadEvidence = useCallback(async () => {
+  const loadEvidence = useCallback(async (signal) => {
     try {
       const home = getCurrentHome();
-      const result = await getCqcEvidence(home);
+      const result = await getCqcEvidence(home, signal ? { signal } : undefined);
       if (isMounted.current) setEvidence(result.evidence || []);
     } catch (err) {
       // Non-fatal: evidence list stays empty rather than breaking the whole page
-      if (isMounted.current) console.error('Failed to load CQC evidence:', err);
+      if (isMounted.current && !isAbortLikeError(err, signal)) {
+        console.error('Failed to load CQC evidence:', err);
+      }
     } finally {
       if (isMounted.current) setEvidenceLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadEvidence(); }, [loadEvidence]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setEvidenceLoading(true);
+    loadEvidence(controller.signal);
+    return () => controller.abort();
+  }, [loadEvidence]);
 
-  const loadSnapshots = useCallback(async () => {
+  const loadSnapshots = useCallback(async (signal) => {
     const home = getCurrentHome();
     if (!home) return;
     if (isMounted.current) setSnapshotLoading(true);
     try {
-      const result = await getSnapshots(home, 'cqc');
+      const result = await getSnapshots(home, 'cqc', signal ? { signal } : undefined);
       if (isMounted.current) setSnapshots(Array.isArray(result) ? result : []);
     } catch (e) {
-      if (isMounted.current) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
+      if (isMounted.current && !isAbortLikeError(e, signal)) {
+        console.warn('Failed to load snapshots:', e.message);
+        setSnapshots([]);
+      }
     } finally {
       if (isMounted.current) setSnapshotLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadSnapshots(); }, [loadSnapshots]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadSnapshots(controller.signal);
+    return () => controller.abort();
+  }, [loadSnapshots]);
 
   async function handleCreateSnapshot() {
     const home = getCurrentHome();

@@ -143,8 +143,8 @@ export async function acknowledgeHandoverEntry(homeSlug, id) {
 
 // ── Incidents ────────────────────────────────────────────────────────────────
 
-export async function getIncidents(homeSlug) {
-  return apiFetch(`${API_BASE}/incidents?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getIncidents(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/incidents?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createIncident(homeSlug, data) {
@@ -185,8 +185,8 @@ export async function addIncidentAddendum(homeSlug, incidentId, content) {
 
 // ── Complaints ───────────────────────────────────────────────────────────────
 
-export async function getComplaints(homeSlug) {
-  return apiFetch(`${API_BASE}/complaints?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getComplaints(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/complaints?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createComplaint(homeSlug, data) {
@@ -227,8 +227,8 @@ export async function deleteComplaintSurvey(homeSlug, id) {
 
 // ── Maintenance ──────────────────────────────────────────────────────────────
 
-export async function getMaintenance(homeSlug) {
-  return apiFetch(`${API_BASE}/maintenance?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getMaintenance(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/maintenance?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createMaintenanceCheck(homeSlug, data) {
@@ -251,8 +251,8 @@ export async function deleteMaintenanceCheck(homeSlug, id) {
 
 // ── IPC Audits ───────────────────────────────────────────────────────────────
 
-export async function getIpcAudits(homeSlug) {
-  return apiFetch(`${API_BASE}/ipc?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getIpcAudits(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/ipc?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createIpcAudit(homeSlug, data) {
@@ -275,8 +275,8 @@ export async function deleteIpcAudit(homeSlug, id) {
 
 // ── Risk Register ─────────────────────────────────────────────────────────────
 
-export async function getRisks(homeSlug) {
-  return apiFetch(`${API_BASE}/risk-register?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getRisks(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/risk-register?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createRisk(homeSlug, data) {
@@ -299,8 +299,8 @@ export async function deleteRisk(homeSlug, id) {
 
 // ── Policies ─────────────────────────────────────────────────────────────────
 
-export async function getPolicies(homeSlug) {
-  return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getPolicies(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/policies?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createPolicy(homeSlug, data) {
@@ -323,8 +323,8 @@ export async function deletePolicy(homeSlug, id) {
 
 // ── Whistleblowing ───────────────────────────────────────────────────────────
 
-export async function getWhistleblowingConcerns(homeSlug) {
-  return apiFetch(`${API_BASE}/whistleblowing?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getWhistleblowingConcerns(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/whistleblowing?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createWhistleblowingConcern(homeSlug, data) {
@@ -347,8 +347,8 @@ export async function deleteWhistleblowingConcern(homeSlug, id) {
 
 // ── DoLS & MCA ───────────────────────────────────────────────────────────────
 
-export async function getDols(homeSlug) {
-  return apiFetch(`${API_BASE}/dols?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getDols(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/dols?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createDols(homeSlug, data) {
@@ -389,8 +389,8 @@ export async function deleteMcaAssessment(homeSlug, id) {
 
 // ── CQC Evidence ─────────────────────────────────────────────────────────────
 
-export async function getCqcEvidence(homeSlug) {
-  return apiFetch(`${API_BASE}/cqc-evidence?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getCqcEvidence(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/cqc-evidence?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function createCqcEvidence(homeSlug, data) {
@@ -953,11 +953,11 @@ export async function updateHrRenewal(id, data) {
 }
 
 // Cross-cutting
-export async function getHrWarnings(homeSlug) {
-  return apiFetch(`${API_BASE}/hr/warnings?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getHrWarnings(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/hr/warnings?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
-export async function getHrStats(homeSlug) {
-  return apiFetch(`${API_BASE}/hr/stats?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getHrStats(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/hr/stats?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 export async function getHrCaseNotes(homeSlug, caseType, caseId) {
   return apiFetch(`${API_BASE}/hr/case-notes/${caseType}/${caseId}?home=${h(homeSlug)}`, { headers: authHeaders() });
@@ -1221,11 +1221,11 @@ export async function approveFinanceExpense(homeSlug, id) {
 export async function getFinanceDashboard(homeSlug, from, to) {
   return apiFetch(`${API_BASE}/finance/dashboard?home=${h(homeSlug)}&from=${from}&to=${to}`, { headers: authHeaders() });
 }
-export async function getFinanceAlerts(homeSlug) {
-  return apiFetch(`${API_BASE}/finance/alerts?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getFinanceAlerts(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/finance/alerts?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
-export async function getDashboardSummary(homeSlug) {
-  return apiFetch(`${API_BASE}/dashboard/summary?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getDashboardSummary(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/dashboard/summary?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 // Chase log
@@ -1269,8 +1269,8 @@ export async function processPaymentSchedule(homeSlug, id) {
 
 // ─── Training ─────────────────────────────────────────────────────────────────
 
-export async function getTrainingData(homeSlug) {
-  return apiFetch(`${API_BASE}/training?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getTrainingData(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/training?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function upsertTrainingRecord(homeSlug, staffId, typeId, data) {
@@ -1352,8 +1352,8 @@ export async function deleteFireDrill(homeSlug, id) {
 
 // ─── Care Certificate ─────────────────────────────────────────────────────────
 
-export async function getCareCertData(homeSlug) {
-  return apiFetch(`${API_BASE}/care-cert?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getCareCertData(homeSlug, options = {}) {
+  return apiFetch(`${API_BASE}/care-cert?home=${h(homeSlug)}`, { headers: authHeaders(), ...options });
 }
 
 export async function startCareCert(homeSlug, data) {
@@ -1837,8 +1837,8 @@ export async function createSnapshot(homeSlug, engine, windowFrom, windowTo) {
   });
 }
 
-export async function getSnapshots(homeSlug, engine) {
-  return apiFetch(`${API_BASE}/assessment/snapshots?home=${h(homeSlug)}&engine=${engine}`, { headers: authHeaders() });
+export async function getSnapshots(homeSlug, engine, options = {}) {
+  return apiFetch(`${API_BASE}/assessment/snapshots?home=${h(homeSlug)}&engine=${engine}`, { headers: authHeaders(), ...options });
 }
 
 export async function getSnapshot(homeSlug, id) {

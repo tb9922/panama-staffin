@@ -6,7 +6,7 @@ import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, isAbortLikeError } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -74,27 +74,36 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setError(null);
     setSchedData(null);
 
     if (!homeSlug || isOwnDataDashboard) {
       setLoading(false);
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
 
     setLoading(true);
-    getSchedulingData(homeSlug)
+    getSchedulingData(homeSlug, { signal: controller.signal })
       .then(data => {
         if (!cancelled) setSchedData(data);
       })
       .catch(e => {
-        if (!cancelled) setError(e.message || 'Failed to load');
+        if (!cancelled && !isAbortLikeError(e, controller.signal)) {
+          setError(e.message || 'Failed to load');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [homeSlug, isOwnDataDashboard]);
 
   if (!homeSlug) {
@@ -161,16 +170,17 @@ function DashboardInner({ schedData }) {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     setHrData({ stats: null, warnings: [] });
     setFinanceAlerts([]);
     setSummary(null);
     setAuxFailures([]);
 
     Promise.all([
-      canViewHr ? getHrStats(home) : Promise.resolve(null),
-      canViewHr ? getHrWarnings(home) : Promise.resolve([]),
-      canViewFinance ? getFinanceAlerts(home) : Promise.resolve([]),
-      getDashboardSummary(home),
+      canViewHr ? getHrStats(home, { signal: controller.signal }) : Promise.resolve(null),
+      canViewHr ? getHrWarnings(home, { signal: controller.signal }) : Promise.resolve([]),
+      canViewFinance ? getFinanceAlerts(home, { signal: controller.signal }) : Promise.resolve([]),
+      getDashboardSummary(home, { signal: controller.signal }),
     ].map(p => Promise.resolve(p).then(
       value => ({ ok: true, value }),
       error => ({ ok: false, error }),
@@ -181,28 +191,28 @@ function DashboardInner({ schedData }) {
 
       if (statsResult.ok) {
         setHrData(current => ({ ...current, stats: statsResult.value }));
-      } else {
+      } else if (!isAbortLikeError(statsResult.error, controller.signal)) {
         console.warn('Failed to load HR stats:', statsResult.error?.message);
         failures.push('HR stats');
       }
 
       if (warningsResult.ok) {
         setHrData(current => ({ ...current, warnings: Array.isArray(warningsResult.value) ? warningsResult.value : [] }));
-      } else {
+      } else if (!isAbortLikeError(warningsResult.error, controller.signal)) {
         console.warn('Failed to load HR warnings:', warningsResult.error?.message);
         failures.push('HR warnings');
       }
 
       if (financeResult.ok) {
         setFinanceAlerts(Array.isArray(financeResult.value) ? financeResult.value : []);
-      } else {
+      } else if (!isAbortLikeError(financeResult.error, controller.signal)) {
         console.warn('Failed to load finance alerts:', financeResult.error?.message);
         failures.push('Finance alerts');
       }
 
       if (summaryResult.ok) {
         setSummary(summaryResult.value);
-      } else {
+      } else if (!isAbortLikeError(summaryResult.error, controller.signal)) {
         console.warn('Failed to load dashboard summary:', summaryResult.error?.message);
         failures.push('Dashboard summary');
       }
@@ -210,7 +220,10 @@ function DashboardInner({ schedData }) {
       setAuxFailures(failures);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [home, canViewFinance, canViewHr]);
 
   const degradedSources = useMemo(() => {
