@@ -13,6 +13,7 @@ This release adds document and evidence workflows across onboarding and key comp
 - Hardened `StaffPicker` and `CoverageAlertBanner` so aborted fetches do not surface noisy false errors
 - Extended GDPR subject-access and erasure coverage for the new onboarding and training staff attachment data
 - Hotfixed onboarding attachment deletion so `/api/onboarding/files/:id` is routed correctly in production
+- Hotfixed maintenance category fallback so homes without configured maintenance categories can still add checks
 
 ## Migrations
 
@@ -48,6 +49,7 @@ Verify after deploy:
 - onboarding document upload, download, and delete all work against the live API
 - training record modal shows attachment panel
 - incident, complaint, IPC, and maintenance edit modals show attachment panel
+- maintenance add dialog offers categories even when the home config has no custom category list
 - login, home switching, and baseline data loads still work
 
 ## Rollback Notes

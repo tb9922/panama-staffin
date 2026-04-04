@@ -48,7 +48,9 @@ export default function MaintenanceTracker() {
       setError(null);
       const result = await getMaintenance(home);
       setChecks(result.checks || []);
-      setMaintenanceCategories(result.maintenanceCategories || DEFAULT_MAINTENANCE_CATEGORIES);
+      setMaintenanceCategories(
+        result.maintenanceCategories?.length ? result.maintenanceCategories : DEFAULT_MAINTENANCE_CATEGORIES
+      );
     } catch (err) {
       setError(err.message || 'Failed to load maintenance checks');
     } finally {
