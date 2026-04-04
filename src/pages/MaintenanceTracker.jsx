@@ -24,6 +24,12 @@ const EMPTY_FORM = {
   certificate_ref: '', certificate_expiry: '', notes: '',
 };
 
+function normalizeNullFields(record) {
+  return Object.fromEntries(
+    Object.entries(record || {}).map(([key, value]) => [key, value === null ? '' : value])
+  );
+}
+
 export default function MaintenanceTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
@@ -88,7 +94,7 @@ export default function MaintenanceTracker() {
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
+    setForm({ ...EMPTY_FORM, ...normalizeNullFields(item), _version: item.version });
     setSaveError(null);
     setShowModal(true);
   }

@@ -42,6 +42,12 @@ const EMPTY_SURVEY = {
   conducted_by: '',
 };
 
+function normalizeNullFields(record) {
+  return Object.fromEntries(
+    Object.entries(record || {}).map(([key, value]) => [key, value === null ? '' : value])
+  );
+}
+
 // Minimal config for functions that need complaint_response_days.
 // The dedicated endpoint does not return this setting; default to 28 days (Reg 16 standard).
 const COMPLAINT_CONFIG = { complaint_response_days: 28 };
@@ -155,7 +161,7 @@ export default function ComplaintsTracker() {
 
   function openEdit(item) {
     setEditingId(item.id);
-    setForm({ ...EMPTY_FORM, ...item, _version: item.version });
+    setForm({ ...EMPTY_FORM, ...normalizeNullFields(item), _version: item.version });
     setActiveTab('details');
     setSaveError(null);
     setShowModal(true);
@@ -201,7 +207,7 @@ export default function ComplaintsTracker() {
 
   function openEditSurvey(item) {
     setEditingSurveyId(item.id);
-    setSurveyForm({ ...EMPTY_SURVEY, ...item, _version: item.version });
+    setSurveyForm({ ...EMPTY_SURVEY, ...normalizeNullFields(item), _version: item.version });
     setSurveyError(null);
     setShowSurveyModal(true);
   }
