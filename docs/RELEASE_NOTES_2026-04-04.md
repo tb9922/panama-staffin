@@ -14,6 +14,8 @@ This release adds document and evidence workflows across onboarding and key comp
 - Extended GDPR subject-access and erasure coverage for the new onboarding and training staff attachment data
 - Hotfixed onboarding attachment deletion so `/api/onboarding/files/:id` is routed correctly in production
 - Hotfixed maintenance category fallback so homes without configured maintenance categories can still add checks
+- Normalized nullable complaint and maintenance edit fields so React controlled inputs stay stable in production
+- Hardened Dashboard, CQC evidence, coverage banner, and handover side-fetch cleanup so full route sweeps stay console-clean during fast navigation
 
 ## Migrations
 
@@ -50,6 +52,8 @@ Verify after deploy:
 - training record modal shows attachment panel
 - incident, complaint, IPC, and maintenance edit modals show attachment panel
 - maintenance add dialog offers categories even when the home config has no custom category list
+- complaint and maintenance edit dialogs open without controlled-input warnings
+- full browser sweep across all app routes completes without page errors or console noise
 - login, home switching, and baseline data loads still work
 
 ## Rollback Notes
