@@ -12,6 +12,7 @@ This release adds document and evidence workflows across onboarding and key comp
 - Added attachment support for incidents, complaints, IPC audits, and maintenance records
 - Hardened `StaffPicker` and `CoverageAlertBanner` so aborted fetches do not surface noisy false errors
 - Extended GDPR subject-access and erasure coverage for the new onboarding and training staff attachment data
+- Hotfixed onboarding attachment deletion so `/api/onboarding/files/:id` is routed correctly in production
 
 ## Migrations
 
@@ -44,6 +45,7 @@ Verify after deploy:
 - `curl -s http://127.0.0.1:3001/health`
 - `curl -s http://127.0.0.1:3001/readiness`
 - onboarding section modal shows documents and history
+- onboarding document upload, download, and delete all work against the live API
 - training record modal shows attachment panel
 - incident, complaint, IPC, and maintenance edit modals show attachment panel
 - login, home switching, and baseline data loads still work

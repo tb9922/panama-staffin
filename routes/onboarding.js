@@ -103,6 +103,17 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
   } catch (err) { next(err); }
 });
 
+router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  try {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid ID' });
+    const deleted = await onboardingAttachmentsRepo.softDelete(id, req.home.id);
+    if (!deleted) return res.status(404).json({ error: 'File not found' });
+    await auditService.log('onboarding_file_delete', req.home.slug, req.user.username, { fileId: id });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // DELETE /api/onboarding/:staffId/:section?home=X — clear section data
 router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
@@ -213,17 +224,6 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       'X-Frame-Options': 'DENY',
     });
     res.sendFile(filePath);
-  } catch (err) { next(err); }
-});
-
-router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid ID' });
-    const deleted = await onboardingAttachmentsRepo.softDelete(id, req.home.id);
-    if (!deleted) return res.status(404).json({ error: 'File not found' });
-    await auditService.log('onboarding_file_delete', req.home.slug, req.user.username, { fileId: id });
-    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
