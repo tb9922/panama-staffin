@@ -11,8 +11,18 @@ import {
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getOnboardingData, upsertOnboardingSection, clearOnboardingSection } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getOnboardingData,
+  upsertOnboardingSection,
+  clearOnboardingSection,
+  getOnboardingFiles,
+  uploadOnboardingFile,
+  deleteOnboardingFile,
+  downloadOnboardingFile,
+} from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -916,6 +926,19 @@ export default function OnboardingTracker() {
               </select>
             </div>
             {renderModalFields()}
+            {modalStaffId && modalSection && (
+              <FileAttachments
+                caseType="onboarding"
+                caseId={`${modalStaffId}::${modalSection}`}
+                readOnly={!canEdit}
+                getFiles={getOnboardingFiles}
+                uploadFile={uploadOnboardingFile}
+                deleteFile={deleteOnboardingFile}
+                downloadFile={downloadOnboardingFile}
+                title="Section Documents"
+                emptyText="No documents uploaded for this section yet."
+              />
+            )}
             <div>
               <label className={INPUT.label}>Notes</label>
               <input type="text" value={modalForm.notes || ''} onChange={e => setField('notes', e.target.value)} className={INPUT.base} placeholder="Optional notes" />

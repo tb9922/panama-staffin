@@ -1,17 +1,53 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import { createReadStream, mkdirSync } from 'fs';
+import { unlink } from 'fs/promises';
+import crypto from 'crypto';
+import path from 'path';
+import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { config } from '../config.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
+
+function safePath(segment) {
+  return String(segment || '').replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+const storage = multer.diskStorage({
+  destination(req, file, cb) {
+    const evidenceId = safePath(req.params.id);
+    if (!evidenceId) return cb(new Error('Invalid evidence ID'));
+    const dir = path.join(config.upload.dir, String(req.home.id), 'cqc_evidence', evidenceId);
+    mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname).replace(/[^a-zA-Z0-9.]/g, '');
+    cb(null, crypto.randomUUID() + ext);
+  },
+});
+
+function fileFilter(req, file, cb) {
+  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type ${file.mimetype} not allowed`));
+  }
+}
+
+const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
 
 const evidenceBodySchema = z.object({
   quality_statement: z.string().min(1).max(20).regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-5]|WL([1-9]|10))$/),
@@ -74,6 +110,99 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     const deleted = await cqcEvidenceRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     await auditService.log('cqc_evidence_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/files', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.id);
+    if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
+    const evidence = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
+    if (!evidence) return res.status(404).json({ error: 'Evidence item not found' });
+    const files = await cqcEvidenceFileRepo.findByEvidence(req.home.id, idParsed.data);
+    res.json(files);
+  } catch (err) { next(err); }
+});
+
+router.post('/:id/files', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  try {
+    const idParsed = idSchema.safeParse(req.params.id);
+    if (!idParsed.success) return res.status(400).json({ error: 'Invalid ID' });
+    const evidence = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
+    if (!evidence) return res.status(404).json({ error: 'Evidence item not found' });
+    upload.single('file')(req, res, async (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });
+        return res.status(400).json({ error: err.message });
+      }
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      try {
+        const detected = await fileTypeFromFile(req.file.path);
+        if (detected && detected.mime !== req.file.mimetype) {
+          await unlink(req.file.path).catch(() => {});
+          return res.status(400).json({ error: 'File content does not match declared type' });
+        }
+        const description = z.string().max(500).optional().safeParse(req.body.description);
+        const attachment = await cqcEvidenceFileRepo.create(req.home.id, idParsed.data, {
+          original_name: req.file.originalname,
+          stored_name: req.file.filename,
+          mime_type: req.file.mimetype,
+          size_bytes: req.file.size,
+          description: description.success ? (description.data || null) : null,
+          uploaded_by: req.user.username,
+        });
+        await auditService.log('cqc_evidence_file_upload', req.home.slug, req.user.username, {
+          evidenceId: idParsed.data,
+          fileId: attachment.id,
+        });
+        res.status(201).json(attachment);
+      } catch (uploadErr) {
+        await unlink(req.file.path).catch(() => {});
+        next(uploadErr);
+      }
+    });
+  } catch (err) { next(err); }
+});
+
+router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const att = await cqcEvidenceFileRepo.findById(id, req.home.id);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    const uploadRoot = path.resolve(config.upload.dir);
+    const filePath = path.resolve(path.join(
+      config.upload.dir,
+      String(req.home.id),
+      'cqc_evidence',
+      safePath(att.evidence_id),
+      att.stored_name
+    ));
+    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    const safeName = att.original_name.replace(/["\r\n;]/g, '_');
+    res.set({
+      'Content-Type': att.mime_type,
+      'Content-Disposition': `attachment; filename="${safeName}"`,
+      'Content-Length': att.size_bytes,
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'X-Frame-Options': 'DENY',
+    });
+    createReadStream(filePath).pipe(res);
+  } catch (err) { next(err); }
+});
+
+router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const deleted = await cqcEvidenceFileRepo.softDelete(id, req.home.id);
+    if (!deleted) return res.status(404).json({ error: 'Attachment not found' });
+    await auditService.log('cqc_evidence_file_delete', req.home.slug, req.user.username, {
+      evidenceId: deleted.evidence_id,
+      fileId: id,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

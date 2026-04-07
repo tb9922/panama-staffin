@@ -5,12 +5,14 @@ import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getSchedulingData, getTrainingData,
   getIncidents, getComplaints, getMaintenance, getIpcAudits,
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
-  getCqcEvidence, createCqcEvidence,
+  getCqcEvidence, createCqcEvidence, updateCqcEvidence,
+  getCqcEvidenceFiles, uploadCqcEvidenceFile, deleteCqcEvidenceFile, downloadCqcEvidenceFile,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
 } from '../lib/api.js';
@@ -45,6 +47,34 @@ const SCORE_STYLES = {
   amber:   { card: 'rounded-xl p-3 bg-amber-50 border border-amber-200',     label: 'text-xs font-medium text-amber-600',   value: 'text-3xl font-bold text-amber-700 mt-0.5' },
   red:     { card: 'rounded-xl p-3 bg-red-50 border border-red-200',         label: 'text-xs font-medium text-red-600',     value: 'text-3xl font-bold text-red-700 mt-0.5' },
 };
+
+function blankEvidenceForm(statementId = '') {
+  return {
+    id: null,
+    version: undefined,
+    quality_statement: statementId || '',
+    type: 'qualitative',
+    title: '',
+    description: '',
+    date_from: '',
+    date_to: '',
+    evidence_category: '',
+  };
+}
+
+function toEvidenceForm(evidence) {
+  return {
+    id: evidence?.id || null,
+    version: evidence?.version,
+    quality_statement: evidence?.quality_statement || '',
+    type: evidence?.type || 'qualitative',
+    title: evidence?.title || '',
+    description: evidence?.description || '',
+    date_from: evidence?.date_from || '',
+    date_to: evidence?.date_to || '',
+    evidence_category: evidence?.evidence_category || '',
+  };
+}
 
 function metricColor(value, lowerIsBetter) {
   if (lowerIsBetter) return value <= 5 ? 'text-emerald-600' : value <= 15 ? 'text-amber-600' : 'text-red-600';
@@ -124,10 +154,11 @@ function CQCEvidenceInner({ data }) {
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
-  const [evidenceForm, setEvidenceForm] = useState({ quality_statement: '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
+  const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [saveNotice, setSaveNotice] = useState(null);
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
@@ -245,8 +276,16 @@ function CQCEvidenceInner({ data }) {
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
 
   function openAddEvidence(statementId) {
-    setEvidenceForm({ quality_statement: statementId || '', type: 'qualitative', title: '', description: '', date_from: '', date_to: '', evidence_category: '' });
+    setEvidenceForm(blankEvidenceForm(statementId));
     setSaveError(null);
+    setSaveNotice(null);
+    setShowAddEvidence(true);
+  }
+
+  function openEditEvidence(item) {
+    setEvidenceForm(toEvidenceForm(item));
+    setSaveError(null);
+    setSaveNotice(null);
     setShowAddEvidence(true);
   }
 
@@ -256,14 +295,39 @@ function CQCEvidenceInner({ data }) {
     const home = getCurrentHome();
     setSavingEvidence(true);
     try {
-      await createCqcEvidence(home, {
-        ...evidenceForm,
+      const payload = {
+        quality_statement: evidenceForm.quality_statement,
+        type: evidenceForm.type,
         title: evidenceForm.title.trim(),
         description: evidenceForm.description.trim(),
+        date_from: evidenceForm.date_from || null,
         date_to: evidenceForm.date_to || null,
-        added_by: getLoggedInUser()?.username || 'admin',
-      });
-      setShowAddEvidence(false);
+        evidence_category: evidenceForm.evidence_category || null,
+      };
+      let saved;
+      if (evidenceForm.id) {
+        saved = await updateCqcEvidence(home, evidenceForm.id, {
+          ...payload,
+          _version: evidenceForm.version,
+        });
+        setSaveNotice('Evidence updated.');
+      } else {
+        saved = await createCqcEvidence(home, {
+          ...payload,
+          added_by: getLoggedInUser()?.username || 'admin',
+        });
+        setSaveNotice('Evidence saved. You can now upload supporting files below.');
+      }
+      setEvidenceForm((current) => ({
+        ...toEvidenceForm(saved),
+        quality_statement: saved?.quality_statement || current.quality_statement,
+        type: saved?.type || current.type,
+        title: saved?.title || current.title,
+        description: saved?.description || current.description,
+        date_from: saved?.date_from || current.date_from,
+        date_to: saved?.date_to || current.date_to,
+        evidence_category: saved?.evidence_category || current.evidence_category,
+      }));
       await loadEvidence();
     } catch (err) {
       setSaveError('Failed to save evidence: ' + err.message);
@@ -477,9 +541,20 @@ function CQCEvidenceInner({ data }) {
                                     {me.added_by && ` | by ${me.added_by}`}
                                   </div>
                                 </div>
-                                {canEdit && <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
-                                  disabled={savingEvidence}
-                                  className="text-xs text-red-400 hover:text-red-600 shrink-0 ml-2">Remove</button>}
+                                {canEdit && (
+                                  <div className="ml-2 flex shrink-0 gap-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openEditEvidence(me); }}
+                                      disabled={savingEvidence}
+                                      className="text-xs text-blue-500 hover:text-blue-700"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteEvidence(me.id); }}
+                                      disabled={savingEvidence}
+                                      className="text-xs text-red-400 hover:text-red-600">Remove</button>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -634,7 +709,7 @@ function CQCEvidenceInner({ data }) {
       )}
 
       {/* Add Evidence Modal */}
-      <Modal isOpen={showAddEvidence} onClose={() => setShowAddEvidence(false)} title="Add Evidence Item" size="lg">
+      <Modal isOpen={showAddEvidence} onClose={() => { setShowAddEvidence(false); setSaveError(null); setSaveNotice(null); }} title={evidenceForm.id ? 'Edit Evidence Item' : 'Add Evidence Item'} size="lg">
 
             <div className="space-y-3">
               <div>
@@ -700,14 +775,31 @@ function CQCEvidenceInner({ data }) {
                     onChange={e => setEvidenceForm({ ...evidenceForm, date_to: e.target.value })} />
                 </div>
               </div>
+
+              {evidenceForm.id ? (
+                <FileAttachments
+                  caseType="cqc_evidence"
+                  caseId={evidenceForm.id}
+                  readOnly={!canEdit}
+                  getFiles={getCqcEvidenceFiles}
+                  uploadFile={uploadCqcEvidenceFile}
+                  deleteFile={deleteCqcEvidenceFile}
+                  downloadFile={downloadCqcEvidenceFile}
+                  title="Supporting Files"
+                  emptyText="No supporting files uploaded yet."
+                />
+              ) : (
+                <p className="text-sm text-gray-400 italic">Save the evidence item first to attach supporting files.</p>
+              )}
             </div>
 
             <div className={MODAL.footer}>
+              {saveNotice && <p className="text-sm text-emerald-700 mr-auto">{saveNotice}</p>}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
-              <button onClick={() => setShowAddEvidence(false)} className={BTN.ghost}>Cancel</button>
+              <button onClick={() => { setShowAddEvidence(false); setSaveError(null); setSaveNotice(null); }} className={BTN.ghost}>Close</button>
               <button onClick={handleSaveEvidence}
                 disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}
-                className={BTN.primary}>{savingEvidence ? 'Saving...' : 'Save Evidence'}</button>
+                className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence'}</button>
             </div>
       </Modal>
       {ConfirmDialog}

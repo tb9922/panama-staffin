@@ -403,6 +403,57 @@ export async function deleteCqcEvidence(homeSlug, id) {
   });
 }
 
+export async function getCqcEvidenceFiles(_caseType, evidenceId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadCqcEvidenceFile(_caseType, evidenceId, file, description) {
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const res = await fetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteCqcEvidenceFile(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/cqc-evidence/files/${id}?home=${h(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadCqcEvidenceFile(id, originalName) {
+  const home = getCurrentHome();
+  const res = await fetch(`${API_BASE}/cqc-evidence/files/${id}/download?home=${h(home)}`, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ── Token Revocation ────────────────────────────────────────────────────────
 
 export async function revokeUserTokens(username) {
@@ -1323,6 +1374,59 @@ export async function clearOnboardingSection(homeSlug, staffId, section) {
   return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}?home=${h(homeSlug)}`, {
     method: 'DELETE', headers: authHeaders(),
   });
+}
+
+export async function getOnboardingFiles(_caseType, staffIdAndSection) {
+  const [staffId, section] = String(staffIdAndSection).split('::');
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadOnboardingFile(_caseType, staffIdAndSection, file, description) {
+  const [staffId, section] = String(staffIdAndSection).split('::');
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  const res = await fetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteOnboardingFile(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/onboarding/files/${id}?home=${h(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadOnboardingFile(id, originalName) {
+  const home = getCurrentHome();
+  const res = await fetch(`${API_BASE}/onboarding/files/${id}/download?home=${h(home)}`, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────────────

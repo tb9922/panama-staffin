@@ -14,6 +14,10 @@ vi.mock('../../lib/api.js', async () => {
     getOnboardingData: vi.fn(),
     upsertOnboardingSection: vi.fn(),
     clearOnboardingSection: vi.fn(),
+    getOnboardingFiles: vi.fn(),
+    uploadOnboardingFile: vi.fn(),
+    deleteOnboardingFile: vi.fn(),
+    downloadOnboardingFile: vi.fn(),
   };
 });
 
@@ -86,6 +90,10 @@ beforeEach(() => {
   api.getOnboardingData.mockResolvedValue(MOCK_RESPONSE);
   api.upsertOnboardingSection.mockResolvedValue({});
   api.clearOnboardingSection.mockResolvedValue({});
+  api.getOnboardingFiles.mockResolvedValue([]);
+  api.uploadOnboardingFile.mockResolvedValue({});
+  api.deleteOnboardingFile.mockResolvedValue({});
+  api.downloadOnboardingFile.mockResolvedValue(undefined);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -210,5 +218,27 @@ describe('OnboardingTracker', () => {
       expect(screen.getByText('Staff Onboarding')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
+  });
+
+  it('shows the section document uploader inside the onboarding modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Alice Smith').closest('.cursor-pointer'));
+    await waitFor(() => {
+      expect(screen.getByText('Enhanced DBS Check')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Enhanced DBS Check'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Enhanced DBS Check/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Section Documents')).toBeInTheDocument();
+    expect(screen.getByText('No documents uploaded for this section yet.')).toBeInTheDocument();
+    expect(api.getOnboardingFiles).toHaveBeenCalledWith('onboarding', 'S001::dbs_check');
   });
 });

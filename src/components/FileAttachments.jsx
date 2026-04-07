@@ -9,7 +9,18 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-export default function FileAttachments({ caseType, caseId, readOnly = false }) {
+export default function FileAttachments({
+  caseType,
+  caseId,
+  readOnly = false,
+  getFiles,
+  uploadFile,
+  deleteFile,
+  downloadFile,
+  title = 'Attached Documents',
+  emptyText = 'No documents attached.',
+  saveFirstMessage = 'Save the case first to attach documents.',
+}) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -17,16 +28,20 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
   const [description, setDescription] = useState('');
   const fileInputRef = useRef(null);
   const { confirm, ConfirmDialog } = useConfirm();
+  const listFiles = getFiles || getHrAttachments;
+  const createFile = uploadFile || uploadHrAttachment;
+  const removeFile = deleteFile || deleteHrAttachment;
+  const fetchFile = downloadFile || downloadHrAttachment;
 
   useEffect(() => {
     if (caseId) loadFiles();
-  }, [caseType, caseId]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFiles is stable given caseType+caseId
+  }, [caseType, caseId, getFiles]); // eslint-disable-line react-hooks/exhaustive-deps -- callback choice intentionally tracks getFiles only
 
   async function loadFiles() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getHrAttachments(caseType, caseId);
+      const data = await listFiles(caseType, caseId);
       setFiles(data);
     } catch (err) {
       setError(err.message);
@@ -41,7 +56,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
     setUploading(true);
     setError(null);
     try {
-      await uploadHrAttachment(caseType, caseId, file, description);
+      await createFile(caseType, caseId, file, description);
       setDescription('');
       fileInputRef.current.value = '';
       await loadFiles();
@@ -55,7 +70,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
   async function handleDelete(att) {
     if (!await confirm(`Delete "${att.original_name}"?`)) return;
     try {
-      await deleteHrAttachment(att.id);
+      await removeFile(att.id);
       await loadFiles();
     } catch (err) {
       setError(err.message);
@@ -64,19 +79,19 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
 
   async function handleDownload(att) {
     try {
-      await downloadHrAttachment(att.id, att.original_name);
+      await fetchFile(att.id, att.original_name);
     } catch (err) {
       setError(err.message);
     }
   }
 
   if (!caseId) {
-    return <p className="text-sm text-gray-400 italic">Save the case first to attach documents.</p>;
+    return <p className="text-sm text-gray-400 italic">{saveFirstMessage}</p>;
   }
 
   return (
     <div className="space-y-3">
-      <h4 className="text-sm font-semibold text-gray-700">Attached Documents</h4>
+      <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -118,7 +133,7 @@ export default function FileAttachments({ caseType, caseId, readOnly = false }) 
       )}
 
       {files.length === 0 && !loading && (
-        <p className="text-sm text-gray-400">No documents attached.</p>
+        <p className="text-sm text-gray-400">{emptyText}</p>
       )}
 
       {!readOnly && (
