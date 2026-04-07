@@ -323,6 +323,7 @@ function CQCEvidenceInner({ data }) {
     const home = getCurrentHome();
     setSavingEvidence(true);
     try {
+      const category = (evidenceForm.evidence_category || '').trim();
       const payload = {
         quality_statement: evidenceForm.quality_statement,
         type: evidenceForm.type,
@@ -330,7 +331,7 @@ function CQCEvidenceInner({ data }) {
         description: evidenceForm.description.trim(),
         date_from: evidenceForm.date_from || null,
         date_to: evidenceForm.date_to || null,
-        evidence_category: evidenceForm.evidence_category || null,
+        ...(category ? { evidence_category: category } : {}),
       };
       let saved;
       if (evidenceForm.id) {
