@@ -18,6 +18,8 @@ export default function FileAttachments({
   deleteFile = deleteHrAttachment,
   downloadFile = downloadHrAttachment,
   title = 'Attached Documents',
+  emptyText = 'No documents attached.',
+  saveFirstMessage = 'Save the case first to attach documents.',
 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,16 +28,20 @@ export default function FileAttachments({
   const [description, setDescription] = useState('');
   const fileInputRef = useRef(null);
   const { confirm, ConfirmDialog } = useConfirm();
+  const listFiles = getFiles || getHrAttachments;
+  const createFile = uploadFile || uploadHrAttachment;
+  const removeFile = deleteFile || deleteHrAttachment;
+  const fetchFile = downloadFile || downloadHrAttachment;
 
   useEffect(() => {
     if (caseId) loadFiles();
-  }, [caseType, caseId]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFiles is stable given caseType+caseId
+  }, [caseType, caseId, getFiles]); // eslint-disable-line react-hooks/exhaustive-deps -- callback choice intentionally tracks getFiles only
 
   async function loadFiles() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getFiles(caseType, caseId);
+      const data = await listFiles(caseType, caseId);
       setFiles(data);
     } catch (err) {
       setError(err.message);
@@ -50,7 +56,7 @@ export default function FileAttachments({
     setUploading(true);
     setError(null);
     try {
-      await uploadFile(caseType, caseId, file, description);
+      await createFile(caseType, caseId, file, description);
       setDescription('');
       fileInputRef.current.value = '';
       await loadFiles();
@@ -64,7 +70,7 @@ export default function FileAttachments({
   async function handleDelete(att) {
     if (!await confirm(`Delete "${att.original_name}"?`)) return;
     try {
-      await deleteFile(att.id);
+      await removeFile(att.id);
       await loadFiles();
     } catch (err) {
       setError(err.message);
@@ -73,14 +79,14 @@ export default function FileAttachments({
 
   async function handleDownload(att) {
     try {
-      await downloadFile(att.id, att.original_name);
+      await fetchFile(att.id, att.original_name);
     } catch (err) {
       setError(err.message);
     }
   }
 
   if (!caseId) {
-    return <p className="text-sm text-gray-400 italic">Save the case first to attach documents.</p>;
+    return <p className="text-sm text-gray-400 italic">{saveFirstMessage}</p>;
   }
 
   return (
@@ -127,7 +133,7 @@ export default function FileAttachments({
       )}
 
       {files.length === 0 && !loading && (
-        <p className="text-sm text-gray-400">No documents attached.</p>
+        <p className="text-sm text-gray-400">{emptyText}</p>
       )}
 
       {!readOnly && (

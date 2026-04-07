@@ -26,6 +26,11 @@ vi.mock('../../lib/api.js', async () => {
     getCareCertData: vi.fn(),
     getCqcEvidence: vi.fn(),
     createCqcEvidence: vi.fn(),
+    updateCqcEvidence: vi.fn(),
+    getCqcEvidenceFiles: vi.fn(),
+    uploadCqcEvidenceFile: vi.fn(),
+    deleteCqcEvidenceFile: vi.fn(),
+    downloadCqcEvidenceFile: vi.fn(),
     deleteCqcEvidence: vi.fn(),
     logReportDownload: vi.fn(),
     createSnapshot: vi.fn(),
@@ -76,7 +81,32 @@ function setupApiMocks() {
   api.getDols.mockResolvedValue({ dols: [], mcaAssessments: [] });
   api.getCareCertData.mockResolvedValue({ careCert: {} });
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
-  api.createCqcEvidence.mockResolvedValue({ id: 'ev-001' });
+  api.createCqcEvidence.mockResolvedValue({
+    id: 'ev-001',
+    version: 0,
+    quality_statement: 'S1',
+    type: 'qualitative',
+    title: 'Created evidence',
+    description: 'Saved from modal',
+    date_from: null,
+    date_to: null,
+    evidence_category: 'feedback',
+  });
+  api.updateCqcEvidence.mockResolvedValue({
+    id: 'ev-001',
+    version: 1,
+    quality_statement: 'S1',
+    type: 'qualitative',
+    title: 'Updated evidence',
+    description: 'Saved from modal',
+    date_from: null,
+    date_to: null,
+    evidence_category: 'feedback',
+  });
+  api.getCqcEvidenceFiles.mockResolvedValue([]);
+  api.uploadCqcEvidenceFile.mockResolvedValue({});
+  api.deleteCqcEvidenceFile.mockResolvedValue({});
+  api.downloadCqcEvidenceFile.mockResolvedValue(undefined);
   api.deleteCqcEvidence.mockResolvedValue({});
   api.createSnapshot.mockResolvedValue({ id: 'snap-001' });
   api.getSnapshots.mockResolvedValue([]);
@@ -300,5 +330,36 @@ describe('CQCEvidence', () => {
     });
     expect(screen.getByRole('button', { name: 'Hide Snapshot History (1)' })).toBeInTheDocument();
     expect(screen.getByText('2026-03-08')).toBeInTheDocument();
+  });
+
+  it('shows the supporting files uploader after saving a new evidence item', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '+ Add Evidence' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: '+ Add Evidence' }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Add Evidence Item' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Save the evidence item first to attach supporting files.')).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText('Brief title...'), 'Family feedback summary');
+
+    await user.click(screen.getByRole('button', { name: 'Save Evidence' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence saved. You can now upload supporting files below.')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Supporting Files')).toBeInTheDocument();
+    expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
+    expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
   });
 });
