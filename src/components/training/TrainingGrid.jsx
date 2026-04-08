@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useId } from 'react';
 import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   buildComplianceMatrix, getComplianceStats,
@@ -22,6 +22,8 @@ const CELL_COLORS = {
   wrong_level:   'bg-orange-200 text-orange-800 hover:bg-orange-300 cursor-pointer hover:shadow-sm',
 };
 
+const CSV_IMPORT_ACCEPT = '.csv,.txt';
+
 export default function TrainingGrid({ training, trainingTypes, staff, homeSlug, _config, configUpdatedAt, onReload, readOnly = false }) {
   const [view, setView] = useState('matrix');
   const [filterTeam, setFilterTeam] = useState('All');
@@ -38,8 +40,11 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [showImportModal, setShowImportModal] = useState(false);
   const [csvRows, setCsvRows] = useState([]);
   const [csvErrors, setCsvErrors] = useState([]);
+  const [csvFileName, setCsvFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState(null);
+  const csvInputRef = useRef(null);
+  const csvInputId = useId();
 
   const todayStr = formatDate(new Date());
   const today = useMemo(() => parseDate(todayStr), [todayStr]);
@@ -229,6 +234,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
     if (readOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
+    setCsvFileName(file.name);
+    setImportError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const { rows, errors } = parseCSV(ev.target.result);
@@ -261,6 +268,8 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       setShowImportModal(false);
       setCsvRows([]);
       setCsvErrors([]);
+      setCsvFileName('');
+      if (csvInputRef.current) csvInputRef.current.value = '';
     } catch (e) {
       setImportError('Import failed: ' + e.message);
     } finally {
@@ -547,7 +556,15 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
       })()}
 
       {/* CSV Import Modal */}
-      <Modal isOpen={!readOnly && showImportModal} onClose={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); }} title="Import Training Records from CSV" size="lg">
+      <Modal isOpen={!readOnly && showImportModal} onClose={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportError(null); setCsvFileName(''); if (csvInputRef.current) csvInputRef.current.value = ''; }} title="Import Training Records from CSV" size="lg">
+        <input
+          id={csvInputId}
+          ref={csvInputRef}
+          type="file"
+          accept={CSV_IMPORT_ACCEPT}
+          onChange={handleCSVFile}
+          className="sr-only"
+        />
         {csvRows.length === 0 ? (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
@@ -559,10 +576,19 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
             <p className="text-xs text-gray-400">
               Dates can be DD/MM/YYYY or YYYY-MM-DD. Staff and training types are matched by name (case-insensitive).
             </p>
-            <div>
-              <label className={INPUT.label}>Select CSV File</label>
-              <input type="file" accept=".csv,.txt" onChange={handleCSVFile}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+            <div className="space-y-2">
+              <label className={INPUT.label} htmlFor={csvInputId}>Select CSV File</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`${BTN.secondary} ${BTN.sm}`}
+                  onClick={() => csvInputRef.current?.click()}
+                >
+                  Choose file
+                </button>
+                <span className="min-w-0 truncate text-sm text-gray-500">{csvFileName || 'No file selected'}</span>
+              </div>
+              <p className="text-[11px] text-gray-400">Accepted: CSV or TXT.</p>
             </div>
           </div>
         ) : (
@@ -615,10 +641,14 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
               </table>
             </div>
             <div>
-              <label className="text-xs text-gray-500 cursor-pointer hover:text-blue-600">
+              <button
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                className="text-xs text-blue-600 hover:text-blue-700"
+              >
                 Choose a different file
-                <input type="file" accept=".csv,.txt" onChange={handleCSVFile} className="hidden" />
-              </label>
+              </button>
+              {csvFileName && <p className="mt-1 text-[11px] text-gray-500">Current file: {csvFileName}</p>}
             </div>
           </div>
         )}

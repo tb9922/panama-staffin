@@ -204,6 +204,29 @@ describe('TrainingMatrix', () => {
     expect(screen.getByRole('button', { name: 'Manage Training Types' })).toBeInTheDocument();
   });
 
+  it('shows an explicit file chooser in the CSV import modal', async () => {
+    const user = userEvent.setup();
+
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: moduleId => moduleId === 'compliance',
+      homeRole: 'training_lead',
+      staffId: null,
+    });
+
+    renderWithProviders(<TrainingMatrix />, { user: { username: 'lead', role: 'training_lead' } });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Import CSV' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Import CSV' }));
+
+    expect(screen.getByRole('button', { name: 'Choose file' })).toBeInTheDocument();
+    expect(screen.getByText('No file selected')).toBeInTheDocument();
+    expect(screen.getByText('Accepted: CSV or TXT.')).toBeInTheDocument();
+  });
+
   it('honors read-only mode across training tabs', async () => {
     const user = userEvent.setup();
     useData.mockReturnValue({
