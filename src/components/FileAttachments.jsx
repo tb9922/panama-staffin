@@ -3,6 +3,9 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
 
+const ACCEPTED_UPLOAD_EXTENSIONS = '.pdf,.doc,.docx,.rtf,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.txt';
+const ACCEPTED_UPLOAD_HELP = 'Accepted: PDF, Word, RTF, Excel, CSV, JPG, PNG, GIF, WebP, HEIC/HEIF, TXT (max 20MB).';
+
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -140,7 +143,8 @@ export default function FileAttachments({
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label className={INPUT.label}>File</label>
-            <input ref={fileInputRef} type="file" className="text-sm text-gray-600" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" />
+            <input ref={fileInputRef} type="file" className="text-sm text-gray-600" accept={ACCEPTED_UPLOAD_EXTENSIONS} />
+            <p className="mt-1 text-[11px] text-gray-400">{ACCEPTED_UPLOAD_HELP}</p>
           </div>
           <div className="flex-1">
             <label className={INPUT.label}>Description (optional)</label>
