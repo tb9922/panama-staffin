@@ -5,9 +5,12 @@ import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getCurrentHome, getWhistleblowingConcerns, createWhistleblowingConcern,
-  updateWhistleblowingConcern, deleteWhistleblowingConcern, } from '../lib/api.js';
+  updateWhistleblowingConcern, deleteWhistleblowingConcern,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import {
   getWhistleblowingStats,
   CONCERN_CATEGORIES, CONCERN_SEVERITIES, CONCERN_STATUSES,
@@ -453,6 +456,21 @@ export default function WhistleblowingTracker() {
                 </div>
               </div>
             )}
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <FileAttachments
+                caseType="whistleblowing"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="Concern Evidence"
+                emptyText="No supporting evidence uploaded yet."
+                saveFirstMessage="Save the concern first to attach supporting evidence."
+              />
+            </div>
 
           </div>
             {/* Footer */}

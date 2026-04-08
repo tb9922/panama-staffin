@@ -19,6 +19,10 @@ vi.mock('../../lib/api.js', async () => {
     createMcaAssessment: vi.fn(),
     updateMcaAssessment: vi.fn(),
     deleteMcaAssessment: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -116,6 +120,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getDols.mockResolvedValue(MOCK_RESPONSE);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -265,5 +270,21 @@ describe('DolsTracker', () => {
       expect(screen.getByDisplayValue('All Types')).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue('All Statuses')).toBeInTheDocument();
+  });
+
+  it('shows DoLS evidence uploader for existing records', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Margaret Wilson')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Margaret Wilson'));
+
+    await waitFor(() => {
+      expect(screen.getByText('DoLS / LPS Evidence')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
   });
 });

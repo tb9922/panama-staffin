@@ -5,9 +5,11 @@ import { formatDate, parseDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getPolicies, createPolicy, updatePolicy, deletePolicy,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import {
   getPolicyStatus, getPolicyStats,
@@ -433,6 +435,19 @@ export default function PolicyReviewTracker() {
                 <textarea className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
+
+              <FileAttachments
+                caseType="policy_review"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="Policy Documents"
+                emptyText="No policy documents uploaded yet."
+                saveFirstMessage="Save the policy first to attach the current document and supporting evidence."
+              />
 
               {/* Version History (read-only) */}
               {form.changes.length > 0 && (

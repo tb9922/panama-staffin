@@ -3,10 +3,13 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
-  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk, } from '../lib/api.js';
+  getCurrentHome, getRisks, createRisk, updateRisk, deleteRisk,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import {
   getRiskScore, getRiskBand, getRiskStats,
   RISK_CATEGORIES, LIKELIHOOD_LABELS, IMPACT_LABELS,
@@ -581,6 +584,21 @@ export default function RiskRegister() {
                 ))}
               </div>
             )}
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <FileAttachments
+                caseType="risk"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="Risk Evidence"
+                emptyText="No risk evidence uploaded yet."
+                saveFirstMessage="Save the risk first to attach supporting evidence."
+              />
+            </div>
 
           </div>
             {/* Footer */}

@@ -5,10 +5,13 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import ResidentPicker from '../components/ResidentPicker.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getDols, createDols, updateDols, deleteDols,
-  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment, } from '../lib/api.js';
+  createMcaAssessment, updateMcaAssessment, deleteMcaAssessment,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import {
   getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
@@ -575,6 +578,19 @@ export default function DolsTracker() {
                 <textarea className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
+
+              <FileAttachments
+                caseType="dols"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="DoLS / LPS Evidence"
+                emptyText="No supporting files uploaded yet."
+                saveFirstMessage="Save the DoLS / LPS record first to attach supporting evidence."
+              />
             </div>
 
             {/* Footer */}
@@ -652,6 +668,19 @@ export default function DolsTracker() {
                 <textarea className={`${INPUT.base} h-16`} value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
+
+              <FileAttachments
+                caseType="mca_assessment"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="MCA Supporting Files"
+                emptyText="No supporting files uploaded yet."
+                saveFirstMessage="Save the MCA assessment first to attach supporting evidence."
+              />
             </div>
 
             {/* Footer */}

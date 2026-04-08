@@ -14,13 +14,28 @@ import * as auditService from '../services/auditService.js';
 
 const router = Router();
 
-const moduleSchema = z.enum(['incident', 'complaint', 'ipc_audit', 'maintenance']);
+const moduleSchema = z.enum([
+  'incident',
+  'complaint',
+  'ipc_audit',
+  'maintenance',
+  'policy_review',
+  'risk',
+  'whistleblowing',
+  'dols',
+  'mca_assessment',
+]);
 const recordIdSchema = z.string().min(1).max(50);
 const permissionByModule = {
   incident: 'compliance',
   complaint: 'compliance',
   ipc_audit: 'compliance',
   maintenance: 'governance',
+  policy_review: 'governance',
+  risk: 'governance',
+  whistleblowing: 'governance',
+  dols: 'compliance',
+  mca_assessment: 'compliance',
 };
 
 function safePath(segment) {

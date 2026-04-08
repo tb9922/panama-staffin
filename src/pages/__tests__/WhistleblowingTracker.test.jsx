@@ -16,6 +16,10 @@ vi.mock('../../lib/api.js', async () => {
     createWhistleblowingConcern: vi.fn(),
     updateWhistleblowingConcern: vi.fn(),
     deleteWhistleblowingConcern: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -105,6 +109,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getWhistleblowingConcerns.mockResolvedValue(MOCK_RESPONSE);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -247,5 +252,22 @@ describe('WhistleblowingTracker', () => {
       expect(screen.getByText('2026-03-01')).toBeInTheDocument();
       expect(screen.queryByText('2026-02-01')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows concern evidence uploader for existing concerns', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('2026-03-01')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('2026-03-01'));
+    await user.click(screen.getByRole('tab', { name: 'Investigation & Outcome' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Concern Evidence')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No supporting evidence uploaded yet.')).toBeInTheDocument();
   });
 });
