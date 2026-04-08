@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getPensionEnrolments,
+  upsertPensionEnrolment,
+  getPensionConfig,
+  getCurrentHome,
+  getSchedulingData,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -427,6 +438,18 @@ export default function PensionManager() {
               onChange={e => field('notes', e.target.value)}
               placeholder="e.g. Opted out by written notice 15 Jan 2026" />
           </div>
+          <FileAttachments
+            caseType="payroll_pension"
+            caseId={editStaffId || null}
+            readOnly={!canEdit}
+            title="Pension Evidence"
+            emptyText="No pension evidence uploaded yet."
+            saveFirstText="Save this pension enrolment first, then attach opt-out notices, postponement letters, and supporting evidence."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
 
         <div className={MODAL.footer}>

@@ -16,6 +16,10 @@ vi.mock('../../lib/api.js', async () => {
     deleteHandoverEntry: vi.fn(),
     acknowledgeHandoverEntry: vi.fn(),
     getIncidents: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -68,6 +72,7 @@ describe('HandoverNotes', () => {
     api.getIncidents.mockResolvedValue({ incidents: [] });
     api.createHandoverEntry.mockResolvedValue({ ...MOCK_ENTRIES[0], id: 'h-new' });
     api.acknowledgeHandoverEntry.mockResolvedValue({ ...MOCK_ENTRIES[0], acknowledged_by: 'Admin', acknowledged_at: '2026-03-08T09:00:00Z' });
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('renders the Handover Book heading', async () => {
@@ -120,5 +125,13 @@ describe('HandoverNotes', () => {
     // Priority radio buttons appear in the modal (may also appear on existing entries)
     expect(screen.getAllByText('Urgent').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Action Required').length).toBeGreaterThan(0);
+  });
+
+  it('shows the handover evidence panel when editing an entry', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<HandoverNotes />);
+    await waitFor(() => expect(screen.getByText(/resident in room 5 had a fall/i)).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await waitFor(() => expect(screen.getByText('Handover Evidence')).toBeInTheDocument());
   });
 });

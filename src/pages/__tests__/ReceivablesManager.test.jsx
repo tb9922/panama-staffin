@@ -12,6 +12,10 @@ vi.mock('../../lib/api.js', async () => {
     getReceivablesDetail: vi.fn(),
     getInvoiceChases: vi.fn(),
     createInvoiceChase: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -51,6 +55,7 @@ const MOCK_RECEIVABLES = {
 function setupMocks(data = MOCK_RECEIVABLES) {
   api.getReceivablesDetail.mockResolvedValue(data);
   api.getInvoiceChases.mockResolvedValue([]);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(data) {
@@ -147,5 +152,17 @@ describe('ReceivablesManager', () => {
       expect(screen.getByText('Chase History')).toBeInTheDocument()
     );
     expect(screen.queryByRole('button', { name: 'Record Chase' })).not.toBeInTheDocument();
+  });
+
+  it('shows invoice evidence panel in the chase modal', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('INV-001')).toBeInTheDocument()
+    );
+    await user.click(screen.getByText('INV-001'));
+    await waitFor(() =>
+      expect(screen.getByText('Invoice Evidence')).toBeInTheDocument()
+    );
   });
 });

@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { formatDate, parseDate, addDays } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
-import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents, isAbortLikeError } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getHandoverEntries,
+  createHandoverEntry,
+  updateHandoverEntry,
+  deleteHandoverEntry,
+  acknowledgeHandoverEntry,
+  getCurrentHome,
+  getIncidents,
+  isAbortLikeError,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
@@ -341,6 +355,20 @@ export default function HandoverNotes() {
               </select>
             </div>
           )}
+          <div className="border-t pt-3">
+            <FileAttachments
+              caseType="handover_entry"
+              caseId={modal === 'edit' ? editId : null}
+              readOnly={!canEdit}
+              title="Handover Evidence"
+              emptyText="No handover evidence uploaded yet."
+              saveFirstMessage="Save this handover entry first, then reopen it here to upload supporting evidence."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
+          </div>
         </div>
         <div className={MODAL.footer}>
           <button onClick={closeModal} className={BTN.ghost} disabled={saving}>Cancel</button>

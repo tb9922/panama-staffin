@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getTimesheets, upsertTimesheet, approveTimesheet, bulkApproveTimesheets,
-  getCurrentHome, getSchedulingData, } from '../lib/api.js';
+  getCurrentHome, getSchedulingData,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import { getStaffForDay, formatDate, addDays } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
@@ -385,6 +388,18 @@ export default function TimesheetManager() {
                   onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Optional notes" />
               </div>
+              <FileAttachments
+                caseType="payroll_timesheet"
+                caseId={editModal?.id}
+                readOnly={!canEdit}
+                title="Timesheet Evidence"
+                emptyText="No timesheet evidence uploaded yet."
+                saveFirstText="Save this timesheet entry first, then attach supporting evidence."
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+              />
             </div>
 
             <div className={MODAL.footer}>

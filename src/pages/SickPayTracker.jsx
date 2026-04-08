@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getSickPeriods,
+  createSickPeriod,
+  updateSickPeriod,
+  getSSPConfig,
+  getCurrentHome,
+  getSchedulingData,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -363,6 +375,18 @@ export default function SickPayTracker() {
               onChange={e => cfield('notes', e.target.value)}
               placeholder="e.g. Self-certified absence, fit note requested" />
           </div>
+          <FileAttachments
+            caseType="payroll_sick_period"
+            caseId={null}
+            readOnly
+            title="Sick Leave Evidence"
+            emptyText="No sick leave evidence uploaded yet."
+            saveFirstText="Record this sick period first, then reopen it to attach fit notes and supporting documents."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
 
         <div className={MODAL.footer}>
@@ -421,6 +445,18 @@ export default function SickPayTracker() {
               onChange={e => ufield('notes', e.target.value)}
               placeholder="e.g. Fit note received, return to work interview completed" />
           </div>
+          <FileAttachments
+            caseType="payroll_sick_period"
+            caseId={showUpdate?.id}
+            readOnly={!canEdit}
+            title="Sick Leave Evidence"
+            emptyText="No sick leave evidence uploaded yet."
+            saveFirstText="Record this sick period first, then attach fit notes and related evidence."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
 
         <div className={MODAL.footer}>

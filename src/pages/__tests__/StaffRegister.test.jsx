@@ -17,6 +17,10 @@ vi.mock('../../lib/api.js', async () => {
     createStaff: vi.fn(),
     updateStaffMember: vi.fn(),
     deleteStaffMember: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -48,6 +52,7 @@ beforeEach(() => {
   // Default: successful load with mock scheduling data
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -299,5 +304,17 @@ describe('StaffRegister', () => {
       expect(screen.getByText('Staff Database')).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: /Edit/i })).not.toBeInTheDocument();
+  });
+
+  it('opens the staff evidence modal from the actions column', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+    await user.click(screen.getAllByRole('button', { name: 'Docs' })[0]);
+    await waitFor(() => {
+      expect(screen.getByText('Staff Evidence')).toBeInTheDocument();
+    });
   });
 });

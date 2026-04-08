@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
-  getSchedulingData, } from '../lib/api.js';
+  getSchedulingData, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const STATUS_BADGE = {
@@ -526,6 +527,20 @@ export default function PayrollDetail() {
           <span className="font-medium">Notes: </span>{run.notes}
         </div>
       )}
+
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-4">
+        <FileAttachments
+          caseType="payroll_run"
+          caseId={run.id}
+          readOnly={!canEdit}
+          title="Payroll Evidence"
+          emptyText="No payroll evidence uploaded for this run."
+          getFiles={getRecordAttachments}
+          uploadFile={uploadRecordAttachment}
+          deleteFile={deleteRecordAttachment}
+          downloadFile={downloadRecordAttachment}
+        />
+      </div>
 
       {/* Approve confirmation modal */}
       <Modal isOpen={showApproveConfirm} onClose={() => setShowApproveConfirm(false)} title="Approve Pay Run" size="sm">

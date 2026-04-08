@@ -15,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     upsertPensionEnrolment: vi.fn(),
     getPensionConfig: vi.fn(),
     getHrStaffList: vi.fn().mockResolvedValue([]),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -72,6 +76,7 @@ function setupMocks(enrolments = MOCK_ENROLMENTS) {
   api.getPensionEnrolments.mockResolvedValue(enrolments);
   api.getPensionConfig.mockResolvedValue(MOCK_CONFIG);
   api.upsertPensionEnrolment.mockResolvedValue({});
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(enrolments) {
@@ -94,6 +99,7 @@ describe('PensionManager', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('renders without crashing', async () => {

@@ -22,6 +22,10 @@ vi.mock('../../lib/api.js', async () => {
     createRopaActivity: vi.fn(),
     updateRopaActivity: vi.fn(),
     deleteRopaActivity: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -55,6 +59,7 @@ describe('RopaManager', () => {
     api.createRopaActivity.mockResolvedValue({ id: 12 });
     api.updateRopaActivity.mockResolvedValue({ id: 11 });
     api.deleteRopaActivity.mockResolvedValue({ ok: true });
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('loads and renders activity rows', async () => {

@@ -3,11 +3,17 @@ import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseD
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
+import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getCurrentHome,
   getSchedulingData,
   bulkUpsertOverrides,
   deleteOverride,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
@@ -47,6 +53,7 @@ export default function AnnualLeave() {
   const [bookingEnd, setBookingEnd] = useState('');
   const [bookingError, setBookingError] = useState(null);
   const [bookingMsg, setBookingMsg] = useState(null);
+  const [docsTarget, setDocsTarget] = useState(null);
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -518,13 +525,31 @@ export default function AnnualLeave() {
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}</div>
                   </div>
-                  {canEdit && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setDocsTarget(b)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">Docs</button>
+                    {canEdit && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+      <Modal isOpen={!!docsTarget} onClose={() => setDocsTarget(null)} title={docsTarget ? `${docsTarget.staffName} - ${docsTarget.date}` : 'Annual Leave Evidence'} size="lg">
+        {docsTarget && (
+          <FileAttachments
+            caseType="schedule_override"
+            caseId={`${docsTarget.date}__${docsTarget.staffId}`}
+            readOnly={!canEdit}
+            title="Annual Leave Evidence"
+            emptyText="No evidence uploaded for this annual leave booking."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

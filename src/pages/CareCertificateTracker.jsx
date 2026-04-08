@@ -10,8 +10,19 @@ import {
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
-import { getCurrentHome, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getCareCertData,
+  startCareCert,
+  updateCareCert,
+  deleteCareCert,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -538,6 +549,20 @@ export default function CareCertificateTracker() {
                   </div>
                 );
               })}
+            </div>
+            <div className="mt-4">
+              <FileAttachments
+                caseType="care_certificate"
+                caseId={selectedStaffId}
+                readOnly={!canEdit}
+                title="Care Certificate Evidence"
+                emptyText="No care certificate evidence uploaded yet."
+                saveFirstText="Start this care certificate first, then attach observations, assessor notes, and supporting documents."
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+              />
             </div>
 
             {/* Footer */}

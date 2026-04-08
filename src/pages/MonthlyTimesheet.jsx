@@ -2,11 +2,17 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
   upsertTimesheet, approveTimesheet, disputeTimesheet,
-  getSchedulingData, } from '../lib/api.js';
+  getSchedulingData,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -713,6 +719,21 @@ export default function MonthlyTimesheet() {
               <label className={INPUT.label}>Notes</label>
               <input className={INPUT.base} value={editForm.notes} placeholder="Optional notes"
                 onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+
+            <div className="border-t pt-4 mb-4">
+              <FileAttachments
+                caseType="payroll_timesheet"
+                caseId={editModal.row.entry?.id || null}
+                readOnly={!canEdit}
+                title="Timesheet Evidence"
+                emptyText="No timesheet evidence uploaded yet."
+                saveFirstMessage="Save this timesheet entry first, then reopen it here to upload supporting evidence."
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+              />
             </div>
 
             <div className={MODAL.footer}>

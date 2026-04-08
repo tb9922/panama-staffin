@@ -15,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     startCareCert: vi.fn(),
     updateCareCert: vi.fn(),
     deleteCareCert: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -77,6 +81,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getCareCertData.mockResolvedValue(MOCK_RESPONSE);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

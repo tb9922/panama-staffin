@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
-  getAgencyMetrics, getCurrentHome, } from '../lib/api.js';
+  getAgencyMetrics, getCurrentHome,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -89,6 +92,18 @@ function ProviderModal({ existing, onSave, onClose }) {
             <label htmlFor="prov-active" className="text-sm text-gray-700">Active</label>
           </div>
         )}
+        <FileAttachments
+          caseType="agency_provider"
+          caseId={existing?.id}
+          readOnly={false}
+          title="Provider Documents"
+          emptyText="No provider documents uploaded yet."
+          saveFirstText="Save this provider first, then attach terms, rates, and onboarding documents."
+          getFiles={getRecordAttachments}
+          uploadFile={uploadRecordAttachment}
+          deleteFile={deleteRecordAttachment}
+          downloadFile={downloadRecordAttachment}
+        />
       </div>
       <div className={MODAL.footer}>
         <button className={BTN.secondary} onClick={onClose}>Cancel</button>
@@ -223,6 +238,18 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
             Total cost: <strong>{fmt(parseFloat(form.hours) * parseFloat(form.hourly_rate))}</strong>
           </div>
         )}
+        <FileAttachments
+          caseType="agency_shift"
+          caseId={existing?.id}
+          readOnly={false}
+          title="Shift Evidence"
+          emptyText="No agency shift evidence uploaded yet."
+          saveFirstText="Save this agency shift first, then attach invoices, confirmations, and supporting documents."
+          getFiles={getRecordAttachments}
+          uploadFile={uploadRecordAttachment}
+          deleteFile={deleteRecordAttachment}
+          downloadFile={downloadRecordAttachment}
+        />
       </div>
       <div className={MODAL.footer}>
         <button className={BTN.secondary} onClick={onClose}>Cancel</button>

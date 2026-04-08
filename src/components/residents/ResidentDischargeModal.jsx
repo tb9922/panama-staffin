@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
-import { updateFinanceResident } from '../../lib/api.js';
+import FileAttachments from '../FileAttachments.jsx';
+import {
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+  updateFinanceResident,
+} from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 
 const DISCHARGE_REASONS = [
@@ -66,6 +73,18 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
         <div>
           <label className={INPUT.label}>Notes</label>
           <textarea className={INPUT.base} rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional discharge notes" />
+        </div>
+        <div className="border-t pt-3">
+          <FileAttachments
+            caseType="finance_resident"
+            caseId={resident.id}
+            title="Resident Evidence"
+            emptyText="No resident documents uploaded yet."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
       </div>
 

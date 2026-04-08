@@ -2,7 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getPaymentSchedules, createPaymentSchedule, updatePaymentSchedule, processPaymentSchedule } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getCurrentHome,
+  getPaymentSchedules,
+  createPaymentSchedule,
+  updatePaymentSchedule,
+  processPaymentSchedule,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -290,6 +301,20 @@ export default function PayablesManager() {
 
           <div className="col-span-2"><label className={INPUT.label}>Notes</label>
             <textarea rows={2} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} /></div>
+          <div className="col-span-2">
+            <FileAttachments
+              caseType="finance_payment_schedule"
+              caseId={editing?.id}
+              readOnly={!canEdit}
+              title="Schedule Evidence"
+              emptyText="No schedule evidence uploaded yet."
+              saveFirstText="Save this payment schedule first, then attach contracts, mandates, and supplier evidence."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
+          </div>
         </div>
 
         <div className={MODAL.footer}>

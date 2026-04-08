@@ -20,6 +20,10 @@ vi.mock('../../lib/api.js', async () => {
     deleteOverride: vi.fn(),
     upsertDayNote: vi.fn(),
     updateStaffMember: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -48,6 +52,7 @@ beforeEach(() => {
   api.deleteOverride.mockResolvedValue({});
   api.upsertDayNote.mockResolvedValue({});
   api.updateStaffMember.mockResolvedValue({});
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -208,6 +213,9 @@ describe('DailyStatus', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Change Status' })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(api.getRecordAttachments).toHaveBeenCalledWith('schedule_override', `${FIXED_DATE}__S001`);
     });
 
     await user.selectOptions(screen.getByRole('combobox'), 'L');

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
-  getCurrentHome, } from '../lib/api.js';
+  getCurrentHome, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -267,6 +269,18 @@ export default function PayRatesConfig() {
               Editing creates a new version of this rule dated today. The previous version is preserved for historical payroll records.
             </p>
           )}
+          <FileAttachments
+            caseType="payroll_rate_rule"
+            caseId={modal?.mode === 'edit' ? modal?.id : null}
+            readOnly={!canEdit}
+            title="Rate Rule Evidence"
+            emptyText="No rate rule evidence uploaded yet."
+            saveFirstText="Save this pay rate rule first, then attach agreements, approvals, and supporting evidence."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
         <div className={MODAL.footer}>
           <button className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>

@@ -28,6 +28,10 @@ vi.mock('../../lib/api.js', async () => {
     getPayrollSummaryPdfUrl: vi.fn(() => '/api/payroll/summary.pdf'),
     getPayslips: vi.fn(),
     getSchedulingData: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -126,6 +130,7 @@ function setupMocks(runData = MOCK_CALCULATED_RUN) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
   api.getPayrollRun.mockResolvedValue(runData);
   api.getPayslips.mockResolvedValue([]);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(runData) {
@@ -202,6 +207,7 @@ describe('PayrollDetail', () => {
     expect(screen.getAllByText('Staff').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Total Gross')).toBeInTheDocument();
     expect(screen.getByText('Enhancements')).toBeInTheDocument();
+    expect(screen.getByText('Payroll Evidence')).toBeInTheDocument();
   });
 
   it('shows Calculate button for admin on draft run', async () => {

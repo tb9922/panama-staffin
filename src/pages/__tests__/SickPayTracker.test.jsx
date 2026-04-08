@@ -14,6 +14,10 @@ vi.mock('../../lib/api.js', async () => {
     createSickPeriod: vi.fn(),
     updateSickPeriod: vi.fn(),
     getSSPConfig: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -67,6 +71,7 @@ function setupMocks(periods = MOCK_PERIODS) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
   api.getSickPeriods.mockResolvedValue(periods);
   api.getSSPConfig.mockResolvedValue(MOCK_SSP_CONFIG);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 describe('SickPayTracker', () => {
@@ -74,6 +79,7 @@ describe('SickPayTracker', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('smoke test - renders without crashing', async () => {

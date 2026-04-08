@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_STAFF, MOCK_CONFIG } from '../../test/fixtures/schedulingData.js';
 import AnnualLeave from '../AnnualLeave.jsx';
@@ -18,6 +19,10 @@ vi.mock('../../lib/api.js', async (importActual) => {
     getSchedulingData: vi.fn(),
     bulkUpsertOverrides: vi.fn(),
     deleteOverride: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -58,7 +63,7 @@ vi.mock('../../lib/design.js', async (importActual) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-import { getSchedulingData } from '../../lib/api.js';
+import * as api from '../../lib/api.js';
 import { getAccrualSummary, getLeaveYear } from '../../lib/accrual.js';
 
 const MOCK_LEAVE_YEAR = {
@@ -95,7 +100,8 @@ function buildAccrualMap(remainingHours = 100, usedHours = 20) {
 
 function setupMocks(overrides = {}) {
   const schedData = { ...MOCK_SCHEDULING_DATA, ...overrides };
-  getSchedulingData.mockResolvedValue(schedData);
+  api.getSchedulingData.mockResolvedValue(schedData);
+  api.getRecordAttachments.mockResolvedValue([]);
   getAccrualSummary.mockReturnValue(buildAccrualMap());
   getLeaveYear.mockReturnValue(MOCK_LEAVE_YEAR);
 }
@@ -120,7 +126,7 @@ describe('AnnualLeave', () => {
 
   it('shows loading spinner initially', () => {
     // getSchedulingData returns a never-resolving promise so we stay in loading
-    getSchedulingData.mockReturnValue(new Promise(() => {}));
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<AnnualLeave />);
     // The spinner is an animated div — check by class
     const spinner = document.querySelector('.animate-spin');
@@ -129,9 +135,9 @@ describe('AnnualLeave', () => {
 
   it('loads a centered scheduling window around today', async () => {
     renderWithProviders(<AnnualLeave />);
-    await waitFor(() => expect(getSchedulingData).toHaveBeenCalled());
+    await waitFor(() => expect(api.getSchedulingData).toHaveBeenCalled());
     const todayDate = parseDate('2026-03-08');
-    expect(getSchedulingData).toHaveBeenCalledWith('test-home', {
+    expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
       from: formatDate(addDays(todayDate, -200)),
       to: formatDate(addDays(todayDate, 200)),
     });
@@ -148,7 +154,7 @@ describe('AnnualLeave', () => {
       user: { username: 'staff', role: 'viewer' },
     });
     await waitFor(() => expect(screen.getByText('Annual leave planning is not available for staff self-service accounts.')).toBeInTheDocument());
-    expect(getSchedulingData).not.toHaveBeenCalled();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('displays accrual table with staff data after load', async () => {
@@ -246,7 +252,7 @@ describe('AnnualLeave', () => {
         },
       },
     };
-    getSchedulingData.mockResolvedValue(schedData);
+    api.getSchedulingData.mockResolvedValue(schedData);
 
     renderWithProviders(<AnnualLeave />);
     await waitFor(() => expect(screen.getByText('Upcoming AL Bookings')).toBeInTheDocument());
@@ -261,8 +267,26 @@ describe('AnnualLeave', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
+  it('opens the annual leave evidence modal for an upcoming booking', async () => {
+    const user = userEvent.setup();
+    const futureDate = '2026-04-01';
+    api.getSchedulingData.mockResolvedValue({
+      ...MOCK_SCHEDULING_DATA,
+      overrides: {
+        [futureDate]: {
+          S001: { shift: 'AL', reason: 'Annual leave', source: 'al', al_hours: 12 },
+        },
+      },
+    });
+
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Docs' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Docs' }));
+    await waitFor(() => expect(screen.getByText('Annual Leave Evidence')).toBeInTheDocument());
+  });
+
   it('handles API error — shows error message', async () => {
-    getSchedulingData.mockRejectedValue(new Error('Failed to load scheduling data'));
+    api.getSchedulingData.mockRejectedValue(new Error('Failed to load scheduling data'));
 
     renderWithProviders(<AnnualLeave />);
 

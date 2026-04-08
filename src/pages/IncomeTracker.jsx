@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
-  recordFinancePayment, } from '../lib/api.js';
+  recordFinancePayment, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
@@ -306,6 +308,19 @@ function ResidentsTab({ home, canEdit }) {
                 <textarea rows={5} value={form.notes || ''} onChange={e => set('notes', e.target.value)} className={INPUT.base} />
               </div>
             )}
+
+            <FileAttachments
+              caseType="finance_resident"
+              caseId={editing?.id}
+              readOnly={!canEdit}
+              title="Resident Billing Evidence"
+              emptyText="No resident billing evidence uploaded yet."
+              saveFirstText="Save this resident profile first, then attach funding letters, fee agreements, and supporting documents."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
@@ -609,6 +624,19 @@ function InvoicesTab({ home, canEdit }) {
                 )}
               </div>
             )}
+
+            <FileAttachments
+              caseType="finance_invoice"
+              caseId={editing?.id}
+              readOnly={!canEdit}
+              title="Invoice Evidence"
+              emptyText="No invoice evidence uploaded yet."
+              saveFirstText="Save this invoice first, then attach remittances, statements, and supporting documents."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>

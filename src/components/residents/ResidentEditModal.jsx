@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES, getLabel, formatCurrency } from '../../lib/finance.js';
-import { updateFinanceResident, getFinanceFeeHistory } from '../../lib/api.js';
+import FileAttachments from '../FileAttachments.jsx';
+import {
+  updateFinanceResident,
+  getFinanceFeeHistory,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 
 export default function ResidentEditModal({ home, resident, canEdit, onClose, onSaved }) {
@@ -57,6 +65,7 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
     { id: 'profile', label: 'Profile' },
     { id: 'fees', label: 'Fees' },
     { id: 'history', label: 'Fee History' },
+    { id: 'documents', label: 'Documents' },
   ];
   const bedManagerUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
 
@@ -214,6 +223,20 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
             ))
           )}
         </div>
+      )}
+
+      {tab === 'documents' && (
+        <FileAttachments
+          caseType="finance_resident"
+          caseId={resident.id}
+          readOnly={readOnly}
+          title="Resident Evidence"
+          emptyText="No resident documents uploaded yet."
+          getFiles={getRecordAttachments}
+          uploadFile={uploadRecordAttachment}
+          deleteFile={deleteRecordAttachment}
+          downloadFile={downloadRecordAttachment}
+        />
       )}
 
       {canEdit && (

@@ -17,6 +17,10 @@ vi.mock('../../lib/api.js', async () => {
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getSchedulingData: vi.fn(),
     saveConfig: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -62,6 +66,7 @@ const SCHED_DATA_WITH_BUDGET = {
 function setupMocks(schedData = SCHED_DATA_NO_BUDGET) {
   api.getSchedulingData.mockResolvedValue(schedData);
   api.saveConfig.mockResolvedValue({});
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(schedData) {
@@ -172,6 +177,7 @@ describe('BudgetTracker', () => {
     expect(screen.getByText('Set Monthly Budget')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('e.g. 50000')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('e.g. 5000')).toBeInTheDocument();
+    expect(screen.getByText('Budget Evidence')).toBeInTheDocument();
   });
 
   it('variance display shows over/under status with budget set', async () => {

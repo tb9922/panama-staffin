@@ -1,4 +1,6 @@
 import Modal from '../Modal.jsx';
+import FileAttachments from '../FileAttachments.jsx';
+import { getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../../lib/api.js';
 import { BADGE, BTN, INPUT, MODAL, TABLE } from '../../lib/design.js';
 
 export default function BedManagerModals({
@@ -79,6 +81,18 @@ export default function BedManagerModals({
               <label className={INPUT.label}>Notes</label>
               <textarea className={INPUT.base} rows={2} value={addForm.notes} onChange={e => setAddForm(form => ({ ...form, notes: e.target.value }))} />
             </div>
+            <div className="border-t pt-4">
+              <FileAttachments
+                caseType="bed"
+                caseId={null}
+                title="Bed Evidence"
+                saveFirstMessage="Save the bed first, then reopen it here to upload room photos and supporting evidence."
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+              />
+            </div>
           </div>
           <div className={MODAL.footer}>
             <button type="button" className={BTN.secondary} onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -128,6 +142,20 @@ export default function BedManagerModals({
               <label className={INPUT.label}>Notes</label>
               <textarea className={INPUT.base} rows={2} value={editForm.notes} onChange={e => setEditForm(form => ({ ...form, notes: e.target.value }))} />
             </div>
+            {editBed && (
+              <div className="border-t pt-4">
+                <FileAttachments
+                  caseType="bed"
+                  caseId={editBed.id}
+                  title="Bed Evidence"
+                  emptyText="No bed evidence uploaded yet."
+                  getFiles={getRecordAttachments}
+                  uploadFile={uploadRecordAttachment}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                />
+              </div>
+            )}
           </div>
           <div className={MODAL.footer}>
             <button type="button" className={BTN.secondary} onClick={() => { setShowEditModal(false); setEditBed(null); }}>Cancel</button>

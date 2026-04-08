@@ -2,10 +2,21 @@ import { useState, useMemo, useEffect, Fragment } from 'react';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getSchedulingData,
+  createStaff,
+  updateStaffMember,
+  deleteStaffMember,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -50,12 +61,14 @@ export default function StaffRegister() {
   const [editing, setEditing] = useState(null); // staffId or null
   const [editingRow, setEditingRow] = useState(null); // local copy of the row being edited
   const [showAdd, setShowAdd] = useState(false);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [evidenceStaff, setEvidenceStaff] = useState(null);
   const [newStaff, setNewStaff] = useState({ ...EMPTY_STAFF });
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useDirtyGuard(!!editing || showAdd);
+  useDirtyGuard(!!editing || showAdd || showEvidenceModal);
 
   useEffect(() => {
     let stale = false;
@@ -201,6 +214,16 @@ export default function StaffRegister() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openEvidenceModal(staffMember) {
+    setEvidenceStaff(staffMember);
+    setShowEvidenceModal(true);
+  }
+
+  function closeEvidenceModal() {
+    setShowEvidenceModal(false);
+    setEvidenceStaff(null);
   }
 
   const teamCounts = useMemo(() => {
@@ -646,6 +669,7 @@ export default function StaffRegister() {
                         ) : (
                           <button onClick={() => startEditing(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
                         )}
+                        <button onClick={() => openEvidenceModal(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Docs</button>
                         <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
                       </div>
                       )}
@@ -676,6 +700,24 @@ export default function StaffRegister() {
       <div className="mt-3 text-xs text-gray-400 print:hidden">
         Click any field to edit inline, then click Save to persist. Changes to pay rates and skills affect all cost and coverage calculations across the app.
       </div>
+      <Modal isOpen={showEvidenceModal} onClose={closeEvidenceModal} title={evidenceStaff ? `Documents - ${evidenceStaff.name}` : 'Staff Documents'} size="lg">
+        {evidenceStaff && (
+          <FileAttachments
+            caseType="staff_register"
+            caseId={evidenceStaff.id}
+            readOnly={!canEdit}
+            title="Staff Evidence"
+            emptyText="No staff documents uploaded yet."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
+        )}
+        <div className={MODAL.footer}>
+          <button onClick={closeEvidenceModal} className={BTN.secondary}>Close</button>
+        </div>
+      </Modal>
       {ConfirmDialog}
     </div>
   );

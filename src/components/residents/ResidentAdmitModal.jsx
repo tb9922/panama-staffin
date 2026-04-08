@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES } from '../../lib/finance.js';
+import FileAttachments from '../FileAttachments.jsx';
 import { createFinanceResident, getLoggedInUser } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
 
@@ -145,6 +146,16 @@ export default function ResidentAdmitModal({ home, onClose, onSaved }) {
             </div>
           </div>
         )}
+
+        <div className="mt-4 border-t pt-4">
+          <FileAttachments
+            caseType="finance_resident"
+            caseId={null}
+            readOnly
+            title="Resident Evidence"
+            saveFirstMessage="Save the resident first, then reopen the record to upload admission paperwork and supporting evidence."
+          />
+        </div>
 
         {/* Bed assignment note */}
         <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded text-sm text-gray-600">

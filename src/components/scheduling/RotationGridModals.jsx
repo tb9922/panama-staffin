@@ -1,6 +1,8 @@
 import Modal from '../Modal.jsx';
+import FileAttachments from '../FileAttachments.jsx';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { SHIFT_COLORS, getScheduledShift, getCycleDay, isOTShift, isAgencyShift } from '../../lib/rotation.js';
+import { getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../../lib/api.js';
 
 const SHIFT_OPTIONS = [
   { value: 'E', label: 'E - Early', group: 'Standard' },
@@ -250,6 +252,20 @@ export default function RotationGridModals({
               ) : editing.proposedShift === editing.currentShift ? (
                 <div className="text-sm text-gray-400 text-center py-4">Select a different shift to see the impact</div>
               ) : null}
+
+              <div className="border-t pt-4 mt-4">
+                <FileAttachments
+                  caseType="schedule_override"
+                  caseId={`${editing.dateStr}__${editing.staffId}`}
+                  readOnly={!canEdit}
+                  title="Shift Evidence"
+                  emptyText="No evidence uploaded for this shift override."
+                  getFiles={getRecordAttachments}
+                  uploadFile={uploadRecordAttachment}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                />
+              </div>
             </div>
 
             <div className={MODAL.footer}>

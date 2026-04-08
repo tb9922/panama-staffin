@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getReceivablesDetail, getInvoiceChases, createInvoiceChase } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getCurrentHome,
+  getReceivablesDetail,
+  getInvoiceChases,
+  createInvoiceChase,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -256,6 +266,22 @@ export default function ReceivablesManager() {
           <div className="col-span-2"><label className={INPUT.label}>Notes</label>
             <textarea rows={2} value={chaseForm.notes || ''} onChange={e => setChaseField('notes', e.target.value)} className={INPUT.base} /></div>
         </div>
+
+        {selectedInvoice && (
+          <div className="mt-4 border-t pt-4">
+            <FileAttachments
+              caseType="finance_invoice"
+              caseId={selectedInvoice.id}
+              readOnly={!canEdit}
+              title="Invoice Evidence"
+              emptyText="No invoice evidence uploaded yet."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
+          </div>
+        )}
 
         <div className={MODAL.footer}>
           <button onClick={closeChaseModal} className={BTN.secondary}>Close</button>

@@ -18,6 +18,10 @@ vi.mock('../../lib/api.js', async () => {
     getTaxCodes: vi.fn(),
     upsertTaxCode: vi.fn(),
     getHrStaffList: vi.fn().mockResolvedValue([]),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -81,6 +85,7 @@ function setupMocks(codes = MOCK_TAX_CODES) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
   api.getTaxCodes.mockResolvedValue(codes);
   api.upsertTaxCode.mockResolvedValue({});
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(codes) {
@@ -107,6 +112,7 @@ describe('TaxCodeManager', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('smoke test -- renders without crashing', async () => {

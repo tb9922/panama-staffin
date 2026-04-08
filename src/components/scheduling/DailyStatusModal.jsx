@@ -1,8 +1,10 @@
 import Modal from '../Modal.jsx';
+import FileAttachments from '../FileAttachments.jsx';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { isWorkingShift, isCareRole, getShiftHours } from '../../lib/rotation.js';
 import { validateSwap } from '../../lib/escalation.js';
 import { calculateAccrual } from '../../lib/accrual.js';
+import { getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../../lib/api.js';
 
 const SHIFT_EDIT_OPTIONS = [
   { value: '__scheduled__', label: 'Scheduled shift' },
@@ -70,6 +72,7 @@ export default function DailyStatusModal({
   onHandleTemporarySwap,
   onHandleAgencyBooking,
 }) {
+  const evidenceCaseId = selectedStaff && dateStr ? `${dateStr}__${selectedStaff}` : null;
   const alBlockedForSelectedStaff = modal === 'al' && selectedStaff && (() => {
     const staff = schedData?.staff?.find(member => member.id === selectedStaff);
     if (!staff) return false;
@@ -297,6 +300,20 @@ export default function DailyStatusModal({
                       : `AL: ${alAccrual.remainingHours.toFixed(1)}h remaining`}
                   </div>
                 )}
+                <div className="border-t pt-3">
+                  <FileAttachments
+                    caseType="schedule_override"
+                    caseId={evidenceCaseId}
+                    readOnly={!canEdit}
+                    title="Shift Evidence"
+                    emptyText="No evidence uploaded for this shift change."
+                    saveFirstMessage="Choose the staff member first, then you can attach supporting evidence for this shift change."
+                    getFiles={getRecordAttachments}
+                    uploadFile={uploadRecordAttachment}
+                    deleteFile={deleteRecordAttachment}
+                    downloadFile={downloadRecordAttachment}
+                  />
+                </div>
                 <div className={MODAL.footer}>
                   <button onClick={onClose} className={BTN.ghost}>Cancel</button>
                   <button
@@ -350,6 +367,20 @@ export default function DailyStatusModal({
             }
             return <div className="text-xs text-gray-500">AL: {accrual.remainingHours.toFixed(1)}h remaining</div>;
           })()}
+          <div className="border-t pt-3">
+            <FileAttachments
+              caseType="schedule_override"
+              caseId={evidenceCaseId}
+              readOnly={!canEdit}
+              title="Shift Evidence"
+              emptyText="No evidence uploaded for this shift change."
+              saveFirstMessage="Choose the staff member first, then you can attach supporting evidence for this shift change."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
+          </div>
           <div className={MODAL.footer}>
             <button onClick={onClose} className={BTN.ghost}>Cancel</button>
             <button

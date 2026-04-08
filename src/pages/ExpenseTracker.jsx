@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getCurrentHome, getLoggedInUser, getFinanceExpenses, createFinanceExpense,
   updateFinanceExpense, approveFinanceExpense,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import {
   EXPENSE_CATEGORIES, EXPENSE_STATUSES, PAYMENT_METHODS, SCHEDULE_FREQUENCIES,
@@ -264,6 +266,20 @@ export default function ExpenseTracker() {
               <p className="text-xs text-gray-500 mt-1">Created by {form.created_by}</p>
             </div>
           )}
+          <div className="col-span-2">
+            <FileAttachments
+              caseType="finance_expense"
+              caseId={editing?.id}
+              readOnly={!canEdit || readOnly}
+              title="Expense Evidence"
+              emptyText="No supplier invoices or receipts uploaded yet."
+              saveFirstText="Save this expense first, then attach invoices, receipts, and approval evidence."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
+          </div>
         </div>
         </fieldset>
 

@@ -20,6 +20,10 @@ vi.mock('../../lib/api.js', async () => {
     upsertTimesheet: vi.fn(),
     approveTimesheet: vi.fn(),
     disputeTimesheet: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     getHrStaffList: vi.fn().mockResolvedValue([]),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
@@ -46,6 +50,10 @@ import * as api from '../../lib/api.js';
 // Fixtures
 // ---------------------------------------------------------------------------
 
+const CURRENT_YEAR = new Date().getUTCFullYear();
+const CURRENT_MONTH = new Date().getUTCMonth() + 1;
+const CURRENT_PREFIX = `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, '0')}`;
+
 const MOCK_SCHED_DATA = {
   staff: [
     { id: 'S001', name: 'Alice Smith', role: 'Senior Carer', team: 'Day A', pref: 'EL', skill: 1.5, active: true, contract_hours: 36 },
@@ -68,7 +76,7 @@ const MOCK_ENTRIES = [
   {
     id: 'ts-1',
     staff_id: 'S001',
-    date: '2026-03-02',
+    date: `${CURRENT_PREFIX}-02`,
     scheduled_start: '07:00',
     scheduled_end: '19:00',
     actual_start: '07:05',
@@ -85,7 +93,7 @@ const MOCK_ENTRIES = [
   {
     id: 'ts-2',
     staff_id: 'S001',
-    date: '2026-03-03',
+    date: `${CURRENT_PREFIX}-03`,
     scheduled_start: '07:00',
     scheduled_end: '19:00',
     actual_start: '07:00',
@@ -104,6 +112,7 @@ const MOCK_ENTRIES = [
 function setupMocks(entries = MOCK_ENTRIES) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
   api.getTimesheetPeriod.mockResolvedValue(entries);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(entries) {
@@ -130,7 +139,6 @@ function renderViewer(entries) {
 describe('MonthlyTimesheet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useRealTimers();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
   });
@@ -224,5 +232,20 @@ describe('MonthlyTimesheet', () => {
     // The staff selector should contain staff options
     const select = screen.getByDisplayValue(/S001/);
     expect(select).toBeInTheDocument();
+  });
+
+  it('shows the timesheet evidence panel in the edit modal', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('Monthly Timesheet')).toBeInTheDocument()
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await waitFor(() =>
+      expect(screen.getByText('Timesheet Evidence')).toBeInTheDocument()
+    );
   });
 });

@@ -3,8 +3,19 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment, deleteDpiaAssessment } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getDpiaAssessments,
+  createDpiaAssessment,
+  updateDpiaAssessment,
+  deleteDpiaAssessment,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
 
 const EMPTY_FORM = {
@@ -191,6 +202,18 @@ export default function DpiaManager() {
             <label className={INPUT.label}>Notes</label>
             <textarea className={INPUT.base} rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
+          <FileAttachments
+            caseType="dpia"
+            caseId={editing?.id}
+            readOnly={!canEdit}
+            title="DPIA Evidence"
+            emptyText="No DPIA evidence uploaded yet."
+            saveFirstText="Save this DPIA first, then attach screening notes, approvals, and supporting documents."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <button className={BTN.secondary} onClick={closeModal}>Cancel</button>

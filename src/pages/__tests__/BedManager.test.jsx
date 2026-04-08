@@ -20,6 +20,10 @@ vi.mock('../../lib/api.js', async () => {
     revertBedTransition: vi.fn(),
     moveBedResident: vi.fn(),
     getFinanceResidents: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -81,6 +85,7 @@ describe('BedManager', () => {
     api.getBedSummary.mockResolvedValue(MOCK_SUMMARY);
     api.getFinanceResidents.mockResolvedValue({ rows: [] });
     api.getBedHistory.mockResolvedValue({ transitions: [] });
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('shows loading state initially', () => {
@@ -174,8 +179,9 @@ describe('BedManager', () => {
     await user.clear(floorInput);
     await user.type(floorInput, 'Ground');
 
-    const textboxes = within(dialog).getAllByRole('textbox');
-    const notesInput = textboxes[textboxes.length - 1];
+    const notesInput = within(dialog).getAllByRole('textbox')
+      .find((element) => element.tagName.toLowerCase() === 'textarea');
+    expect(notesInput).toBeTruthy();
     await user.type(notesInput, 'Refreshed room details');
 
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
@@ -188,6 +194,14 @@ describe('BedManager', () => {
       notes: 'Refreshed room details',
       clientUpdatedAt: '2026-03-01T00:00:00Z',
     }));
+  });
+
+  it('shows the bed evidence panel in the edit modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<BedManager />);
+    await waitFor(() => expect(screen.getByLabelText('Edit bed 101')).toBeInTheDocument());
+    await user.click(screen.getByLabelText('Edit bed 101'));
+    await waitFor(() => expect(screen.getByText('Bed Evidence')).toBeInTheDocument());
   });
 
   it('shows delete action only for available beds and deletes after confirmation', async () => {

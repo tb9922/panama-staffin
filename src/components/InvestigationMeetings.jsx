@@ -3,6 +3,13 @@ import { getHrMeetings, createHrMeeting } from '../lib/api.js';
 import { MEETING_TYPES, MEETING_ATTENDEE_ROLES } from '../lib/hr.js';
 import { BTN, INPUT, CARD, BADGE } from '../lib/design.js';
 import StaffPicker from './StaffPicker.jsx';
+import FileAttachments from './FileAttachments.jsx';
+import {
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 
 const TYPE_BADGE = {
   interview: BADGE.blue,
@@ -281,6 +288,17 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">{m.outcome}</p>
                   </div>
                 )}
+                <FileAttachments
+                  caseType="investigation_meeting"
+                  caseId={String(m.id)}
+                  readOnly={readOnly}
+                  title="Meeting Evidence"
+                  emptyText="No evidence uploaded for this meeting."
+                  uploadFile={uploadRecordAttachment}
+                  getFiles={getRecordAttachments}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                />
               </div>
             )}
 

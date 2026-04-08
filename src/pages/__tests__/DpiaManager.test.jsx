@@ -22,6 +22,10 @@ vi.mock('../../lib/api.js', async () => {
     createDpiaAssessment: vi.fn(),
     updateDpiaAssessment: vi.fn(),
     deleteDpiaAssessment: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -53,6 +57,7 @@ describe('DpiaManager', () => {
     api.createDpiaAssessment.mockResolvedValue({ id: 2 });
     api.updateDpiaAssessment.mockResolvedValue({ id: 1 });
     api.deleteDpiaAssessment.mockResolvedValue({ ok: true });
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('loads and renders assessment rows', async () => {

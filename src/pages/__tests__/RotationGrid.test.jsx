@@ -18,6 +18,10 @@ vi.mock('../../lib/api.js', async () => {
     deleteOverride: vi.fn(),
     bulkUpsertOverrides: vi.fn(),
     revertMonthOverrides: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -25,6 +29,7 @@ import * as api from '../../lib/api.js';
 
 beforeEach(() => {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 function renderAdmin() {
@@ -157,6 +162,7 @@ describe('RotationGrid', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(screen.getByText('Change shift to:')).toBeInTheDocument();
+    expect(screen.getByText('Shift Evidence')).toBeInTheDocument();
   });
 
   it('Revert All button opens confirmation modal', async () => {

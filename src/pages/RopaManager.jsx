@@ -3,8 +3,19 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { getCurrentHome, getRopaActivities, createRopaActivity, updateRopaActivity, deleteRopaActivity } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getRopaActivities,
+  createRopaActivity,
+  updateRopaActivity,
+  deleteRopaActivity,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
 
 const EMPTY_FORM = {
@@ -227,6 +238,18 @@ export default function RopaManager() {
             <label className={INPUT.label}>Notes</label>
             <textarea className={INPUT.base} rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
+          <FileAttachments
+            caseType="ropa"
+            caseId={editing?.id}
+            readOnly={!canEdit}
+            title="ROPA Evidence"
+            emptyText="No processing activity evidence uploaded yet."
+            saveFirstText="Save this processing activity first, then attach retention schedules, transfer safeguards, and supporting documents."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <button className={BTN.secondary} onClick={closeModal}>Cancel</button>

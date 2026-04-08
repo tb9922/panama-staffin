@@ -15,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     updatePayRateRule: vi.fn(),
     deletePayRateRule: vi.fn(),
     getNMWRates: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -46,6 +50,7 @@ const MOCK_NMW_RATES = [
 function setupMocks(rules = MOCK_RULES, nmwRates = MOCK_NMW_RATES) {
   api.getPayRateRules.mockResolvedValue(rules);
   api.getNMWRates.mockResolvedValue(nmwRates);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 describe('PayRatesConfig', () => {

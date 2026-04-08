@@ -14,6 +14,10 @@ vi.mock('../../lib/api.js', async () => {
     approveTimesheet: vi.fn(),
     bulkApproveTimesheets: vi.fn(),
     getSchedulingData: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -75,6 +79,7 @@ describe('TimesheetManager', () => {
     api.upsertTimesheet.mockResolvedValue({});
     api.approveTimesheet.mockResolvedValue({});
     api.bulkApproveTimesheets.mockResolvedValue({});
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('renders page heading', async () => {

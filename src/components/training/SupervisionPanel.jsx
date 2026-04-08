@@ -3,7 +3,16 @@ import { formatDate, parseDate } from '../../lib/rotation.js';
 import {
   getSupervisionStatus, getSupervisionStats, getSupervisionFrequency, isInProbation,
 } from '../../lib/training.js';
-import { createSupervision, updateSupervision, deleteSupervision } from '../../lib/api.js';
+import FileAttachments from '../FileAttachments.jsx';
+import {
+  createSupervision,
+  updateSupervision,
+  deleteSupervision,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
@@ -295,6 +304,20 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
                 disabled={readOnly}
                 className={INPUT.base} placeholder="Optional notes" />
             </div>
+          </div>
+          <div className="border-t pt-3">
+            <FileAttachments
+              caseType="supervision"
+              caseId={modalData.existing ? modalData.id : null}
+              readOnly={readOnly}
+              title="Supervision Evidence"
+              emptyText="No supervision evidence uploaded yet."
+              saveFirstMessage="Save this supervision record first, then reopen it here to upload supporting evidence."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>

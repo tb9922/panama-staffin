@@ -16,6 +16,10 @@ vi.mock('../../lib/api.js', async () => {
     createAgencyShift: vi.fn(),
     updateAgencyShift: vi.fn(),
     getAgencyMetrics: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -61,6 +65,7 @@ function setupMocks() {
   api.getAgencyProviders.mockResolvedValue(MOCK_PROVIDERS);
   api.getAgencyShifts.mockResolvedValue(MOCK_SHIFTS);
   api.getAgencyMetrics.mockResolvedValue(MOCK_METRICS);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin() {
@@ -83,6 +88,7 @@ describe('AgencyTracker', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('smoke test — renders without crashing', async () => {

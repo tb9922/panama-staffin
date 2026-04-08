@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import {
+  getTaxCodes,
+  upsertTaxCode,
+  getCurrentHome,
+  getSchedulingData,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -415,6 +425,18 @@ export default function TaxCodeManager() {
               placeholder="e.g. Updated per HMRC P6 notice received 15 Jan 2026"
             />
           </div>
+          <FileAttachments
+            caseType="payroll_tax_code"
+            caseId={editStaffId || null}
+            readOnly={!canEdit}
+            title="Tax Code Evidence"
+            emptyText="No tax code evidence uploaded yet."
+            saveFirstText="Save this tax code record first, then attach HMRC notices, P45 details, and supporting evidence."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
 
         <div className={MODAL.footer}>

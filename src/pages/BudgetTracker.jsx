@@ -3,7 +3,8 @@ import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import { getCurrentHome, getSchedulingData, saveConfig, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -236,6 +237,19 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
                 <input type="number" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
                   className={INPUT.base} placeholder="e.g. 5000" />
               </div>
+              <div className="border-t pt-3">
+                <FileAttachments
+                  caseType="budget_month"
+                  caseId="default"
+                  readOnly={!canEdit}
+                  title="Budget Evidence"
+                  emptyText="No evidence uploaded for the default budget."
+                  getFiles={getRecordAttachments}
+                  uploadFile={uploadRecordAttachment}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                />
+              </div>
             </div>
             <div className={MODAL.footer}>
               <button onClick={() => setEditingBudget(null)} className={BTN.secondary}>Cancel</button>
@@ -429,6 +443,23 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
 
       {/* Per-month budget edit modal */}
       <Modal isOpen={!!editingBudget && editingBudget !== 'default'} onClose={() => setEditingBudget(null)} title={`Budget for ${editingBudget || ''}`} size="sm">
+            <div className="space-y-3">
+              <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+                className={INPUT.base} placeholder="Monthly budget Â£" />
+              <div className="border-t pt-3">
+                <FileAttachments
+                  caseType="budget_month"
+                  caseId={editingBudget}
+                  readOnly={!canEdit}
+                  title="Budget Evidence"
+                  emptyText="No evidence uploaded for this budget month."
+                  getFiles={getRecordAttachments}
+                  uploadFile={uploadRecordAttachment}
+                  deleteFile={deleteRecordAttachment}
+                  downloadFile={downloadRecordAttachment}
+                />
+              </div>
+            </div>
             <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               className={`${INPUT.base} mb-3`} placeholder="Monthly budget £" />
             <div className={MODAL.footer}>
