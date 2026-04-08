@@ -23,6 +23,7 @@ export default function FileAttachments({
   title = 'Attached Documents',
   emptyText = 'No documents attached.',
   saveFirstMessage = 'Save the case first to attach documents.',
+  saveFirstText,
   ensureCaseId,
 }) {
   const [files, setFiles] = useState([]);
@@ -41,6 +42,7 @@ export default function FileAttachments({
   const removeFile = deleteFile || deleteHrAttachment;
   const fetchFile = downloadFile || downloadHrAttachment;
   const activeCaseId = caseId || createdCaseId;
+  const saveMessage = saveFirstText || saveFirstMessage;
 
   useEffect(() => {
     if (caseId) setCreatedCaseId(null);
@@ -76,10 +78,10 @@ export default function FileAttachments({
       let targetCaseId = activeCaseId;
       if (!targetCaseId && ensureCaseId) {
         targetCaseId = await ensureCaseId();
-        if (!targetCaseId) throw new Error(saveFirstMessage);
+        if (!targetCaseId) throw new Error(saveMessage);
         setCreatedCaseId(targetCaseId);
       }
-      if (!targetCaseId) throw new Error(saveFirstMessage);
+      if (!targetCaseId) throw new Error(saveMessage);
       await createFile(caseType, targetCaseId, file, description);
       setDescription('');
       setSelectedFileName('');
@@ -111,7 +113,7 @@ export default function FileAttachments({
   }
 
   if (!activeCaseId && !ensureCaseId) {
-    return <p className="text-sm text-gray-400 italic">{saveFirstMessage}</p>;
+    return <p className="text-sm text-gray-400 italic">{saveMessage}</p>;
   }
 
   return (
@@ -119,7 +121,7 @@ export default function FileAttachments({
       <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
 
       {!activeCaseId && ensureCaseId && (
-        <p className="text-sm text-gray-500">{saveFirstMessage}</p>
+        <p className="text-sm text-gray-500">{saveMessage}</p>
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}

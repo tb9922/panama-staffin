@@ -186,6 +186,7 @@ function CQCEvidenceInner({ data }) {
   const [savingEvidence, setSavingEvidence] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
+  const [evidenceFilesById, setEvidenceFilesById] = useState({});
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
@@ -312,6 +313,36 @@ function CQCEvidenceInner({ data }) {
   if (!data?.config || !score) {
     return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
   }
+
+  useEffect(() => {
+    const current = evidenceByStatement[expandedStatement];
+    const manualEvidence = Array.isArray(current?.manualEvidence) ? current.manualEvidence : [];
+    const missingIds = manualEvidence
+      .map((item) => item?.id)
+      .filter((id) => id && !evidenceFilesById[id]);
+    if (missingIds.length === 0) return undefined;
+
+    let cancelled = false;
+    Promise.all(missingIds.map(async (id) => {
+      try {
+        const files = await getCqcEvidenceFiles('cqc_evidence', id);
+        return [id, { files, error: null }];
+      } catch (err) {
+        return [id, { files: [], error: err.message || 'Failed to load supporting files.' }];
+      }
+    })).then((entries) => {
+      if (cancelled || !isMounted.current) return;
+      setEvidenceFilesById((currentMap) => {
+        const next = { ...currentMap };
+        for (const [id, value] of entries) next[id] = value;
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedStatement, evidenceByStatement, evidenceFilesById]);
 
   const bandColorMap = { green: 'emerald', amber: 'amber', red: 'red' };
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
@@ -592,6 +623,33 @@ function CQCEvidenceInner({ data }) {
                                     {me.date_from}{me.date_to ? ` to ${me.date_to}` : ' — ongoing'}
                                     {me.added_by && ` | by ${me.added_by}`}
                                   </div>
+                                  {evidenceFilesById[me.id]?.error && (
+                                    <div className="text-[11px] text-red-500 mt-1">
+                                      {evidenceFilesById[me.id].error}
+                                    </div>
+                                  )}
+                                  {evidenceFilesById[me.id]?.files?.length > 0 && (
+                                    <div className="mt-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
+                                        Supporting Files
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {evidenceFilesById[me.id].files.map((file) => (
+                                          <button
+                                            key={file.id}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              downloadCqcEvidenceFile(file.id, file.original_name);
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                          >
+                                            {file.original_name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                                 {canEdit && (
                                   <div className="ml-2 flex shrink-0 gap-2">

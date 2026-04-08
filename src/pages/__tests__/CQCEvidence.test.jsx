@@ -365,4 +365,52 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
   });
+
+  it('shows supporting files directly on a manual evidence item and downloads them from the statement view', async () => {
+    const user = userEvent.setup();
+    api.getCqcEvidence.mockResolvedValueOnce({
+      evidence: [
+        {
+          id: 'ev-inline',
+          quality_statement: 'S1',
+          type: 'qualitative',
+          title: 'Learning review notes',
+          description: 'Post-incident review',
+          date_from: '2026-03-01',
+          date_to: null,
+          evidence_category: 'feedback',
+          added_by: 'admin',
+        },
+      ],
+    });
+    api.getCqcEvidenceFiles.mockResolvedValueOnce([
+      {
+        id: 77,
+        original_name: 'learning-review.pdf',
+        size_bytes: 1024,
+        description: 'Review notes',
+        uploaded_by: 'admin',
+        created_at: '2026-03-08T10:00:00Z',
+      },
+    ]);
+
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Learning review notes')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Supporting Files')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'learning-review.pdf' }));
+
+    expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-inline');
+    expect(api.downloadCqcEvidenceFile).toHaveBeenCalledWith(77, 'learning-review.pdf');
+  });
 });
