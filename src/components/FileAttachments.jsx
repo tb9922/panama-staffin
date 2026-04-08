@@ -23,6 +23,7 @@ export default function FileAttachments({
   title = 'Attached Documents',
   emptyText = 'No documents attached.',
   saveFirstMessage = 'Save the case first to attach documents.',
+  ensureCaseId,
 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -32,21 +33,29 @@ export default function FileAttachments({
   const [selectedFileName, setSelectedFileName] = useState('');
   const fileInputRef = useRef(null);
   const fileInputId = useId();
+  const [createdCaseId, setCreatedCaseId] = useState(null);
+  const descriptionInputId = useId();
   const { confirm, ConfirmDialog } = useConfirm();
   const listFiles = getFiles || getHrAttachments;
   const createFile = uploadFile || uploadHrAttachment;
   const removeFile = deleteFile || deleteHrAttachment;
   const fetchFile = downloadFile || downloadHrAttachment;
+  const activeCaseId = caseId || createdCaseId;
 
   useEffect(() => {
-    if (caseId) loadFiles();
-  }, [caseType, caseId, getFiles]); // eslint-disable-line react-hooks/exhaustive-deps -- callback choice intentionally tracks getFiles only
+    if (caseId) setCreatedCaseId(null);
+  }, [caseId]);
 
-  async function loadFiles() {
+  useEffect(() => {
+    if (activeCaseId) loadFiles(activeCaseId);
+  }, [caseType, activeCaseId, getFiles]); // eslint-disable-line react-hooks/exhaustive-deps -- callback choice intentionally tracks getFiles only
+
+  async function loadFiles(targetCaseId = activeCaseId) {
+    if (!targetCaseId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await listFiles(caseType, caseId);
+      const data = await listFiles(caseType, targetCaseId);
       setFiles(data);
     } catch (err) {
       setError(err.message);
@@ -64,11 +73,18 @@ export default function FileAttachments({
     setUploading(true);
     setError(null);
     try {
-      await createFile(caseType, caseId, file, description);
+      let targetCaseId = activeCaseId;
+      if (!targetCaseId && ensureCaseId) {
+        targetCaseId = await ensureCaseId();
+        if (!targetCaseId) throw new Error(saveFirstMessage);
+        setCreatedCaseId(targetCaseId);
+      }
+      if (!targetCaseId) throw new Error(saveFirstMessage);
+      await createFile(caseType, targetCaseId, file, description);
       setDescription('');
       setSelectedFileName('');
       fileInputRef.current.value = '';
-      await loadFiles();
+      await loadFiles(targetCaseId);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -94,13 +110,17 @@ export default function FileAttachments({
     }
   }
 
-  if (!caseId) {
+  if (!activeCaseId && !ensureCaseId) {
     return <p className="text-sm text-gray-400 italic">{saveFirstMessage}</p>;
   }
 
   return (
     <div className="space-y-3">
       <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
+
+      {!activeCaseId && ensureCaseId && (
+        <p className="text-sm text-gray-500">{saveFirstMessage}</p>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -179,8 +199,8 @@ export default function FileAttachments({
             {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
           <div className="flex-1">
-            <label className={INPUT.label}>Description (optional)</label>
-            <input className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" />
+            <label htmlFor={descriptionInputId} className={INPUT.label}>Description (optional)</label>
+            <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" />
           </div>
           <button onClick={handleUpload} disabled={uploading} className={BTN.primary + ' ' + BTN.sm}>
             {uploading ? 'Uploading...' : 'Upload'}

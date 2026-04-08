@@ -76,6 +76,19 @@ function toEvidenceForm(evidence) {
   };
 }
 
+function buildEvidencePayload(form) {
+  const category = (form.evidence_category || '').trim();
+  return {
+    quality_statement: form.quality_statement,
+    type: form.type,
+    title: form.title.trim(),
+    description: form.description.trim(),
+    date_from: form.date_from || null,
+    date_to: form.date_to || null,
+    ...(category ? { evidence_category: category } : {}),
+  };
+}
+
 function metricColor(value, lowerIsBetter) {
   if (lowerIsBetter) return value <= 5 ? 'text-emerald-600' : value <= 15 ? 'text-amber-600' : 'text-red-600';
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
@@ -320,46 +333,56 @@ function CQCEvidenceInner({ data }) {
   async function handleSaveEvidence() {
     if (savingEvidence) return;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) return;
-    const home = getCurrentHome();
     setSavingEvidence(true);
+    setSaveError(null);
     try {
-      const category = (evidenceForm.evidence_category || '').trim();
-      const payload = {
-        quality_statement: evidenceForm.quality_statement,
-        type: evidenceForm.type,
-        title: evidenceForm.title.trim(),
-        description: evidenceForm.description.trim(),
-        date_from: evidenceForm.date_from || null,
-        date_to: evidenceForm.date_to || null,
-        ...(category ? { evidence_category: category } : {}),
-      };
-      let saved;
-      if (evidenceForm.id) {
-        saved = await updateCqcEvidence(home, evidenceForm.id, {
-          ...payload,
-          _version: evidenceForm.version,
-        });
-        setSaveNotice('Evidence updated.');
-      } else {
-        saved = await createCqcEvidence(home, {
-          ...payload,
-          added_by: getLoggedInUser()?.username || 'admin',
-        });
-        setSaveNotice('Evidence saved. You can now upload supporting files below.');
-      }
-      setEvidenceForm((current) => ({
-        ...toEvidenceForm(saved),
-        quality_statement: saved?.quality_statement || current.quality_statement,
-        type: saved?.type || current.type,
-        title: saved?.title || current.title,
-        description: saved?.description || current.description,
-        date_from: saved?.date_from || current.date_from,
-        date_to: saved?.date_to || current.date_to,
-        evidence_category: saved?.evidence_category || current.evidence_category,
-      }));
+      const saved = await persistEvidenceDraft();
+      setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved.');
+      setEvidenceForm(toEvidenceForm(saved));
       await loadEvidence();
     } catch (err) {
       setSaveError('Failed to save evidence: ' + err.message);
+    } finally {
+      setSavingEvidence(false);
+    }
+  }
+
+  async function persistEvidenceDraft() {
+    const home = getCurrentHome();
+    const payload = buildEvidencePayload(evidenceForm);
+    if (evidenceForm.id) {
+      return updateCqcEvidence(home, evidenceForm.id, {
+        ...payload,
+        _version: evidenceForm.version,
+      });
+    }
+    return createCqcEvidence(home, {
+      ...payload,
+      added_by: getLoggedInUser()?.username || 'admin',
+    });
+  }
+
+  async function ensureEvidenceForUploads() {
+    if (evidenceForm.id) return evidenceForm.id;
+    if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) {
+      throw new Error('Add a quality statement and title before uploading supporting files.');
+    }
+    if (savingEvidence) {
+      throw new Error('Evidence is already being saved. Please wait a moment and try again.');
+    }
+    setSavingEvidence(true);
+    setSaveError(null);
+    setSaveNotice(null);
+    try {
+      const saved = await persistEvidenceDraft();
+      setEvidenceForm(toEvidenceForm(saved));
+      await loadEvidence();
+      setSaveNotice('Evidence saved. Uploading supporting files now.');
+      return saved.id;
+    } catch (err) {
+      const message = 'Failed to save evidence: ' + err.message;
+      setSaveError(message);
+      throw new Error(message);
     } finally {
       setSavingEvidence(false);
     }
@@ -805,26 +828,19 @@ function CQCEvidenceInner({ data }) {
                 </div>
               </div>
 
-              {evidenceForm.id ? (
-                <FileAttachments
-                  caseType="cqc_evidence"
-                  caseId={evidenceForm.id}
-                  readOnly={!canEdit}
-                  getFiles={getCqcEvidenceFiles}
-                  uploadFile={uploadCqcEvidenceFile}
-                  deleteFile={deleteCqcEvidenceFile}
-                  downloadFile={downloadCqcEvidenceFile}
-                  title="Supporting Files"
-                  emptyText="No supporting files uploaded yet."
-                />
-              ) : (
-                <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/70 p-4">
-                  <p className="text-sm font-medium text-blue-900">Supporting Files</p>
-                  <p className="mt-1 text-sm text-blue-800">
-                    Save this evidence item first, then you can upload supporting files in this same window.
-                  </p>
-                </div>
-              )}
+              <FileAttachments
+                caseType="cqc_evidence"
+                caseId={evidenceForm.id}
+                readOnly={!canEdit}
+                getFiles={getCqcEvidenceFiles}
+                uploadFile={uploadCqcEvidenceFile}
+                deleteFile={deleteCqcEvidenceFile}
+                downloadFile={downloadCqcEvidenceFile}
+                title="Supporting Files"
+                emptyText="No supporting files uploaded yet."
+                saveFirstMessage="You can upload on the first pass. We will save the evidence item automatically before the first file upload."
+                ensureCaseId={canEdit ? ensureEvidenceForUploads : undefined}
+              />
             </div>
 
             <div className={MODAL.footer}>
@@ -833,7 +849,7 @@ function CQCEvidenceInner({ data }) {
               <button onClick={() => { setShowAddEvidence(false); setSaveError(null); setSaveNotice(null); }} className={BTN.ghost}>Close</button>
               <button onClick={handleSaveEvidence}
                 disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}
-                className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence & Enable Uploads'}</button>
+                className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence'}</button>
             </div>
       </Modal>
       {ConfirmDialog}

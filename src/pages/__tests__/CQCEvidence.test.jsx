@@ -332,7 +332,7 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('2026-03-08')).toBeInTheDocument();
   });
 
-  it('shows the supporting files uploader after saving a new evidence item', async () => {
+  it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
     const user = userEvent.setup();
     renderAdmin();
     await waitFor(() => {
@@ -350,16 +350,18 @@ describe('CQCEvidence', () => {
     });
 
     expect(screen.getByText('Supporting Files')).toBeInTheDocument();
-    expect(screen.getByText('Save this evidence item first, then you can upload supporting files in this same window.')).toBeInTheDocument();
+    expect(screen.getByText('You can upload on the first pass. We will save the evidence item automatically before the first file upload.')).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText('Brief title...'), 'Family feedback summary');
+    await user.upload(screen.getByLabelText('File'), new File(['hello'], 'evidence.txt', { type: 'text/plain' }));
 
-    await user.click(screen.getByRole('button', { name: 'Save Evidence & Enable Uploads' }));
+    await user.click(screen.getByRole('button', { name: 'Upload' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Evidence saved. You can now upload supporting files below.')).toBeInTheDocument();
+      expect(api.createCqcEvidence).toHaveBeenCalled();
+      expect(api.uploadCqcEvidenceFile).toHaveBeenCalledWith('cqc_evidence', 'ev-001', expect.any(File), '');
     });
-    expect(screen.getByText('Supporting Files')).toBeInTheDocument();
+    expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
   });
