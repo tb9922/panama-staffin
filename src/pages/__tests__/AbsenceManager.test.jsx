@@ -204,6 +204,7 @@ describe('AbsenceManager', () => {
     await user.click(screen.getByRole('button', { name: 'New OH Referral' }));
     expect(screen.getByLabelText('Referred By')).toBeInTheDocument();
     expect(screen.getByLabelText('Questions for OH Provider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Report Received')).toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Consent Obtained'));
     expect(screen.getByLabelText('Consent Date')).toBeInTheDocument();

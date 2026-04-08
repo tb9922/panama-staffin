@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nullableDateInput } from '../../lib/zodHelpers.js';
+import { nullableDateInput, nullableEnumInput } from '../../lib/zodHelpers.js';
 
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
@@ -298,12 +298,12 @@ export const rtwInterviewBodySchema = z.object({
   follow_up_date:     dateSchema.optional(),
   fit_note_received:  z.boolean().optional(),
   fit_note_date:      dateSchema.optional(),
-  fit_note_type:      z.enum(['not_fit', 'may_be_fit']).nullable().optional(),
+  fit_note_type:      nullableEnumInput(['not_fit', 'may_be_fit']).optional(),
   fit_note_adjustments: z.string().max(5000).nullable().optional(),
   fit_note_review_date: dateSchema.optional(),
   bradford_score_after: z.coerce.number().nonnegative().nullable().optional(),
-  trigger_reached:    z.enum(['informal', 'formal_1', 'formal_2', 'final']).nullable().optional(),
-  action_taken:       z.enum(['none', 'informal_chat', 'formal_meeting', 'referral']).nullable().optional(),
+  trigger_reached:    nullableEnumInput(['none', 'informal', 'formal_1', 'formal_2', 'final']).optional(),
+  action_taken:       nullableEnumInput(['none', 'informal_chat', 'formal_meeting', 'referral']).optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -320,12 +320,12 @@ export const rtwInterviewUpdateSchema = z.object({
   follow_up_date:     dateSchema.nullable().optional(),
   fit_note_received:  z.boolean().optional(),
   fit_note_date:      dateSchema.nullable().optional(),
-  fit_note_type:      z.enum(['not_fit', 'may_be_fit']).nullable().optional(),
+  fit_note_type:      nullableEnumInput(['not_fit', 'may_be_fit']).optional(),
   fit_note_adjustments: z.string().max(5000).nullable().optional(),
   fit_note_review_date: dateSchema.nullable().optional(),
   bradford_score_after: z.coerce.number().nonnegative().nullable().optional(),
-  trigger_reached:    z.enum(['informal', 'formal_1', 'formal_2', 'final']).nullable().optional(),
-  action_taken:       z.enum(['none', 'informal_chat', 'formal_meeting', 'referral']).nullable().optional(),
+  trigger_reached:    nullableEnumInput(['none', 'informal', 'formal_1', 'formal_2', 'final']).optional(),
+  action_taken:       nullableEnumInput(['none', 'informal_chat', 'formal_meeting', 'referral']).optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -346,8 +346,8 @@ export const ohReferralBodySchema = z.object({
   consent_date:     dateSchema.optional(),
   questions_for_oh: z.string().max(5000).nullable().optional(),
   report_summary:   z.string().max(5000).nullable().optional(),
-  fit_for_role:     z.enum(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).nullable().optional(),
-  disability_likely: z.enum(['yes', 'no', 'possible']).nullable().optional(),
+  fit_for_role:     nullableEnumInput(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).optional(),
+  disability_likely: nullableEnumInput(['yes', 'no', 'possible']).optional(),
   estimated_return_date: dateSchema.optional(),
   follow_up_date:   dateSchema.optional(),
   notes:            z.string().max(5000).nullable().optional(),
@@ -367,8 +367,8 @@ export const ohReferralUpdateSchema = z.object({
   consent_date:     dateSchema.nullable().optional(),
   questions_for_oh: z.string().max(5000).nullable().optional(),
   report_summary:   z.string().max(5000).nullable().optional(),
-  fit_for_role:     z.enum(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).nullable().optional(),
-  disability_likely: z.enum(['yes', 'no', 'possible']).nullable().optional(),
+  fit_for_role:     nullableEnumInput(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).optional(),
+  disability_likely: nullableEnumInput(['yes', 'no', 'possible']).optional(),
   estimated_return_date: dateSchema.nullable().optional(),
   follow_up_date:   dateSchema.nullable().optional(),
   notes:            z.string().max(5000).nullable().optional(),

@@ -98,6 +98,7 @@ export default function AbsenceManager() {
   const ohConsentObtainedId = useId();
   const ohConsentDateId = useId();
   const ohQuestionsId = useId();
+  const ohReportReceivedId = useId();
   const ohReportDateId = useId();
   const ohReportSummaryId = useId();
   const ohFitForRoleId = useId();
@@ -638,8 +639,8 @@ export default function AbsenceManager() {
             <textarea id={ohQuestionsId} className={INPUT.base} rows={3} value={ohForm.questions_for_oh} onChange={e => ohf('questions_for_oh', e.target.value)} placeholder="One question per line" />
           </div>
           <div className="flex items-center gap-2">
-            <input type="checkbox" id="oh_report" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
-            <label htmlFor="oh_report" className="text-sm">Report Received</label>
+            <input id={ohReportReceivedId} type="checkbox" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
+            <label htmlFor={ohReportReceivedId} className="text-sm">Report Received</label>
           </div>
           {ohForm.report_received && (
             <div>
