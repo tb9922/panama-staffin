@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
@@ -31,6 +31,7 @@ export default function FileAttachments({
   const [description, setDescription] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('');
   const fileInputRef = useRef(null);
+  const fileInputId = useId();
   const { confirm, ConfirmDialog } = useConfirm();
   const listFiles = getFiles || getHrAttachments;
   const createFile = uploadFile || uploadHrAttachment;
@@ -147,17 +148,33 @@ export default function FileAttachments({
       {!readOnly && (
         <div className="flex items-end gap-3">
           <div className="flex-1">
-            <label className={INPUT.label}>File</label>
+            <label className={INPUT.label} htmlFor={fileInputId}>File</label>
             <input
+              id={fileInputId}
               ref={fileInputRef}
               type="file"
-              className="text-sm text-gray-600"
+              className="sr-only"
               accept={ACCEPTED_UPLOAD_EXTENSIONS}
               onChange={(e) => {
                 setSelectedFileName(e.target.files?.[0]?.name || '');
                 setError(null);
               }}
             />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  fileInputRef.current?.click();
+                }}
+                className={BTN.secondary + ' ' + BTN.sm}
+              >
+                Choose file
+              </button>
+              <span className="min-w-0 truncate text-sm text-gray-500">
+                {selectedFileName || 'No file selected'}
+              </span>
+            </div>
             <p className="mt-1 text-[11px] text-gray-400">{ACCEPTED_UPLOAD_HELP}</p>
             {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
