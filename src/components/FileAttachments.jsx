@@ -29,6 +29,7 @@ export default function FileAttachments({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [description, setDescription] = useState('');
+  const [selectedFileName, setSelectedFileName] = useState('');
   const fileInputRef = useRef(null);
   const { confirm, ConfirmDialog } = useConfirm();
   const listFiles = getFiles || getHrAttachments;
@@ -55,12 +56,16 @@ export default function FileAttachments({
 
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setError('Choose a file first.');
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
       await createFile(caseType, caseId, file, description);
       setDescription('');
+      setSelectedFileName('');
       fileInputRef.current.value = '';
       await loadFiles();
     } catch (err) {
@@ -143,8 +148,18 @@ export default function FileAttachments({
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label className={INPUT.label}>File</label>
-            <input ref={fileInputRef} type="file" className="text-sm text-gray-600" accept={ACCEPTED_UPLOAD_EXTENSIONS} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="text-sm text-gray-600"
+              accept={ACCEPTED_UPLOAD_EXTENSIONS}
+              onChange={(e) => {
+                setSelectedFileName(e.target.files?.[0]?.name || '');
+                setError(null);
+              }}
+            />
             <p className="mt-1 text-[11px] text-gray-400">{ACCEPTED_UPLOAD_HELP}</p>
+            {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
           <div className="flex-1">
             <label className={INPUT.label}>Description (optional)</label>
