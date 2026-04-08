@@ -818,7 +818,12 @@ function CQCEvidenceInner({ data }) {
                   emptyText="No supporting files uploaded yet."
                 />
               ) : (
-                <p className="text-sm text-gray-400 italic">Save the evidence item first to attach supporting files.</p>
+                <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/70 p-4">
+                  <p className="text-sm font-medium text-blue-900">Supporting Files</p>
+                  <p className="mt-1 text-sm text-blue-800">
+                    Save this evidence item first, then you can upload supporting files in this same window.
+                  </p>
+                </div>
               )}
             </div>
 
@@ -828,7 +833,7 @@ function CQCEvidenceInner({ data }) {
               <button onClick={() => { setShowAddEvidence(false); setSaveError(null); setSaveNotice(null); }} className={BTN.ghost}>Close</button>
               <button onClick={handleSaveEvidence}
                 disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}
-                className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence'}</button>
+                className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence & Enable Uploads'}</button>
             </div>
       </Modal>
       {ConfirmDialog}

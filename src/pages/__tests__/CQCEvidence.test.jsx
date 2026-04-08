@@ -349,11 +349,12 @@ describe('CQCEvidence', () => {
       expect(screen.getByRole('heading', { name: 'Add Evidence Item' })).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Save the evidence item first to attach supporting files.')).toBeInTheDocument();
+    expect(screen.getByText('Supporting Files')).toBeInTheDocument();
+    expect(screen.getByText('Save this evidence item first, then you can upload supporting files in this same window.')).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText('Brief title...'), 'Family feedback summary');
 
-    await user.click(screen.getByRole('button', { name: 'Save Evidence' }));
+    await user.click(screen.getByRole('button', { name: 'Save Evidence & Enable Uploads' }));
 
     await waitFor(() => {
       expect(screen.getByText('Evidence saved. You can now upload supporting files below.')).toBeInTheDocument();
