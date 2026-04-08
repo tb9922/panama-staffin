@@ -12,7 +12,7 @@ const shapeRenewal = createShaper({
     'dbs_certificate_number', 'dbs_disclosure_level', 'dbs_check_date', 'dbs_next_renewal_due',
     'dbs_update_service_registered', 'dbs_update_service_last_checked', 'dbs_barred_list_check',
     'rtw_document_type', 'rtw_check_date', 'rtw_document_expiry', 'rtw_next_check_due',
-    'status', 'checked_by', 'notes', 'created_at', 'updated_at', 'version',
+    'status', 'checked_by', 'notes', 'created_by', 'created_at', 'updated_at', 'version',
   ],
   dates: ['dbs_check_date', 'dbs_next_renewal_due', 'dbs_update_service_last_checked', 'rtw_check_date', 'rtw_document_expiry', 'rtw_next_check_due'],
   aliases: {

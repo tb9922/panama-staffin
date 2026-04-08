@@ -308,8 +308,10 @@ router.post('/timesheets/approve-range', writeRateLimiter, requireAuth, requireH
 router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     if (requireStaffLink(req, res, 'payroll')) return;
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
-    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const rawOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Math.min(500, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 100));
+    const offset = Math.max(0, Number.isFinite(rawOffset) ? rawOffset : 0);
     const { rows, total } = await payrollRunRepo.findByHome(req.home.id, { limit, offset });
     // staff_member: strip aggregate totals from run list
     if (isOwnDataOnly(req.homeRole, 'payroll')) {

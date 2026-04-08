@@ -94,8 +94,8 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
     }
     const bodyParsed = onboardingSectionSchema.safeParse(req.body);
     if (!bodyParsed.success) return zodError(res, bodyParsed);
-    const allOnboarding = await onboardingRepo.findByHome(req.home.id);
-    const beforeSection = allOnboarding[staffIdParsed.data]?.[sectionParsed.data] ?? null;
+    const existingOnboarding = await onboardingRepo.findByStaffId(req.home.id, staffIdParsed.data);
+    const beforeSection = existingOnboarding?.[sectionParsed.data] ?? null;
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data, req.user.username);
     const changes = diffFields(beforeSection, bodyParsed.data);
     await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
