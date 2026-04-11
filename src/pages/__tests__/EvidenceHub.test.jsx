@@ -119,4 +119,54 @@ describe('EvidenceHub page', () => {
       expect(api.deleteEvidenceHubAttachment).toHaveBeenCalledWith('hr', 91);
     });
   });
+
+  it('renders the folder view with structured source and category groups', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvidenceHub />, {
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Folders' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Toggle source CQC Evidence' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Toggle source HR Cases' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle source Onboarding' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle category S1 - Learning Culture' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle category Enhanced DBS Check' })).toBeInTheDocument();
+  });
+
+  it('supports deleting a file from the folder view', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvidenceHub />, {
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Folders' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Toggle category Disciplinary' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Toggle category Disciplinary' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('hr-evidence-note.pdf')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.deleteEvidenceHubAttachment).toHaveBeenCalledWith('hr', 91);
+    });
+  });
 });
