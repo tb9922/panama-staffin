@@ -204,6 +204,28 @@ describe('AppLayout', () => {
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   });
 
+  it('shows Evidence Hub link when the role can read at least one evidence source', () => {
+    mockData({
+      canRead: (mod) => ['reports', 'finance'].includes(mod),
+      canWrite: () => false,
+      homeRole: 'finance_officer',
+    });
+    renderLayout({ username: 'finance', role: 'viewer' });
+    fireEvent.click(screen.getByRole('button', { name: 'System' }));
+    expect(screen.getByRole('link', { name: 'Evidence Hub' })).toBeInTheDocument();
+  });
+
+  it('hides Evidence Hub link when the role has no readable evidence sources', () => {
+    mockData({
+      canRead: (mod) => mod === 'reports',
+      canWrite: () => false,
+      homeRole: 'mystery_role',
+    });
+    renderLayout({ username: 'mystery', role: 'viewer' });
+    fireEvent.click(screen.getByRole('button', { name: 'System' }));
+    expect(screen.queryByRole('link', { name: 'Evidence Hub' })).not.toBeInTheDocument();
+  });
+
   // 8. Platform section only visible to platform admin
   it('platform admin sees the Platform nav section', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: true });

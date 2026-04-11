@@ -113,6 +113,71 @@ export async function loadAuditLog(limit = 100) {
   return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
 }
 
+export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modules, limit = 50, offset = 0 } = {}) {
+  const home = getCurrentHome();
+  const params = new URLSearchParams({
+    home,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (q) params.set('q', q);
+  if (uploadedBy) params.set('uploadedBy', uploadedBy);
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  if (modules?.length) params.set('modules', modules.join(','));
+  return apiFetch(`${API_BASE}/evidence-hub/search?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function listEvidenceHubUploaders() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/evidence-hub/uploaders?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export function getEvidenceHubDownloadUrl(sourceModule, attachmentId) {
+  const home = getCurrentHome();
+  switch (sourceModule) {
+    case 'hr':
+      return `${API_BASE}/hr/attachments/download/${attachmentId}?home=${h(home)}`;
+    case 'cqc_evidence':
+      return `${API_BASE}/cqc-evidence/files/${attachmentId}/download?home=${h(home)}`;
+    case 'onboarding':
+      return `${API_BASE}/onboarding/files/${attachmentId}/download?home=${h(home)}`;
+    case 'training':
+      return `${API_BASE}/training/files/${attachmentId}/download?home=${h(home)}`;
+    case 'record':
+      return `${API_BASE}/record-attachments/download/${attachmentId}?home=${h(home)}`;
+    default:
+      throw new Error(`Unsupported evidence source: ${sourceModule}`);
+  }
+}
+
+function getEvidenceHubDeleteUrl(sourceModule, attachmentId) {
+  const home = getCurrentHome();
+  switch (sourceModule) {
+    case 'hr':
+      return `${API_BASE}/hr/attachments/${attachmentId}?home=${h(home)}`;
+    case 'cqc_evidence':
+      return `${API_BASE}/cqc-evidence/files/${attachmentId}?home=${h(home)}`;
+    case 'onboarding':
+      return `${API_BASE}/onboarding/files/${attachmentId}?home=${h(home)}`;
+    case 'training':
+      return `${API_BASE}/training/files/${attachmentId}?home=${h(home)}`;
+    case 'record':
+      return `${API_BASE}/record-attachments/${attachmentId}?home=${h(home)}`;
+    default:
+      throw new Error(`Unsupported evidence source: ${sourceModule}`);
+  }
+}
+
+export async function deleteEvidenceHubAttachment(sourceModule, attachmentId) {
+  return apiFetch(getEvidenceHubDeleteUrl(sourceModule, attachmentId), {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
 export async function getHandoverEntries(homeSlug, date) {
   return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}&date=${date}`, { headers: authHeaders() });
 }

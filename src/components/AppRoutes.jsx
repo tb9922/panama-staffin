@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
-import { RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { RequireEvidenceHub, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -26,6 +26,7 @@ const WhistleblowingTracker = lazy(() => import('../pages/WhistleblowingTracker.
 const DolsTracker = lazy(() => import('../pages/DolsTracker.jsx'));
 const CareCertificateTracker = lazy(() => import('../pages/CareCertificateTracker.jsx'));
 const Reports = lazy(() => import('../pages/Reports.jsx'));
+const EvidenceHub = lazy(() => import('../pages/EvidenceHub.jsx'));
 const Config = lazy(() => import('../pages/Config.jsx'));
 const HandoverNotes = lazy(() => import('../pages/HandoverNotes.jsx'));
 const PayRatesConfig = lazy(() => import('../pages/PayRatesConfig.jsx'));
@@ -140,6 +141,7 @@ export default function AppRoutes() {
 
       {/* Reports & System */}
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/evidence" element={<RouteErrorBoundary><RequireEvidenceHub><EvidenceHub /></RequireEvidenceHub></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />

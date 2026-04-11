@@ -6,6 +6,7 @@ import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { ROLES, getRoleLabel } from '../../shared/roles.js';
+import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
@@ -14,6 +15,7 @@ export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
+  const canUseEvidenceHub = isPlatformAdmin || canAccessEvidenceHub(homeRole);
   const location = useLocation();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -215,6 +217,7 @@ export default function AppLayout() {
                     {section.items.filter(item => {
                       if (item.platformAdminOnly) return isPlatformAdmin;
                       if (item.requiresUserManagement && !canManageUsers) return false;
+                      if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
                       if (item.module) return canRead(item.module);
                       if (section.id === 'scheduling' && homeRole === 'staff_member') return item.ownDataSafe === true;
                       return true;
