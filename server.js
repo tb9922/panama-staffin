@@ -70,9 +70,9 @@ const app = express();
 // Ensure uploads directory exists on startup (prevents ENOENT on first file upload)
 try { fs.mkdirSync(config.upload.dir, { recursive: true }); } catch { /* non-fatal */ }
 
-// Trust first proxy (nginx) so req.ip reflects the real client IP.
-// Without this, rate limiters use 127.0.0.1 for everyone behind a proxy.
-if (config.nodeEnv === 'production') {
+// Trust first proxy (nginx) when explicitly enabled so req.ip reflects the
+// real client IP without forcing every deployment into NODE_ENV=production.
+if (config.trustProxy) {
   app.set('trust proxy', 1);
 }
 
