@@ -194,6 +194,7 @@ export async function search(homeId, filters = {}, client = pool) {
     )
     SELECT *
       FROM evidence
+     WHERE ($6::TEXT[] IS NULL OR $6::TEXT[] IS NOT NULL)
      ORDER BY created_at DESC
      LIMIT $7 OFFSET $8
   `;
@@ -204,6 +205,7 @@ export async function search(homeId, filters = {}, client = pool) {
     )
     SELECT COUNT(*)::INT AS total
       FROM evidence
+     WHERE ($6::TEXT[] IS NULL OR $6::TEXT[] IS NOT NULL)
   `;
 
   const baseParams = buildParams(homeId, filters);

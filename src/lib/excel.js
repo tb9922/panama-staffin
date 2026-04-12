@@ -1,8 +1,9 @@
-// Guard against Excel formula injection — strings starting with =, +, -, @, \t, \r
+// Guard against Excel formula injection — strings starting with =, +, -, @, \t, \r,
+// newline, or a pipe are treated suspiciously by spreadsheet tools/importers.
 // are interpreted as formulas by Excel. Prefix with a single quote to force text.
 function sanitizeCell(value) {
   if (typeof value !== 'string') return value;
-  if (/^[=+\-@\t\r]/.test(value)) return "'" + value;
+  if (/^[=+\-@\t\r\n|]/.test(value)) return "'" + value;
   return value;
 }
 

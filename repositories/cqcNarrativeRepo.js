@@ -24,16 +24,6 @@ function shapeRow(row) {
   };
 }
 
-async function findAnyByStatement(homeId, qualityStatement, client = pool) {
-  const { rows } = await client.query(
-    `SELECT ${COLS}
-       FROM cqc_statement_narratives
-      WHERE home_id = $1 AND quality_statement = $2`,
-    [homeId, qualityStatement]
-  );
-  return shapeRow(rows[0]);
-}
-
 export async function findByHome(homeId, client = pool) {
   const { rows } = await client.query(
     `SELECT ${COLS}
@@ -56,15 +46,22 @@ export async function findByStatement(homeId, qualityStatement, client = pool) {
 }
 
 export async function upsert(homeId, qualityStatement, data, version = null, client = pool) {
-  const existing = await findAnyByStatement(homeId, qualityStatement, client);
-  if (existing && version != null && existing.version !== version) return null;
-
-  if (!existing) {
+  if (version == null) {
     const { rows } = await client.query(
       `INSERT INTO cqc_statement_narratives (
          home_id, quality_statement, narrative, risks, actions,
          reviewed_by, reviewed_at, review_due
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (home_id, quality_statement) DO UPDATE SET
+         narrative = EXCLUDED.narrative,
+         risks = EXCLUDED.risks,
+         actions = EXCLUDED.actions,
+         reviewed_by = EXCLUDED.reviewed_by,
+         reviewed_at = EXCLUDED.reviewed_at,
+         review_due = EXCLUDED.review_due,
+         deleted_at = NULL,
+         version = cqc_statement_narratives.version + 1,
+         updated_at = NOW()
        RETURNING ${COLS}`,
       [
         homeId,
@@ -80,7 +77,7 @@ export async function upsert(homeId, qualityStatement, data, version = null, cli
     return shapeRow(rows[0]);
   }
 
-  const { rows } = await client.query(
+  const { rows: updatedRows } = await client.query(
     `UPDATE cqc_statement_narratives
        SET narrative = $3,
            risks = $4,
@@ -102,10 +99,30 @@ export async function upsert(homeId, qualityStatement, data, version = null, cli
       data.reviewed_by || null,
       data.reviewed_at || null,
       data.review_due || null,
-      version != null ? version : existing.version,
+      version,
     ]
   );
-  return shapeRow(rows[0]);
+  if (updatedRows[0]) return shapeRow(updatedRows[0]);
+
+  const { rows: insertedRows } = await client.query(
+    `INSERT INTO cqc_statement_narratives (
+       home_id, quality_statement, narrative, risks, actions,
+       reviewed_by, reviewed_at, review_due
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (home_id, quality_statement) DO NOTHING
+     RETURNING ${COLS}`,
+    [
+      homeId,
+      qualityStatement,
+      data.narrative || null,
+      data.risks || null,
+      data.actions || null,
+      data.reviewed_by || null,
+      data.reviewed_at || null,
+      data.review_due || null,
+    ]
+  );
+  return shapeRow(insertedRows[0]) || null;
 }
 
 export async function softDelete(homeId, qualityStatement, client = pool) {

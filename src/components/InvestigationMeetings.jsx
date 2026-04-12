@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getHrMeetings, createHrMeeting } from '../lib/api.js';
 import { MEETING_TYPES, MEETING_ATTENDEE_ROLES } from '../lib/hr.js';
 import { BTN, INPUT, CARD, BADGE } from '../lib/design.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import StaffPicker from './StaffPicker.jsx';
 import FileAttachments from './FileAttachments.jsx';
 import {
@@ -28,7 +29,7 @@ function roleName(id) {
 
 function initialForm() {
   return {
-    meeting_date: new Date().toISOString().slice(0, 10),
+    meeting_date: todayLocalISO(),
     meeting_time: '',
     meeting_type: 'interview',
     location: '',

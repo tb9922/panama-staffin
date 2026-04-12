@@ -9,6 +9,7 @@ import {
   downloadRecordAttachment,
   updateFinanceResident,
 } from '../../lib/api.js';
+import { todayLocalISO } from '../../lib/localDates.js';
 import Modal from '../Modal.jsx';
 
 const DISCHARGE_REASONS = [
@@ -19,7 +20,7 @@ const DISCHARGE_REASONS = [
 
 export default function ResidentDischargeModal({ home, resident, onClose, onSaved }) {
   const [reason, setReason] = useState('discharged');
-  const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dischargeDate, setDischargeDate] = useState(todayLocalISO());
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
