@@ -7,6 +7,7 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { zodError } from '../errors.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { validateDpiaStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 
@@ -89,9 +90,9 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dpiaRepo.findById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    // Enforce status workflow: approved requires completed first
-    if (parsed.data.status === 'approved' && existing.status !== 'completed') {
-      return res.status(400).json({ error: 'DPIA must be completed before it can be approved' });
+    const statusError = validateDpiaStatusChange(existing, parsed.data);
+    if (statusError) {
+      return res.status(400).json({ error: statusError });
     }
     const version = Number.isFinite(parsed.data._version) ? parsed.data._version : null;
     const result = await dpiaRepo.update(idP.data, req.home.id, parsed.data, null, version);
