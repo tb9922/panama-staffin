@@ -8,6 +8,15 @@ const EVIDENCE_COLS = `
   date_from, date_to, evidence_category, evidence_owner, review_due,
   added_by, added_at, created_at, deleted_at
 `;
+const FILE_COUNT_SQL = `
+  (
+    SELECT COUNT(*)::int
+      FROM cqc_evidence_files f
+     WHERE f.home_id = e.home_id
+       AND f.evidence_id = e.id
+       AND f.deleted_at IS NULL
+  ) AS file_count
+`;
 
 function shapeRow(row) {
   return {
@@ -24,13 +33,14 @@ function shapeRow(row) {
     review_due: row.review_due || null,
     added_by: row.added_by,
     added_at: row.added_at,
+    file_count: row.file_count != null ? parseInt(row.file_count, 10) : 0,
   };
 }
 
 export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
   const { rows } = await pool.query(
-    `SELECT ${EVIDENCE_COLS}, COUNT(*) OVER() AS _total
-       FROM cqc_evidence
+    `SELECT ${EVIDENCE_COLS}, ${FILE_COUNT_SQL}, COUNT(*) OVER() AS _total
+       FROM cqc_evidence e
       WHERE home_id = $1 AND deleted_at IS NULL
       ORDER BY added_at DESC NULLS LAST
       LIMIT $2 OFFSET $3`,
@@ -115,8 +125,8 @@ export async function sync(homeId, arr, client) {
 
 export async function findById(id, homeId) {
   const { rows } = await pool.query(
-    `SELECT ${EVIDENCE_COLS}
-       FROM cqc_evidence
+    `SELECT ${EVIDENCE_COLS}, ${FILE_COUNT_SQL}
+       FROM cqc_evidence e
       WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
@@ -144,7 +154,7 @@ export async function upsert(homeId, data) {
        added_by = $12,
        added_at = $13,
        deleted_at = NULL
-     RETURNING ${EVIDENCE_COLS}`,
+     RETURNING id`,
     [
       id,
       homeId,
@@ -161,7 +171,7 @@ export async function upsert(homeId, data) {
       data.added_at || now,
     ]
   );
-  return rows[0] ? shapeRow(rows[0]) : null;
+  return rows[0] ? findById(rows[0].id, homeId) : null;
 }
 
 const ALLOWED_COLUMNS = new Set([
@@ -201,10 +211,10 @@ export async function update(id, homeId, data, version) {
     params.push(version);
     sql += ` AND version = $${params.length}`;
   }
-  sql += ` RETURNING ${EVIDENCE_COLS}`;
+  sql += ` RETURNING id`;
   const { rows, rowCount } = await pool.query(sql, params);
   if (rowCount === 0 && version != null) return null;
-  return rows[0] ? shapeRow(rows[0]) : null;
+  return rows[0] ? findById(rows[0].id, homeId) : null;
 }
 
 export async function softDelete(id, homeId) {

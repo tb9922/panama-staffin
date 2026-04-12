@@ -84,11 +84,28 @@ describe('cqc evidence routes readiness contract', () => {
     expect(createRes.body.evidence_category).toBe('staff_leader_feedback');
     expect(createRes.body.evidence_owner).toBe('Deputy Manager');
     expect(createRes.body.review_due).toBe('2026-06-30');
+    expect(createRes.body.file_count).toBe(0);
 
     const listRes = await auth('get', `/api/cqc-evidence?home=${homeSlug}`).expect(200);
     expect(listRes.body.evidence[0].id).toBe(evidenceId);
     expect(listRes.body.evidence[0].evidence_owner).toBe('Deputy Manager');
     expect(listRes.body.evidence[0].review_due).toBe('2026-06-30');
+    expect(listRes.body.evidence[0].file_count).toBe(0);
+  });
+
+  it('rejects evidence where the end date is before the start date', async () => {
+    const res = await auth('post', `/api/cqc-evidence?home=${homeSlug}`)
+      .send({
+        quality_statement: 'S2',
+        type: 'qualitative',
+        title: 'Broken date range',
+        date_from: '2026-04-17',
+        date_to: '2026-04-16',
+        evidence_category: 'peoples_experience',
+      })
+      .expect(400);
+
+    expect(res.body.error).toMatch(/Evidence To cannot be before Evidence From/i);
   });
 
   it('supports narrative upsert and list endpoints with optimistic locking payloads', async () => {

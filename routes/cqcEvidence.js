@@ -119,6 +119,10 @@ const readinessQuerySchema = z.object({
   dateRange: z.coerce.number().int().min(28).max(365).optional(),
 });
 
+function hasInvalidEvidenceDateOrder(payload) {
+  return Boolean(payload?.date_from && payload?.date_to && payload.date_to < payload.date_from);
+}
+
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
@@ -171,6 +175,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = evidenceBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    if (hasInvalidEvidenceDateOrder(parsed.data)) {
+      return res.status(400).json({ error: 'Evidence To cannot be before Evidence From' });
+    }
     const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
     await auditService.log('cqc_evidence_create', req.home.slug, req.user.username, { id: item?.id });
     res.status(201).json(item);
@@ -287,6 +294,13 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await cqcEvidenceRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    const mergedDates = {
+      date_from: parsed.data.date_from !== undefined ? parsed.data.date_from : existing.date_from,
+      date_to: parsed.data.date_to !== undefined ? parsed.data.date_to : existing.date_to,
+    };
+    if (hasInvalidEvidenceDateOrder(mergedDates)) {
+      return res.status(400).json({ error: 'Evidence To cannot be before Evidence From' });
+    }
     const { version, payload } = splitVersion(parsed.data);
     const item = await cqcEvidenceRepo.update(idParsed.data, req.home.id, payload, version);
     if (item === null) {

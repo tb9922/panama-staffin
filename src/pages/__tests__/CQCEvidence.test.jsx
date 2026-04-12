@@ -140,6 +140,7 @@ function setupApiMocks() {
     date_from: null,
     date_to: null,
     evidence_category: 'feedback',
+    file_count: 0,
   });
   api.updateCqcEvidence.mockResolvedValue({
     id: 'ev-001',
@@ -151,6 +152,7 @@ function setupApiMocks() {
     date_from: null,
     date_to: null,
     evidence_category: 'feedback',
+    file_count: 0,
   });
   api.getCqcEvidenceFiles.mockResolvedValue([]);
   api.upsertCqcNarrative.mockResolvedValue({
@@ -592,7 +594,7 @@ describe('CQCEvidence', () => {
     });
 
     expect(screen.getByText('Supporting Files')).toBeInTheDocument();
-    expect(screen.getByText('You can upload on the first pass. We will save the evidence item automatically before the first file upload.')).toBeInTheDocument();
+    expect(screen.getByText('You can upload on the first pass. We will save the evidence item automatically before the first file upload. Saving the evidence item alone does not attach the selected file — click Upload.')).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText('Brief title...'), 'Family feedback summary');
     await user.upload(screen.getByLabelText('File'), new File(['hello'], 'evidence.txt', { type: 'text/plain' }));
@@ -606,5 +608,35 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
+  });
+
+  it('shows manual evidence file counts so unsaved attachments are obvious', async () => {
+    api.getCqcEvidence.mockResolvedValue({
+      evidence: [{
+        id: 'ev-101',
+        version: 1,
+        quality_statement: 'S1',
+        type: 'qualitative',
+        title: 'Family feedback summary',
+        description: '',
+        date_from: '2026-03-01',
+        date_to: '2026-03-05',
+        evidence_category: 'peoples_experience',
+        evidence_owner: null,
+        review_due: null,
+        added_by: 'admin',
+        added_at: '2026-03-06T10:00:00Z',
+        file_count: 0,
+      }],
+    });
+
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+    expect(await screen.findByText('0 files')).toBeInTheDocument();
   });
 });

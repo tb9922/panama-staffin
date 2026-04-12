@@ -110,6 +110,17 @@ function blankNarrativeForm(statementId = '', existing = null) {
   };
 }
 
+function getEvidenceDateRangeError(form) {
+  if (form?.date_from && form?.date_to && form.date_to < form.date_from) {
+    return 'Evidence To cannot be before Evidence From.';
+  }
+  return null;
+}
+
+function formatFileCount(count) {
+  return `${count} file${count === 1 ? '' : 's'}`;
+}
+
 function blankPartnerFeedbackForm(statementId = '', existing = null) {
   return {
     id: existing?.id || null,
@@ -626,11 +637,16 @@ function CQCEvidenceInner({ data }) {
   async function handleSaveEvidence() {
     if (savingEvidence) return;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) return;
+    const dateError = getEvidenceDateRangeError(evidenceForm);
+    if (dateError) {
+      setSaveError(dateError);
+      return;
+    }
     setSavingEvidence(true);
     setSaveError(null);
     try {
       const saved = await persistEvidenceDraft();
-      setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved.');
+      setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved. Supporting files are uploaded separately below.');
       setEvidenceForm(toEvidenceForm(saved));
       await loadEvidence();
     } catch (err) {
@@ -659,6 +675,11 @@ function CQCEvidenceInner({ data }) {
     if (evidenceForm.id) return evidenceForm.id;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) {
       throw new Error('Add a quality statement and title before uploading supporting files.');
+    }
+    const dateError = getEvidenceDateRangeError(evidenceForm);
+    if (dateError) {
+      setSaveError(dateError);
+      throw new Error(dateError);
     }
     if (savingEvidence) {
       throw new Error('Evidence is already being saved. Please wait a moment and try again.');
@@ -1039,6 +1060,9 @@ function CQCEvidenceInner({ data }) {
                                   <div className="text-sm font-medium text-gray-800">
                                     {me.title}
                                     {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{getEvidenceCategoryLabel(me.evidence_category)}</span>}
+                                    <span className={`${me.file_count > 0 ? BADGE.blue : BADGE.gray} ml-1.5 text-[10px]`}>
+                                      {formatFileCount(me.file_count || 0)}
+                                    </span>
                                   </div>
                                   {me.description && <div className="text-xs text-gray-500 mt-0.5">{me.description}</div>}
                                   <div className="text-[10px] text-gray-400 mt-0.5">
@@ -1550,7 +1574,7 @@ function CQCEvidenceInner({ data }) {
                 downloadFile={downloadCqcEvidenceFile}
                 title="Supporting Files"
                 emptyText="No supporting files uploaded yet."
-                saveFirstMessage="You can upload on the first pass. We will save the evidence item automatically before the first file upload."
+                saveFirstMessage="You can upload on the first pass. We will save the evidence item automatically before the first file upload. Saving the evidence item alone does not attach the selected file — click Upload."
                 ensureCaseId={canEdit ? ensureEvidenceForUploads : undefined}
               />
             </div>
