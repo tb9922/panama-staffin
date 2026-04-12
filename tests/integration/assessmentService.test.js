@@ -6,6 +6,8 @@ import { MOCK_CONFIG } from '../../src/test/fixtures/schedulingData.js';
 let homeId;
 
 beforeAll(async () => {
+  await pool.query(`DELETE FROM cqc_partner_feedback WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
+  await pool.query(`DELETE FROM cqc_observations WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_statement_narratives WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM homes WHERE slug = 'assess-ready-home'`).catch(() => {});
@@ -31,10 +33,30 @@ beforeAll(async () => {
      ) VALUES ($1,'S1','Evidence shows learning from incidents','Handover consistency','Refresh handover prompts','admin','2026-04-10T09:00:00Z','2026-07-10')`,
     [homeId]
   );
+
+  await pool.query(
+    `INSERT INTO cqc_partner_feedback (
+       id, home_id, quality_statement, feedback_date, title, partner_name, partner_role,
+       summary, evidence_owner, review_due, added_by
+     ) VALUES ($1,$2,'WL6','2026-03-15','Family communication review','Relative A','Family',
+       'Family feedback confirmed improved communication.','Deputy Manager','2026-07-01','admin')`,
+    ['snap-pf-1', homeId]
+  );
+
+  await pool.query(
+    `INSERT INTO cqc_observations (
+       id, home_id, quality_statement, observed_at, title, area, observer,
+       notes, evidence_owner, review_due, added_by
+     ) VALUES ($1,$2,'S1','2026-03-10T08:30:00Z','Observed learning handover','Handover','admin',
+       'Learning points discussed during handover.','Deputy Manager','2026-07-01','admin')`,
+    ['snap-obs-1', homeId]
+  );
 });
 
 afterAll(async () => {
   if (homeId) {
+    await pool.query('DELETE FROM cqc_partner_feedback WHERE home_id = $1', [homeId]).catch(() => {});
+    await pool.query('DELETE FROM cqc_observations WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_statement_narratives WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM homes WHERE id = $1', [homeId]).catch(() => {});
@@ -53,5 +75,10 @@ describe('assessmentService readiness snapshots', () => {
     const s1 = snapshot.result.readiness.entries.find((entry) => entry.statementId === 'S1');
     expect(s1).toBeTruthy();
     expect(s1.narrativePresent).toBe(true);
+    expect(s1.evidenceByCategory.observation).toBeGreaterThanOrEqual(1);
+
+    const wl6 = snapshot.result.readiness.entries.find((entry) => entry.statementId === 'WL6');
+    expect(wl6).toBeTruthy();
+    expect(wl6.evidenceByCategory.partner_feedback).toBeGreaterThanOrEqual(1);
   });
 });

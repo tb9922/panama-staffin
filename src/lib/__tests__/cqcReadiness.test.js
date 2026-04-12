@@ -20,6 +20,8 @@ function buildBaseData() {
     onboarding: {},
     cqc_evidence: [],
     cqc_statement_narratives: [],
+    cqc_partner_feedback: [],
+    cqc_observations: [],
   };
 }
 
@@ -80,5 +82,36 @@ describe('cqcReadiness', () => {
 
     expect(overall.total).toBe(4);
     expect(gaps.map((entry) => entry.statementId)).toEqual(['S1', 'S2', 'S3']);
+  });
+
+  it('counts structured partner feedback and observations as evidence coverage', () => {
+    const data = buildBaseData();
+    data.cqc_partner_feedback = [
+      {
+        id: 'pf-1',
+        quality_statement: 'WL6',
+        feedback_date: '2026-04-01',
+        title: 'Family coordination feedback',
+        evidence_owner: 'Manager',
+        review_due: '2026-07-01',
+        added_at: '2026-04-01T10:00:00Z',
+      },
+    ];
+    data.cqc_observations = [
+      {
+        id: 'obs-1',
+        quality_statement: 'S1',
+        observed_at: '2026-04-02T10:00:00Z',
+        title: 'Observed handover learning',
+        notes: 'Learning points discussed during handover.',
+        evidence_owner: 'Deputy',
+        review_due: '2026-07-15',
+        added_at: '2026-04-02T10:00:00Z',
+      },
+    ];
+
+    const matrix = buildReadinessMatrix(data, getDateRange(28), '2026-04-12');
+    expect(matrix.get('WL6').evidenceByCategory.partner_feedback).toBe(1);
+    expect(matrix.get('S1').evidenceByCategory.observation).toBe(1);
   });
 });

@@ -16,6 +16,8 @@ import {
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
   getCqcNarratives, upsertCqcNarrative,
+  getCqcPartnerFeedback, createCqcPartnerFeedback, updateCqcPartnerFeedback, deleteCqcPartnerFeedback,
+  getCqcObservations, createCqcObservation, updateCqcObservation, deleteCqcObservation,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -108,9 +110,82 @@ function blankNarrativeForm(statementId = '', existing = null) {
   };
 }
 
+function blankPartnerFeedbackForm(statementId = '', existing = null) {
+  return {
+    id: existing?.id || null,
+    version: existing?.version,
+    quality_statement: statementId || existing?.quality_statement || '',
+    feedback_date: existing?.feedback_date || todayLocalISO(),
+    title: existing?.title || '',
+    partner_name: existing?.partner_name || '',
+    partner_role: existing?.partner_role || '',
+    relationship: existing?.relationship || '',
+    summary: existing?.summary || '',
+    response_action: existing?.response_action || '',
+    evidence_owner: existing?.evidence_owner || '',
+    review_due: existing?.review_due || '',
+  };
+}
+
+function buildPartnerFeedbackPayload(form) {
+  return {
+    quality_statement: form.quality_statement,
+    feedback_date: form.feedback_date || null,
+    title: form.title.trim(),
+    partner_name: form.partner_name.trim() || null,
+    partner_role: form.partner_role.trim() || null,
+    relationship: form.relationship.trim() || null,
+    summary: form.summary.trim() || null,
+    response_action: form.response_action.trim() || null,
+    evidence_owner: form.evidence_owner.trim() || null,
+    review_due: form.review_due || null,
+  };
+}
+
+function blankObservationForm(statementId = '', existing = null) {
+  return {
+    id: existing?.id || null,
+    version: existing?.version,
+    quality_statement: statementId || existing?.quality_statement || '',
+    observed_at: existing?.observed_at ? String(existing.observed_at).slice(0, 16) : `${todayLocalISO()}T09:00`,
+    title: existing?.title || '',
+    area: existing?.area || '',
+    observer: existing?.observer || '',
+    notes: existing?.notes || '',
+    actions: existing?.actions || '',
+    evidence_owner: existing?.evidence_owner || '',
+    review_due: existing?.review_due || '',
+  };
+}
+
+function buildObservationPayload(form) {
+  return {
+    quality_statement: form.quality_statement,
+    observed_at: form.observed_at ? new Date(form.observed_at).toISOString() : null,
+    title: form.title.trim(),
+    area: form.area.trim() || null,
+    observer: form.observer.trim() || null,
+    notes: form.notes.trim() || null,
+    actions: form.actions.trim() || null,
+    evidence_owner: form.evidence_owner.trim() || null,
+    review_due: form.review_due || null,
+  };
+}
+
 function metricColor(value, lowerIsBetter) {
   if (lowerIsBetter) return value <= 5 ? 'text-emerald-600' : value <= 15 ? 'text-amber-600' : 'text-red-600';
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function readinessBadgeClass(status) {
@@ -190,20 +265,31 @@ function CQCEvidenceInner({ data }) {
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
   const [narratives, setNarratives] = useState([]);
+  const [partnerFeedback, setPartnerFeedback] = useState([]);
+  const [observations, setObservations] = useState([]);
   const [narrativeDrafts, setNarrativeDrafts] = useState({});
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [narrativesLoading, setNarrativesLoading] = useState(true);
+  const [structuredLoading, setStructuredLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
+  const [showPartnerFeedbackModal, setShowPartnerFeedbackModal] = useState(false);
+  const [partnerFeedbackForm, setPartnerFeedbackForm] = useState(blankPartnerFeedbackForm());
+  const [showObservationModal, setShowObservationModal] = useState(false);
+  const [observationForm, setObservationForm] = useState(blankObservationForm());
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
   const [savingNarrativeId, setSavingNarrativeId] = useState(null);
+  const [savingPartnerFeedback, setSavingPartnerFeedback] = useState(false);
+  const [savingObservation, setSavingObservation] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
   const [narrativeError, setNarrativeError] = useState(null);
   const [narrativeNotice, setNarrativeNotice] = useState(null);
+  const [structuredError, setStructuredError] = useState(null);
+  const [structuredNotice, setStructuredNotice] = useState(null);
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
@@ -214,7 +300,7 @@ function CQCEvidenceInner({ data }) {
   const [viewingSnapshot, setViewingSnapshot] = useState(null);
   const [showSnapshots, setShowSnapshots] = useState(false);
 
-  useDirtyGuard(showAddEvidence);
+  useDirtyGuard(showAddEvidence || showPartnerFeedbackModal || showObservationModal);
 
   const loadEvidence = useCallback(async () => {
     try {
@@ -244,6 +330,25 @@ function CQCEvidenceInner({ data }) {
   }, []);
 
   useEffect(() => { loadNarratives(); }, [loadNarratives]);
+
+  const loadStructuredEvidence = useCallback(async () => {
+    try {
+      const home = getCurrentHome();
+      const [feedbackRows, observationRows] = await Promise.all([
+        getCqcPartnerFeedback(home),
+        getCqcObservations(home),
+      ]);
+      if (!isMounted.current) return;
+      setPartnerFeedback(Array.isArray(feedbackRows) ? feedbackRows : []);
+      setObservations(Array.isArray(observationRows) ? observationRows : []);
+    } catch (err) {
+      if (isMounted.current) console.error('Failed to load structured CQC evidence:', err);
+    } finally {
+      if (isMounted.current) setStructuredLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadStructuredEvidence(); }, [loadStructuredEvidence]);
 
   const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
@@ -318,8 +423,10 @@ function CQCEvidenceInner({ data }) {
       ...data,
       cqc_evidence: evidence,
       cqc_statement_narratives: narratives,
+      cqc_partner_feedback: partnerFeedback,
+      cqc_observations: observations,
     };
-  }, [data, evidence, narratives]);
+  }, [data, evidence, narratives, partnerFeedback, observations]);
 
   const score = useMemo(() => {
     if (!dataWithEvidence?.config) return null;
@@ -344,6 +451,28 @@ function CQCEvidenceInner({ data }) {
     return map;
   }, [dataWithEvidence, dateRange, today]);
 
+  const partnerFeedbackByStatement = useMemo(() => {
+    const grouped = {};
+    for (const entry of partnerFeedback) {
+      (grouped[entry.quality_statement] ||= []).push(entry);
+    }
+    for (const values of Object.values(grouped)) {
+      values.sort((a, b) => String(b.feedback_date || '').localeCompare(String(a.feedback_date || '')));
+    }
+    return grouped;
+  }, [partnerFeedback]);
+
+  const observationsByStatement = useMemo(() => {
+    const grouped = {};
+    for (const entry of observations) {
+      (grouped[entry.quality_statement] ||= []).push(entry);
+    }
+    for (const values of Object.values(grouped)) {
+      values.sort((a, b) => String(b.observed_at || '').localeCompare(String(a.observed_at || '')));
+    }
+    return grouped;
+  }, [observations]);
+
   if (!data?.config || !score) {
     return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
   }
@@ -363,6 +492,34 @@ function CQCEvidenceInner({ data }) {
     setSaveError(null);
     setSaveNotice(null);
     setShowAddEvidence(true);
+  }
+
+  function openAddPartnerFeedback(statementId) {
+    setPartnerFeedbackForm(blankPartnerFeedbackForm(statementId));
+    setStructuredError(null);
+    setStructuredNotice(null);
+    setShowPartnerFeedbackModal(true);
+  }
+
+  function openEditPartnerFeedback(item) {
+    setPartnerFeedbackForm(blankPartnerFeedbackForm(item.quality_statement, item));
+    setStructuredError(null);
+    setStructuredNotice(null);
+    setShowPartnerFeedbackModal(true);
+  }
+
+  function openAddObservation(statementId) {
+    setObservationForm(blankObservationForm(statementId));
+    setStructuredError(null);
+    setStructuredNotice(null);
+    setShowObservationModal(true);
+  }
+
+  function openEditObservation(item) {
+    setObservationForm(blankObservationForm(item.quality_statement, item));
+    setStructuredError(null);
+    setStructuredNotice(null);
+    setShowObservationModal(true);
   }
 
   function getNarrativeDraft(statementId) {
@@ -487,6 +644,80 @@ function CQCEvidenceInner({ data }) {
     }
   }
 
+  async function handleSavePartnerFeedback() {
+    if (savingPartnerFeedback) return;
+    if (!partnerFeedbackForm.quality_statement || !partnerFeedbackForm.title.trim() || !partnerFeedbackForm.feedback_date) return;
+    const home = getCurrentHome();
+    setSavingPartnerFeedback(true);
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      const payload = buildPartnerFeedbackPayload(partnerFeedbackForm);
+      const saved = partnerFeedbackForm.id
+        ? await updateCqcPartnerFeedback(home, partnerFeedbackForm.id, { ...payload, _version: partnerFeedbackForm.version })
+        : await createCqcPartnerFeedback(home, payload);
+      await loadStructuredEvidence();
+      setPartnerFeedbackForm(blankPartnerFeedbackForm(saved.quality_statement, saved));
+      setStructuredNotice(partnerFeedbackForm.id ? 'Partner feedback updated.' : 'Partner feedback saved.');
+      setShowPartnerFeedbackModal(false);
+    } catch (err) {
+      setStructuredError(`Failed to save partner feedback: ${err.message}`);
+    } finally {
+      setSavingPartnerFeedback(false);
+    }
+  }
+
+  async function handleDeletePartnerFeedback(id) {
+    if (!await confirm('Remove this partner feedback entry?')) return;
+    const home = getCurrentHome();
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      await deleteCqcPartnerFeedback(home, id);
+      await loadStructuredEvidence();
+      setStructuredNotice('Partner feedback removed.');
+    } catch (err) {
+      setStructuredError(`Failed to remove partner feedback: ${err.message}`);
+    }
+  }
+
+  async function handleSaveObservation() {
+    if (savingObservation) return;
+    if (!observationForm.quality_statement || !observationForm.title.trim() || !observationForm.observed_at) return;
+    const home = getCurrentHome();
+    setSavingObservation(true);
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      const payload = buildObservationPayload(observationForm);
+      const saved = observationForm.id
+        ? await updateCqcObservation(home, observationForm.id, { ...payload, _version: observationForm.version })
+        : await createCqcObservation(home, payload);
+      await loadStructuredEvidence();
+      setObservationForm(blankObservationForm(saved.quality_statement, saved));
+      setStructuredNotice(observationForm.id ? 'Observation updated.' : 'Observation saved.');
+      setShowObservationModal(false);
+    } catch (err) {
+      setStructuredError(`Failed to save observation: ${err.message}`);
+    } finally {
+      setSavingObservation(false);
+    }
+  }
+
+  async function handleDeleteObservation(id) {
+    if (!await confirm('Remove this observation entry?')) return;
+    const home = getCurrentHome();
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      await deleteCqcObservation(home, id);
+      await loadStructuredEvidence();
+      setStructuredNotice('Observation removed.');
+    } catch (err) {
+      setStructuredError(`Failed to remove observation: ${err.message}`);
+    }
+  }
+
   async function handleGeneratePDF() {
     setGenerating(true);
     setPdfError(null);
@@ -548,6 +779,8 @@ function CQCEvidenceInner({ data }) {
       {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
       {narrativeNotice && <p className="mb-3 text-sm text-emerald-700">{narrativeNotice}</p>}
       {narrativeError && <p className="mb-3 text-sm text-red-600">{narrativeError}</p>}
+      {structuredNotice && <p className="mb-3 text-sm text-emerald-700">{structuredNotice}</p>}
+      {structuredError && <p className="mb-3 text-sm text-red-600">{structuredError}</p>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -662,6 +895,8 @@ function CQCEvidenceInner({ data }) {
               const readiness = readinessEntries[qs.id];
               const autoCount = ev?.autoEvidence?.length || 0;
               const manualCount = ev?.manualEvidence?.length || 0;
+              const feedbackItems = partnerFeedbackByStatement[qs.id] || [];
+              const observationItems = observationsByStatement[qs.id] || [];
               const narrativeDraft = getNarrativeDraft(qs.id);
 
               return (
@@ -768,6 +1003,128 @@ function CQCEvidenceInner({ data }) {
                           </div>
                         </div>
                       )}
+
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Partner Feedback</div>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className={`${BTN.secondary} ${BTN.xs}`}
+                              onClick={(e) => { e.stopPropagation(); openAddPartnerFeedback(qs.id); }}
+                            >
+                              + Add Partner Feedback
+                            </button>
+                          )}
+                        </div>
+                        {structuredLoading ? (
+                          <div className="text-xs text-gray-400">Loading partner feedback...</div>
+                        ) : feedbackItems.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
+                            No structured partner feedback recorded for this statement yet.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {feedbackItems.map((entry) => (
+                              <div key={entry.id} className="rounded bg-gray-50 px-2 py-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-800">{entry.title}</div>
+                                    <div className="text-[10px] text-gray-400 mt-0.5">
+                                      {entry.feedback_date}
+                                      {entry.partner_name ? ` | ${entry.partner_name}` : ''}
+                                      {entry.partner_role ? ` | ${entry.partner_role}` : ''}
+                                      {entry.evidence_owner ? ` | owner ${entry.evidence_owner}` : ''}
+                                      {entry.review_due ? ` | review due ${entry.review_due}` : ''}
+                                    </div>
+                                    {entry.summary && <div className="text-xs text-gray-500 mt-1">{entry.summary}</div>}
+                                    {entry.response_action && <div className="text-xs text-gray-500 mt-1">Action: {entry.response_action}</div>}
+                                  </div>
+                                  {canEdit && (
+                                    <div className="ml-2 flex shrink-0 gap-2">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-blue-500 hover:text-blue-700"
+                                        onClick={(e) => { e.stopPropagation(); openEditPartnerFeedback(entry); }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="text-xs text-red-400 hover:text-red-600"
+                                        onClick={(e) => { e.stopPropagation(); handleDeletePartnerFeedback(entry.id); }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Observation Notes</div>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className={`${BTN.secondary} ${BTN.xs}`}
+                              onClick={(e) => { e.stopPropagation(); openAddObservation(qs.id); }}
+                            >
+                              + Add Observation
+                            </button>
+                          )}
+                        </div>
+                        {structuredLoading ? (
+                          <div className="text-xs text-gray-400">Loading observations...</div>
+                        ) : observationItems.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
+                            No structured observations recorded for this statement yet.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {observationItems.map((entry) => (
+                              <div key={entry.id} className="rounded bg-gray-50 px-2 py-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-800">{entry.title}</div>
+                                    <div className="text-[10px] text-gray-400 mt-0.5">
+                                      {formatDateTime(entry.observed_at)}
+                                      {entry.area ? ` | ${entry.area}` : ''}
+                                      {entry.observer ? ` | ${entry.observer}` : ''}
+                                      {entry.evidence_owner ? ` | owner ${entry.evidence_owner}` : ''}
+                                      {entry.review_due ? ` | review due ${entry.review_due}` : ''}
+                                    </div>
+                                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                                    {entry.actions && <div className="text-xs text-gray-500 mt-1">Action: {entry.actions}</div>}
+                                  </div>
+                                  {canEdit && (
+                                    <div className="ml-2 flex shrink-0 gap-2">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-blue-500 hover:text-blue-700"
+                                        onClick={(e) => { e.stopPropagation(); openEditObservation(entry); }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="text-xs text-red-400 hover:text-red-600"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteObservation(entry.id); }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="mb-3">
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Self-Assessment</div>
@@ -1134,6 +1491,256 @@ function CQCEvidenceInner({ data }) {
                 disabled={savingEvidence || !evidenceForm.quality_statement || !evidenceForm.title.trim()}
                 className={BTN.primary}>{savingEvidence ? 'Saving...' : evidenceForm.id ? 'Save Changes' : 'Save Evidence'}</button>
             </div>
+      </Modal>
+      <Modal
+        isOpen={showPartnerFeedbackModal}
+        onClose={() => { setShowPartnerFeedbackModal(false); setStructuredError(null); setStructuredNotice(null); }}
+        title={partnerFeedbackForm.id ? 'Edit Partner Feedback' : 'Add Partner Feedback'}
+        size="lg"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className={INPUT.label}>Quality Statement</label>
+            <select
+              className={INPUT.select}
+              value={partnerFeedbackForm.quality_statement}
+              onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, quality_statement: e.target.value })}
+            >
+              <option value="">Select statement...</option>
+              {QUALITY_STATEMENTS.map((qs) => (
+                <option key={qs.id} value={qs.id}>{qs.cqcRef} — {qs.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Feedback Date</label>
+              <input
+                type="date"
+                aria-label="Feedback Date"
+                className={INPUT.base}
+                value={partnerFeedbackForm.feedback_date}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, feedback_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Title</label>
+              <input
+                type="text"
+                aria-label="Title"
+                className={INPUT.base}
+                value={partnerFeedbackForm.title}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, title: e.target.value })}
+                placeholder="What was the feedback about?"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={INPUT.label}>Partner Name</label>
+              <input
+                type="text"
+                aria-label="Partner Name"
+                className={INPUT.base}
+                value={partnerFeedbackForm.partner_name}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, partner_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Partner Role</label>
+              <input
+                type="text"
+                aria-label="Partner Role"
+                className={INPUT.base}
+                value={partnerFeedbackForm.partner_role}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, partner_role: e.target.value })}
+                placeholder="Family / GP / Social worker"
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Relationship</label>
+              <input
+                type="text"
+                aria-label="Relationship"
+                className={INPUT.base}
+                value={partnerFeedbackForm.relationship}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, relationship: e.target.value })}
+              />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Feedback Summary</label>
+            <textarea
+              aria-label="Feedback Summary"
+              className={`${INPUT.base} h-20`}
+              value={partnerFeedbackForm.summary}
+              onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, summary: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={INPUT.label}>Response / Follow-up</label>
+            <textarea
+              aria-label="Response / Follow-up"
+              className={`${INPUT.base} h-20`}
+              value={partnerFeedbackForm.response_action}
+              onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, response_action: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Evidence Owner</label>
+              <input
+                type="text"
+                aria-label="Evidence Owner"
+                className={INPUT.base}
+                value={partnerFeedbackForm.evidence_owner}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, evidence_owner: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Review Due</label>
+              <input
+                type="date"
+                aria-label="Review Due"
+                className={INPUT.base}
+                value={partnerFeedbackForm.review_due}
+                onChange={(e) => setPartnerFeedbackForm({ ...partnerFeedbackForm, review_due: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+        <div className={MODAL.footer}>
+          {structuredNotice && <p className="text-sm text-emerald-700 mr-auto">{structuredNotice}</p>}
+          {structuredError && <p className="text-sm text-red-600 mr-auto">{structuredError}</p>}
+          <button onClick={() => { setShowPartnerFeedbackModal(false); setStructuredError(null); setStructuredNotice(null); }} className={BTN.ghost}>Close</button>
+          <button
+            onClick={handleSavePartnerFeedback}
+            disabled={savingPartnerFeedback || !partnerFeedbackForm.quality_statement || !partnerFeedbackForm.feedback_date || !partnerFeedbackForm.title.trim()}
+            className={BTN.primary}
+          >
+            {savingPartnerFeedback ? 'Saving...' : partnerFeedbackForm.id ? 'Save Changes' : 'Save Partner Feedback'}
+          </button>
+        </div>
+      </Modal>
+      <Modal
+        isOpen={showObservationModal}
+        onClose={() => { setShowObservationModal(false); setStructuredError(null); setStructuredNotice(null); }}
+        title={observationForm.id ? 'Edit Observation' : 'Add Observation'}
+        size="lg"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className={INPUT.label}>Quality Statement</label>
+            <select
+              className={INPUT.select}
+              value={observationForm.quality_statement}
+              onChange={(e) => setObservationForm({ ...observationForm, quality_statement: e.target.value })}
+            >
+              <option value="">Select statement...</option>
+              {QUALITY_STATEMENTS.map((qs) => (
+                <option key={qs.id} value={qs.id}>{qs.cqcRef} — {qs.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Observed At</label>
+              <input
+                type="datetime-local"
+                aria-label="Observed At"
+                className={INPUT.base}
+                value={observationForm.observed_at}
+                onChange={(e) => setObservationForm({ ...observationForm, observed_at: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Title</label>
+              <input
+                type="text"
+                aria-label="Title"
+                className={INPUT.base}
+                value={observationForm.title}
+                onChange={(e) => setObservationForm({ ...observationForm, title: e.target.value })}
+                placeholder="What was observed?"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Area</label>
+              <input
+                type="text"
+                aria-label="Area"
+                className={INPUT.base}
+                value={observationForm.area}
+                onChange={(e) => setObservationForm({ ...observationForm, area: e.target.value })}
+                placeholder="Dining room / med round / handover"
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Observer</label>
+              <input
+                type="text"
+                aria-label="Observer"
+                className={INPUT.base}
+                value={observationForm.observer}
+                onChange={(e) => setObservationForm({ ...observationForm, observer: e.target.value })}
+              />
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Observation Notes</label>
+            <textarea
+              aria-label="Observation Notes"
+              className={`${INPUT.base} h-24`}
+              value={observationForm.notes}
+              onChange={(e) => setObservationForm({ ...observationForm, notes: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={INPUT.label}>Actions / Learning</label>
+            <textarea
+              aria-label="Actions / Learning"
+              className={`${INPUT.base} h-20`}
+              value={observationForm.actions}
+              onChange={(e) => setObservationForm({ ...observationForm, actions: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={INPUT.label}>Evidence Owner</label>
+              <input
+                type="text"
+                aria-label="Evidence Owner"
+                className={INPUT.base}
+                value={observationForm.evidence_owner}
+                onChange={(e) => setObservationForm({ ...observationForm, evidence_owner: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={INPUT.label}>Review Due</label>
+              <input
+                type="date"
+                aria-label="Review Due"
+                className={INPUT.base}
+                value={observationForm.review_due}
+                onChange={(e) => setObservationForm({ ...observationForm, review_due: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+        <div className={MODAL.footer}>
+          {structuredNotice && <p className="text-sm text-emerald-700 mr-auto">{structuredNotice}</p>}
+          {structuredError && <p className="text-sm text-red-600 mr-auto">{structuredError}</p>}
+          <button onClick={() => { setShowObservationModal(false); setStructuredError(null); setStructuredNotice(null); }} className={BTN.ghost}>Close</button>
+          <button
+            onClick={handleSaveObservation}
+            disabled={savingObservation || !observationForm.quality_statement || !observationForm.observed_at || !observationForm.title.trim()}
+            className={BTN.primary}
+          >
+            {savingObservation ? 'Saving...' : observationForm.id ? 'Save Changes' : 'Save Observation'}
+          </button>
+        </div>
       </Modal>
       {ConfirmDialog}
     </div>

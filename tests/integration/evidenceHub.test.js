@@ -130,6 +130,9 @@ describe('Evidence Hub integration', () => {
       type: 'qualitative',
       title: 'Learning culture audit',
       description: 'Snapshot of learning culture evidence',
+      evidence_category: 'partner_feedback',
+      evidence_owner: 'Compliance Lead',
+      review_due: '2026-08-01',
       added_by: USERS.manager,
     });
 
@@ -260,6 +263,13 @@ describe('Evidence Hub integration', () => {
     const trainingRow = response.body.rows.find((row) => row.sourceModule === 'training');
     expect(trainingRow.parentLabel).toMatch(/Training - Fire Safety/);
     expect(trainingRow.staffName).toBe('Alice Evidence');
+
+    const cqcRow = response.body.rows.find((row) => row.sourceModule === 'cqc_evidence');
+    expect(cqcRow.qualityStatementId).toBe('S1');
+    expect(cqcRow.evidenceCategory).toBe('partner_feedback');
+    expect(cqcRow.evidenceOwner).toBe('Compliance Lead');
+    expect(cqcRow.reviewDueAt).toBe('2026-08-01');
+    expect(cqcRow.freshness).toBeTruthy();
 
     const onboardingRow = response.body.rows.find((row) => row.sourceModule === 'onboarding');
     expect(onboardingRow.parentLabel).toBe('Onboarding - Enhanced DBS Check');

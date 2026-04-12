@@ -13,6 +13,7 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getReadableEvidenceSources } from '../../shared/evidenceHub.js';
 import { getRecordAttachmentModule } from '../../shared/recordAttachmentModules.js';
 import { QUALITY_STATEMENTS } from '../lib/cqc.js';
+import { getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { ONBOARDING_SECTIONS } from '../lib/onboarding.js';
 import { getTrainingTypes } from '../lib/training.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -99,6 +100,22 @@ function getFileTypeLabel(mimeType, fileName) {
 
 function countLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function freshnessBadge(freshness) {
+  if (freshness === 'overdue') return BADGE.red;
+  if (freshness === 'due_soon') return BADGE.amber;
+  if (freshness === 'stale') return BADGE.gray;
+  if (freshness === 'fresh') return BADGE.green;
+  return BADGE.gray;
+}
+
+function freshnessLabel(freshness) {
+  if (freshness === 'overdue') return 'Review overdue';
+  if (freshness === 'due_soon') return 'Review due soon';
+  if (freshness === 'stale') return 'Aged evidence';
+  if (freshness === 'fresh') return 'Current';
+  return '';
 }
 
 function getCqcStatementId(row) {
@@ -604,8 +621,28 @@ export default function EvidenceHub() {
                                                 >
                                                   {file.originalName}
                                                 </a>
+                                                {file.sourceModule === 'cqc_evidence' && (
+                                                  <div className="mt-1 flex flex-wrap gap-1">
+                                                    {file.qualityStatementId && (
+                                                      <span className={BADGE.gray}>{file.qualityStatementId}</span>
+                                                    )}
+                                                    {file.evidenceCategory && (
+                                                      <span className={BADGE.gray}>{getEvidenceCategoryLabel(file.evidenceCategory)}</span>
+                                                    )}
+                                                    {file.freshness && (
+                                                      <span className={freshnessBadge(file.freshness)}>{freshnessLabel(file.freshness)}</span>
+                                                    )}
+                                                  </div>
+                                                )}
                                                 {file.description && (
                                                   <div className="text-xs text-gray-500 mt-1">{file.description}</div>
+                                                )}
+                                                {file.sourceModule === 'cqc_evidence' && (file.evidenceOwner || file.reviewDueAt) && (
+                                                  <div className="text-xs text-gray-500 mt-1">
+                                                    {file.evidenceOwner ? `Owner ${file.evidenceOwner}` : null}
+                                                    {file.evidenceOwner && file.reviewDueAt ? ' | ' : null}
+                                                    {file.reviewDueAt ? `Review due ${file.reviewDueAt}` : null}
+                                                  </div>
                                                 )}
                                               </div>
                                             </div>
@@ -790,8 +827,26 @@ export default function EvidenceHub() {
                       <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} className="text-blue-600 hover:text-blue-700 hover:underline font-medium">
                         {row.originalName}
                       </a>
+                      {row.sourceModule === 'cqc_evidence' && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {row.qualityStatementId && <span className={BADGE.gray}>{row.qualityStatementId}</span>}
+                          {row.evidenceCategory && (
+                            <span className={BADGE.gray}>{getEvidenceCategoryLabel(row.evidenceCategory)}</span>
+                          )}
+                          {row.freshness && (
+                            <span className={freshnessBadge(row.freshness)}>{freshnessLabel(row.freshness)}</span>
+                          )}
+                        </div>
+                      )}
                       {row.description && (
                         <p className="text-xs text-gray-500 mt-1">{row.description}</p>
+                      )}
+                      {row.sourceModule === 'cqc_evidence' && (row.evidenceOwner || row.reviewDueAt) && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {row.evidenceOwner ? `Owner ${row.evidenceOwner}` : null}
+                          {row.evidenceOwner && row.reviewDueAt ? ' | ' : null}
+                          {row.reviewDueAt ? `Review due ${row.reviewDueAt}` : null}
+                        </p>
                       )}
                     </td>
                     <td className={TABLE.td}>

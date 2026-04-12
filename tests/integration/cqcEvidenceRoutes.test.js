@@ -14,6 +14,8 @@ let token;
 let evidenceId;
 
 beforeAll(async () => {
+  await pool.query(`DELETE FROM cqc_partner_feedback WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
+  await pool.query(`DELETE FROM cqc_observations WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query(`DELETE FROM cqc_statement_narratives WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [`${PREFIX}-home`]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
@@ -49,6 +51,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (homeId) {
+    await pool.query('DELETE FROM cqc_partner_feedback WHERE home_id = $1', [homeId]).catch(() => {});
+    await pool.query('DELETE FROM cqc_observations WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_statement_narratives WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeId]).catch(() => {});
   }
@@ -115,5 +119,65 @@ describe('cqc evidence routes readiness contract', () => {
     expect(Array.isArray(listRes.body)).toBe(true);
     expect(listRes.body[0].quality_statement).toBe('S1');
     expect(listRes.body[0].review_due).toBe('2026-07-12');
+  });
+
+  it('creates, updates, lists, and deletes structured partner feedback', async () => {
+    const createRes = await auth('post', `/api/cqc-evidence/partner-feedback?home=${homeSlug}`)
+      .send({
+        quality_statement: 'WL6',
+        feedback_date: '2026-04-10',
+        title: 'Family review',
+        partner_name: 'Relative A',
+        partner_role: 'Family',
+        summary: 'Communication was calm and clear.',
+        response_action: 'Keep using weekly updates.',
+        evidence_owner: 'Deputy Manager',
+        review_due: '2026-07-12',
+      })
+      .expect(201);
+
+    const updateRes = await auth('put', `/api/cqc-evidence/partner-feedback/${createRes.body.id}?home=${homeSlug}`)
+      .send({
+        summary: 'Communication was calm and consistently clear.',
+        _version: createRes.body.version,
+      })
+      .expect(200);
+
+    expect(updateRes.body.version).toBe(2);
+
+    const listRes = await auth('get', `/api/cqc-evidence/partner-feedback?home=${homeSlug}`).expect(200);
+    expect(listRes.body.some((entry) => entry.id === createRes.body.id)).toBe(true);
+
+    await auth('delete', `/api/cqc-evidence/partner-feedback/${createRes.body.id}?home=${homeSlug}`).expect(200);
+  });
+
+  it('creates, updates, lists, and deletes structured observations', async () => {
+    const createRes = await auth('post', `/api/cqc-evidence/observations?home=${homeSlug}`)
+      .send({
+        quality_statement: 'S1',
+        observed_at: '2026-04-10T09:30:00Z',
+        title: 'Observed handover learning',
+        area: 'Handover',
+        observer: 'Deputy Manager',
+        notes: 'Team discussed previous incidents and learning points.',
+        actions: 'Repeat in weekly handover.',
+        evidence_owner: 'Deputy Manager',
+        review_due: '2026-07-12',
+      })
+      .expect(201);
+
+    const updateRes = await auth('put', `/api/cqc-evidence/observations/${createRes.body.id}?home=${homeSlug}`)
+      .send({
+        notes: 'Team discussed previous incidents, learning points, and escalation themes.',
+        _version: createRes.body.version,
+      })
+      .expect(200);
+
+    expect(updateRes.body.version).toBe(2);
+
+    const listRes = await auth('get', `/api/cqc-evidence/observations?home=${homeSlug}`).expect(200);
+    expect(listRes.body.some((entry) => entry.id === createRes.body.id)).toBe(true);
+
+    await auth('delete', `/api/cqc-evidence/observations/${createRes.body.id}?home=${homeSlug}`).expect(200);
   });
 });

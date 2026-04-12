@@ -490,6 +490,60 @@ export async function upsertCqcNarrative(homeSlug, statementId, data) {
 
 // ── Token Revocation ────────────────────────────────────────────────────────
 
+export async function getCqcPartnerFeedback(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc-evidence/partner-feedback?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createCqcPartnerFeedback(homeSlug, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/partner-feedback?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCqcPartnerFeedback(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/partner-feedback/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCqcPartnerFeedback(homeSlug, id) {
+  return apiFetch(`${API_BASE}/cqc-evidence/partner-feedback/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function getCqcObservations(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc-evidence/observations?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createCqcObservation(homeSlug, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/observations?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCqcObservation(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/observations/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCqcObservation(homeSlug, id) {
+  return apiFetch(`${API_BASE}/cqc-evidence/observations/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
 export async function getCqcEvidenceFiles(_caseType, evidenceId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {

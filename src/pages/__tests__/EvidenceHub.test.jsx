@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import EvidenceHub from '../EvidenceHub.jsx';
 
@@ -23,6 +24,27 @@ vi.mock('../../lib/excel.js', () => ({
 import * as api from '../../lib/api.js';
 
 const HUB_ROWS = [
+  {
+    sourceModule: 'cqc_evidence',
+    sourceLabel: 'CQC Evidence',
+    sourceSubType: null,
+    sourceRecordId: 'cqc-1',
+    attachmentId: 44,
+    originalName: 'family-feedback-note.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 1536,
+    description: 'Structured family feedback evidence',
+    uploadedBy: 'compliance.user',
+    createdAt: '2026-04-11T11:00:00.000Z',
+    parentLabel: 'S1 - Learning culture audit',
+    ownerPagePath: '/cqc',
+    qualityStatementId: 'S1',
+    evidenceCategory: 'partner_feedback',
+    evidenceOwner: 'Compliance Lead',
+    reviewDueAt: '2026-08-01',
+    freshness: 'fresh',
+    canDelete: true,
+  },
   {
     sourceModule: 'hr',
     sourceLabel: 'HR Cases',
@@ -75,9 +97,12 @@ describe('EvidenceHub page', () => {
     await waitFor(() => {
       expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
     });
+    expect(screen.getByText('family-feedback-note.pdf')).toBeInTheDocument();
     expect(screen.getByText('hr-evidence-note.pdf')).toBeInTheDocument();
     expect(screen.getByText('Invoice - INV-42')).toBeInTheDocument();
     expect(screen.getByText('Alice Evidence')).toBeInTheDocument();
+    expect(screen.getByText('Feedback from Partners')).toBeInTheDocument();
+    expect(screen.getByText('Current')).toBeInTheDocument();
   });
 
   it('passes module filters through to searchEvidenceHub', async () => {
@@ -109,10 +134,12 @@ describe('EvidenceHub page', () => {
       expect(screen.getByText('hr-evidence-note.pdf')).toBeInTheDocument();
     });
 
-    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
-    expect(deleteButtons).toHaveLength(1);
+    const hrFileLink = screen.getByRole('link', { name: 'hr-evidence-note.pdf' });
+    const hrRow = hrFileLink.closest('tr');
+    expect(hrRow).not.toBeNull();
 
-    await user.click(deleteButtons[0]);
+    const deleteButton = within(hrRow).getByRole('button', { name: 'Delete' });
+    await user.click(deleteButton);
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {

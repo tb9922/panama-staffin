@@ -21,6 +21,8 @@ import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
+import * as cqcPartnerFeedbackRepo from '../repositories/cqcPartnerFeedbackRepo.js';
+import * as cqcObservationRepo from '../repositories/cqcObservationRepo.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as ropaRepo from '../repositories/ropaRepo.js';
 import * as dpiaRepo from '../repositories/dpiaRepo.js';
@@ -56,6 +58,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     fireDrills, incidents, complaints, complaintSurveys,
     maintenance, ipcAudits, risks, policies,
     whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcNarratives,
+    cqcPartnerFeedback, cqcObservations,
   ] = await Promise.all([
     staffRepo.findByHome(homeId),
     overrideRepo.findByHome(homeId, from, to),
@@ -77,6 +80,8 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     onboardingRepo.findByHome(homeId),
     cqcEvidenceRepo.findByHome(homeId, { limit: 500 }),
     cqcNarrativeRepo.findByHome(homeId),
+    cqcPartnerFeedbackRepo.findByHome(homeId),
+    cqcObservationRepo.findByHome(homeId),
   ]);
 
   return {
@@ -101,6 +106,8 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     onboarding: onboarding || {},
     cqc_evidence: cqcEvidence?.rows || cqcEvidence || [],
     cqc_statement_narratives: cqcNarratives || [],
+    cqc_partner_feedback: cqcPartnerFeedback || [],
+    cqc_observations: cqcObservations || [],
   };
 }
 

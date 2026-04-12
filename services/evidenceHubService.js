@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import * as evidenceHubRepo from '../repositories/evidenceHubRepo.js';
+import { normalizeEvidenceCategory } from '../src/lib/cqcEvidenceCategories.js';
 import {
   canDeleteEvidenceSource,
   getEvidenceSourceLabel,
@@ -111,6 +112,24 @@ function formatCaseType(caseType) {
     .join(' ');
 }
 
+function classifyFreshness(reviewDueAt, createdAt) {
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+  if (reviewDueAt) {
+    const dueIso = String(reviewDueAt).slice(0, 10);
+    const diffDays = Math.round((new Date(`${dueIso}T00:00:00Z`) - new Date(`${todayIso}T00:00:00Z`)) / 86400000);
+    if (diffDays < 0) return 'overdue';
+    if (diffDays <= 30) return 'due_soon';
+    return 'fresh';
+  }
+  const createdIso = String(createdAt || '').slice(0, 10);
+  if (createdIso) {
+    const ageDays = Math.round((new Date(`${todayIso}T00:00:00Z`) - new Date(`${createdIso}T00:00:00Z`)) / 86400000);
+    if (ageDays > 365) return 'stale';
+  }
+  return 'fresh';
+}
+
 async function loadStaffNames(homeId, staffIds, client) {
   const uniqueIds = [...new Set(staffIds.filter(Boolean))];
   if (uniqueIds.length === 0) return {};
@@ -199,6 +218,11 @@ async function resolveCqcRows(home, rows, client) {
       : `CQC Evidence - ${row.sourceRecordId}`;
     row.staffName = null;
     row.ownerPagePath = '/cqc';
+    row.qualityStatementId = evidence?.quality_statement || row.qualityStatementId || null;
+    row.evidenceCategory = normalizeEvidenceCategory(row.evidenceCategory);
+    row.evidenceOwner = row.evidenceOwner || null;
+    row.reviewDueAt = row.reviewDueAt || null;
+    row.freshness = classifyFreshness(row.reviewDueAt, row.createdAt);
   }
 }
 
@@ -276,6 +300,13 @@ export async function search(home, roleId, filters = {}) {
     for (const row of rows) {
       row.sourceLabel = getEvidenceSourceLabel(row.sourceModule);
       row.canDelete = canDeleteEvidenceSource(roleId, row.sourceModule, row.sourceSubType);
+      if (row.sourceModule !== 'cqc_evidence') {
+        row.qualityStatementId = row.qualityStatementId || null;
+        row.evidenceCategory = row.evidenceCategory || null;
+        row.evidenceOwner = row.evidenceOwner || null;
+        row.reviewDueAt = row.reviewDueAt || null;
+        row.freshness = row.freshness || null;
+      }
     }
 
     return { rows, total: result.total };

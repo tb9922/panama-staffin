@@ -1083,12 +1083,70 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     });
   }
 
-  const manualEvidence = (data.cqc_evidence || [])
+  const structuredPartnerFeedback = (data.cqc_partner_feedback || [])
     .filter((entry) => entry.quality_statement === statementId)
     .map((entry) => ({
-      ...entry,
-      evidence_category: normalizeEvidenceCategory(entry.evidence_category),
+      id: entry.id,
+      version: entry.version,
+      quality_statement: entry.quality_statement,
+      type: 'partner_feedback',
+      title: entry.title,
+      description: entry.summary,
+      date_from: entry.feedback_date,
+      date_to: entry.feedback_date,
+      evidence_category: 'partner_feedback',
+      evidence_owner: entry.evidence_owner || null,
+      review_due: entry.review_due || null,
+      added_by: entry.added_by || null,
+      added_at: entry.added_at || entry.created_at || null,
+      source_kind: 'partner_feedback',
+      partner_name: entry.partner_name || null,
+      partner_role: entry.partner_role || null,
+      relationship: entry.relationship || null,
+      response_action: entry.response_action || null,
     }));
+
+  const structuredObservations = (data.cqc_observations || [])
+    .filter((entry) => entry.quality_statement === statementId)
+    .map((entry) => {
+      const observedDate = entry.observed_at ? String(entry.observed_at).slice(0, 10) : null;
+      return {
+        id: entry.id,
+        version: entry.version,
+        quality_statement: entry.quality_statement,
+        type: 'observation',
+        title: entry.title,
+        description: entry.notes,
+        date_from: observedDate,
+        date_to: observedDate,
+        evidence_category: 'observation',
+        evidence_owner: entry.evidence_owner || null,
+        review_due: entry.review_due || null,
+        added_by: entry.added_by || null,
+        added_at: entry.added_at || entry.created_at || null,
+        source_kind: 'observation',
+        area: entry.area || null,
+        observer: entry.observer || null,
+        actions: entry.actions || null,
+        observed_at: entry.observed_at,
+      };
+    });
+
+  const manualEvidence = [
+    ...(data.cqc_evidence || [])
+      .filter((entry) => entry.quality_statement === statementId)
+      .map((entry) => ({
+        ...entry,
+        evidence_category: normalizeEvidenceCategory(entry.evidence_category),
+        source_kind: 'manual_evidence',
+      })),
+    ...structuredPartnerFeedback,
+    ...structuredObservations,
+  ].sort((a, b) => {
+    const aDate = a.added_at || a.date_to || a.date_from || '';
+    const bDate = b.added_at || b.date_to || b.date_from || '';
+    return String(bDate).localeCompare(String(aDate));
+  });
 
   return { statement, autoEvidence, manualEvidence };
 }

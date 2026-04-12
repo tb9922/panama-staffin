@@ -26,9 +26,17 @@ vi.mock('../../lib/api.js', async () => {
     getCareCertData: vi.fn(),
     getCqcEvidence: vi.fn(),
     getCqcNarratives: vi.fn(),
+    getCqcPartnerFeedback: vi.fn(),
+    getCqcObservations: vi.fn(),
     createCqcEvidence: vi.fn(),
     updateCqcEvidence: vi.fn(),
     upsertCqcNarrative: vi.fn(),
+    createCqcPartnerFeedback: vi.fn(),
+    updateCqcPartnerFeedback: vi.fn(),
+    deleteCqcPartnerFeedback: vi.fn(),
+    createCqcObservation: vi.fn(),
+    updateCqcObservation: vi.fn(),
+    deleteCqcObservation: vi.fn(),
     getCqcEvidenceFiles: vi.fn(),
     uploadCqcEvidenceFile: vi.fn(),
     deleteCqcEvidenceFile: vi.fn(),
@@ -84,6 +92,8 @@ function setupApiMocks() {
   api.getCareCertData.mockResolvedValue({ careCert: {} });
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
   api.getCqcNarratives.mockResolvedValue([]);
+  api.getCqcPartnerFeedback.mockResolvedValue([]);
+  api.getCqcObservations.mockResolvedValue([]);
   api.createCqcEvidence.mockResolvedValue({
     id: 'ev-001',
     version: 0,
@@ -121,6 +131,62 @@ function setupApiMocks() {
   api.deleteCqcEvidenceFile.mockResolvedValue({});
   api.downloadCqcEvidenceFile.mockResolvedValue(undefined);
   api.deleteCqcEvidence.mockResolvedValue({});
+  api.createCqcPartnerFeedback.mockResolvedValue({
+    id: 'pf-001',
+    version: 1,
+    quality_statement: 'S1',
+    feedback_date: '2026-03-08',
+    title: 'Family review',
+    partner_name: 'Relative A',
+    partner_role: 'Family',
+    relationship: '',
+    summary: 'Family said communication was clear.',
+    response_action: 'Continue weekly update.',
+    evidence_owner: 'Deputy Manager',
+    review_due: '2026-06-08',
+  });
+  api.updateCqcPartnerFeedback.mockResolvedValue({
+    id: 'pf-001',
+    version: 2,
+    quality_statement: 'S1',
+    feedback_date: '2026-03-08',
+    title: 'Family review',
+    partner_name: 'Relative A',
+    partner_role: 'Family',
+    relationship: '',
+    summary: 'Updated feedback summary.',
+    response_action: 'Continue weekly update.',
+    evidence_owner: 'Deputy Manager',
+    review_due: '2026-06-08',
+  });
+  api.deleteCqcPartnerFeedback.mockResolvedValue({});
+  api.createCqcObservation.mockResolvedValue({
+    id: 'obs-001',
+    version: 1,
+    quality_statement: 'S1',
+    observed_at: '2026-03-08T10:00:00Z',
+    title: 'Observed handover learning',
+    area: 'Handover',
+    observer: 'admin',
+    notes: 'Learning discussed clearly.',
+    actions: 'Repeat weekly.',
+    evidence_owner: 'Deputy Manager',
+    review_due: '2026-06-08',
+  });
+  api.updateCqcObservation.mockResolvedValue({
+    id: 'obs-001',
+    version: 2,
+    quality_statement: 'S1',
+    observed_at: '2026-03-08T10:00:00Z',
+    title: 'Observed handover learning',
+    area: 'Handover',
+    observer: 'admin',
+    notes: 'Updated observation notes.',
+    actions: 'Repeat weekly.',
+    evidence_owner: 'Deputy Manager',
+    review_due: '2026-06-08',
+  });
+  api.deleteCqcObservation.mockResolvedValue({});
   api.createSnapshot.mockResolvedValue({ id: 'snap-001' });
   api.getSnapshots.mockResolvedValue([]);
   api.getSnapshot.mockResolvedValue({ id: 'snap-001', status: 'draft' });
@@ -300,6 +366,56 @@ describe('CQCEvidence', () => {
       expect(api.upsertCqcNarrative).toHaveBeenCalled();
     });
     expect(screen.getByText(/Self-assessment saved for S1/i)).toBeInTheDocument();
+  });
+
+  it('saves structured partner feedback for a statement', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+    await user.click(screen.getByRole('button', { name: '+ Add Partner Feedback' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Add Partner Feedback' })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('Title'), 'Family review');
+    await user.type(screen.getByLabelText('Partner Name'), 'Relative A');
+    await user.type(screen.getByLabelText('Partner Role'), 'Family');
+    await user.type(screen.getByLabelText('Feedback Summary'), 'Family said communication was clear.');
+    await user.click(screen.getByRole('button', { name: /Save Partner Feedback/i }));
+
+    await waitFor(() => {
+      expect(api.createCqcPartnerFeedback).toHaveBeenCalled();
+    });
+  });
+
+  it('saves structured observations for a statement', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+    await user.click(screen.getByRole('button', { name: '+ Add Observation' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Add Observation' })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('Title'), 'Observed handover learning');
+    await user.type(screen.getByLabelText('Area'), 'Handover');
+    await user.type(screen.getByLabelText('Observer'), 'admin');
+    await user.type(screen.getByLabelText('Observation Notes'), 'Learning discussed clearly.');
+    await user.click(screen.getByRole('button', { name: /Save Observation/i }));
+
+    await waitFor(() => {
+      expect(api.createCqcObservation).toHaveBeenCalled();
+    });
   });
 
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
