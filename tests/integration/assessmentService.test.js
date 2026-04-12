@@ -70,12 +70,14 @@ describe('assessmentService readiness snapshots', () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot.result.readiness).toBeTruthy();
     expect(Array.isArray(snapshot.result.readiness.entries)).toBe(true);
+    expect(Array.isArray(snapshot.result.readiness.questionSummary)).toBe(true);
     expect(snapshot.result.readiness.overall).toBeTruthy();
 
     const s1 = snapshot.result.readiness.entries.find((entry) => entry.statementId === 'S1');
     expect(s1).toBeTruthy();
     expect(s1.narrativePresent).toBe(true);
     expect(s1.evidenceByCategory.observation).toBeGreaterThanOrEqual(1);
+    expect(['strong', 'partial', 'stale']).toContain(s1.status);
 
     const wl6 = snapshot.result.readiness.entries.find((entry) => entry.statementId === 'WL6');
     expect(wl6).toBeTruthy();

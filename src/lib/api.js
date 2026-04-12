@@ -480,6 +480,13 @@ export async function getCqcNarratives(homeSlug) {
   return apiFetch(`${API_BASE}/cqc-evidence/narratives?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
 
+export async function getCqcReadiness(homeSlug, dateRange = 28, signal) {
+  return apiFetch(`${API_BASE}/cqc-evidence/readiness?home=${h(homeSlug)}&dateRange=${encodeURIComponent(dateRange)}`, {
+    headers: authHeaders(),
+    signal,
+  });
+}
+
 export async function upsertCqcNarrative(homeSlug, statementId, data) {
   return apiFetch(`${API_BASE}/cqc-evidence/narratives/${encodeURIComponent(statementId)}?home=${h(homeSlug)}`, {
     method: 'PUT',

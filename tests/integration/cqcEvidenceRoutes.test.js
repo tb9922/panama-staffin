@@ -121,6 +121,18 @@ describe('cqc evidence routes readiness contract', () => {
     expect(listRes.body[0].review_due).toBe('2026-07-12');
   });
 
+  it('returns a server-authored readiness summary for the home', async () => {
+    const res = await auth('get', `/api/cqc-evidence/readiness?home=${homeSlug}&dateRange=28`).expect(200);
+
+    expect(Array.isArray(res.body.entries)).toBe(true);
+    expect(Array.isArray(res.body.questionSummary)).toBe(true);
+    expect(Array.isArray(res.body.gaps)).toBe(true);
+
+    const s1 = res.body.entries.find((entry) => entry.statementId === 'S1');
+    expect(s1).toBeTruthy();
+    expect(typeof s1.summary).toBe('string');
+  });
+
   it('creates, updates, lists, and deletes structured partner feedback', async () => {
     const createRes = await auth('post', `/api/cqc-evidence/partner-feedback?home=${homeSlug}`)
       .send({

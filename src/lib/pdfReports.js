@@ -23,7 +23,7 @@ import { getRiskStats, getRiskBand, RISK_CATEGORIES } from './riskRegister.js';
 import { getPolicyStats, getPolicyStatus, POLICY_STATUSES } from './policyReview.js';
 import { getWhistleblowingStats } from './whistleblowing.js';
 import { getDolsStats } from './dols.js';
-import { buildReadinessMatrix, getOverallReadiness, getReadinessGaps, serialiseReadinessMatrix } from './cqcReadiness.js';
+import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps, serialiseReadinessMatrix } from './cqcReadiness.js';
 
 function addHeader(doc, title, subtitle, homeName) {
   doc.setFontSize(16);
@@ -408,6 +408,7 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
     const matrix = buildReadinessMatrix(data, dateRange, today);
     return {
       entries: serialiseReadinessMatrix(matrix),
+      questionSummary: getQuestionReadiness(matrix),
       overall: getOverallReadiness(matrix),
       gaps: getReadinessGaps(matrix),
     };
@@ -471,37 +472,35 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   // ── Page 2: S1 — Staffing Levels ──────────────────────────────────────────
   doc.addPage();
   y = addHeader(doc, 'CQC Readiness Summary', periodLabel, homeName);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Overall Readiness', 14, y);
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.text(
-    `${readiness.overall?.label || 'Progressing'} - ${readiness.overall?.covered || 0}/${readiness.overall?.total || QUALITY_STATEMENTS.length} statements covered`,
-    14,
-    y
-  );
-  y += 6;
-  doc.text(
-    `Missing: ${readiness.overall?.missing || 0} | Weak: ${readiness.overall?.weak || 0} | Partial: ${readiness.overall?.partial || 0}`,
-    14,
-    y
-  );
-  y += 6;
+  const questionRows = (readiness.questionSummary || []).map((entry) => [
+    entry.question === 'well-led' ? 'Well-Led' : entry.question.replace(/^\w/, (value) => value.toUpperCase()),
+    `${entry.strong}/${entry.total}`,
+    String(entry.partial || 0),
+    String(entry.stale || 0),
+    String(entry.weak || 0),
+    String(entry.missing || 0),
+  ]);
+  autoTable(doc, {
+    startY: y,
+    head: [['Question', 'Strong', 'Partial', 'Stale', 'Weak', 'Missing']],
+    body: questionRows.length > 0 ? questionRows : [['-', '0/0', '0', '0', '0', '0']],
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+  });
 
   const readinessRows = (readiness.gaps || []).slice(0, 12).map((gap) => [
     gap.statementId,
     gap.statementName,
     gap.status,
     String(gap.reviewOverdue || 0),
-    (gap.reasons || []).join('; ').slice(0, 120),
+    String(gap.summary || (gap.reasons || []).join('; ')).slice(0, 120),
   ]);
   if (readinessRows.length === 0) {
-    readinessRows.push(['-', 'No significant gaps identified', 'covered', '0', 'Readiness checks looked healthy at export time']);
+    readinessRows.push(['-', 'No significant gaps identified', 'strong', '0', 'Readiness checks looked healthy at export time']);
   }
 
   autoTable(doc, {
-    startY: y + 2,
+    startY: doc.lastAutoTable.finalY + 6,
     head: [['Statement', 'Name', 'Status', 'Overdue', 'Key Gaps']],
     body: readinessRows,
     styles: { fontSize: 8, cellPadding: 2 },

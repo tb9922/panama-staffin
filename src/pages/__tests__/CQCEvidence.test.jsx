@@ -25,6 +25,7 @@ vi.mock('../../lib/api.js', async () => {
     getDols: vi.fn(),
     getCareCertData: vi.fn(),
     getCqcEvidence: vi.fn(),
+    getCqcReadiness: vi.fn(),
     getCqcNarratives: vi.fn(),
     getCqcPartnerFeedback: vi.fn(),
     getCqcObservations: vi.fn(),
@@ -91,6 +92,41 @@ function setupApiMocks() {
   api.getDols.mockResolvedValue({ dols: [], mcaAssessments: [] });
   api.getCareCertData.mockResolvedValue({ careCert: {} });
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
+  api.getCqcReadiness.mockResolvedValue({
+    computedAt: '2026-03-08',
+    entries: [
+      {
+        statementId: 'S1',
+        statementName: 'Learning Culture',
+        category: 'safe',
+        status: 'partial',
+        evidenceCount: 1,
+        categoriesCovered: 1,
+        categoriesExpected: 4,
+        staleCount: 0,
+        reviewOverdue: 0,
+        narrativePresent: false,
+        summary: '1 evidence item. Missing: observation, processes, outcomes.',
+      },
+    ],
+    questionSummary: [
+      { question: 'safe', total: 8, strong: 0, partial: 1, stale: 0, weak: 0, missing: 7 },
+      { question: 'effective', total: 6, strong: 0, partial: 0, stale: 0, weak: 0, missing: 6 },
+      { question: 'caring', total: 5, strong: 0, partial: 0, stale: 0, weak: 0, missing: 5 },
+      { question: 'responsive', total: 5, strong: 0, partial: 0, stale: 0, weak: 0, missing: 5 },
+      { question: 'well-led', total: 10, strong: 0, partial: 0, stale: 0, weak: 0, missing: 10 },
+    ],
+    gaps: [
+      {
+        statementId: 'S1',
+        statementName: 'Learning Culture',
+        category: 'safe',
+        status: 'partial',
+        summary: '1 evidence item. Missing: observation, processes, outcomes.',
+      },
+    ],
+    overall: { band: 'gaps', label: 'Heuristic: Gaps', badge: 'amber', strong: 0, partial: 1, stale: 0, weak: 0, missing: 33, total: 34 },
+  });
   api.getCqcNarratives.mockResolvedValue([]);
   api.getCqcPartnerFeedback.mockResolvedValue([]);
   api.getCqcObservations.mockResolvedValue([]);
@@ -272,6 +308,7 @@ describe('CQCEvidence', () => {
       expect(screen.getByText('Readiness')).toBeInTheDocument();
     });
     expect(screen.getByText('Readiness Gaps')).toBeInTheDocument();
+    expect(api.getCqcReadiness).toHaveBeenCalled();
   });
 
   it('displays Training Compliance and Staffing Fill Rate KPI cards', async () => {

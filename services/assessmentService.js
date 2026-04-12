@@ -31,9 +31,10 @@ import { scanRetention } from './gdprService.js';
 // Scoring engines — pure functions, no browser APIs.
 // CONSTRAINT: these files (and their transitive imports) must remain browser-API-free.
 // If any file in the chain imports window/document/fetch, server-side scoring will crash.
-import { calculateComplianceScore } from '../src/lib/cqc.js';
+import { calculateComplianceScore, getDateRange } from '../src/lib/cqc.js';
 import {
   buildReadinessMatrix,
+  getQuestionReadiness,
   getOverallReadiness,
   getReadinessGaps,
   serialiseReadinessMatrix,
@@ -111,6 +112,17 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
   };
 }
 
+function buildReadinessPayload(data, dateRange, asOfDate) {
+  const readinessMatrix = buildReadinessMatrix(data, dateRange, asOfDate);
+  return {
+    entries: serialiseReadinessMatrix(readinessMatrix),
+    questionSummary: getQuestionReadiness(readinessMatrix),
+    overall: getOverallReadiness(readinessMatrix),
+    gaps: getReadinessGaps(readinessMatrix),
+    computedAt: asOfDate,
+  };
+}
+
 // ── GDPR Data Assembly ──────────────────────────────────────────────────────
 
 async function gatherGdprData(homeId) {
@@ -158,12 +170,7 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
     // asOfDate = window end date (for historical snapshots) or today (for current snapshots)
     const asOfDate = windowTo || today;
     const result = calculateComplianceScore(data, dateRange, asOfDate);
-    const readinessMatrix = buildReadinessMatrix(data, dateRange, asOfDate);
-    const readiness = {
-      entries: serialiseReadinessMatrix(readinessMatrix),
-      overall: getOverallReadiness(readinessMatrix),
-      gaps: getReadinessGaps(readinessMatrix),
-    };
+    const readiness = buildReadinessPayload(data, dateRange, asOfDate);
     return {
       engine_version: result.engine_version,
       overall_score: result.overallScore,
@@ -194,4 +201,10 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   }
 
   return null;
+}
+
+export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = formatDate(new Date())) {
+  const data = await gatherCqcData(homeId);
+  if (!data) return null;
+  return buildReadinessPayload(data, getDateRange(dateRangeDays), asOfDate);
 }

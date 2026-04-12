@@ -2,6 +2,15 @@ import { calculateComplianceScore, getEvidenceForStatement, QUALITY_STATEMENTS }
 import { getExpectedEvidenceCategories } from './cqcStatementExpectations.js';
 import { normalizeEvidenceCategory } from './cqcEvidenceCategories.js';
 
+export const FRESHNESS_THRESHOLDS_DAYS = {
+  peoples_experience: 180,
+  staff_leader_feedback: 180,
+  partner_feedback: 180,
+  observation: 90,
+  processes: 365,
+  outcomes: 180,
+};
+
 function asIsoDate(value) {
   if (!value) return null;
   if (typeof value === 'string') return value.slice(0, 10);
@@ -16,13 +25,12 @@ function daysBetween(a, b) {
 }
 
 function sortBySeverity(a, b) {
-  const order = { missing: 0, weak: 1, partial: 2, covered: 3 };
+  const order = { missing: 0, weak: 1, stale: 2, partial: 3, strong: 4 };
   return (order[a.status] ?? 99) - (order[b.status] ?? 99) || a.statementId.localeCompare(b.statementId);
 }
 
 function getEvidenceDate(entry) {
   return (
-    asIsoDate(entry.review_due) ||
     asIsoDate(entry.date_to) ||
     asIsoDate(entry.date_from) ||
     asIsoDate(entry.added_at) ||
@@ -30,30 +38,19 @@ function getEvidenceDate(entry) {
   );
 }
 
-function computeStatus({
-  manualEvidenceCount,
-  metricCoverageCount,
-  expectedCategories,
-  coveredCategories,
+function getFreshnessThreshold(category) {
+  return FRESHNESS_THRESHOLDS_DAYS[category] || 365;
+}
+
+function buildReasonParts({
+  categoriesMissing,
+  metricsMissing,
   staleCount,
   reviewOverdue,
   narrativePresent,
 }) {
-  const totalCoverage = manualEvidenceCount + metricCoverageCount;
-  if (totalCoverage === 0) return 'missing';
-  if (manualEvidenceCount === 0 && metricCoverageCount > 0) return 'weak';
-
-  const expectedCount = expectedCategories.length || 1;
-  const coverageRatio = coveredCategories.size / expectedCount;
-  const mostlyStale = manualEvidenceCount > 0 && staleCount > manualEvidenceCount / 2;
-  if (coverageRatio >= 0.75 && reviewOverdue === 0 && !mostlyStale && narrativePresent) return 'covered';
-  return 'partial';
-}
-
-function buildReasonParts(expectedCategories, coveredCategories, metricsMissing, staleCount, reviewOverdue, narrativePresent) {
   const reasons = [];
-  const missingCategories = expectedCategories.filter((category) => !coveredCategories.has(category));
-  if (missingCategories.length) reasons.push(`Missing ${missingCategories.join(', ')}`);
+  if (categoriesMissing.length) reasons.push(`Missing ${categoriesMissing.join(', ')}`);
   if (metricsMissing.length) reasons.push(`Missing metrics: ${metricsMissing.join(', ')}`);
   if (staleCount > 0) reasons.push(`${staleCount} stale evidence item${staleCount === 1 ? '' : 's'}`);
   if (reviewOverdue > 0) reasons.push(`${reviewOverdue} review overdue`);
@@ -61,7 +58,45 @@ function buildReasonParts(expectedCategories, coveredCategories, metricsMissing,
   return reasons;
 }
 
-export function buildReadinessMatrix(data, dateRange, asOfDate, staleDays = 365) {
+function computeStatus({
+  evidenceCount,
+  metricCoverageCount,
+  categoriesCovered,
+  categoriesExpected,
+  staleCount,
+  reviewOverdue,
+}) {
+  if (evidenceCount === 0 && metricCoverageCount === 0) return 'missing';
+  if (evidenceCount === 0) return 'weak';
+  if (staleCount > 0 && staleCount >= evidenceCount * 0.5) return 'stale';
+  if (categoriesCovered < Math.max(1, categoriesExpected * 0.5)) return 'partial';
+  if (categoriesCovered >= Math.ceil(categoriesExpected * 0.75) && staleCount === 0 && reviewOverdue === 0) return 'strong';
+  return 'partial';
+}
+
+function buildSummary({
+  evidenceCount,
+  categoriesCovered,
+  categoriesExpected,
+  staleCount,
+  reviewOverdue,
+  categoriesMissing,
+  metricsMissing,
+  narrativePresent,
+}) {
+  const parts = [
+    `${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`,
+    `across ${categoriesCovered} of ${categoriesExpected} expected categor${categoriesExpected === 1 ? 'y' : 'ies'}`,
+  ];
+  if (staleCount > 0) parts.push(`${staleCount} stale`);
+  if (reviewOverdue > 0) parts.push(`${reviewOverdue} review overdue`);
+  if (categoriesMissing.length) parts.push(`Missing: ${categoriesMissing.join(', ')}`);
+  if (metricsMissing.length) parts.push(`Metrics missing: ${metricsMissing.join(', ')}`);
+  if (!narrativePresent) parts.push('Narrative missing');
+  return parts.join('. ') + '.';
+}
+
+export function buildReadinessMatrix(data, dateRange, asOfDate) {
   const score = calculateComplianceScore(data, dateRange, asOfDate);
   const asOf = asIsoDate(asOfDate) || asIsoDate(new Date());
   const narratives = new Map(
@@ -72,11 +107,11 @@ export function buildReadinessMatrix(data, dateRange, asOfDate, staleDays = 365)
   for (const statement of QUALITY_STATEMENTS) {
     const evidence = getEvidenceForStatement(statement.id, data, dateRange, asOfDate) || { manualEvidence: [], autoEvidence: [] };
     const manualEvidence = evidence.manualEvidence || [];
-    const autoEvidence = evidence.autoEvidence || [];
-    const expectedCategories = getExpectedEvidenceCategories(statement.id);
+    const expectedCategories = [...new Set(getExpectedEvidenceCategories(statement.id).map(normalizeEvidenceCategory).filter(Boolean))];
+    const expectedCategorySet = new Set(expectedCategories);
     const evidenceByCategory = Object.fromEntries(expectedCategories.map((category) => [category, 0]));
     const coveredCategories = new Set();
-    let staleCount = 0;
+    const staleItems = [];
     let reviewOverdue = 0;
     let reviewDueSoon = 0;
     let oldestEvidenceDate = null;
@@ -84,16 +119,32 @@ export function buildReadinessMatrix(data, dateRange, asOfDate, staleDays = 365)
 
     for (const item of manualEvidence) {
       const category = normalizeEvidenceCategory(item.evidence_category);
-      if (category) {
+      const isExpectedCategory = !!(category && expectedCategorySet.has(category));
+      if (isExpectedCategory) {
         evidenceByCategory[category] = (evidenceByCategory[category] || 0) + 1;
         coveredCategories.add(category);
       }
+
       const evidenceDate = getEvidenceDate(item);
       if (evidenceDate) {
         if (!oldestEvidenceDate || evidenceDate < oldestEvidenceDate) oldestEvidenceDate = evidenceDate;
         if (!newestEvidenceDate || evidenceDate > newestEvidenceDate) newestEvidenceDate = evidenceDate;
-        if (daysBetween(evidenceDate, asOf) > staleDays) staleCount += 1;
+        if (isExpectedCategory) {
+          const daysOld = daysBetween(evidenceDate, asOf);
+          const staleDays = getFreshnessThreshold(category);
+          if (daysOld > staleDays) {
+            staleItems.push({
+              id: item.id,
+              title: item.title,
+              category,
+              addedAt: evidenceDate,
+              staleDays,
+              daysOld,
+            });
+          }
+        }
       }
+
       const reviewDue = asIsoDate(item.review_due);
       if (reviewDue) {
         const diff = daysBetween(asOf, reviewDue);
@@ -112,27 +163,17 @@ export function buildReadinessMatrix(data, dateRange, asOfDate, staleDays = 365)
       }
       metricScores[metricId] = metric.score;
       const metricCategory = normalizeEvidenceCategory(metric.evidence_category);
-      if (metricCategory) coveredCategories.add(metricCategory);
+      if (metricCategory && expectedCategorySet.has(metricCategory)) coveredCategories.add(metricCategory);
     }
 
+    const categoriesMissing = expectedCategories.filter((category) => !coveredCategories.has(category));
     const narrative = narratives.get(statement.id) || null;
     const narrativePresent = !!(
       narrative &&
       [narrative.narrative, narrative.risks, narrative.actions].some((value) => !!String(value || '').trim())
     );
 
-    const status = computeStatus({
-      manualEvidenceCount: manualEvidence.length,
-      metricCoverageCount: Object.keys(metricScores).length,
-      expectedCategories,
-      coveredCategories,
-      staleCount,
-      reviewOverdue,
-      narrativePresent,
-    });
-
-    const reasons = buildReasonParts(expectedCategories, coveredCategories, metricsMissing, staleCount, reviewOverdue, narrativePresent);
-    matrix.set(statement.id, {
+    const entry = {
       statementId: statement.id,
       statementName: statement.name,
       category: statement.category,
@@ -141,45 +182,93 @@ export function buildReadinessMatrix(data, dateRange, asOfDate, staleDays = 365)
       evidenceByCategory,
       expectedCategories,
       categoriesCovered: coveredCategories.size,
-      categoriesMissing: expectedCategories.filter((category) => !coveredCategories.has(category)),
+      categoriesExpected: expectedCategories.length,
+      categoriesMissing,
+      staleItems,
+      staleCount: staleItems.length,
+      freshCount: Math.max(0, manualEvidence.length - staleItems.length),
       oldestEvidenceDate,
       newestEvidenceDate,
-      staleCount,
-      freshCount: Math.max(0, manualEvidence.length - staleCount),
+      metricCoverageCount: Object.keys(metricScores).length,
       metricScores,
       metricsMissing,
       reviewOverdue,
       reviewDueSoon,
       narrative,
       narrativePresent,
-      status,
-      reasons,
-      statusReason: reasons.join('; ') || 'Readiness evidence looks healthy',
+    };
+
+    entry.status = computeStatus(entry);
+    entry.reasons = buildReasonParts({
+      categoriesMissing,
+      metricsMissing,
+      staleCount: entry.staleCount,
+      reviewOverdue,
+      narrativePresent,
     });
+    entry.summary = buildSummary({
+      evidenceCount: entry.evidenceCount,
+      categoriesCovered: entry.categoriesCovered,
+      categoriesExpected: entry.categoriesExpected,
+      staleCount: entry.staleCount,
+      reviewOverdue,
+      categoriesMissing,
+      metricsMissing,
+      narrativePresent,
+    });
+    entry.statusReason = entry.summary;
+
+    matrix.set(statement.id, entry);
   }
 
   return matrix;
 }
 
+export function getQuestionReadiness(matrix) {
+  const questions = new Map([
+    ['safe', []],
+    ['effective', []],
+    ['caring', []],
+    ['responsive', []],
+    ['well-led', []],
+  ]);
+
+  for (const entry of matrix.values()) {
+    const bucket = questions.get(entry.category);
+    if (bucket) bucket.push(entry);
+  }
+
+  return [...questions.entries()].map(([question, entries]) => ({
+    question,
+    total: entries.length,
+    strong: entries.filter((entry) => entry.status === 'strong').length,
+    partial: entries.filter((entry) => entry.status === 'partial').length,
+    stale: entries.filter((entry) => entry.status === 'stale').length,
+    weak: entries.filter((entry) => entry.status === 'weak').length,
+    missing: entries.filter((entry) => entry.status === 'missing').length,
+  }));
+}
+
 export function getReadinessGaps(matrix) {
   return [...matrix.values()]
-    .filter((entry) => entry.status !== 'covered')
+    .filter((entry) => entry.status !== 'strong')
     .sort(sortBySeverity);
 }
 
 export function getOverallReadiness(matrix) {
   const entries = [...matrix.values()];
   const total = entries.length || 1;
-  const covered = entries.filter((entry) => entry.status === 'covered').length;
-  const missing = entries.filter((entry) => entry.status === 'missing').length;
-  const weak = entries.filter((entry) => entry.status === 'weak').length;
+  const strong = entries.filter((entry) => entry.status === 'strong').length;
   const partial = entries.filter((entry) => entry.status === 'partial').length;
+  const stale = entries.filter((entry) => entry.status === 'stale').length;
+  const weak = entries.filter((entry) => entry.status === 'weak').length;
+  const missing = entries.filter((entry) => entry.status === 'missing').length;
 
-  if (missing > 5 || weak > 4) return { band: 'not_ready', label: 'Not Ready', badge: 'red', covered, partial, weak, missing, total };
-  if (missing > 0 || weak > 0 || partial > 10) return { band: 'gaps', label: 'Significant Gaps', badge: 'amber', covered, partial, weak, missing, total };
-  if (partial > 5) return { band: 'progressing', label: 'Progressing', badge: 'amber', covered, partial, weak, missing, total };
-  if (covered >= total * 0.8) return { band: 'strong', label: 'Strong', badge: 'green', covered, partial, weak, missing, total };
-  return { band: 'progressing', label: 'Progressing', badge: 'amber', covered, partial, weak, missing, total };
+  if (missing > 5 || weak > 4) return { band: 'not_ready', label: 'Heuristic: Significant Gaps', badge: 'red', strong, partial, stale, weak, missing, total };
+  if (missing > 0 || weak > 0 || stale > 4) return { band: 'gaps', label: 'Heuristic: Gaps', badge: 'amber', strong, partial, stale, weak, missing, total };
+  if (partial > 5 || stale > 0) return { band: 'progressing', label: 'Heuristic: Progressing', badge: 'amber', strong, partial, stale, weak, missing, total };
+  if (strong >= total * 0.8) return { band: 'strong', label: 'Heuristic: Strong', badge: 'green', strong, partial, stale, weak, missing, total };
+  return { band: 'progressing', label: 'Heuristic: Progressing', badge: 'amber', strong, partial, stale, weak, missing, total };
 }
 
 export function serialiseReadinessMatrix(matrix) {

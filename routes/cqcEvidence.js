@@ -14,6 +14,7 @@ import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as cqcPartnerFeedbackRepo from '../repositories/cqcPartnerFeedbackRepo.js';
 import * as cqcObservationRepo from '../repositories/cqcObservationRepo.js';
 import * as auditService from '../services/auditService.js';
+import { computeCqcReadiness } from '../services/assessmentService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -114,12 +115,26 @@ const narrativeBodySchema = z.object({
   review_due: dateSchema.optional(),
   _version: z.number().int().nonnegative().optional(),
 });
+const readinessQuerySchema = z.object({
+  dateRange: z.coerce.number().int().min(28).max(365).optional(),
+});
 
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
     const pg = paginationSchema.parse(req.query);
     const evidenceResult = await cqcEvidenceRepo.findByHome(req.home.id, { limit: pg.limit, offset: pg.offset });
     res.json({ evidence: evidenceResult.rows, _total: evidenceResult.total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/readiness', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const parsed = readinessQuerySchema.safeParse(req.query);
+    if (!parsed.success) return zodError(res, parsed);
+    const readiness = await computeCqcReadiness(req.home.id, parsed.data.dateRange || 28);
+    res.json(readiness || { entries: [], questionSummary: [], gaps: [], overall: null, computedAt: null });
   } catch (err) {
     next(err);
   }

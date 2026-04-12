@@ -45,8 +45,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
       const staffName = staffRow?.name;
 
       const [
-        staff, overrides, training, supervisions, appraisals,
-        trainingAttachments,
+        staff, overrides, training, trainingAttachments, supervisions, appraisals,
         timesheets, payrollLines, taxCodes, sspPeriods,
         pensionEnrolment, pensionContributions, accessLog,
         incidents, fireDrills, handoverEntries,
@@ -59,8 +58,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         payrollLineShifts, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
-        // Operational tables matched by name (no staff FK)
-        agencyShifts, complaintSurveys,
+        // Operational/CQC tables matched by name (no staff FK)
+        agencyShifts, complaintSurveys, cqcNarratives,
       ] = await runSequentialQueries([
         () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -208,6 +207,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => staffName
           ? conn.query(`SELECT * FROM complaint_surveys WHERE home_id = $1 AND conducted_by = $2 AND deleted_at IS NULL`, [homeId, staffName])
           : { rows: [] },
+        // CQC self-assessment narratives reviewed by this staff member
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_statement_narratives
+               WHERE home_id = $1 AND reviewed_by = $2 AND deleted_at IS NULL`,
+              [homeId, staffName])
+          : { rows: [] },
       ]);
 
       return {
@@ -262,9 +268,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           consent_records: consentRecords.rows,
           data_requests: dataRequests.rows,
           dp_complaints: dpComplaints.rows,
-          // Operational tables matched by name (no staff FK)
+          // Operational/CQC tables matched by name (no staff FK)
           agency_shifts: agencyShifts.rows,
           complaint_surveys: complaintSurveys.rows,
+          cqc_statement_narratives: cqcNarratives.rows,
         },
       };
     }
@@ -740,6 +747,16 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
+    // Anonymise CQC self-assessment reviewer attribution while preserving the narrative itself.
+    if (originalName) {
+      await client.query(
+        `UPDATE cqc_statement_narratives
+            SET reviewed_by = $1
+          WHERE home_id = $2 AND reviewed_by = $3 AND deleted_at IS NULL`,
+        [anon, homeId, originalName]
+      );
+    }
+
     // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
     await client.query(
       `UPDATE shift_overrides SET reason = NULL WHERE home_id = $1 AND staff_id = $2`,
@@ -1063,7 +1080,7 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'staff', 'sick_periods', 'training_records', 'onboarding', 'payroll_runs',
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
-  'retention_schedule',
+  'retention_schedule', 'cqc_statement_narratives',
   // HR module tables (6-year retention per Limitation Act 1980)
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',

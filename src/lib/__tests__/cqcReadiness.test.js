@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MOCK_SCHEDULING_DATA } from '../../test/fixtures/schedulingData.js';
 import { getDateRange } from '../cqc.js';
-import { buildReadinessMatrix, getOverallReadiness, getReadinessGaps } from '../cqcReadiness.js';
+import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps } from '../cqcReadiness.js';
 
 function buildBaseData() {
   return {
@@ -20,30 +20,28 @@ function buildBaseData() {
     onboarding: {},
     cqc_evidence: [],
     cqc_statement_narratives: [],
-    cqc_partner_feedback: [],
-    cqc_observations: [],
   };
 }
 
 describe('cqcReadiness', () => {
-  it('normalizes legacy evidence categories and tracks overdue reviews', () => {
+  it('normalizes legacy evidence categories and applies per-category freshness thresholds', () => {
     const data = buildBaseData();
     data.cqc_evidence = [
       {
         id: 'ev-1',
         quality_statement: 'S1',
         type: 'qualitative',
-        title: 'Learning review',
+        title: 'Resident survey',
         evidence_category: 'feedback',
-        date_from: '2026-02-01',
+        date_from: '2025-09-01',
         review_due: '2026-03-01',
-        added_at: '2026-02-05T10:00:00Z',
+        added_at: '2025-09-02T10:00:00Z',
       },
       {
         id: 'ev-2',
         quality_statement: 'S1',
         type: 'qualitative',
-        title: 'Process note',
+        title: 'Process audit',
         evidence_category: 'management_info',
         date_from: '2026-02-10',
         review_due: '2026-08-01',
@@ -65,53 +63,45 @@ describe('cqcReadiness', () => {
     expect(s1.evidenceByCategory.staff_leader_feedback).toBe(1);
     expect(s1.evidenceByCategory.processes).toBe(1);
     expect(s1.reviewOverdue).toBe(1);
+    expect(s1.staleCount).toBe(1);
+    expect(s1.staleItems[0].category).toBe('staff_leader_feedback');
     expect(s1.narrativePresent).toBe(true);
-    expect(['partial', 'covered']).toContain(s1.status);
+    expect(s1.status).toBe('stale');
+    expect(s1.summary).toMatch(/Missing:/);
   });
 
-  it('summarizes overall readiness and sorts gaps by severity', () => {
+  it('treats a statement with no manual evidence and no working auto-metrics as missing', () => {
+    const data = buildBaseData();
+    const matrix = buildReadinessMatrix(data, getDateRange(28), '2026-04-12');
+    const wl6 = matrix.get('WL6');
+
+    expect(wl6.evidenceCount).toBe(0);
+    expect(wl6.metricCoverageCount).toBe(0);
+    expect(wl6.status).toBe('missing');
+  });
+
+  it('summarizes question readiness and sorts gaps by severity', () => {
     const matrix = new Map([
-      ['S1', { statementId: 'S1', status: 'missing', reasons: ['No evidence'] }],
-      ['S2', { statementId: 'S2', status: 'weak', reasons: ['Metrics only'] }],
-      ['S3', { statementId: 'S3', status: 'partial', reasons: ['Missing partner feedback'] }],
-      ['S4', { statementId: 'S4', status: 'covered', reasons: [] }],
+      ['S1', { statementId: 'S1', category: 'safe', status: 'missing', summary: 'No evidence' }],
+      ['S2', { statementId: 'S2', category: 'safe', status: 'weak', summary: 'Metrics only' }],
+      ['S3', { statementId: 'S3', category: 'safe', status: 'stale', summary: 'Old evidence' }],
+      ['S4', { statementId: 'S4', category: 'safe', status: 'partial', summary: 'Missing partner feedback' }],
+      ['C1', { statementId: 'C1', category: 'caring', status: 'strong', summary: 'Healthy' }],
     ]);
 
+    const questionSummary = getQuestionReadiness(matrix);
     const overall = getOverallReadiness(matrix);
     const gaps = getReadinessGaps(matrix);
 
-    expect(overall.total).toBe(4);
-    expect(gaps.map((entry) => entry.statementId)).toEqual(['S1', 'S2', 'S3']);
-  });
-
-  it('counts structured partner feedback and observations as evidence coverage', () => {
-    const data = buildBaseData();
-    data.cqc_partner_feedback = [
-      {
-        id: 'pf-1',
-        quality_statement: 'WL6',
-        feedback_date: '2026-04-01',
-        title: 'Family coordination feedback',
-        evidence_owner: 'Manager',
-        review_due: '2026-07-01',
-        added_at: '2026-04-01T10:00:00Z',
-      },
-    ];
-    data.cqc_observations = [
-      {
-        id: 'obs-1',
-        quality_statement: 'S1',
-        observed_at: '2026-04-02T10:00:00Z',
-        title: 'Observed handover learning',
-        notes: 'Learning points discussed during handover.',
-        evidence_owner: 'Deputy',
-        review_due: '2026-07-15',
-        added_at: '2026-04-02T10:00:00Z',
-      },
-    ];
-
-    const matrix = buildReadinessMatrix(data, getDateRange(28), '2026-04-12');
-    expect(matrix.get('WL6').evidenceByCategory.partner_feedback).toBe(1);
-    expect(matrix.get('S1').evidenceByCategory.observation).toBe(1);
+    expect(questionSummary.find((entry) => entry.question === 'safe')).toMatchObject({
+      total: 4,
+      missing: 1,
+      weak: 1,
+      stale: 1,
+      partial: 1,
+      strong: 0,
+    });
+    expect(overall.strong).toBe(1);
+    expect(gaps.map((entry) => entry.statementId)).toEqual(['S1', 'S2', 'S3', 'S4']);
   });
 });

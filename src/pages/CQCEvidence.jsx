@@ -11,7 +11,7 @@ import {
   getCurrentHome, getSchedulingData, getTrainingData,
   getIncidents, getComplaints, getMaintenance, getIpcAudits,
   getRisks, getPolicies, getWhistleblowingConcerns, getDols, getCareCertData,
-  getCqcEvidence, createCqcEvidence, updateCqcEvidence,
+  getCqcEvidence, getCqcReadiness, createCqcEvidence, updateCqcEvidence,
   getCqcEvidenceFiles, uploadCqcEvidenceFile, deleteCqcEvidenceFile, downloadCqcEvidenceFile,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
@@ -23,7 +23,7 @@ import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
   calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
-import { buildReadinessMatrix, getOverallReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
+import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
 import { getAllEvidenceCategories, getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
@@ -189,10 +189,19 @@ function formatDateTime(value) {
 }
 
 function readinessBadgeClass(status) {
-  if (status === 'covered') return BADGE.green;
+  if (status === 'strong') return BADGE.green;
+  if (status === 'stale') return BADGE.amber;
   if (status === 'partial') return BADGE.amber;
-  if (status === 'weak') return BADGE.blue;
+  if (status === 'weak') return BADGE.red;
   return BADGE.red;
+}
+
+function readinessStatusLabel(status) {
+  if (status === 'strong') return 'Strong';
+  if (status === 'stale') return 'Stale';
+  if (status === 'partial') return 'Partial';
+  if (status === 'weak') return 'Weak';
+  return 'Missing';
 }
 
 export default function CQCEvidence() {
@@ -271,6 +280,9 @@ function CQCEvidenceInner({ data }) {
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [narrativesLoading, setNarrativesLoading] = useState(true);
   const [structuredLoading, setStructuredLoading] = useState(true);
+  const [liveReadiness, setLiveReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState(null);
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
@@ -349,6 +361,34 @@ function CQCEvidenceInner({ data }) {
   }, []);
 
   useEffect(() => { loadStructuredEvidence(); }, [loadStructuredEvidence]);
+
+  const loadReadiness = useCallback(async (signal) => {
+    const home = getCurrentHome();
+    if (!home) return;
+    if (isMounted.current) {
+      setReadinessLoading(true);
+      setReadinessError(null);
+    }
+    try {
+      const result = await getCqcReadiness(home, dateRangeDays, signal);
+      if (isMounted.current && !signal?.aborted) setLiveReadiness(result || null);
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      if (isMounted.current) {
+        console.warn('Failed to load authoritative readiness:', err);
+        setReadinessError(err.message || 'Failed to load readiness');
+        setLiveReadiness(null);
+      }
+    } finally {
+      if (isMounted.current && !signal?.aborted) setReadinessLoading(false);
+    }
+  }, [dateRangeDays]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadReadiness(controller.signal);
+    return () => controller.abort();
+  }, [loadReadiness, evidence, narratives, partnerFeedback, observations]);
 
   const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
@@ -433,14 +473,26 @@ function CQCEvidenceInner({ data }) {
     return calculateComplianceScore(dataWithEvidence, dateRange, today);
   }, [dataWithEvidence, dateRange, today]);
 
-  const readinessMatrix = useMemo(() => {
+  const fallbackReadinessMatrix = useMemo(() => {
     if (!dataWithEvidence?.config) return new Map();
     return buildReadinessMatrix(dataWithEvidence, dateRange, today);
   }, [dataWithEvidence, dateRange, today]);
 
-  const readinessOverall = useMemo(() => getOverallReadiness(readinessMatrix), [readinessMatrix]);
-  const readinessGaps = useMemo(() => getReadinessGaps(readinessMatrix), [readinessMatrix]);
-  const readinessEntries = useMemo(() => Object.fromEntries(readinessMatrix), [readinessMatrix]);
+  const fallbackReadiness = useMemo(() => ({
+    entries: [...fallbackReadinessMatrix.values()],
+    questionSummary: getQuestionReadiness(fallbackReadinessMatrix),
+    overall: getOverallReadiness(fallbackReadinessMatrix),
+    gaps: getReadinessGaps(fallbackReadinessMatrix),
+    computedAt: today,
+  }), [fallbackReadinessMatrix, today]);
+
+  const readinessPayload = liveReadiness || fallbackReadiness;
+  const questionReadiness = readinessPayload?.questionSummary || fallbackReadiness.questionSummary;
+  const readinessGaps = readinessPayload?.gaps || fallbackReadiness.gaps;
+  const readinessEntries = useMemo(
+    () => Object.fromEntries((readinessPayload?.entries || []).map((entry) => [entry.statementId, entry])),
+    [readinessPayload]
+  );
 
   const evidenceByStatement = useMemo(() => {
     if (!dataWithEvidence?.config) return {};
@@ -816,30 +868,43 @@ function CQCEvidenceInner({ data }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-5">
-        <div className={CARD.padded}>
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Readiness</div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className={BADGE[readinessOverall.badge]}>{readinessOverall.label}</span>
-            <span className="text-xs text-gray-500">{readinessOverall.covered}/{readinessOverall.total} covered</span>
-          </div>
+      <div className="mb-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-900">Readiness</h2>
+          {readinessLoading ? <span className={BADGE.gray}>Refreshing...</span> : null}
         </div>
-        {categories.map((question) => {
-          const statements = QUALITY_STATEMENTS.filter((entry) => entry.category === question);
-          const covered = statements.filter((entry) => readinessEntries[entry.id]?.status === 'covered').length;
-          const missing = statements.filter((entry) => readinessEntries[entry.id]?.status === 'missing').length;
-          return (
-            <div key={question} className={CARD.padded}>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{CATEGORY_LABELS[question]}</p>
-              <p className="text-lg font-bold text-gray-900 mt-1">{covered}/{statements.length}</p>
-              {missing > 0 ? (
-                <span className={BADGE.red}>{missing} missing</span>
-              ) : (
-                <span className={BADGE.green}>No missing</span>
-              )}
-            </div>
-          );
-        })}
+        {readinessError ? (
+          <p className="mb-3 text-xs text-amber-700">
+            Live readiness could not be refreshed from the server, so this view is temporarily using the local fallback calculation.
+          </p>
+        ) : null}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          {categories.map((question) => {
+            const summary = questionReadiness.find((entry) => entry.question === question) || {
+              total: QUALITY_STATEMENTS.filter((entry) => entry.category === question).length,
+              strong: 0,
+              partial: 0,
+              stale: 0,
+              weak: 0,
+              missing: 0,
+            };
+            return (
+              <div key={question} className={CARD.padded}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{CATEGORY_LABELS[question]}</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{summary.strong}/{summary.total} strong</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {summary.missing > 0 ? <span className={BADGE.red}>{summary.missing} missing</span> : null}
+                  {summary.weak > 0 ? <span className={BADGE.red}>{summary.weak} weak</span> : null}
+                  {summary.stale > 0 ? <span className={BADGE.amber}>{summary.stale} stale</span> : null}
+                  {summary.partial > 0 ? <span className={BADGE.amber}>{summary.partial} partial</span> : null}
+                  {summary.missing === 0 && summary.weak === 0 && summary.stale === 0 && summary.partial === 0 ? (
+                    <span className={BADGE.green}>No open gaps</span>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Date Range Toggle */}
@@ -868,10 +933,10 @@ function CQCEvidenceInner({ data }) {
             {readinessGaps.slice(0, 10).map((gap) => (
               <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={readinessBadgeClass(gap.status)}>{gap.status}</span>
+                  <span className={readinessBadgeClass(gap.status)}>{readinessStatusLabel(gap.status)}</span>
                   <span className="text-sm font-medium text-gray-900">{gap.statementId} - {gap.statementName}</span>
                 </div>
-                <p className="text-xs text-gray-500 md:text-right">{gap.reasons.join('; ')}</p>
+                <p className="text-xs text-gray-500 md:text-right">{gap.summary}</p>
               </div>
             ))}
           </div>
@@ -913,7 +978,7 @@ function CQCEvidenceInner({ data }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {readiness && <span className={readinessBadgeClass(readiness.status)}>{readiness.status}</span>}
+                      {readiness && <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>}
                       <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
                       {ev?.autoEvidence?.map((ae, i) => (
                         <span key={i} className={`text-sm font-bold ${metricColor(ae.value, ae.lowerIsBetter)}`}>
@@ -930,16 +995,15 @@ function CQCEvidenceInner({ data }) {
                       {readiness && (
                         <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className={readinessBadgeClass(readiness.status)}>{readiness.status}</span>
+                            <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>
                             <span className="text-xs text-gray-500">
-                              {readiness.categoriesCovered}/{readiness.expectedCategories.length} expected categories covered
+                              {readiness.evidenceCount} items · {readiness.categoriesCovered}/{readiness.categoriesExpected} expected categories covered
                             </span>
+                            {readiness.staleCount > 0 && <span className={BADGE.amber}>{readiness.staleCount} stale</span>}
                             {readiness.reviewOverdue > 0 && <span className={BADGE.red}>{readiness.reviewOverdue} overdue</span>}
                             {!readiness.narrativePresent && <span className={BADGE.gray}>Narrative missing</span>}
                           </div>
-                          {readiness.reasons.length > 0 && (
-                            <p className="mt-2 text-xs text-gray-500">{readiness.reasons.join('; ')}</p>
-                          )}
+                          <p className="mt-2 text-xs text-gray-500">{readiness.summary}</p>
                         </div>
                       )}
 
@@ -1339,14 +1403,22 @@ function CQCEvidenceInner({ data }) {
             {viewingSnapshot.result?.readiness && (
               <div>
                 <div className="text-sm font-semibold text-gray-600 mb-2">Frozen Readiness</div>
-                <div className="flex items-center gap-2">
-                  <span className={BADGE[viewingSnapshot.result.readiness.overall?.badge || 'gray']}>
-                    {viewingSnapshot.result.readiness.overall?.label || 'Unknown'}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {viewingSnapshot.result.readiness.overall?.covered || 0}/{viewingSnapshot.result.readiness.overall?.total || QUALITY_STATEMENTS.length} covered
-                  </span>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+                  {(viewingSnapshot.result.readiness.questionSummary || []).map((entry) => (
+                    <div key={entry.question} className={CARD.padded}>
+                      <div className="text-xs text-gray-500">
+                        {entry.question === 'well-led' ? 'Well-Led' : entry.question.replace(/^\w/, (value) => value.toUpperCase())}
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">{entry.strong}/{entry.total} strong</div>
+                      <div className="text-[10px] text-gray-500">
+                        {entry.missing} missing · {entry.weak} weak · {entry.stale} stale · {entry.partial} partial
+                      </div>
+                    </div>
+                  ))}
                 </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  {viewingSnapshot.result.readiness.gaps?.length || 0} open readiness gaps at snapshot time.
+                </p>
               </div>
             )}
             {viewingSnapshot.sign_off_notes && (
