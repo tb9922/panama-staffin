@@ -49,6 +49,9 @@ describe('CQC Evidence: create and read', () => {
       description: 'Average daily fill rate across all shifts',
       date_from: '2026-01-01',
       date_to: '2026-03-31',
+      evidence_category: 'feedback',
+      evidence_owner: 'Home Manager',
+      review_due: '2026-06-30',
       added_by: 'admin',
     });
 
@@ -63,6 +66,9 @@ describe('CQC Evidence: create and read', () => {
     expect(created.title).toBe('Staffing fill rate Q1 2026');
     expect(created.date_from).toBe('2026-01-01');
     expect(created.date_to).toBe('2026-03-31');
+    expect(created.evidence_category).toBe('staff_leader_feedback');
+    expect(created.evidence_owner).toBe('Home Manager');
+    expect(created.review_due).toBe('2026-06-30');
   });
 
   it('reads by id', async () => {
@@ -70,6 +76,7 @@ describe('CQC Evidence: create and read', () => {
     expect(found).not.toBeNull();
     expect(found.id).toBe(evidenceId);
     expect(found.added_by).toBe('admin');
+    expect(found.evidence_owner).toBe('Home Manager');
   });
 
   it('blocks cross-home read', async () => {
