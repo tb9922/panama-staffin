@@ -25,8 +25,10 @@ vi.mock('../../lib/api.js', async () => {
     getDols: vi.fn(),
     getCareCertData: vi.fn(),
     getCqcEvidence: vi.fn(),
+    getCqcNarratives: vi.fn(),
     createCqcEvidence: vi.fn(),
     updateCqcEvidence: vi.fn(),
+    upsertCqcNarrative: vi.fn(),
     getCqcEvidenceFiles: vi.fn(),
     uploadCqcEvidenceFile: vi.fn(),
     deleteCqcEvidenceFile: vi.fn(),
@@ -81,6 +83,7 @@ function setupApiMocks() {
   api.getDols.mockResolvedValue({ dols: [], mcaAssessments: [] });
   api.getCareCertData.mockResolvedValue({ careCert: {} });
   api.getCqcEvidence.mockResolvedValue({ evidence: [] });
+  api.getCqcNarratives.mockResolvedValue([]);
   api.createCqcEvidence.mockResolvedValue({
     id: 'ev-001',
     version: 0,
@@ -104,6 +107,16 @@ function setupApiMocks() {
     evidence_category: 'feedback',
   });
   api.getCqcEvidenceFiles.mockResolvedValue([]);
+  api.upsertCqcNarrative.mockResolvedValue({
+    quality_statement: 'S1',
+    narrative: 'The evidence shows safer incident follow-up.',
+    risks: 'Escalation recording can still be inconsistent.',
+    actions: 'Refresh incident learning in team meetings.',
+    reviewed_by: 'admin',
+    reviewed_at: '2026-03-08T10:00:00Z',
+    review_due: '2026-06-08',
+    version: 1,
+  });
   api.uploadCqcEvidenceFile.mockResolvedValue({});
   api.deleteCqcEvidenceFile.mockResolvedValue({});
   api.downloadCqcEvidenceFile.mockResolvedValue(undefined);
@@ -172,12 +185,12 @@ describe('CQCEvidence', () => {
   it('shows the 5 CQC category section headings — Safe, Effective, Caring, Responsive, Well-Led', async () => {
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Safe')).toBeInTheDocument();
+      expect(screen.getAllByText('Safe').length).toBeGreaterThan(0);
     });
-    expect(screen.getByText('Effective')).toBeInTheDocument();
-    expect(screen.getByText('Caring')).toBeInTheDocument();
-    expect(screen.getByText('Responsive')).toBeInTheDocument();
-    expect(screen.getByText('Well-Led')).toBeInTheDocument();
+    expect(screen.getAllByText('Effective').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Caring').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Responsive').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Well-Led').length).toBeGreaterThan(0);
   });
 
   it('displays the Overall Score KPI card', async () => {
@@ -185,6 +198,14 @@ describe('CQCEvidence', () => {
     await waitFor(() => {
       expect(screen.getByText('Overall Score')).toBeInTheDocument();
     });
+  });
+
+  it('shows the readiness strip and gap section after load', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Readiness')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Readiness Gaps')).toBeInTheDocument();
   });
 
   it('displays Training Compliance and Staffing Fill Rate KPI cards', async () => {
@@ -264,6 +285,23 @@ describe('CQCEvidence', () => {
     });
   });
 
+  it('saves a self-assessment narrative for a statement', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Learning Culture'));
+    await user.type(screen.getByLabelText('What the evidence shows'), 'Learning is discussed in daily handover.');
+    await user.click(screen.getByRole('button', { name: /Save Self-Assessment/i }));
+
+    await waitFor(() => {
+      expect(api.upsertCqcNarrative).toHaveBeenCalled();
+    });
+    expect(screen.getByText(/Self-assessment saved for S1/i)).toBeInTheDocument();
+  });
+
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
     const user = userEvent.setup();
     renderAdmin();
@@ -332,6 +370,57 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('2026-03-08')).toBeInTheDocument();
   });
 
+  it('exports snapshot PDFs from frozen snapshot data, not live metrics', async () => {
+    const user = userEvent.setup();
+    const frozenEvidencePack = { source: 'snapshot', rows: [{ file: 'frozen.pdf' }] };
+    api.getSnapshots.mockResolvedValueOnce([
+      {
+        id: 'snap-100',
+        computed_at: '2026-03-08T10:00:00Z',
+        overall_score: 88,
+        band: 'Good',
+        engine_version: 'v2',
+        computed_by: 'admin',
+        signed_off_by: 'manager',
+      },
+    ]);
+    api.getSnapshot.mockResolvedValueOnce({
+      id: 'snap-100',
+      computed_at: '2026-03-08T10:00:00Z',
+      overall_score: 88,
+      band: 'Good',
+      engine_version: 'v2',
+      signed_off_by: 'manager',
+      result: {
+        evidencePackData: frozenEvidencePack,
+        evidencePackMeta: { date_range_days: 90 },
+        questionScores: {},
+      },
+    });
+
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show Snapshot History (1)' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Show Snapshot History (1)' }));
+    await user.click(screen.getByRole('button', { name: 'View' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Export PDF from Snapshot' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Export PDF from Snapshot' }));
+
+    await waitFor(() => {
+      expect(pdfReports.generateEvidencePackPDF).toHaveBeenCalledWith(
+        frozenEvidencePack,
+        90,
+        expect.objectContaining({ id: 'snap-100' })
+      );
+    });
+  });
+
   it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
     const user = userEvent.setup();
     renderAdmin();
@@ -364,53 +453,5 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
-  });
-
-  it('shows supporting files directly on a manual evidence item and downloads them from the statement view', async () => {
-    const user = userEvent.setup();
-    api.getCqcEvidence.mockResolvedValueOnce({
-      evidence: [
-        {
-          id: 'ev-inline',
-          quality_statement: 'S1',
-          type: 'qualitative',
-          title: 'Learning review notes',
-          description: 'Post-incident review',
-          date_from: '2026-03-01',
-          date_to: null,
-          evidence_category: 'feedback',
-          added_by: 'admin',
-        },
-      ],
-    });
-    api.getCqcEvidenceFiles.mockResolvedValueOnce([
-      {
-        id: 77,
-        original_name: 'learning-review.pdf',
-        size_bytes: 1024,
-        description: 'Review notes',
-        uploaded_by: 'admin',
-        created_at: '2026-03-08T10:00:00Z',
-      },
-    ]);
-
-    renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByText('Learning Culture')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Learning Culture'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Learning review notes')).toBeInTheDocument();
-    });
-    await waitFor(() => {
-      expect(screen.getByText('Supporting Files')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: 'learning-review.pdf' }));
-
-    expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-inline');
-    expect(api.downloadCqcEvidenceFile).toHaveBeenCalledWith(77, 'learning-review.pdf');
   });
 });

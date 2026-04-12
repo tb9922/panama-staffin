@@ -476,6 +476,18 @@ export async function deleteCqcEvidence(homeSlug, id) {
   });
 }
 
+export async function getCqcNarratives(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc-evidence/narratives?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function upsertCqcNarrative(homeSlug, statementId, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/narratives/${encodeURIComponent(statementId)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Token Revocation ────────────────────────────────────────────────────────
 
 export async function getCqcEvidenceFiles(_caseType, evidenceId) {

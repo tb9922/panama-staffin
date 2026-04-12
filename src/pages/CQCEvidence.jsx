@@ -14,13 +14,17 @@ import {
   getCqcEvidence, createCqcEvidence, updateCqcEvidence,
   getCqcEvidenceFiles, uploadCqcEvidenceFile, deleteCqcEvidenceFile, downloadCqcEvidenceFile,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
-  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot, isAbortLikeError,
+  createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
+  getCqcNarratives, upsertCqcNarrative,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
   calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
+import { buildReadinessMatrix, getOverallReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
+import { getAllEvidenceCategories, getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
 const CATEGORY_COLORS = {
@@ -31,10 +35,7 @@ const CATEGORY_COLORS = {
   'well-led': 'text-purple-700 bg-purple-50 border-purple-200',
 };
 
-const EVIDENCE_CATEGORY_LABELS = {
-  peoples_experience: "People's Experience", feedback: 'Feedback', observation: 'Observation',
-  processes: 'Processes', outcomes: 'Outcomes', management_info: 'Management Info',
-};
+const EVIDENCE_CATEGORY_OPTIONS = getAllEvidenceCategories();
 
 const RANGE_OPTIONS = [
   { days: 28, label: '28 Days' },
@@ -59,6 +60,8 @@ function blankEvidenceForm(statementId = '') {
     date_from: '',
     date_to: '',
     evidence_category: '',
+    evidence_owner: '',
+    review_due: '',
   };
 }
 
@@ -73,11 +76,12 @@ function toEvidenceForm(evidence) {
     date_from: evidence?.date_from || '',
     date_to: evidence?.date_to || '',
     evidence_category: evidence?.evidence_category || '',
+    evidence_owner: evidence?.evidence_owner || '',
+    review_due: evidence?.review_due || '',
   };
 }
 
 function buildEvidencePayload(form) {
-  const category = (form.evidence_category || '').trim();
   return {
     quality_statement: form.quality_statement,
     type: form.type,
@@ -85,13 +89,35 @@ function buildEvidencePayload(form) {
     description: form.description.trim(),
     date_from: form.date_from || null,
     date_to: form.date_to || null,
-    ...(category ? { evidence_category: category } : {}),
+    evidence_category: form.evidence_category || null,
+    evidence_owner: form.evidence_owner.trim() || null,
+    review_due: form.review_due || null,
+  };
+}
+
+function blankNarrativeForm(statementId = '', existing = null) {
+  return {
+    quality_statement: statementId || existing?.quality_statement || '',
+    narrative: existing?.narrative || '',
+    risks: existing?.risks || '',
+    actions: existing?.actions || '',
+    reviewed_by: existing?.reviewed_by || '',
+    reviewed_at: existing?.reviewed_at ? String(existing.reviewed_at).slice(0, 16) : '',
+    review_due: existing?.review_due || '',
+    version: existing?.version,
   };
 }
 
 function metricColor(value, lowerIsBetter) {
   if (lowerIsBetter) return value <= 5 ? 'text-emerald-600' : value <= 15 ? 'text-amber-600' : 'text-red-600';
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
+}
+
+function readinessBadgeClass(status) {
+  if (status === 'covered') return BADGE.green;
+  if (status === 'partial') return BADGE.amber;
+  if (status === 'weak') return BADGE.blue;
+  return BADGE.red;
 }
 
 export default function CQCEvidence() {
@@ -103,32 +129,25 @@ export default function CQCEvidence() {
   useEffect(() => {
     if (!homeSlug) return;
     let cancelled = false;
-    const controller = new AbortController();
     // CQC scoring needs up to 365 days of overrides for the 1-year view
     const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
-      .toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7))
-      .toISOString().slice(0, 10);
-    const readFallback = (label, fallback) => (e) => {
-      if (!cancelled && !isAbortLikeError(e, controller.signal)) {
-        console.warn(`Failed to load ${label}:`, e.message);
-      }
-      return fallback;
-    };
+    const fromDate = new Date(now);
+    fromDate.setFullYear(fromDate.getFullYear() - 1);
+    const from = todayLocalISO(fromDate);
+    const to = addDaysLocalISO(todayLocalISO(now), 7);
 
     Promise.all([
-      getSchedulingData(homeSlug, { from, to, signal: controller.signal }),
-      getTrainingData(homeSlug, { signal: controller.signal }).catch(readFallback('training data', {})),
-      getIncidents(homeSlug, { signal: controller.signal }).catch(readFallback('incidents', { incidents: [] })),
-      getComplaints(homeSlug, { signal: controller.signal }).catch(readFallback('complaints', { complaints: [], surveys: [] })),
-      getMaintenance(homeSlug, { signal: controller.signal }).catch(readFallback('maintenance', { checks: [] })),
-      getIpcAudits(homeSlug, { signal: controller.signal }).catch(readFallback('IPC audits', { audits: [] })),
-      getRisks(homeSlug, { signal: controller.signal }).catch(readFallback('risks', { risks: [] })),
-      getPolicies(homeSlug, { signal: controller.signal }).catch(readFallback('policies', { policies: [] })),
-      getWhistleblowingConcerns(homeSlug, { signal: controller.signal }).catch(readFallback('whistleblowing', { concerns: [] })),
-      getDols(homeSlug, { signal: controller.signal }).catch(readFallback('DoLS', { dols: [], mcaAssessments: [] })),
-      getCareCertData(homeSlug, { signal: controller.signal }).catch(readFallback('care cert', { careCert: {} })),
+      getSchedulingData(homeSlug, { from, to }),
+      getTrainingData(homeSlug).catch(e => { console.warn('Failed to load training data:', e.message); return {}; }),
+      getIncidents(homeSlug).catch(e => { console.warn('Failed to load incidents:', e.message); return { incidents: [] }; }),
+      getComplaints(homeSlug).catch(e => { console.warn('Failed to load complaints:', e.message); return { complaints: [], surveys: [] }; }),
+      getMaintenance(homeSlug).catch(e => { console.warn('Failed to load maintenance:', e.message); return { checks: [] }; }),
+      getIpcAudits(homeSlug).catch(e => { console.warn('Failed to load IPC audits:', e.message); return { audits: [] }; }),
+      getRisks(homeSlug).catch(e => { console.warn('Failed to load risks:', e.message); return { risks: [] }; }),
+      getPolicies(homeSlug).catch(e => { console.warn('Failed to load policies:', e.message); return { policies: [] }; }),
+      getWhistleblowingConcerns(homeSlug).catch(e => { console.warn('Failed to load whistleblowing:', e.message); return { concerns: [] }; }),
+      getDols(homeSlug).catch(e => { console.warn('Failed to load DoLS:', e.message); return { dols: [], mcaAssessments: [] }; }),
+      getCareCertData(homeSlug).catch(e => { console.warn('Failed to load care cert:', e.message); return { careCert: {} }; }),
     ]).then(([sched, train, inc, comp, maint, ipc, risks, pol, wb, dols, cc]) => {
       if (cancelled) return;
       setModuleData({
@@ -152,16 +171,9 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(e => {
-      if (!cancelled && !isAbortLikeError(e, controller.signal)) {
-        setError(e.message || 'Failed to load CQC data');
-      }
-    })
+    }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
+    return () => { cancelled = true; };
   }, [homeSlug]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
@@ -177,16 +189,21 @@ function CQCEvidenceInner({ data }) {
   const isMounted = useRef(true);
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
+  const [narratives, setNarratives] = useState([]);
+  const [narrativeDrafts, setNarrativeDrafts] = useState({});
   const [evidenceLoading, setEvidenceLoading] = useState(true);
+  const [narrativesLoading, setNarrativesLoading] = useState(true);
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
+  const [savingNarrativeId, setSavingNarrativeId] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
-  const [evidenceFilesById, setEvidenceFilesById] = useState({});
+  const [narrativeError, setNarrativeError] = useState(null);
+  const [narrativeNotice, setNarrativeNotice] = useState(null);
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
@@ -199,50 +216,50 @@ function CQCEvidenceInner({ data }) {
 
   useDirtyGuard(showAddEvidence);
 
-  const loadEvidence = useCallback(async (signal) => {
+  const loadEvidence = useCallback(async () => {
     try {
       const home = getCurrentHome();
-      const result = await getCqcEvidence(home, signal ? { signal } : undefined);
+      const result = await getCqcEvidence(home);
       if (isMounted.current) setEvidence(result.evidence || []);
     } catch (err) {
       // Non-fatal: evidence list stays empty rather than breaking the whole page
-      if (isMounted.current && !isAbortLikeError(err, signal)) {
-        console.error('Failed to load CQC evidence:', err);
-      }
+      if (isMounted.current) console.error('Failed to load CQC evidence:', err);
     } finally {
       if (isMounted.current) setEvidenceLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setEvidenceLoading(true);
-    loadEvidence(controller.signal);
-    return () => controller.abort();
-  }, [loadEvidence]);
+  useEffect(() => { loadEvidence(); }, [loadEvidence]);
 
-  const loadSnapshots = useCallback(async (signal) => {
+  const loadNarratives = useCallback(async () => {
+    try {
+      const home = getCurrentHome();
+      const rows = await getCqcNarratives(home);
+      if (isMounted.current) setNarratives(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      if (isMounted.current) console.error('Failed to load CQC narratives:', err);
+    } finally {
+      if (isMounted.current) setNarrativesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadNarratives(); }, [loadNarratives]);
+
+  const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
     if (!home) return;
     if (isMounted.current) setSnapshotLoading(true);
     try {
-      const result = await getSnapshots(home, 'cqc', signal ? { signal } : undefined);
+      const result = await getSnapshots(home, 'cqc');
       if (isMounted.current) setSnapshots(Array.isArray(result) ? result : []);
     } catch (e) {
-      if (isMounted.current && !isAbortLikeError(e, signal)) {
-        console.warn('Failed to load snapshots:', e.message);
-        setSnapshots([]);
-      }
+      if (isMounted.current) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
     } finally {
       if (isMounted.current) setSnapshotLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    loadSnapshots(controller.signal);
-    return () => controller.abort();
-  }, [loadSnapshots]);
+  useEffect(() => { loadSnapshots(); }, [loadSnapshots]);
 
   async function handleCreateSnapshot() {
     const home = getCurrentHome();
@@ -289,17 +306,34 @@ function CQCEvidenceInner({ data }) {
 
   const today = useLiveDate();
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
+  const narrativeByStatement = useMemo(
+    () => Object.fromEntries((narratives || []).map((entry) => [entry.quality_statement, entry])),
+    [narratives]
+  );
 
   // Merge live evidence state into data for score computation and evidence-for-statement calls
   const dataWithEvidence = useMemo(() => {
     if (!data) return null;
-    return { ...data, cqc_evidence: evidence };
-  }, [data, evidence]);
+    return {
+      ...data,
+      cqc_evidence: evidence,
+      cqc_statement_narratives: narratives,
+    };
+  }, [data, evidence, narratives]);
 
   const score = useMemo(() => {
     if (!dataWithEvidence?.config) return null;
     return calculateComplianceScore(dataWithEvidence, dateRange, today);
   }, [dataWithEvidence, dateRange, today]);
+
+  const readinessMatrix = useMemo(() => {
+    if (!dataWithEvidence?.config) return new Map();
+    return buildReadinessMatrix(dataWithEvidence, dateRange, today);
+  }, [dataWithEvidence, dateRange, today]);
+
+  const readinessOverall = useMemo(() => getOverallReadiness(readinessMatrix), [readinessMatrix]);
+  const readinessGaps = useMemo(() => getReadinessGaps(readinessMatrix), [readinessMatrix]);
+  const readinessEntries = useMemo(() => Object.fromEntries(readinessMatrix), [readinessMatrix]);
 
   const evidenceByStatement = useMemo(() => {
     if (!dataWithEvidence?.config) return {};
@@ -313,36 +347,6 @@ function CQCEvidenceInner({ data }) {
   if (!data?.config || !score) {
     return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
   }
-
-  useEffect(() => {
-    const current = evidenceByStatement[expandedStatement];
-    const manualEvidence = Array.isArray(current?.manualEvidence) ? current.manualEvidence : [];
-    const missingIds = manualEvidence
-      .map((item) => item?.id)
-      .filter((id) => id && !evidenceFilesById[id]);
-    if (missingIds.length === 0) return undefined;
-
-    let cancelled = false;
-    Promise.all(missingIds.map(async (id) => {
-      try {
-        const files = await getCqcEvidenceFiles('cqc_evidence', id);
-        return [id, { files, error: null }];
-      } catch (err) {
-        return [id, { files: [], error: err.message || 'Failed to load supporting files.' }];
-      }
-    })).then((entries) => {
-      if (cancelled || !isMounted.current) return;
-      setEvidenceFilesById((currentMap) => {
-        const next = { ...currentMap };
-        for (const [id, value] of entries) next[id] = value;
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [expandedStatement, evidenceByStatement, evidenceFilesById]);
 
   const bandColorMap = { green: 'emerald', amber: 'amber', red: 'red' };
   const scoreStyle = SCORE_STYLES[bandColorMap[score.band.color]] || SCORE_STYLES.red;
@@ -359,6 +363,55 @@ function CQCEvidenceInner({ data }) {
     setSaveError(null);
     setSaveNotice(null);
     setShowAddEvidence(true);
+  }
+
+  function getNarrativeDraft(statementId) {
+    return narrativeDrafts[statementId] || blankNarrativeForm(statementId, narrativeByStatement[statementId]);
+  }
+
+  function updateNarrativeDraft(statementId, patch) {
+    setNarrativeDrafts((prev) => ({
+      ...prev,
+      [statementId]: {
+        ...blankNarrativeForm(statementId, narrativeByStatement[statementId]),
+        ...prev[statementId],
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSaveNarrative(statementId) {
+    if (savingNarrativeId) return;
+    const home = getCurrentHome();
+    const draft = getNarrativeDraft(statementId);
+    setSavingNarrativeId(statementId);
+    setNarrativeError(null);
+    setNarrativeNotice(null);
+    try {
+      const saved = await upsertCqcNarrative(home, statementId, {
+        narrative: draft.narrative || null,
+        risks: draft.risks || null,
+        actions: draft.actions || null,
+        reviewed_by: draft.reviewed_by || null,
+        reviewed_at: draft.reviewed_at ? new Date(draft.reviewed_at).toISOString() : null,
+        review_due: draft.review_due || null,
+        _version: draft.version,
+      });
+      setNarratives((prev) => {
+        const next = prev.filter((entry) => entry.quality_statement !== statementId);
+        next.push(saved);
+        return next.sort((a, b) => a.quality_statement.localeCompare(b.quality_statement));
+      });
+      setNarrativeDrafts((prev) => ({
+        ...prev,
+        [statementId]: blankNarrativeForm(statementId, saved),
+      }));
+      setNarrativeNotice(`Self-assessment saved for ${statementId}.`);
+    } catch (err) {
+      setNarrativeError(`Failed to save self-assessment: ${err.message}`);
+    } finally {
+      setSavingNarrativeId(null);
+    }
   }
 
   async function handleSaveEvidence() {
@@ -469,6 +522,7 @@ function CQCEvidenceInner({ data }) {
   }
 
   const categories = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
+  const snapshotPdfAvailable = Boolean(viewingSnapshot?.result?.evidencePackData);
 
   return (
     <div className={PAGE.container}>
@@ -492,6 +546,8 @@ function CQCEvidenceInner({ data }) {
       {pdfError && <p className="mb-3 text-sm text-red-600">{pdfError}</p>}
       {snapshotNotice && <p className="mb-3 text-sm text-amber-700">{snapshotNotice}</p>}
       {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
+      {narrativeNotice && <p className="mb-3 text-sm text-emerald-700">{narrativeNotice}</p>}
+      {narrativeError && <p className="mb-3 text-sm text-red-600">{narrativeError}</p>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -527,6 +583,32 @@ function CQCEvidenceInner({ data }) {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-5">
+        <div className={CARD.padded}>
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Readiness</div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className={BADGE[readinessOverall.badge]}>{readinessOverall.label}</span>
+            <span className="text-xs text-gray-500">{readinessOverall.covered}/{readinessOverall.total} covered</span>
+          </div>
+        </div>
+        {categories.map((question) => {
+          const statements = QUALITY_STATEMENTS.filter((entry) => entry.category === question);
+          const covered = statements.filter((entry) => readinessEntries[entry.id]?.status === 'covered').length;
+          const missing = statements.filter((entry) => readinessEntries[entry.id]?.status === 'missing').length;
+          return (
+            <div key={question} className={CARD.padded}>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{CATEGORY_LABELS[question]}</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{covered}/{statements.length}</p>
+              {missing > 0 ? (
+                <span className={BADGE.red}>{missing} missing</span>
+              ) : (
+                <span className={BADGE.green}>No missing</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* Date Range Toggle */}
       <div className="flex gap-1 mb-5 print:hidden">
         {RANGE_OPTIONS.map(opt => (
@@ -539,6 +621,29 @@ function CQCEvidenceInner({ data }) {
           {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
         </span>
       </div>
+
+      {readinessGaps.length > 0 && (
+        <div className={`${CARD.padded} mb-5`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Readiness Gaps</h2>
+              <p className="text-xs text-gray-500">Statements that still need fresher, broader, or better-owned evidence.</p>
+            </div>
+            <span className={BADGE.amber}>{readinessGaps.length} open</span>
+          </div>
+          <div className="space-y-2">
+            {readinessGaps.slice(0, 10).map((gap) => (
+              <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={readinessBadgeClass(gap.status)}>{gap.status}</span>
+                  <span className="text-sm font-medium text-gray-900">{gap.statementId} - {gap.statementName}</span>
+                </div>
+                <p className="text-xs text-gray-500 md:text-right">{gap.reasons.join('; ')}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quality Statements by Category */}
       {categories.map(cat => (
@@ -554,8 +659,10 @@ function CQCEvidenceInner({ data }) {
             {QUALITY_STATEMENTS.filter(q => q.category === cat).map(qs => {
               const isExpanded = expandedStatement === qs.id;
               const ev = evidenceByStatement[qs.id];
+              const readiness = readinessEntries[qs.id];
               const autoCount = ev?.autoEvidence?.length || 0;
               const manualCount = ev?.manualEvidence?.length || 0;
+              const narrativeDraft = getNarrativeDraft(qs.id);
 
               return (
                 <div key={qs.id} className={CARD.padded}>
@@ -571,6 +678,7 @@ function CQCEvidenceInner({ data }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
+                      {readiness && <span className={readinessBadgeClass(readiness.status)}>{readiness.status}</span>}
                       <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
                       {ev?.autoEvidence?.map((ae, i) => (
                         <span key={i} className={`text-sm font-bold ${metricColor(ae.value, ae.lowerIsBetter)}`}>
@@ -584,6 +692,21 @@ function CQCEvidenceInner({ data }) {
                   {isExpanded && (
                     <div className="mt-3 border-t border-gray-100 pt-3">
                       <p className="text-xs text-gray-500 mb-3">{qs.description}</p>
+                      {readiness && (
+                        <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={readinessBadgeClass(readiness.status)}>{readiness.status}</span>
+                            <span className="text-xs text-gray-500">
+                              {readiness.categoriesCovered}/{readiness.expectedCategories.length} expected categories covered
+                            </span>
+                            {readiness.reviewOverdue > 0 && <span className={BADGE.red}>{readiness.reviewOverdue} overdue</span>}
+                            {!readiness.narrativePresent && <span className={BADGE.gray}>Narrative missing</span>}
+                          </div>
+                          {readiness.reasons.length > 0 && (
+                            <p className="mt-2 text-xs text-gray-500">{readiness.reasons.join('; ')}</p>
+                          )}
+                        </div>
+                      )}
 
                       {/* Auto-computed metrics */}
                       {autoCount > 0 && (
@@ -616,40 +739,15 @@ function CQCEvidenceInner({ data }) {
                                 <div>
                                   <div className="text-sm font-medium text-gray-800">
                                     {me.title}
-                                    {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{EVIDENCE_CATEGORY_LABELS[me.evidence_category] || me.evidence_category}</span>}
+                                    {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{getEvidenceCategoryLabel(me.evidence_category)}</span>}
                                   </div>
                                   {me.description && <div className="text-xs text-gray-500 mt-0.5">{me.description}</div>}
                                   <div className="text-[10px] text-gray-400 mt-0.5">
                                     {me.date_from}{me.date_to ? ` to ${me.date_to}` : ' — ongoing'}
                                     {me.added_by && ` | by ${me.added_by}`}
+                                    {me.evidence_owner && ` | owner ${me.evidence_owner}`}
+                                    {me.review_due && ` | review due ${me.review_due}`}
                                   </div>
-                                  {evidenceFilesById[me.id]?.error && (
-                                    <div className="text-[11px] text-red-500 mt-1">
-                                      {evidenceFilesById[me.id].error}
-                                    </div>
-                                  )}
-                                  {evidenceFilesById[me.id]?.files?.length > 0 && (
-                                    <div className="mt-2">
-                                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
-                                        Supporting Files
-                                      </div>
-                                      <div className="flex flex-wrap gap-2">
-                                        {evidenceFilesById[me.id].files.map((file) => (
-                                          <button
-                                            key={file.id}
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              downloadCqcEvidenceFile(file.id, file.original_name);
-                                            }}
-                                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                                          >
-                                            {file.original_name}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
                                 {canEdit && (
                                   <div className="ml-2 flex shrink-0 gap-2">
@@ -670,6 +768,91 @@ function CQCEvidenceInner({ data }) {
                           </div>
                         </div>
                       )}
+
+                      <div className="mb-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Self-Assessment</div>
+                        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+                          <div>
+                            <label className={INPUT.label}>What the evidence shows</label>
+                            <textarea
+                              aria-label="What the evidence shows"
+                              className={`${INPUT.base} h-20`}
+                              value={narrativeDraft.narrative}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { narrative: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div>
+                            <label className={INPUT.label}>Current risks</label>
+                            <textarea
+                              aria-label="Current risks"
+                              className={`${INPUT.base} h-16`}
+                              value={narrativeDraft.risks}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { risks: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div>
+                            <label className={INPUT.label}>Improvement actions</label>
+                            <textarea
+                              aria-label="Improvement actions"
+                              className={`${INPUT.base} h-16`}
+                              value={narrativeDraft.actions}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { actions: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className={INPUT.label}>Reviewed by</label>
+                              <input
+                                aria-label="Reviewed by"
+                                type="text"
+                                className={INPUT.base}
+                                value={narrativeDraft.reviewed_by}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { reviewed_by: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <label className={INPUT.label}>Reviewed at</label>
+                              <input
+                                aria-label="Reviewed at"
+                                type="datetime-local"
+                                className={INPUT.base}
+                                value={narrativeDraft.reviewed_at}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { reviewed_at: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <label className={INPUT.label}>Review due</label>
+                              <input
+                                aria-label="Review due"
+                                type="date"
+                                className={INPUT.base}
+                                value={narrativeDraft.review_due}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { review_due: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                          </div>
+                          {canEdit ? (
+                            <div className="flex justify-end">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSaveNarrative(qs.id);
+                                }}
+                                disabled={savingNarrativeId === qs.id || narrativesLoading}
+                                className={`${BTN.secondary} ${BTN.xs}`}
+                              >
+                                {savingNarrativeId === qs.id ? 'Saving...' : 'Save Self-Assessment'}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
 
                       {evidenceLoading ? (
                         <span className="text-xs text-gray-400">Loading evidence...</span>
@@ -796,6 +979,19 @@ function CQCEvidenceInner({ data }) {
                 </div>
               </div>
             )}
+            {viewingSnapshot.result?.readiness && (
+              <div>
+                <div className="text-sm font-semibold text-gray-600 mb-2">Frozen Readiness</div>
+                <div className="flex items-center gap-2">
+                  <span className={BADGE[viewingSnapshot.result.readiness.overall?.badge || 'gray']}>
+                    {viewingSnapshot.result.readiness.overall?.label || 'Unknown'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {viewingSnapshot.result.readiness.overall?.covered || 0}/{viewingSnapshot.result.readiness.overall?.total || QUALITY_STATEMENTS.length} covered
+                  </span>
+                </div>
+              </div>
+            )}
             {viewingSnapshot.sign_off_notes && (
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Sign-off notes:</span> {viewingSnapshot.sign_off_notes}
@@ -809,11 +1005,19 @@ function CQCEvidenceInner({ data }) {
               setGenerating(true);
               setSnapshotError(null);
               try {
+                const frozenData = viewingSnapshot?.result?.evidencePackData;
+                if (!frozenData) {
+                  throw new Error('This snapshot was created before frozen PDF exports were added. Create a new snapshot to export a signed-off evidence pack.');
+                }
                 const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
-                generateEvidencePackPDF(dataWithEvidence || {}, dateRangeDays, viewingSnapshot);
+                generateEvidencePackPDF(
+                  frozenData,
+                  viewingSnapshot?.result?.evidencePackMeta?.date_range_days || dateRangeDays,
+                  viewingSnapshot
+                );
               } catch (e) { setSnapshotError(e.message); }
               finally { setGenerating(false); }
-            }} disabled={generating}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
+            }} disabled={generating || !snapshotPdfAvailable}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
           </div>
         </Modal>
       )}
@@ -857,12 +1061,9 @@ function CQCEvidenceInner({ data }) {
                   <select className={INPUT.select} value={evidenceForm.evidence_category}
                     onChange={e => setEvidenceForm({ ...evidenceForm, evidence_category: e.target.value })}>
                     <option value="">— None —</option>
-                    <option value="peoples_experience">People's Experience</option>
-                    <option value="feedback">Feedback</option>
-                    <option value="observation">Observation</option>
-                    <option value="processes">Processes</option>
-                    <option value="outcomes">Outcomes</option>
-                    <option value="management_info">Management Information</option>
+                    {EVIDENCE_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -883,6 +1084,30 @@ function CQCEvidenceInner({ data }) {
                   <label className={INPUT.label}>Evidence To (optional)</label>
                   <input type="date" className={INPUT.base} value={evidenceForm.date_to}
                     onChange={e => setEvidenceForm({ ...evidenceForm, date_to: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={INPUT.label}>Evidence Owner</label>
+                  <input
+                    aria-label="Evidence Owner"
+                    type="text"
+                    className={INPUT.base}
+                    placeholder="Who is responsible for keeping this current?"
+                    value={evidenceForm.evidence_owner}
+                    onChange={e => setEvidenceForm({ ...evidenceForm, evidence_owner: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Review Due</label>
+                  <input
+                    aria-label="Review Due"
+                    type="date"
+                    className={INPUT.base}
+                    value={evidenceForm.review_due}
+                    onChange={e => setEvidenceForm({ ...evidenceForm, review_due: e.target.value })}
+                  />
                 </div>
               </div>
 
