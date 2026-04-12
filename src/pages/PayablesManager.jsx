@@ -16,6 +16,7 @@ import {
 } from '../lib/api.js';
 import { EXPENSE_CATEGORIES, SCHEDULE_FREQUENCIES, formatCurrency, getLabel } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -49,17 +50,9 @@ export default function PayablesManager() {
 
   useEffect(() => { load(); }, [load]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const in28Days = (() => {
-    const d = new Date();
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 28))
-      .toISOString().slice(0, 10);
-  })();
-  const in7Days = (() => {
-    const d = new Date();
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 7))
-      .toISOString().slice(0, 10);
-  })();
+  const today = todayLocalISO();
+  const in28Days = addDaysLocalISO(today, 28);
+  const in7Days = addDaysLocalISO(today, 7);
 
   // KPI calculations
   const activeSchedules = schedules.filter(s => !s.on_hold);
@@ -99,7 +92,7 @@ export default function PayablesManager() {
     setSaving(true);
     try {
       if (editing?.id) {
-        await updatePaymentSchedule(home, editing.id, form);
+        await updatePaymentSchedule(home, editing.id, { ...form, _version: editing.version });
       } else {
         await createPaymentSchedule(home, form);
       }
@@ -130,6 +123,7 @@ export default function PayablesManager() {
       await updatePaymentSchedule(home, sched.id, {
         on_hold: !sched.on_hold,
         hold_reason: !sched.on_hold ? 'Manually held' : null,
+        _version: sched.version,
       });
       load();
     } catch (e) { setError(e.message); }

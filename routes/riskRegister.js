@@ -8,6 +8,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { validateRiskStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -78,6 +79,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const residualImpact = parsed.data.residual_impact ?? existing.residual_impact ?? 0;
     parsed.data.inherent_risk = likelihood * impact;
     parsed.data.residual_risk = residualLikelihood * residualImpact;
+    const transitionError = validateRiskStatusChange(existing, parsed.data);
+    if (transitionError) return res.status(400).json({ error: transitionError });
     const version = parsed.data._version != null ? parsed.data._version : null;
     const risk = await riskRepo.update(idParsed.data, req.home.id, parsed.data, version);
     if (risk === null) {

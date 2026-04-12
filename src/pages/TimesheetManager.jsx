@@ -10,6 +10,8 @@ import {
 } from '../lib/api.js';
 import { getStaffForDay, formatDate, addDays } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
+import { getMinimumWageRate } from '../../shared/nmw.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -21,7 +23,7 @@ const STATUS_BADGE = {
 };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalISO();
 }
 
 export default function TimesheetManager() {
@@ -88,9 +90,9 @@ export default function TimesheetManager() {
     const approved  = entries.filter(e => e.status === 'approved').length;
     const pending   = entries.filter(e => e.status === 'pending').length;
     const totalMins = entries.reduce((s, e) => s + (e.snap_minutes_saved || 0), 0);
-    const hourly    = 12.21; // NLW reference
+    const hourly    = getMinimumWageRate(null, schedData?.config).rate;
     return { approved, pending, totalMins, snapSavingEst: Math.round(totalMins / 60 * hourly * 100) / 100 };
-  }, [entries]);
+  }, [entries, schedData]);
 
   function openEdit(row) {
     const { staff, entry, shiftStart, shiftEnd } = row;

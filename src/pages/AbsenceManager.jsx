@@ -13,6 +13,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
@@ -23,7 +24,7 @@ const TABS = [
 
 const emptyRtw = () => ({
   staff_id: '', absence_start_date: '', absence_end_date: '',
-  rtw_date: new Date().toISOString().slice(0, 10), conducted_by: '',
+  rtw_date: todayLocalISO(), conducted_by: '',
   absence_reason: '', fit_for_work: true, adjustments: '',
   referral_needed: false, underlying_condition: false, follow_up_date: '',
   fit_note_received: false, fit_note_date: '', fit_note_type: '', fit_note_adjustments: '',
@@ -32,7 +33,7 @@ const emptyRtw = () => ({
 });
 
 const emptyOh = () => ({
-  staff_id: '', referral_date: new Date().toISOString().slice(0, 10),
+  staff_id: '', referral_date: todayLocalISO(),
   reason: '', referred_by: '', provider: '', appointment_date: '',
   report_received: false, report_date: '', recommendations: '',
   employee_consent_obtained: false, consent_date: '', questions_for_oh: '',

@@ -5,7 +5,7 @@ import { BTN, INPUT, MODAL } from '../lib/design.js';
 import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { ROLES, getRoleLabel } from '../../shared/roles.js';
+import { ROLES, getRoleLabel, hasModuleAccess } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
@@ -21,6 +21,26 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
   const [changePwOpen, setChangePwOpen] = useState(false);
+  const canAccessOwnSafeItem = (moduleId, ownDataSafe) => (
+    Boolean(
+      ownDataSafe &&
+      homeRole &&
+      hasModuleAccess(homeRole, moduleId, 'own'),
+    )
+  );
+  const canSeeNavItem = (item, sectionModule = null) => {
+    if (item.platformAdminOnly) return isPlatformAdmin;
+    if (item.requiresUserManagement && !canManageUsers) return false;
+    if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
+    const moduleId = item.module || sectionModule;
+    if (!moduleId) return true;
+    return canRead(moduleId) || canAccessOwnSafeItem(moduleId, item.ownDataSafe);
+  };
+  const canSeeSection = (section) => {
+    if (section.platformAdminOnly) return isPlatformAdmin;
+    if (section.module && canRead(section.module)) return true;
+    return (section.items || []).some(item => canSeeNavItem(item, section.module));
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50" role="status">
@@ -157,7 +177,7 @@ export default function AppLayout() {
 
         <nav className="flex-1 py-1.5 px-2 overflow-y-auto space-y-0.5">
           {/* Top-level items */}
-          {NAV_TOP.filter(item => !item.module || canRead(item.module)).map(item => (
+          {NAV_TOP.filter(item => canSeeNavItem(item)).map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -182,13 +202,7 @@ export default function AppLayout() {
           ))}
 
           {/* Grouped sections */}
-          {NAV_SECTIONS.filter(s => {
-            if (s.platformAdminOnly) return isPlatformAdmin;
-            if (s.module) return canRead(s.module);
-            // System section: show if any child item's module is accessible
-            if (s.items) return s.items.some(item => !item.module || canRead(item.module));
-            return true;
-          }).map(section => {
+          {NAV_SECTIONS.filter(canSeeSection).map(section => {
             const isOpen = expandedSections[section.id];
             return (
               <div key={section.id}>
@@ -214,14 +228,7 @@ export default function AppLayout() {
                 </button>
                 {isOpen && sidebarOpen && (
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
-                    {section.items.filter(item => {
-                      if (item.platformAdminOnly) return isPlatformAdmin;
-                      if (item.requiresUserManagement && !canManageUsers) return false;
-                      if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
-                      if (item.module) return canRead(item.module);
-                      if (section.id === 'scheduling' && homeRole === 'staff_member') return item.ownDataSafe === true;
-                      return true;
-                    }).map(item => (
+                    {section.items.filter(item => canSeeNavItem(item, section.module)).map(item => (
                       <NavLink
                         key={item.path}
                         to={item.path}

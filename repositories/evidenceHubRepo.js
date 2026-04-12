@@ -194,7 +194,6 @@ export async function search(homeId, filters = {}, client = pool) {
     )
     SELECT *
       FROM evidence
-     WHERE ($6::TEXT[] IS NULL OR TRUE)
      ORDER BY created_at DESC
      LIMIT $7 OFFSET $8
   `;
@@ -205,7 +204,6 @@ export async function search(homeId, filters = {}, client = pool) {
     )
     SELECT COUNT(*)::INT AS total
       FROM evidence
-     WHERE ($6::TEXT[] IS NULL OR TRUE)
   `;
 
   const baseParams = buildParams(homeId, filters);
@@ -234,7 +232,6 @@ export async function listUploaders(homeId, filters = {}, client = pool) {
     SELECT DISTINCT uploaded_by
       FROM evidence
      WHERE uploaded_by IS NOT NULL
-       AND ($6::TEXT[] IS NULL OR TRUE)
      ORDER BY uploaded_by
   `;
 

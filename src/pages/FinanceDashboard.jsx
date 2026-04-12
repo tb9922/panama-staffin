@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE, INPUT } from '../lib/design.js';
 import { getCurrentHome, getFinanceDashboard, getFinanceAlerts } from '../lib/api.js';
 import { formatCurrency, getLabel, EXPENSE_CATEGORIES } from '../lib/finance.js';
+import { startOfLocalMonthISO, todayLocalISO } from '../lib/localDates.js';
 
 const ALERT_STYLES = {
   error: 'bg-red-50 border-red-200 text-red-700',
@@ -15,12 +16,9 @@ export default function FinanceDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [period, setPeriod] = useState(() => {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const m = now.getUTCMonth();
     return {
-      from: `${y}-${String(m + 1).padStart(2, '0')}-01`,
-      to: now.toISOString().slice(0, 10),
+      from: startOfLocalMonthISO(),
+      to: todayLocalISO(),
     };
   });
   const home = getCurrentHome();

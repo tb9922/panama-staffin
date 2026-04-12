@@ -175,20 +175,24 @@ describe('AppLayout', () => {
     expect(screen.queryByText('Finance')).not.toBeInTheDocument();
   });
 
-  it('staff_member only sees own-data-safe scheduling links', () => {
+  it('staff_member only sees audited own-data-safe links', () => {
     mockAuth({ user: { username: 'staff', role: 'viewer', displayName: 'Staff User' }, isViewer: false, isPlatformAdmin: false });
     mockData({
-      canRead: (mod) => mod === 'scheduling',
+      canRead: () => false,
       canWrite: () => false,
       homeRole: 'staff_member',
       staffId: 'S001',
     });
     renderLayout({ username: 'staff', role: 'viewer' });
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
     expect(screen.queryByText('Daily Status')).not.toBeInTheDocument();
     expect(screen.queryByText('Roster')).not.toBeInTheDocument();
     expect(screen.queryByText('Scenarios')).not.toBeInTheDocument();
     expect(screen.queryByText('Annual Leave')).not.toBeInTheDocument();
-    expect(screen.getByText('Handover Book')).toBeInTheDocument();
+    expect(screen.queryByText('Handover Book')).not.toBeInTheDocument();
+    expect(screen.getByText('Payroll')).toBeInTheDocument();
+    expect(screen.getByText('Monthly View')).toBeInTheDocument();
+    expect(screen.queryByText('Timesheets')).not.toBeInTheDocument();
   });
 
   it('config-read roles do not see the Users nav item without user-management rights', () => {

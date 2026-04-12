@@ -7,6 +7,12 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
+function parseOptionalNumber(value) {
+  if (value === '' || value == null) return null;
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default function Config() {
   const { canWrite } = useData();
   const canEdit = canWrite('config');
@@ -86,7 +92,7 @@ export default function Config() {
       <div className="flex items-center gap-1">
         {type === 'number' ? (
           <input type="number" step={step || 1} value={getVal(path)}
-            onChange={e => handleChange(path, parseFloat(e.target.value) || 0)}
+            onChange={e => handleChange(path, parseOptionalNumber(e.target.value))}
             className={INPUT.sm} />
         ) : (
           <input type={type} value={getVal(path)}
@@ -191,7 +197,7 @@ export default function Config() {
                   </td>
                   <td className={TABLE.td}>
                     <input type="number" step="0.25" value={shift.hours}
-                      onChange={e => handleChange(`shifts.${code}.hours`, parseFloat(e.target.value) || 0)}
+                      onChange={e => handleChange(`shifts.${code}.hours`, parseOptionalNumber(e.target.value))}
                       className={`${INPUT.sm} w-20`} />
                   </td>
                 </tr>

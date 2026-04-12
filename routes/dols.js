@@ -8,6 +8,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { validateDolsReviewStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -90,6 +91,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dolsRepo.findDolsById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    const transitionError = validateDolsReviewStatusChange(existing, parsed.data);
+    if (transitionError) return res.status(400).json({ error: transitionError });
     const version = parsed.data._version != null ? parsed.data._version : null;
     const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data, version);
     if (record === null) {

@@ -10,6 +10,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const MODAL_TABS = [
   { id: 'concern', label: 'Concern' },
@@ -22,7 +23,7 @@ const MODAL_TABS = [
 ];
 
 const emptyForm = () => ({
-  staff_id: '', date_raised: new Date().toISOString().slice(0, 10), type: 'capability',
+  staff_id: '', date_raised: todayLocalISO(), type: 'capability',
   description: '', status: 'open',
   informal_notes: '', informal_targets: '',
   pip_objectives: '', pip_start_date: '', pip_end_date: '',

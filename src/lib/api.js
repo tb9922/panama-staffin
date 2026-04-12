@@ -20,6 +20,13 @@ function clearClientSession() {
   }
 }
 
+function expireClientSession() {
+  clearClientSession();
+  if (typeof window !== 'undefined') {
+    window.location.assign('/');
+  }
+}
+
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/);
   return match ? match[1] : '';
@@ -51,6 +58,36 @@ async function apiFetch(url, options = {}) {
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function downloadBinary(url, originalName) {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+  });
+  if (res.status === 401) {
+    expireClientSession();
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = originalName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function downloadAuthenticatedFile(url, originalName) {
+  return downloadBinary(url, originalName);
 }
 
 export function isAbortLikeError(err, signal) {
@@ -594,23 +631,7 @@ export async function deleteCqcEvidenceFile(id) {
 
 export async function downloadCqcEvidenceFile(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/cqc-evidence/files/${id}/download?home=${h(home)}`, {
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return downloadBinary(`${API_BASE}/cqc-evidence/files/${id}/download?home=${h(home)}`, originalName);
 }
 
 export async function revokeUserTokens(username) {
@@ -1216,20 +1237,7 @@ export async function deleteHrAttachment(id) {
 
 export async function downloadHrAttachment(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return downloadBinary(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, originalName);
 }
 
 // ── HR Investigation Meetings ───────────────────────────────────────────────
@@ -1276,20 +1284,7 @@ export async function deleteRecordAttachment(id) {
 
 export async function downloadRecordAttachment(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return downloadBinary(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, originalName);
 }
 
 export async function getHrMeetings(caseType, caseId) {
@@ -1643,23 +1638,7 @@ export async function deleteOnboardingFile(id) {
 
 export async function downloadOnboardingFile(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, {
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return downloadBinary(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, originalName);
 }
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────────────
@@ -1709,20 +1688,7 @@ export async function deleteTrainingFile(id) {
 
 export async function downloadTrainingFile(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return downloadBinary(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, originalName);
 }
 
 export async function createStaff(homeSlug, staffData) {

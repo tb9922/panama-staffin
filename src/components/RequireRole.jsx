@@ -1,12 +1,13 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { ROLES } from '../../shared/roles.js';
+import { hasModuleAccess, ROLES } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 
-export function RequireModule({ module, children }) {
-  const { canRead } = useData();
-  if (!canRead(module)) return <Navigate to="/" replace />;
+export function RequireModule({ module, level = 'read', children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  if (!isPlatformAdmin && !hasModuleAccess(homeRole, module, level)) return <Navigate to="/" replace />;
   return children;
 }
 

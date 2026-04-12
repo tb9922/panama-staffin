@@ -8,6 +8,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 function recordTypeName(id) {
   return EDI_RECORD_TYPES.find(t => t.id === id)?.name || id;
@@ -23,7 +24,7 @@ function categoryName(id) {
 
 const blankForm = () => ({
   record_type: 'harassment_complaint', staff_id: '',
-  date_recorded: new Date().toISOString().slice(0, 10),
+  date_recorded: todayLocalISO(),
   category: '', status: 'open', notes: '',
   // harassment-specific
   third_party: false, third_party_type: '', respondent_name: '', respondent_role: '', handling_route: '', description: '',

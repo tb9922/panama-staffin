@@ -8,6 +8,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
 const emptyForm = () => ({
   staff_id: '', contract_type: 'permanent', start_date: '', end_date: '',
@@ -128,11 +129,11 @@ export default function ContractManager() {
 
   // Probation tracker: contracts in probation with days remaining
   const probationItems = items.filter(c => c.status === 'probation' && c.probation_end_date);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
 
   function daysUntil(dateStr) {
     if (!dateStr) return null;
-    const diff = (new Date(dateStr + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000;
+    const diff = (parseLocalDate(dateStr) - parseLocalDate(today)) / 86400000;
     return Math.ceil(diff);
   }
 

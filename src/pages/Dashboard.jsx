@@ -8,6 +8,7 @@ import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
 import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, isAbortLikeError } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
+import { startOfNextLocalDay } from '../lib/localDates.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -149,8 +150,7 @@ function DashboardInner({ schedData }) {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
+    const timer = setTimeout(() => setToday(new Date()), startOfNextLocalDay(now).getTime() - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

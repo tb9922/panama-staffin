@@ -6,7 +6,13 @@ import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as authService from './authService.js';
 import logger from '../logger.js';
 
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+function parseBcryptRounds(rawValue) {
+  const parsed = parseInt(rawValue || '12', 10);
+  if (!Number.isInteger(parsed) || parsed < 10 || parsed > 15) return 12;
+  return parsed;
+}
+
+const BCRYPT_ROUNDS = parseBcryptRounds(process.env.BCRYPT_ROUNDS);
 const PASSWORD_MIN = 10;
 const PASSWORD_MAX = 200;
 

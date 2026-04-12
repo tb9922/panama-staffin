@@ -23,6 +23,7 @@ import {
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'overview',   label: 'Overview' },
@@ -235,7 +236,7 @@ export default function GdprDashboard() {
     if (!decisionForm.decision_rationale?.trim()) { setError('Decision rationale is required'); return; }
     setSaving(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISO();
       await updateDataBreach(home, decisionBreach.id, {
         manual_decision: decisionForm.manual_decision,
         decision_by: getLoggedInUser()?.username || 'admin',
@@ -259,7 +260,7 @@ export default function GdprDashboard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `sar_data_${data.subject_id}_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `sar_data_${data.subject_id}_${todayLocalISO()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) { setError(e.message); } finally { setSaving(false); }
@@ -584,7 +585,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Requests</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: todayLocalISO() }); setShowModal('request'); }}>
             New Request
           </button>}
         </div>
@@ -642,7 +643,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Breaches</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: todayLocalISO(now), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
             Report Breach
           </button>}
         </div>
@@ -768,7 +769,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Protection Complaints</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: todayLocalISO() }); setShowModal('complaint'); }}>
             Log Complaint
           </button>}
         </div>

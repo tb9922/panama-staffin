@@ -50,8 +50,8 @@ import * as api from '../../lib/api.js';
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const CURRENT_YEAR = new Date().getUTCFullYear();
-const CURRENT_MONTH = new Date().getUTCMonth() + 1;
+const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth() + 1;
 const CURRENT_PREFIX = `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, '0')}`;
 
 const MOCK_SCHED_DATA = {
@@ -119,6 +119,7 @@ function renderAdmin(entries) {
   setupMocks(entries);
   return renderWithProviders(<MonthlyTimesheet />, {
     route: '/payroll/monthly-timesheet/S001',
+    path: '/payroll/monthly-timesheet/:staffId',
     user: { username: 'admin', role: 'admin' },
   });
 }
@@ -128,6 +129,7 @@ function renderViewer(entries) {
   setupMocks(entries);
   return renderWithProviders(<MonthlyTimesheet />, {
     route: '/payroll/monthly-timesheet/S001',
+    path: '/payroll/monthly-timesheet/:staffId',
     user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
 }
@@ -161,10 +163,10 @@ describe('MonthlyTimesheet', () => {
     renderAdmin();
     await screen.findByText('Monthly Timesheet');
     const now = new Date();
-    const currentYear = now.getUTCFullYear();
-    const currentMonth = now.getUTCMonth() + 1;
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
     const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(new Date(Date.UTC(currentYear, currentMonth, 0)).getUTCDate()).padStart(2, '0')}`;
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(new Date(currentYear, currentMonth, 0).getDate()).padStart(2, '0')}`;
     expect(api.getSchedulingData).toHaveBeenCalledWith('test-home', {
       from: monthStart,
       to: monthEnd,

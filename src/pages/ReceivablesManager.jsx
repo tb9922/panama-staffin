@@ -14,6 +14,7 @@ import {
 } from '../lib/api.js';
 import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -56,7 +57,7 @@ export default function ReceivablesManager() {
   async function openChaseModal(invoice) {
     setSelectedInvoice(invoice);
     setError(null);
-    setChaseForm({ chase_date: new Date().toISOString().slice(0, 10), method: 'phone' });
+    setChaseForm({ chase_date: todayLocalISO(), method: 'phone' });
     try {
       setChases(await getInvoiceChases(home, invoice.id));
     } catch { setChases([]); }
@@ -178,7 +179,7 @@ export default function ReceivablesManager() {
               {filteredItems.length === 0 ? (
                 <tr><td colSpan={9} className={TABLE.empty}>No outstanding invoices</td></tr>
               ) : filteredItems.map(item => {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = todayLocalISO();
                 const actionOverdue = item.last_chase?.next_action_date && item.last_chase.next_action_date <= today;
                 return (
                   <tr key={item.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openChaseModal(item))}>

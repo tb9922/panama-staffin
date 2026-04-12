@@ -6,6 +6,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
+  downloadAuthenticatedFile,
   getSchedulingData, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -33,30 +34,6 @@ function fmt(n, prefix = '£') {
 function fmtHrs(n) {
   if (n == null || parseFloat(n) === 0) return '—';
   return `${parseFloat(n).toFixed(2)}h`;
-}
-
-// Fetch blob with cookie auth + CSRF headers, trigger download
-function getCsrfToken() {
-  return document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/)?.[1] || '';
-}
-async function downloadWithAuth(url, filename) {
-  const res = await fetch(url, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: 'Invalid response' }));
-    throw new Error(body.error || `Export failed (${res.status})`);
-  }
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(href);
 }
 
 export default function PayrollDetail() {
@@ -166,7 +143,7 @@ export default function PayrollDetail() {
     setError(null);
     try {
       const period = run ? `${run.period_start}_${run.period_end}` : runId;
-      await downloadWithAuth(getPayrollSummaryPdfUrl(homeSlug, runId), `payroll_summary_${period}.pdf`);
+      await downloadAuthenticatedFile(getPayrollSummaryPdfUrl(homeSlug, runId), `payroll_summary_${period}.pdf`);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -180,7 +157,7 @@ export default function PayrollDetail() {
     try {
       const url = getPayrollExportUrl(homeSlug, runId, format);
       const period = run ? `${run.period_start}_${run.period_end}` : runId;
-      await downloadWithAuth(url, `payroll_${format}_${period}.csv`);
+      await downloadAuthenticatedFile(url, `payroll_${format}_${period}.csv`);
       // Reload to pick up exported_at timestamp update
       await load();
     } catch (e) {

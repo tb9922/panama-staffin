@@ -15,6 +15,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const PROTECTED_CHARACTERISTICS = [
   { id: '', name: 'None' },
@@ -87,7 +88,7 @@ export default function GrievanceTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'other', status: 'open', confidential: false, raised_by_method: 'written' });
+    setForm({ date_raised: todayLocalISO(), category: 'other', status: 'open', confidential: false, raised_by_method: 'written' });
     setModalTab('details');
     setCaseNotes([]);
     setActions([]);
@@ -187,7 +188,7 @@ export default function GrievanceTracker() {
       await updateGrievanceAction(action.id, {
         ...action,
         status: 'completed',
-        completed_date: new Date().toISOString().slice(0, 10),
+        completed_date: todayLocalISO(),
         _version: action.version,
       });
       setActions(await getGrievanceActions(editing.id));

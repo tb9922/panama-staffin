@@ -17,6 +17,7 @@ import {
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 import IncidentTrackerModal from '../components/incidents/IncidentTrackerModal.jsx';
+import { addDaysLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -97,9 +98,7 @@ export default function IncidentTracker() {
 
   // Date range for stats: last 90 days
   const statsRange = useMemo(() => {
-    const d = new Date(today + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 89);
-    return { from: d.toISOString().slice(0, 10), to: today };
+    return { from: addDaysLocalISO(today, -89), to: today };
   }, [today]);
 
   const stats = useMemo(() =>

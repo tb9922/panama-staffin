@@ -4,6 +4,7 @@ import Modal from '../components/Modal.jsx';
 import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -34,10 +35,10 @@ function fmt(n) {
 
 function currentTaxYear() {
   const now = new Date();
-  const m = now.getUTCMonth() + 1;
-  const d = now.getUTCDate();
-  if (m > 4 || (m === 4 && d >= 6)) return now.getUTCFullYear();
-  return now.getUTCFullYear() - 1;
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  if (m > 4 || (m === 4 && d >= 6)) return now.getFullYear();
+  return now.getFullYear() - 1;
 }
 
 export default function HMRCDashboard() {
@@ -83,7 +84,7 @@ export default function HMRCDashboard() {
     .reduce((s, l) => s + parseFloat(l.total_due || 0), 0);
 
   function openPaid(liability) {
-    setPaidForm({ paid_date: new Date().toISOString().slice(0, 10), paid_reference: '' });
+    setPaidForm({ paid_date: todayLocalISO(), paid_reference: '' });
     setShowPaidModal(liability);
   }
 

@@ -3,6 +3,7 @@ import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotati
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 function getMonthRange(monthsBack) {
@@ -43,9 +44,8 @@ export default function SickTrends() {
   useEffect(() => {
     if (!homeSlug) return;
     // SickTrends shows 6 months back — request wider override window
-    const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+    const from = startOfLocalMonthISO(new Date(), -6);
+    const to = endOfLocalMonthISO(new Date(), 0);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))

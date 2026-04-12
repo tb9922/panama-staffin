@@ -12,6 +12,7 @@ import {
   getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -55,7 +56,7 @@ export default function ExpenseTracker() {
     setReadOnly(false);
     setError(null);
     setForm({
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: todayLocalISO(),
       category: 'other',
       status: 'pending',
       net_amount: '',
@@ -90,7 +91,7 @@ export default function ExpenseTracker() {
         gross_amount: form.gross_amount || (parseFloat(form.net_amount || 0) + parseFloat(form.vat_amount || 0)),
       };
       if (editing?.id) {
-        await updateFinanceExpense(home, editing.id, payload);
+        await updateFinanceExpense(home, editing.id, { ...payload, _version: editing.version });
       } else {
         await createFinanceExpense(home, payload);
       }

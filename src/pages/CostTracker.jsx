@@ -4,6 +4,7 @@ import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { startOfNextLocalDay } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 function downloadCSV(filename, headers, rows) {
@@ -40,8 +41,7 @@ export default function CostTracker() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
+    const timer = setTimeout(() => setToday(new Date()), startOfNextLocalDay(now).getTime() - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

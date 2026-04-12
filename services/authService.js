@@ -25,11 +25,13 @@ export async function loadDenyList() {
 export async function login(username, password) {
   // Try database-backed users first
   let dbUser = null;
+  let usersTableExists = true;
   try { dbUser = await userRepo.findByUsername(username); } catch (err) {
     // Only fall through when the users table doesn't exist yet (pre-migration state).
     // Any other error (DB down, timeout, pool exhausted) must propagate so auth is
     // never silently bypassed — env-var users skip lockout and deny-list checks.
     if (err.code !== '42P01') throw err;
+    usersTableExists = false;
   }
 
   if (dbUser) {
@@ -63,6 +65,8 @@ export async function login(username, password) {
     );
     return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };
   }
+
+  if (usersTableExists) throw new AuthenticationError('Invalid credentials');
 
   // Fallback: env-var users (backward compatibility before migration)
   const envUser = config.users.find(u => u.username === username);

@@ -8,6 +8,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { validateIpcOutbreakStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -97,6 +98,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
     const existing = await ipcRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    const transitionError = validateIpcOutbreakStatusChange(existing, updates);
+    if (transitionError) return res.status(400).json({ error: transitionError });
     const version = parsed.data._version != null ? parsed.data._version : null;
     const audit = await ipcRepo.update(idParsed.data, req.home.id, updates, version);
     if (audit === null) {

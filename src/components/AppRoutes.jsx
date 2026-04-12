@@ -69,13 +69,13 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Scheduling */}
-      <Route path="/" element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
-      <Route path="/day" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
-      <Route path="/day/:date" element={<RouteErrorBoundary><DailyStatus /></RouteErrorBoundary>} />
-      <Route path="/handover" element={<RouteErrorBoundary><HandoverNotes /></RouteErrorBoundary>} />
-      <Route path="/rotation" element={<RouteErrorBoundary><RotationGrid /></RouteErrorBoundary>} />
-      <Route path="/scenarios" element={<RouteErrorBoundary><ScenarioModel /></RouteErrorBoundary>} />
-      <Route path="/leave" element={<RouteErrorBoundary><AnnualLeave /></RouteErrorBoundary>} />
+      <Route path="/" element={<RouteErrorBoundary><RequireModule module="scheduling" level="own"><Dashboard /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/day" element={<RouteErrorBoundary><RequireModule module="scheduling"><DailyStatus /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/day/:date" element={<RouteErrorBoundary><RequireModule module="scheduling"><DailyStatus /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/handover" element={<RouteErrorBoundary><RequireModule module="scheduling"><HandoverNotes /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/rotation" element={<RouteErrorBoundary><RequireModule module="scheduling"><RotationGrid /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/scenarios" element={<RouteErrorBoundary><RequireModule module="scheduling"><ScenarioModel /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/leave" element={<RouteErrorBoundary><RequireModule module="scheduling"><AnnualLeave /></RequireModule></RouteErrorBoundary>} />
 
       {/* Staff */}
       <Route path="/staff" element={<RouteErrorBoundary><RequireModule module="staff"><StaffRegister /></RequireModule></RouteErrorBoundary>} />
@@ -125,7 +125,7 @@ export default function AppRoutes() {
       {/* Payroll */}
       <Route path="/payroll/rates"      element={<RouteErrorBoundary><RequireModule module="payroll"><PayRatesConfig /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/timesheets" element={<RouteErrorBoundary><RequireModule module="payroll"><TimesheetManager /></RequireModule></RouteErrorBoundary>} />
-      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><RequireModule module="payroll"><MonthlyTimesheet /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><RequireModule module="payroll" level="own"><MonthlyTimesheet /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/agency"     element={<RouteErrorBoundary><RequireModule module="payroll"><AgencyTracker /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/tax-codes"  element={<RouteErrorBoundary><RequireModule module="payroll"><TaxCodeManager /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/pensions"   element={<RouteErrorBoundary><RequireModule module="payroll"><PensionManager /></RequireModule></RouteErrorBoundary>} />

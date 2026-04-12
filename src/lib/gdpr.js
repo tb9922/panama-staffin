@@ -1,5 +1,6 @@
 // GDPR / Data Protection — Pure Functions
 // UK GDPR compliance for care home special category data
+import { addDaysLocalISO, todayLocalISO } from './localDates.js';
 
 // ── Engine Version ──────────────────────────────────────────────────────────
 // Bump when the scoring model changes materially (penalty weights, domain structure,
@@ -64,9 +65,7 @@ export const DATA_CATEGORIES = [
 // ── Deadline Calculators ─────────────────────────────────────────────────────
 
 export function calculateDeadline(dateReceived, days = 30) {
-  const [y, m, day] = dateReceived.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1, day + days));
-  return d.toISOString().slice(0, 10);
+  return addDaysLocalISO(dateReceived, days);
 }
 
 export function calculateICODeadline(discoveredDate) {
@@ -298,7 +297,7 @@ function evaluateDomain(domainId, data) {
       // ROPA — Article 30 compliance
       const ropa = data.ropa || [];
       const activeRopa = ropa.filter(x => x.status === 'active');
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISO();
       // Overdue = review date in the past, OR no review date set on an active entry (never reviewed)
       const overdueRopa = activeRopa.filter(x => !x.next_review_due || x.next_review_due < today);
       controls.push({ id: 'ropa_maintained', label: 'ROPA maintained (Art 30)', evidenced: activeRopa.length > 0, detail: `${activeRopa.length} active entries` });

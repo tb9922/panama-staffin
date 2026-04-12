@@ -8,6 +8,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { validateWhistleblowingStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -95,6 +96,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const updateData = { ...parsed.data };
     // Prevent de-anonymisation: never overwrite raised_by_role on anonymous concerns
     if (existing.anonymous) delete updateData.raised_by_role;
+    const transitionError = validateWhistleblowingStatusChange(existing, updateData);
+    if (transitionError) return res.status(400).json({ error: transitionError });
     const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, updateData, version);
     if (concern === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

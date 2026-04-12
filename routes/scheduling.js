@@ -236,7 +236,7 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
 }
 
 // GET /api/scheduling?home=X — full scheduling bundle
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'own'), async (req, res, next) => {
   try {
     // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
     const now = new Date();
@@ -267,7 +267,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
-    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training;
+    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training, dayNotesOut = dayNotes;
     if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
@@ -281,11 +281,14 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     let configOut = buildSchedulingConfigOut(req.home.config);
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
-      staffOut = staff.map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
+      staffOut = staff
+        .filter(({ id }) => id === req.staffId)
+        .map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
       overridesOut = {};
       for (const [date, entries] of Object.entries(overrides)) {
         if (entries[req.staffId]) overridesOut[date] = { [req.staffId]: entries[req.staffId] };
       }
+      dayNotesOut = [];
       trainingOut = [];
       onboardingOut = undefined;
       // Strip commercially sensitive fields — staff don't need cost parameters
@@ -297,7 +300,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       configUpdatedAt: req.home.updated_at ? req.home.updated_at.toISOString() : null,
       staff: staffOut,
       overrides: overridesOut,
-      day_notes: dayNotes,
+      day_notes: dayNotesOut,
       training: trainingOut,
       ...(onboardingOut !== undefined && { onboarding: onboardingOut }),
     });

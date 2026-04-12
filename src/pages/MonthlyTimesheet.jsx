@@ -17,6 +17,7 @@ import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -28,7 +29,7 @@ const STATUS_BADGE = {
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function daysInMonth(year, month) {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(year, month, 0).getDate();
 }
 
 function isAbsence(shift) {
@@ -66,8 +67,8 @@ export default function MonthlyTimesheet() {
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState(urlStaffId || '');
-  const [year, setYear] = useState(() => new Date().getUTCFullYear());
-  const [month, setMonth] = useState(() => new Date().getUTCMonth() + 1);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -90,7 +91,8 @@ export default function MonthlyTimesheet() {
 
   // Default to first active staff if none selected
   useEffect(() => {
-    if (!selectedStaffId && activeStaff.length > 0) {
+    if (activeStaff.length === 0) return;
+    if (!selectedStaffId || !activeStaff.some(s => s.id === selectedStaffId)) {
       setSelectedStaffId(activeStaff[0].id);
     }
   }, [activeStaff, selectedStaffId]);
@@ -155,8 +157,8 @@ export default function MonthlyTimesheet() {
       // Classify the row
       let rowType;
       if (WORKING_SHIFTS.includes(rosterShift) && !entry) {
-        const nowUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        rowType = dateObj < nowUtc ? 'missing' : 'future';
+        const today = parseLocalDate(todayLocalISO());
+        rowType = dateObj < today ? 'missing' : 'future';
       } else if (WORKING_SHIFTS.includes(rosterShift) && entry) {
         rowType = 'working';
       } else if (isAbsence(rosterShift)) {
@@ -491,7 +493,7 @@ export default function MonthlyTimesheet() {
 
   if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
 
-  const monthName = new Date(Date.UTC(year, month - 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const monthName = new Date(year, month - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
   return (
     <div className={PAGE.container}>

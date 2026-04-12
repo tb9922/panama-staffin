@@ -59,7 +59,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
         // Operational/CQC tables matched by name (no staff FK)
-        agencyShifts, complaintSurveys, cqcNarratives,
+        agencyShifts, complaintSurveys, cqcNarratives, cqcEvidence, cqcPartnerFeedback, cqcObservations,
       ] = await runSequentialQueries([
         () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -214,6 +214,26 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE home_id = $1 AND reviewed_by = $2 AND deleted_at IS NULL`,
               [homeId, staffName])
           : { rows: [] },
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_evidence
+               WHERE home_id = $1 AND evidence_owner = $2 AND deleted_at IS NULL`,
+              [homeId, staffName])
+          : { rows: [] },
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_partner_feedback
+               WHERE home_id = $1 AND deleted_at IS NULL
+                 AND (partner_name = $2 OR evidence_owner = $2)`,
+              [homeId, staffName])
+          : { rows: [] },
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_observations
+               WHERE home_id = $1 AND deleted_at IS NULL
+                 AND (observer = $2 OR evidence_owner = $2)`,
+              [homeId, staffName])
+          : { rows: [] },
       ]);
 
       return {
@@ -272,6 +292,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           agency_shifts: agencyShifts.rows,
           complaint_surveys: complaintSurveys.rows,
           cqc_statement_narratives: cqcNarratives.rows,
+          cqc_evidence: cqcEvidence.rows,
+          cqc_partner_feedback: cqcPartnerFeedback.rows,
+          cqc_observations: cqcObservations.rows,
         },
       };
     }
@@ -755,6 +778,31 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
           WHERE home_id = $2 AND reviewed_by = $3 AND deleted_at IS NULL`,
         [anon, homeId, originalName]
       );
+      await client.query(
+        `UPDATE cqc_evidence
+            SET evidence_owner = $1,
+                updated_at = NOW()
+          WHERE home_id = $2 AND evidence_owner = $3 AND deleted_at IS NULL`,
+        [anon, homeId, originalName]
+      );
+      await client.query(
+        `UPDATE cqc_partner_feedback
+            SET partner_name = CASE WHEN partner_name = $3 THEN $1 ELSE partner_name END,
+                evidence_owner = CASE WHEN evidence_owner = $3 THEN $1 ELSE evidence_owner END,
+                updated_at = NOW()
+          WHERE home_id = $2 AND deleted_at IS NULL
+            AND (partner_name = $3 OR evidence_owner = $3)`,
+        [anon, homeId, originalName]
+      );
+      await client.query(
+        `UPDATE cqc_observations
+            SET observer = CASE WHEN observer = $3 THEN $1 ELSE observer END,
+                evidence_owner = CASE WHEN evidence_owner = $3 THEN $1 ELSE evidence_owner END,
+                updated_at = NOW()
+          WHERE home_id = $2 AND deleted_at IS NULL
+            AND (observer = $3 OR evidence_owner = $3)`,
+        [anon, homeId, originalName]
+      );
     }
 
     // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
@@ -1080,7 +1128,8 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'staff', 'sick_periods', 'training_records', 'onboarding', 'payroll_runs',
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
-  'retention_schedule', 'cqc_statement_narratives',
+  'retention_schedule', 'cqc_statement_narratives', 'cqc_evidence',
+  'cqc_partner_feedback', 'cqc_observations',
   // HR module tables (6-year retention per Limitation Act 1980)
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',

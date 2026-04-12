@@ -15,6 +15,7 @@ import {
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
@@ -23,7 +24,7 @@ const NI_CATEGORIES = ['A','B','C','F','H','I','J','L','M','S','V','Z'];
 function emptyForm() {
   return {
     staff_id: '', tax_code: '1257L', basis: 'cumulative', ni_category: 'A',
-    effective_from: new Date().toISOString().slice(0, 10),
+    effective_from: todayLocalISO(),
     previous_pay: '', previous_tax: '', student_loan_plan: '',
     source: 'manual', notes: '',
   };
@@ -95,7 +96,7 @@ export default function TaxCodeManager() {
       tax_code:          code.tax_code || '1257L',
       basis:             code.basis || 'cumulative',
       ni_category:       code.ni_category || 'A',
-      effective_from:    code.effective_from || new Date().toISOString().slice(0, 10),
+      effective_from:    code.effective_from || todayLocalISO(),
       previous_pay:      code.previous_pay != null ? String(code.previous_pay) : '',
       previous_tax:      code.previous_tax != null ? String(code.previous_tax) : '',
       student_loan_plan: code.student_loan_plan || '',

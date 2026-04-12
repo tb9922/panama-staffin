@@ -300,32 +300,79 @@ export async function upsertYTDBatch(homeId, taxYear, rows, client) {
 export async function subtractYTDBatch(homeId, taxYear, rows, client) {
   if (!rows.length) return;
   const conn = client || pool;
+  const values = [];
+  const params = [];
   for (const r of rows) {
-    const { gross_pay=0, taxable_pay=0, tax_deducted=0, employee_ni=0, employer_ni=0,
-            student_loan=0, pension_employee=0, pension_employer=0,
-            holiday_pay=0, ssp_amount=0, net_pay=0 } = r;
-    await conn.query(
-      `UPDATE payroll_ytd SET
-         gross_pay        = GREATEST(0, gross_pay        - $4),
-         taxable_pay      = GREATEST(0, taxable_pay      - $5),
-         tax_deducted     = tax_deducted - $6,
-         employee_ni      = GREATEST(0, employee_ni      - $7),
-         employer_ni      = GREATEST(0, employer_ni      - $8),
-         student_loan     = GREATEST(0, student_loan     - $9),
-         pension_employee = GREATEST(0, pension_employee - $10),
-         pension_employer = GREATEST(0, pension_employer - $11),
-         holiday_pay      = GREATEST(0, holiday_pay      - $12),
-         ssp_amount       = GREATEST(0, ssp_amount       - $13),
-         net_pay          = net_pay - $14,
-         updated_at       = NOW()
-       WHERE home_id = $1 AND staff_id = $2 AND tax_year = $3`,
-      [homeId, r.staff_id, taxYear,
-       gross_pay, taxable_pay, tax_deducted,
-       employee_ni, employer_ni, student_loan,
-       pension_employee, pension_employer,
-       holiday_pay, ssp_amount, net_pay],
+    const base = params.length;
+    const {
+      gross_pay = 0,
+      taxable_pay = 0,
+      tax_deducted = 0,
+      employee_ni = 0,
+      employer_ni = 0,
+      student_loan = 0,
+      pension_employee = 0,
+      pension_employer = 0,
+      holiday_pay = 0,
+      ssp_amount = 0,
+      net_pay = 0,
+    } = r;
+    params.push(
+      homeId,
+      r.staff_id,
+      taxYear,
+      gross_pay,
+      taxable_pay,
+      tax_deducted,
+      employee_ni,
+      employer_ni,
+      student_loan,
+      pension_employee,
+      pension_employer,
+      holiday_pay,
+      ssp_amount,
+      net_pay,
     );
+    const p = (n) => `$${base + n}`;
+    values.push(`(${p(1)},${p(2)},${p(3)},${p(4)},${p(5)},${p(6)},${p(7)},${p(8)},${p(9)},${p(10)},${p(11)},${p(12)},${p(13)},${p(14)})`);
   }
+  await conn.query(
+    `UPDATE payroll_ytd AS ytd SET
+       gross_pay        = GREATEST(0, ytd.gross_pay        - v.gross_pay),
+       taxable_pay      = GREATEST(0, ytd.taxable_pay      - v.taxable_pay),
+       tax_deducted     = ytd.tax_deducted - v.tax_deducted,
+       employee_ni      = GREATEST(0, ytd.employee_ni      - v.employee_ni),
+       employer_ni      = GREATEST(0, ytd.employer_ni      - v.employer_ni),
+       student_loan     = GREATEST(0, ytd.student_loan     - v.student_loan),
+       pension_employee = GREATEST(0, ytd.pension_employee - v.pension_employee),
+       pension_employer = GREATEST(0, ytd.pension_employer - v.pension_employer),
+       holiday_pay      = GREATEST(0, ytd.holiday_pay      - v.holiday_pay),
+       ssp_amount       = GREATEST(0, ytd.ssp_amount       - v.ssp_amount),
+       net_pay          = ytd.net_pay - v.net_pay,
+       updated_at       = NOW()
+     FROM (
+       VALUES ${values.join(', ')}
+     ) AS v(
+       home_id,
+       staff_id,
+       tax_year,
+       gross_pay,
+       taxable_pay,
+       tax_deducted,
+       employee_ni,
+       employer_ni,
+       student_loan,
+       pension_employee,
+       pension_employer,
+       holiday_pay,
+       ssp_amount,
+       net_pay
+     )
+     WHERE ytd.home_id = v.home_id
+       AND ytd.staff_id = v.staff_id
+       AND ytd.tax_year = v.tax_year`,
+    params,
+  );
 }
 
 /**

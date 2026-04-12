@@ -10,6 +10,7 @@ import {
   getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TABS = [
@@ -52,7 +53,7 @@ function ProviderModal({ existing, onSave, onClose }) {
         active:     form.active,
       };
       if (existing) {
-        await updateAgencyProvider(homeSlug, existing.id, payload);
+        await updateAgencyProvider(homeSlug, existing.id, { ...payload, _version: existing.version });
       } else {
         await createAgencyProvider(homeSlug, payload);
       }
@@ -116,7 +117,7 @@ function ProviderModal({ existing, onSave, onClose }) {
 // ── Shift Log Modal ────────────────────────────────────────────────────────────
 
 function ShiftModal({ providers, existing, onSave, onClose }) {
-  const today  = new Date().toISOString().slice(0, 10);
+  const today  = todayLocalISO();
   const blank  = { agency_id: providers[0]?.id || '', date: today, shift_code: 'E', hours: '', hourly_rate: '', worker_name: '', invoice_ref: '', role_covered: '', reconciled: false };
   const [form, setForm]   = useState(existing || blank);
   const [saving, setSaving] = useState(false);
@@ -165,7 +166,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
         reconciled:   form.reconciled,
       };
       if (existing) {
-        await updateAgencyShift(homeSlug, existing.id, payload);
+        await updateAgencyShift(homeSlug, existing.id, { ...payload, _version: existing.version });
       } else {
         await createAgencyShift(homeSlug, payload);
       }
@@ -267,12 +268,8 @@ export default function AgencyTracker() {
   const canEdit = canWrite('payroll');
 
   // Default last 12 weeks
-  const defaultEnd   = new Date().toISOString().slice(0, 10);
-  const defaultStart = (() => {
-    const d = new Date();
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 84))
-      .toISOString().slice(0, 10);
-  })();
+  const defaultEnd = todayLocalISO();
+  const defaultStart = addDaysLocalISO(defaultEnd, -84);
 
   const [tab, setTab]             = useState('shifts'); // 'shifts' | 'providers' | 'metrics'
   const [providers, setProviders] = useState([]);

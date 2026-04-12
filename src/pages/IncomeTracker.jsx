@@ -13,6 +13,7 @@ import {
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -80,7 +81,7 @@ function ResidentsTab({ home, canEdit }) {
 
   function openCreate() {
     setEditing(null);
-    setForm({ status: 'active', funding_type: 'self_funded', care_type: 'residential', admission_date: new Date().toISOString().slice(0, 10) });
+    setForm({ status: 'active', funding_type: 'self_funded', care_type: 'residential', admission_date: todayLocalISO() });
     setModalTab('profile');
     setFeeHistory([]);
     setShowModal(true);
@@ -375,7 +376,7 @@ function InvoicesTab({ home, canEdit }) {
 
   function openCreate() {
     setEditing(null);
-    setForm({ payer_type: 'resident', payer_name: '', status: 'draft', issue_date: new Date().toISOString().slice(0, 10) });
+    setForm({ payer_type: 'resident', payer_name: '', status: 'draft', issue_date: todayLocalISO() });
     setLines([{ description: '', quantity: 1, unit_price: '', amount: '', line_type: 'fee' }]);
     setModalTab('details');
     setPayForm({ amount: '', payment_method: 'bacs', payment_reference: '' });

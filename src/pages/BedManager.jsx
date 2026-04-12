@@ -7,6 +7,7 @@ import {
   transitionBedStatus, revertBedTransition, moveBedResident,
   getFinanceResidents,
 } from '../lib/api.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import BedManagerModals from '../components/beds/BedManagerModals.jsx';
@@ -74,9 +75,7 @@ function getTransitionLabel(fromStatus, toStatus) {
 }
 
 function defaultDate(daysAhead = 0) {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysAhead))
-    .toISOString().slice(0, 10);
+  return addDaysLocalISO(todayLocalISO(), daysAhead);
 }
 
 const EMPTY_BED_FORM = {

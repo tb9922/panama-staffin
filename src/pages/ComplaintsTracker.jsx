@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
-import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
@@ -19,6 +18,7 @@ import {
   getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -122,9 +122,7 @@ export default function ComplaintsTracker() {
   const today = useLiveDate();
 
   const statsRange = useMemo(() => {
-    const d = new Date(today + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 89);
-    return { from: d.toISOString().slice(0, 10), to: today };
+    return { from: addDaysLocalISO(today, -89), to: today };
   }, [today]);
 
   const stats = useMemo(() =>
@@ -152,7 +150,7 @@ export default function ComplaintsTracker() {
 
   function openAdd() {
     setEditingId(null);
-    const deadline = formatDate(new Date(Date.now() + (COMPLAINT_CONFIG.complaint_response_days) * 86400000));
+    const deadline = addDaysLocalISO(today, COMPLAINT_CONFIG.complaint_response_days);
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
     setSaveError(null);

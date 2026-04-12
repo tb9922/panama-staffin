@@ -57,7 +57,7 @@ export async function findByStatement(homeId, qualityStatement, client = pool) {
 
 export async function upsert(homeId, qualityStatement, data, version = null, client = pool) {
   const existing = await findAnyByStatement(homeId, qualityStatement, client);
-  if (existing && existing.deleted_at == null && version != null && existing.version !== version) return null;
+  if (existing && version != null && existing.version !== version) return null;
 
   if (!existing) {
     const { rows } = await client.query(
@@ -82,16 +82,16 @@ export async function upsert(homeId, qualityStatement, data, version = null, cli
 
   const { rows } = await client.query(
     `UPDATE cqc_statement_narratives
-        SET narrative = $3,
-            risks = $4,
-            actions = $5,
-            reviewed_by = $6,
-            reviewed_at = $7,
-            review_due = $8,
-            deleted_at = NULL,
-            version = version + 1,
-            updated_at = NOW()
-      WHERE home_id = $1 AND quality_statement = $2
+       SET narrative = $3,
+           risks = $4,
+           actions = $5,
+           reviewed_by = $6,
+           reviewed_at = $7,
+           review_due = $8,
+           deleted_at = NULL,
+           version = version + 1,
+           updated_at = NOW()
+      WHERE home_id = $1 AND quality_statement = $2 AND version = $9
       RETURNING ${COLS}`,
     [
       homeId,
@@ -102,6 +102,7 @@ export async function upsert(homeId, qualityStatement, data, version = null, cli
       data.reviewed_by || null,
       data.reviewed_at || null,
       data.review_due || null,
+      version != null ? version : existing.version,
     ]
   );
   return shapeRow(rows[0]);

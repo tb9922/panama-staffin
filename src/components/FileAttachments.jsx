@@ -189,6 +189,7 @@ export default function FileAttachments({
                   setError(null);
                   fileInputRef.current?.click();
                 }}
+                disabled={uploading}
                 className={BTN.secondary + ' ' + BTN.sm}
               >
                 Choose file

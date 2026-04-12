@@ -7,6 +7,7 @@ import { checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, BTN } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { startOfNextLocalDay } from '../lib/localDates.js';
 
 export default function FatigueTracker() {
   const homeSlug = getCurrentHome();
@@ -18,8 +19,7 @@ export default function FatigueTracker() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    const timer = setTimeout(() => setToday(new Date()), startOfNextLocalDay(now).getTime() - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

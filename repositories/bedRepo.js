@@ -111,11 +111,46 @@ export async function create(homeId, data, client) {
 }
 
 export async function createMany(homeId, bedsArray, client) {
-  const results = [];
+  if (!bedsArray.length) return [];
+  const conn = client || pool;
+  const values = [];
+  const params = [];
   for (const bed of bedsArray) {
-    results.push(await create(homeId, bed, client));
+    const base = params.length;
+    params.push(
+      homeId,
+      bed.room_number,
+      bed.room_name || null,
+      bed.room_type || 'single',
+      bed.floor || null,
+      bed.status ?? 'available',
+      bed.resident_id || null,
+      bed.notes || null,
+      bed.created_by,
+    );
+    const p = (n) => `$${base + n}`;
+    values.push(`(${p(1)},${p(2)},${p(3)},${p(4)},${p(5)},${p(6)},${p(7)},${p(8)},${p(9)},${p(9)})`);
   }
-  return results;
+  try {
+    const { rows } = await conn.query(
+      `/* bedRepo – createMany */
+       INSERT INTO beds
+         (home_id, room_number, room_name, room_type, floor, status,
+          resident_id, notes, created_by, updated_by)
+       VALUES ${values.join(', ')}
+       RETURNING ${BED_COLS}`,
+      params,
+    );
+    return rows.map(shapeBed);
+  } catch (err) {
+    if (err.code === '23505') {
+      if (err.constraint === 'uniq_beds_home_resident_occupied') {
+        throw new ConflictError('Resident is already assigned to another occupied bed in this home');
+      }
+      throw new ConflictError('Room number already exists in this home');
+    }
+    throw err;
+  }
 }
 
 export async function updateDetails(bedId, homeId, data, client) {

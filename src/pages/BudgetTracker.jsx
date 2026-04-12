@@ -5,6 +5,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { getCurrentHome, getSchedulingData, saveConfig, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../lib/api.js';
+import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -31,9 +32,8 @@ export default function BudgetTracker() {
   useEffect(() => {
     if (!homeSlug) return;
     // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
-    const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0)).toISOString().slice(0, 10);
+    const from = startOfLocalMonthISO(new Date(), -6);
+    const to = endOfLocalMonthISO(new Date(), 5);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
       .catch(e => setError(e.message))

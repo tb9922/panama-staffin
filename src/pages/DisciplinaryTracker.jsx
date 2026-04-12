@@ -20,6 +20,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const MODAL_TABS = [
   { id: 'details', label: 'Details' },
@@ -76,7 +77,7 @@ export default function DisciplinaryTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'misconduct', status: 'open', source: 'other' });
+    setForm({ date_raised: todayLocalISO(), category: 'misconduct', status: 'open', source: 'other' });
     setModalTab('details');
     setCaseNotes([]);
     setNoteText('');
