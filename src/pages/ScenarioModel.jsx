@@ -25,24 +25,22 @@ const WINTER_SCENARIOS = [
 export default function ScenarioModel() {
   const { homeRole } = useData();
   const homeSlug = getCurrentHome();
-  const [schedData, setSchedData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [schedState, setSchedState] = useState({ homeSlug: null, data: null, error: null });
   const [customSick, setCustomSick] = useState(2);
   const [customAL, setCustomAL] = useState(1);
   const [customName, setCustomName] = useState('Custom Scenario');
 
-  const [error, setError] = useState(null);
   const isOwnDataScenario = homeRole === 'staff_member';
+  const scopedSchedState = schedState.homeSlug === homeSlug ? schedState : { homeSlug: null, data: null, error: null };
+  const schedData = scopedSchedState.data;
+  const error = scopedSchedState.error;
+  const loading = Boolean(homeSlug && !isOwnDataScenario && !schedData && !error);
 
   useEffect(() => {
-    if (!homeSlug || isOwnDataScenario) {
-      setLoading(false);
-      return;
-    }
+    if (!homeSlug || isOwnDataScenario) return;
     getSchedulingData(homeSlug)
-      .then(setSchedData)
-      .catch(e => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
+      .then(data => setSchedState({ homeSlug, data, error: null }))
+      .catch(e => setSchedState({ homeSlug, data: null, error: e.message || 'Failed to load' }));
   }, [homeSlug, isOwnDataScenario]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading scenario data...</div>;

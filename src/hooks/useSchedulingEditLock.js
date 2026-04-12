@@ -12,10 +12,9 @@ function normalizeDates(dates) {
 
 export default function useSchedulingEditLock({ homeSlug, hasEditLock, today }) {
   const storageKey = homeSlug || 'default';
-  const unlockedDatesRef = useRef(loadSchedulingUnlockedDates(storageKey));
+  const [unlockedDates, setUnlockedDates] = useState(() => loadSchedulingUnlockedDates(storageKey));
+  const unlockedDatesRef = useRef(unlockedDates);
   const storedLockPinRef = useRef(loadSchedulingEditLockPin(storageKey));
-
-  const [unlockedDates, setUnlockedDates] = useState(() => unlockedDatesRef.current);
   const [showLockPrompt, setShowLockPrompt] = useState(false);
   const [lockPin, setLockPin] = useState('');
   const [lockError, setLockError] = useState('');

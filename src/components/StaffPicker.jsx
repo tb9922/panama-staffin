@@ -4,24 +4,23 @@ import { getCurrentHome, getHrStaffList, isAbortLikeError } from '../lib/api.js'
 
 export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
   const [staff, setStaff] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadedHome, setLoadedHome] = useState(null);
   const home = getCurrentHome();
   const selectId = useId();
 
   useEffect(() => {
-    if (!home) {
-      setStaff([]);
-      setLoading(false);
-      return undefined;
-    }
+    if (!home) return undefined;
     const controller = new AbortController();
     let cancelled = false;
-    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     getHrStaffList(home, { signal: controller.signal }).then(list => {
-      if (!cancelled) { setStaff(list); setLoading(false); }
+      if (!cancelled) {
+        setStaff(list);
+        setLoadedHome(home);
+      }
     }).catch((err) => {
       if (cancelled || isAbortLikeError(err, controller.signal)) return;
-      setLoading(false);
+      setStaff([]);
+      setLoadedHome(home);
       console.error('Failed to load staff list', err);
     });
     return () => {
@@ -30,8 +29,10 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
     };
   }, [home]);
 
-  const active = staff.filter(s => s.active).sort((a, b) => a.name.localeCompare(b.name));
-  const inactive = staff.filter(s => !s.active).sort((a, b) => a.name.localeCompare(b.name));
+  const visibleStaff = loadedHome === home ? staff : [];
+  const loading = Boolean(home && loadedHome !== home);
+  const active = visibleStaff.filter(s => s.active).sort((a, b) => a.name.localeCompare(b.name));
+  const inactive = visibleStaff.filter(s => !s.active).sort((a, b) => a.name.localeCompare(b.name));
   const displayList = showInactive ? [...active, ...inactive] : active;
 
   return (
@@ -42,7 +43,7 @@ export default function StaffPicker({ value, onChange, disabled, showAll, showIn
         className={small ? INPUT.sm : INPUT.select}
         value={value || ''}
         onChange={e => onChange(e.target.value)}
-        disabled={disabled || loading}
+        disabled={disabled || (!home ? false : loading)}
       >
         {showAll ? (
           <option value="">All Staff</option>

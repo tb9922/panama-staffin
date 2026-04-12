@@ -10,28 +10,27 @@ export default function CoverageAlertBanner() {
   const navigate = useNavigate();
   const { activeHome } = useData();
   const today = useLiveDate();
-  const [data, setData] = useState(null);
+  const homeSlug = activeHome || getCurrentHome();
+  const [dataState, setDataState] = useState({ homeSlug: null, value: null });
+  const data = dataState.homeSlug === homeSlug ? dataState.value : null;
 
   useEffect(() => {
-    const homeSlug = activeHome || getCurrentHome();
-    if (!homeSlug) {
-      setData(null);
-      return undefined;
-    }
+    if (!homeSlug) return undefined;
     const controller = new AbortController();
     let cancelled = false;
-    setData(null);
     getSchedulingData(homeSlug, { signal: controller.signal })
-      .then(result => { if (!cancelled) setData(result); })
+      .then(result => {
+        if (!cancelled) setDataState({ homeSlug, value: result });
+      })
       .catch((e) => {
         if (cancelled || isAbortLikeError(e, controller.signal)) return;
-        setData(null);
+        setDataState({ homeSlug, value: null });
       });
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [today, activeHome]);
+  }, [today, homeSlug]);
 
   const todayCoverage = useMemo(() => {
     if (!data) return null;

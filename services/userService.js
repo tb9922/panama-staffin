@@ -31,8 +31,6 @@ export function validatePassword(password) {
  */
 export async function ensureSeedUsers() {
   const hasSeedHashes = config.users.some(envUser => !!envUser.hash);
-  let seeded = 0;
-  let repaired = 0;
   for (const envUser of config.users) {
     if (!envUser.hash) continue;
 
@@ -45,7 +43,6 @@ export async function ensureSeedUsers() {
         envUser.username === 'admin' ? 'Administrator' : 'Viewer',
         'system'
       );
-      seeded++;
       logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
     }
 
@@ -53,7 +50,6 @@ export async function ensureSeedUsers() {
       const current = existing || await userRepo.findByUsername(envUser.username);
       if (current && !current.is_platform_admin) {
         await userRepo.setPlatformAdmin(envUser.username, true);
-        repaired++;
         logger.info({ username: envUser.username }, 'Granted platform admin to bootstrap admin');
       }
       await userHomeRepo.grantAllHomesRole(envUser.username);

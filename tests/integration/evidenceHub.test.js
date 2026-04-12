@@ -31,7 +31,6 @@ const STAFF_IDS = {
 let homeId;
 let homeSlug;
 let homeTwoId;
-let homeTwoSlug;
 let homeManagerToken;
 let hrOfficerToken;
 let trainingLeadToken;
@@ -77,7 +76,6 @@ describe('Evidence Hub integration', () => {
       [`${PREFIX}-b`, JSON.stringify({ home_name: 'Evidence Hub Other Home', registered_beds: 12 })]
     );
     homeTwoId = homeTwo.id;
-    homeTwoSlug = homeTwo.slug;
 
     const passwordHash = await bcrypt.hash(PASSWORD, 4);
     for (const username of Object.values(USERS)) {

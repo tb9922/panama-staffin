@@ -23,7 +23,7 @@ const MANAGER_PW = 'TestManager!2025x';
 const VIEWER_PW = 'TestViewer!2025x';
 
 let adminToken, managerToken, viewerToken;
-let adminUserId, managerUserId, viewerUserId;
+let adminUserId, viewerUserId;
 let homeAId, homeBId;
 
 beforeAll(async () => {
@@ -53,7 +53,7 @@ beforeAll(async () => {
      VALUES ($1, $2, 'admin', true, 'Test Admin', 'test-setup', true) RETURNING id`,
     [ADMIN_USER, adminHash]
   );
-  const { rows: [mu] } = await pool.query(
+  await pool.query(
     `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
      VALUES ($1, $2, 'viewer', true, 'Test Manager', 'test-setup') RETURNING id`,
     [MANAGER_USER, managerHash]
@@ -64,7 +64,6 @@ beforeAll(async () => {
     [VIEWER_USER, viewerHash]
   );
   adminUserId = au.id;
-  managerUserId = mu.id;
   viewerUserId = vu.id;
 
   // Assign RBAC roles — admin as home_manager at both homes, manager as home_manager at home A,

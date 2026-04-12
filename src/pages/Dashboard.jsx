@@ -67,38 +67,26 @@ function CoverageGauge({ period, cov }) {
 
 export default function Dashboard() {
   const { homeRole } = useData();
-  const [schedData, setSchedData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [schedState, setSchedState] = useState({ homeSlug: null, data: null, error: null });
   const homeSlug = getCurrentHome();
   const isOwnDataDashboard = homeRole === 'staff_member';
+  const scopedSchedState = schedState.homeSlug === homeSlug ? schedState : { homeSlug: null, data: null, error: null };
+  const schedData = scopedSchedState.data;
+  const error = scopedSchedState.error;
+  const loading = Boolean(homeSlug && !isOwnDataDashboard && !schedData && !error);
 
   useEffect(() => {
+    if (!homeSlug || isOwnDataDashboard) return undefined;
     let cancelled = false;
     const controller = new AbortController();
-    setError(null);
-    setSchedData(null);
-
-    if (!homeSlug || isOwnDataDashboard) {
-      setLoading(false);
-      return () => {
-        cancelled = true;
-        controller.abort();
-      };
-    }
-
-    setLoading(true);
     getSchedulingData(homeSlug, { signal: controller.signal })
       .then(data => {
-        if (!cancelled) setSchedData(data);
+        if (!cancelled) setSchedState({ homeSlug, data, error: null });
       })
       .catch(e => {
         if (!cancelled && !isAbortLikeError(e, controller.signal)) {
-          setError(e.message || 'Failed to load');
+          setSchedState({ homeSlug, data: null, error: e.message || 'Failed to load' });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
 
     return () => {
@@ -154,27 +142,33 @@ function DashboardInner({ schedData }) {
     return () => clearTimeout(timer);
   }, [today]);
 
-  const [hrData, setHrData] = useState({ stats: null, warnings: [] });
-  const [financeAlerts, setFinanceAlerts] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [auxFailures, setAuxFailures] = useState([]);
+  const [auxState, setAuxState] = useState({
+    home: null,
+    hrData: { stats: null, warnings: [] },
+    financeAlerts: [],
+    summary: null,
+    auxFailures: [],
+  });
   const home = getCurrentHome();
+  const scopedAuxState = auxState.home === home
+    ? auxState
+    : {
+        home: null,
+        hrData: { stats: null, warnings: [] },
+        financeAlerts: [],
+        summary: null,
+        auxFailures: [],
+      };
+  const hrData = scopedAuxState.hrData;
+  const financeAlerts = scopedAuxState.financeAlerts;
+  const summary = scopedAuxState.summary;
+  const auxFailures = scopedAuxState.auxFailures;
 
   useEffect(() => {
-    if (!home) {
-      setHrData({ stats: null, warnings: [] });
-      setFinanceAlerts([]);
-      setSummary(null);
-      setAuxFailures([]);
-      return;
-    }
+    if (!home) return undefined;
 
     let cancelled = false;
     const controller = new AbortController();
-    setHrData({ stats: null, warnings: [] });
-    setFinanceAlerts([]);
-    setSummary(null);
-    setAuxFailures([]);
 
     Promise.all([
       canViewHr ? getHrStats(home, { signal: controller.signal }) : Promise.resolve(null),
@@ -187,37 +181,46 @@ function DashboardInner({ schedData }) {
     ))).then(([statsResult, warningsResult, financeResult, summaryResult]) => {
       if (cancelled) return;
 
+      const nextHrData = { stats: null, warnings: [] };
+      const nextFinanceAlerts = [];
+      let nextSummary = null;
       const failures = [];
 
       if (statsResult.ok) {
-        setHrData(current => ({ ...current, stats: statsResult.value }));
+        nextHrData.stats = statsResult.value;
       } else if (!isAbortLikeError(statsResult.error, controller.signal)) {
         console.warn('Failed to load HR stats:', statsResult.error?.message);
         failures.push('HR stats');
       }
 
       if (warningsResult.ok) {
-        setHrData(current => ({ ...current, warnings: Array.isArray(warningsResult.value) ? warningsResult.value : [] }));
+        nextHrData.warnings = Array.isArray(warningsResult.value) ? warningsResult.value : [];
       } else if (!isAbortLikeError(warningsResult.error, controller.signal)) {
         console.warn('Failed to load HR warnings:', warningsResult.error?.message);
         failures.push('HR warnings');
       }
 
       if (financeResult.ok) {
-        setFinanceAlerts(Array.isArray(financeResult.value) ? financeResult.value : []);
+        nextFinanceAlerts.push(...(Array.isArray(financeResult.value) ? financeResult.value : []));
       } else if (!isAbortLikeError(financeResult.error, controller.signal)) {
         console.warn('Failed to load finance alerts:', financeResult.error?.message);
         failures.push('Finance alerts');
       }
 
       if (summaryResult.ok) {
-        setSummary(summaryResult.value);
+        nextSummary = summaryResult.value;
       } else if (!isAbortLikeError(summaryResult.error, controller.signal)) {
         console.warn('Failed to load dashboard summary:', summaryResult.error?.message);
         failures.push('Dashboard summary');
       }
 
-      setAuxFailures(failures);
+      setAuxState({
+        home,
+        hrData: nextHrData,
+        financeAlerts: nextFinanceAlerts,
+        summary: nextSummary,
+        auxFailures: failures,
+      });
     });
 
     return () => {

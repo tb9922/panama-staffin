@@ -299,7 +299,6 @@ export default function RotationGrid() {
     updateLockPin,
     dismissLockPrompt,
     attemptUnlock,
-    isDateLocked,
     getEditLockOptions,
     requestUnlock,
     handleLockedError,
