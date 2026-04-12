@@ -189,6 +189,32 @@ beforeAll(async () => {
     [homeA, STAFF_NAMES[0]]
   );
 
+  // ── CQC name-keyed records ────────────────────────────────────────────────
+  await pool.query(
+    `INSERT INTO cqc_evidence
+       (id, home_id, quality_statement, type, title, description, date_from, date_to,
+        evidence_category, evidence_owner, review_due, added_by, added_at)
+     VALUES ('cqc-gdpr-001', $1, 'S1', 'qualitative', 'GDPR smoke evidence', 'CQC evidence owner test',
+       '2025-08-01', '2025-08-15', 'peoples_experience', $2, '2025-09-01', 'test-runner', NOW())`,
+    [homeA, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO cqc_partner_feedback
+       (id, home_id, quality_statement, feedback_date, title, partner_name, partner_role, relationship,
+        summary, response_action, evidence_owner, review_due, added_by)
+     VALUES ('cpf-gdpr-001', $1, 'S1', '2025-08-15', 'Family feedback', $2, 'Relative', 'Daughter',
+       'Positive feedback', 'Shared with team', $2, '2025-09-01', 'test-runner')`,
+    [homeA, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO cqc_observations
+       (id, home_id, quality_statement, observed_at, title, area, observer, notes, actions,
+        evidence_owner, review_due, added_by)
+     VALUES ('cqo-gdpr-001', $1, 'S1', '2025-08-15T10:00:00Z', 'Medication round', 'Unit A', $2,
+       'Observed calm support', 'Keep current practice', $2, '2025-09-01', 'test-runner')`,
+    [homeA, STAFF_NAMES[0]]
+  );
+
   // ── DoLS (resident data for resident SAR) ──────────────────────────────
   await pool.query(
     `INSERT INTO dols (id, home_id, resident_name, dob, room_number, application_type, application_date, authorised)
@@ -228,6 +254,11 @@ beforeAll(async () => {
 async function cleanHome(hid) {
   // Reverse FK order cleanup
   const tables = [
+    { sql: `DELETE FROM cqc_evidence_files WHERE evidence_id IN (SELECT id FROM cqc_evidence WHERE home_id = $1)` },
+    { sql: `DELETE FROM cqc_partner_feedback WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_observations WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_statement_narratives WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_evidence WHERE home_id = $1` },
     { sql: `DELETE FROM hr_grievance_actions WHERE grievance_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1)` },
     { sql: `DELETE FROM hr_case_notes WHERE home_id = $1` },
     { sql: `DELETE FROM hr_disciplinary_cases WHERE home_id = $1` },
@@ -725,6 +756,31 @@ describe('executeErasure', () => {
     );
     expect(cmp.length).toBeGreaterThanOrEqual(1);
     expect(cmp[0].description).toBe('[REDACTED]');
+  });
+
+  it('anonymises CQC name-keyed records', async () => {
+    const { rows: evidence } = await pool.query(
+      `SELECT evidence_owner FROM cqc_evidence WHERE home_id = $1 AND id = 'cqc-gdpr-001'`,
+      [homeA]
+    );
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: feedback } = await pool.query(
+      `SELECT partner_name, evidence_owner FROM cqc_partner_feedback WHERE home_id = $1 AND id = 'cpf-gdpr-001'`,
+      [homeA]
+    );
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0].partner_name).toBe('[REDACTED-gdpr]');
+    expect(feedback[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: observations } = await pool.query(
+      `SELECT observer, evidence_owner FROM cqc_observations WHERE home_id = $1 AND id = 'cqo-gdpr-001'`,
+      [homeA]
+    );
+    expect(observations).toHaveLength(1);
+    expect(observations[0].observer).toBe('[REDACTED-gdpr]');
+    expect(observations[0].evidence_owner).toBe('[REDACTED-gdpr]');
   });
 
   it('anonymises access log entries', async () => {

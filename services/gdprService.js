@@ -780,8 +780,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
       await client.query(
         `UPDATE cqc_evidence
-            SET evidence_owner = $1,
-                updated_at = NOW()
+            SET evidence_owner = $1
           WHERE home_id = $2 AND evidence_owner = $3 AND deleted_at IS NULL`,
         [anon, homeId, originalName]
       );
