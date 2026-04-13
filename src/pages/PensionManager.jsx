@@ -1,21 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import FileAttachments from '../components/FileAttachments.jsx';
-import {
-  getPensionEnrolments,
-  upsertPensionEnrolment,
-  getPensionConfig,
-  getCurrentHome,
-  getSchedulingData,
-  getRecordAttachments,
-  uploadRecordAttachment,
-  deleteRecordAttachment,
-  downloadRecordAttachment,
-} from '../lib/api.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import { getPensionEnrolments, upsertPensionEnrolment, getPensionConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const STATUS_BADGE = {
   eligible_enrolled:       BADGE.green,
@@ -65,6 +60,8 @@ export default function PensionManager() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
 
   const [schedData, setSchedData]   = useState(null);
   const [enrolments, setEnrolments] = useState([]);
@@ -161,6 +158,11 @@ export default function PensionManager() {
         opted_out_date:    form.opted_out_date || null,
         reassessment_date: form.reassessment_date || null,
       });
+      showNotice(editStaffId ? 'Pension enrolment updated.' : 'Pension enrolment recorded.');
+      showToast({
+        title: editStaffId ? 'Pension enrolment updated' : 'Pension enrolment added',
+        message: form.staff_id,
+      });
       setShowModal(false);
       await load();
     } catch (e) {
@@ -170,10 +172,15 @@ export default function PensionManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -189,7 +196,7 @@ export default function PensionManager() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" role="alert">{error}</div>
+        <ErrorState title="Pension action needs attention" message={error} onRetry={() => void load()} className="mb-4" />
       )}
 
       {/* Unrecorded alert */}
@@ -250,8 +257,14 @@ export default function PensionManager() {
           <tbody>
             {enrolments.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 9 : 8} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No enrolment records. Add records for each staff member after assessing eligibility.
+                <td colSpan={canEdit ? 9 : 8} className={TABLE.empty}>
+                  <EmptyState
+                    compact
+                    title="No enrolment records yet"
+                    description="Add records for each staff member after assessing eligibility."
+                    actionLabel={canEdit ? 'Add / Update Enrolment' : undefined}
+                    onAction={canEdit ? () => openNew() : undefined}
+                  />
                 </td>
               </tr>
             )}
@@ -438,18 +451,6 @@ export default function PensionManager() {
               onChange={e => field('notes', e.target.value)}
               placeholder="e.g. Opted out by written notice 15 Jan 2026" />
           </div>
-          <FileAttachments
-            caseType="payroll_pension"
-            caseId={editStaffId || null}
-            readOnly={!canEdit}
-            title="Pension Evidence"
-            emptyText="No pension evidence uploaded yet."
-            saveFirstText="Save this pension enrolment first, then attach opt-out notices, postponement letters, and supporting evidence."
-            getFiles={getRecordAttachments}
-            uploadFile={uploadRecordAttachment}
-            deleteFile={deleteRecordAttachment}
-            downloadFile={downloadRecordAttachment}
-          />
         </div>
 
         <div className={MODAL.footer}>

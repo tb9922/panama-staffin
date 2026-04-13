@@ -10,6 +10,7 @@ import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
+import ToastViewport from './ToastViewport.jsx';
 
 export default function AppLayout() {
   const { user, isPlatformAdmin, logout } = useAuth();
@@ -300,6 +301,7 @@ export default function AppLayout() {
         </Suspense>
       </main>
       {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}
+      <ToastViewport />
     </div>
   );
 }

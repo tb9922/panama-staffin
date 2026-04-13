@@ -14,10 +14,6 @@ vi.mock('../../lib/api.js', async () => {
     approveTimesheet: vi.fn(),
     bulkApproveTimesheets: vi.fn(),
     getSchedulingData: vi.fn(),
-    getRecordAttachments: vi.fn(),
-    uploadRecordAttachment: vi.fn(),
-    deleteRecordAttachment: vi.fn(),
-    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -35,6 +31,10 @@ vi.mock('../../lib/payroll.js', () => ({
 
 vi.mock('../../hooks/useDirtyGuard', () => ({
   default: vi.fn(),
+}));
+
+vi.mock('../../../shared/nmw.js', () => ({
+  getMinimumWageRate: vi.fn(() => ({ rate: 12.21, label: 'NLW' })),
 }));
 
 import * as api from '../../lib/api.js';
@@ -79,7 +79,6 @@ describe('TimesheetManager', () => {
     api.upsertTimesheet.mockResolvedValue({});
     api.approveTimesheet.mockResolvedValue({});
     api.bulkApproveTimesheets.mockResolvedValue({});
-    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('renders page heading', async () => {
@@ -90,10 +89,10 @@ describe('TimesheetManager', () => {
 
   it('shows loading state initially', async () => {
     let resolve;
-    api.getTimesheets.mockReturnValue(new Promise(r => { resolve = r; }));
+    api.getTimesheets.mockReturnValue(new Promise((r) => { resolve = r; }));
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<TimesheetManager />);
-    expect(screen.getByText('Loading timesheets…')).toBeInTheDocument();
+    expect(screen.getByText('Loading timesheets...')).toBeInTheDocument();
     await act(async () => { resolve(MOCK_ENTRIES); });
   });
 
@@ -105,7 +104,6 @@ describe('TimesheetManager', () => {
 
   it('renders summary stat cards', async () => {
     renderWithProviders(<TimesheetManager />);
-    // Cards include Scheduled, Approved, Pending, Snap Savings
     await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
     expect(screen.getByText('Approved')).toBeInTheDocument();
     expect(screen.getByText('Pending')).toBeInTheDocument();
@@ -129,7 +127,6 @@ describe('TimesheetManager', () => {
   it('shows date navigation controls', async () => {
     renderWithProviders(<TimesheetManager />);
     await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
-    // Date input for selecting day
     expect(screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}/)).toBeInTheDocument();
   });
 });

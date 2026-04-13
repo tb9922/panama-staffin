@@ -163,7 +163,7 @@ describe('IncomeTracker', () => {
     expect(screen.getByRole('button', { name: 'New Invoice' })).toBeInTheDocument();
   });
 
-  it('shows resident evidence panel in the resident edit modal', async () => {
+  it('shows resident detail tabs in the resident edit modal', async () => {
     const user = userEvent.setup();
     renderAdmin();
     await waitFor(() =>
@@ -171,7 +171,9 @@ describe('IncomeTracker', () => {
     );
     await user.click(screen.getByText('Mrs Joan Smith'));
     await waitFor(() =>
-      expect(screen.getByText('Resident Billing Evidence')).toBeInTheDocument()
+      expect(screen.getByText('Edit Resident')).toBeInTheDocument()
     );
+    expect(screen.getByRole('button', { name: 'Fee History' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument();
   });
 });

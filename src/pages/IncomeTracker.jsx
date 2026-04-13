@@ -2,25 +2,37 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
-import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
-  recordFinancePayment, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
-} from '../lib/api.js';
+  recordFinancePayment, } from '../lib/api.js';
 import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
 } from '../lib/finance.js';
 import { clickableRowProps } from '../lib/a11y.js';
-import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'residents', label: 'Residents' },
   { id: 'invoices', label: 'Invoices' },
 ];
+
+function normalizeFinanceError(message) {
+  if (!message) return 'Something went wrong.';
+  if (/conflict|version|modified by another user/i.test(message)) {
+    return 'This record was modified by another user. Please close and reopen it to get the latest version.';
+  }
+  return message;
+}
 
 export default function IncomeTracker() {
   const { canWrite } = useData();
@@ -48,6 +60,8 @@ export default function IncomeTracker() {
 // ── Residents Tab ────────────────────────────────────────────────────────────
 
 function ResidentsTab({ home, canEdit }) {
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
   const [residents, setResidents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -73,7 +87,7 @@ function ResidentsTab({ home, canEdit }) {
       setResidents(data.rows || []);
       setTotal(data.total || 0);
       setError(null);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(normalizeFinanceError(e.message)); }
     finally { setLoading(false); }
   }, [home, filterStatus, filterFunding]);
 
@@ -103,17 +117,24 @@ function ResidentsTab({ home, canEdit }) {
   async function handleSave() {
     if (saving) return;
     setError(null);
-    if (!form.resident_name) return;
+    if (!form.resident_name?.trim()) {
+      setError('Resident name is required.');
+      return;
+    }
     setSaving(true);
     try {
       if (editing?.id) {
         await updateFinanceResident(home, editing.id, { ...form, _version: editing.version });
+        showNotice('Resident profile updated.');
+        showToast({ title: 'Resident updated', message: form.resident_name });
       } else {
         await createFinanceResident(home, form);
+        showNotice('Resident profile created.');
+        showToast({ title: 'Resident added', message: form.resident_name });
       }
       closeModal();
-      load();
-    } catch (e) { setError(e.message); }
+      await load();
+    } catch (e) { setError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
@@ -132,11 +153,21 @@ function ResidentsTab({ home, canEdit }) {
     }]);
   }
 
-  if (loading) return <div className={CARD.padded} role="status"><p className="text-center py-10 text-gray-500">Loading residents...</p></div>;
+  if (loading) return <LoadingState message="Loading residents..." card />;
+
+  if (error && residents.length === 0) {
+    return <ErrorState title="Unable to load resident billing profiles" message={error} onRetry={() => void load()} />;
+  }
 
   return (
     <>
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Some resident billing actions need attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} w-auto`}>
@@ -169,7 +200,17 @@ function ResidentsTab({ home, canEdit }) {
             </tr></thead>
             <tbody>
               {residents.length === 0 ? (
-                <tr><td colSpan={9} className={TABLE.empty}>No residents found</td></tr>
+                <tr>
+                  <td colSpan={9} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No billing residents found"
+                      description={canEdit ? 'Add the first resident billing profile to start tracking fees and balances.' : 'No resident billing profiles match the current filters.'}
+                      actionLabel={canEdit ? 'Add Resident' : undefined}
+                      onAction={canEdit ? openCreate : undefined}
+                    />
+                  </td>
+                </tr>
               ) : residents.map(r => (
                 <tr key={r.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(r))}>
                   <td className={`${TABLE.td} font-medium`}>{r.resident_name}</td>
@@ -243,6 +284,10 @@ function ResidentsTab({ home, canEdit }) {
                   <input type="number" step="0.01" value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>FNC Amount</label>
                   <input type="number" step="0.01" value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} className={INPUT.base} /></div>
+                <div className="col-span-2 grid grid-cols-2 gap-4 text-xs text-gray-500">
+                  <p>CHC = NHS Continuing Healthcare funding for residents with a primary health need.</p>
+                  <p>FNC = Funded Nursing Care contribution paid by the NHS towards registered nursing input.</p>
+                </div>
                 <div><label className={INPUT.label}>Top-Up Amount</label>
                   <input type="number" step="0.01" value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>Top-Up Payer</label>
@@ -275,7 +320,7 @@ function ResidentsTab({ home, canEdit }) {
             {modalTab === 'history' && (
               <div>
                 {feeHistory.length === 0 ? (
-                  <p className="text-gray-400 text-sm py-4 text-center">No fee changes recorded</p>
+                  <EmptyState compact title="No fee changes recorded yet" description="Fee review history will appear here once a resident fee is amended and saved." />
                 ) : (
                   <div className={TABLE.wrapper}>
                     <table className={TABLE.table}>
@@ -310,19 +355,6 @@ function ResidentsTab({ home, canEdit }) {
               </div>
             )}
 
-            <FileAttachments
-              caseType="finance_resident"
-              caseId={editing?.id}
-              readOnly={!canEdit}
-              title="Resident Billing Evidence"
-              emptyText="No resident billing evidence uploaded yet."
-              saveFirstText="Save this resident profile first, then attach funding letters, fee agreements, and supporting documents."
-              getFiles={getRecordAttachments}
-              uploadFile={uploadRecordAttachment}
-              deleteFile={deleteRecordAttachment}
-              downloadFile={downloadRecordAttachment}
-            />
-
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSave} disabled={saving} className={BTN.primary}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Resident'}</button>}
@@ -335,6 +367,8 @@ function ResidentsTab({ home, canEdit }) {
 // ── Invoices Tab ─────────────────────────────────────────────────────────────
 
 function InvoicesTab({ home, canEdit }) {
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
   const [invoices, setInvoices] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -368,7 +402,7 @@ function InvoicesTab({ home, canEdit }) {
       setTotal(invData.total || 0);
       setResidents(resData.rows || []);
       setError(null);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(normalizeFinanceError(e.message)); }
     finally { setLoading(false); }
   }, [home, filterStatus, filterPayer]);
 
@@ -405,18 +439,25 @@ function InvoicesTab({ home, canEdit }) {
   async function handleSave() {
     if (saving) return;
     setError(null);
-    if (!form.payer_name || !form.payer_type) return;
+    if (!form.payer_name?.trim() || !form.payer_type) {
+      setError('Payer type and payer name are required.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form, lines: lines.map(l => ({ ...l, amount: parseFloat(l.amount) || (parseFloat(l.quantity) * parseFloat(l.unit_price)) || 0 })) };
       if (editing?.id) {
         await updateFinanceInvoice(home, editing.id, { ...payload, _version: editing.version });
+        showNotice('Invoice updated.');
+        showToast({ title: 'Invoice updated', message: form.payer_name });
       } else {
         await createFinanceInvoice(home, payload);
+        showNotice('Invoice created.');
+        showToast({ title: 'Invoice created', message: form.payer_name });
       }
       closeModal();
-      load();
-    } catch (e) { setError(e.message); }
+      await load();
+    } catch (e) { setError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
@@ -427,9 +468,11 @@ function InvoicesTab({ home, canEdit }) {
     setError(null);
     try {
       await recordFinancePayment(home, editing.id, payForm);
+      showNotice('Payment recorded against invoice.');
+      showToast({ title: 'Payment recorded', message: editing.invoice_number || editing.payer_name });
       closeModal();
-      load();
-    } catch (e) { setError(e.message); }
+      await load();
+    } catch (e) { setError(normalizeFinanceError(e.message)); }
     finally { setSaving(false); }
   }
 
@@ -467,11 +510,21 @@ function InvoicesTab({ home, canEdit }) {
     }]);
   }
 
-  if (loading) return <div className={CARD.padded} role="status"><p className="text-center py-10 text-gray-500">Loading invoices...</p></div>;
+  if (loading) return <LoadingState message="Loading invoices..." card />;
+
+  if (error && invoices.length === 0) {
+    return <ErrorState title="Unable to load invoices" message={error} onRetry={() => void load()} />;
+  }
 
   return (
     <>
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Some invoice actions need attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} w-auto`}>
@@ -503,7 +556,17 @@ function InvoicesTab({ home, canEdit }) {
             </tr></thead>
             <tbody>
               {invoices.length === 0 ? (
-                <tr><td colSpan={8} className={TABLE.empty}>No invoices found</td></tr>
+                <tr>
+                  <td colSpan={8} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No invoices found"
+                      description={canEdit ? 'Create the first invoice for this home to start tracking payments and balances.' : 'No invoices match the current filters.'}
+                      actionLabel={canEdit ? 'New Invoice' : undefined}
+                      onAction={canEdit ? openCreate : undefined}
+                    />
+                  </td>
+                </tr>
               ) : invoices.map(inv => (
                 <tr key={inv.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(inv))}>
                   <td className={`${TABLE.td} font-medium font-mono`}>{inv.invoice_number}</td>
@@ -625,19 +688,6 @@ function InvoicesTab({ home, canEdit }) {
                 )}
               </div>
             )}
-
-            <FileAttachments
-              caseType="finance_invoice"
-              caseId={editing?.id}
-              readOnly={!canEdit}
-              title="Invoice Evidence"
-              emptyText="No invoice evidence uploaded yet."
-              saveFirstText="Save this invoice first, then attach remittances, statements, and supporting documents."
-              getFiles={getRecordAttachments}
-              uploadFile={uploadRecordAttachment}
-              deleteFile={deleteRecordAttachment}
-              downloadFile={downloadRecordAttachment}
-            />
 
             <div className={MODAL.footer}>
               <button onClick={closeModal} className={BTN.secondary}>Cancel</button>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useId } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
@@ -13,8 +14,13 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
-import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'bradford', label: 'Bradford Scores' },
@@ -46,11 +52,13 @@ const LIMIT = 50;
 export default function AbsenceManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState('bradford');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   // Bradford
   const [summary, setSummary] = useState([]);
@@ -64,6 +72,7 @@ export default function AbsenceManager() {
   const [showRtwModal, setShowRtwModal] = useState(false);
   const [editingRtw, setEditingRtw] = useState(null);
   const [rtwForm, setRtwForm] = useState(emptyRtw());
+  const [rtwModalSection, setRtwModalSection] = useState('absence');
 
   // OH
   const [ohList, setOhList] = useState([]);
@@ -72,8 +81,13 @@ export default function AbsenceManager() {
   const [showOhModal, setShowOhModal] = useState(false);
   const [editingOh, setEditingOh] = useState(null);
   const [ohForm, setOhForm] = useState(emptyOh());
+  const [ohModalSection, setOhModalSection] = useState('referral');
 
   const home = getCurrentHome();
+  const handoffSource = searchParams.get('source');
+  const handoffTab = searchParams.get('tab');
+  const handoffStaffId = searchParams.get('staffId') || '';
+  const handoffDate = searchParams.get('date') || '';
   const rtwDateId = useId();
   const rtwAbsenceStartId = useId();
   const rtwAbsenceEndId = useId();
@@ -99,8 +113,8 @@ export default function AbsenceManager() {
   const ohConsentObtainedId = useId();
   const ohConsentDateId = useId();
   const ohQuestionsId = useId();
-  const ohReportReceivedId = useId();
   const ohReportDateId = useId();
+  const ohReportReceivedId = useId();
   const ohReportSummaryId = useId();
   const ohFitForRoleId = useId();
   const ohDisabilityLikelyId = useId();
@@ -131,6 +145,33 @@ export default function AbsenceManager() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (handoffTab && TABS.some(item => item.id === handoffTab)) {
+      setTab(handoffTab);
+    }
+  }, [handoffTab]);
+
+  function clearHandoffParams() {
+    const next = new URLSearchParams(searchParams);
+    ['source', 'staffId', 'date'].forEach(key => next.delete(key));
+    setSearchParams(next, { replace: true });
+  }
+
+  function openHandoffRtw() {
+    setTab('rtw');
+    setEditingRtw(null);
+    setRtwModalSection('absence');
+    setRtwForm({
+      ...emptyRtw(),
+      staff_id: handoffStaffId,
+      absence_start_date: handoffDate || '',
+      rtw_date: todayLocalISO(),
+    });
+    setFormError('');
+    setShowRtwModal(true);
+    clearHandoffParams();
+  }
+
   // Escape key handling is provided by the Modal component
 
   // Bradford detail
@@ -143,9 +184,10 @@ export default function AbsenceManager() {
   }
 
   // RTW handlers
-  function openNewRtw() { setEditingRtw(null); setRtwForm(emptyRtw()); setFormError(''); setShowRtwModal(true); }
+  function openNewRtw() { setEditingRtw(null); setRtwModalSection('absence'); setRtwForm(emptyRtw()); setFormError(''); setShowRtwModal(true); }
   function openEditRtw(item) {
     setEditingRtw(item);
+    setRtwModalSection('absence');
     setRtwForm({
       staff_id: item.staff_id || '', absence_start_date: item.absence_start_date || '',
       absence_end_date: item.absence_end_date || '', rtw_date: item.rtw_date || '',
@@ -181,6 +223,7 @@ export default function AbsenceManager() {
       };
       if (editingRtw) await updateHrRtwInterview(editingRtw.id, { ...payload, _version: editingRtw.version });
       else await createHrRtwInterview(home, payload);
+      showNotice(editingRtw ? 'RTW interview updated.' : 'RTW interview saved.');
       setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -191,9 +234,10 @@ export default function AbsenceManager() {
   }
 
   // OH handlers
-  function openNewOh() { setEditingOh(null); setOhForm(emptyOh()); setFormError(''); setShowOhModal(true); }
+  function openNewOh() { setEditingOh(null); setOhModalSection('referral'); setOhForm(emptyOh()); setFormError(''); setShowOhModal(true); }
   function openEditOh(item) {
     setEditingOh(item);
+    setOhModalSection('referral');
     setOhForm({
       staff_id: item.staff_id || '', referral_date: item.referral_date || '',
       reason: item.reason || '', referred_by: item.referred_by || '', provider: item.provider || '',
@@ -218,6 +262,7 @@ export default function AbsenceManager() {
     try {
       if (editingOh) await updateHrOhReferral(editingOh.id, { ...ohForm, _version: editingOh.version });
       else await createHrOhReferral(home, ohForm);
+      showNotice(editingOh ? 'OH referral updated.' : 'OH referral saved.');
       setShowOhModal(false); setEditingOh(null); setOhForm(emptyOh()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -267,7 +312,15 @@ export default function AbsenceManager() {
   const rf = (key, val) => setRtwForm(prev => ({ ...prev, [key]: val }));
   const ohf = (key, val) => setOhForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading absence data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading absence data..." card /></div>;
+
+  if (error && !summary.length && tab === 'bradford') {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Unable to load absence data" message={error} onRetry={load} />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -283,7 +336,28 @@ export default function AbsenceManager() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {handoffSource === 'daily-status' && handoffTab === 'rtw' && handoffStaffId && (
+        <InlineNotice variant="info" onDismiss={clearHandoffParams} className="mb-4">
+          <div className="space-y-2">
+            <p>
+              Daily Status marked {handoffStaffId} sick{handoffDate ? ` on ${handoffDate}` : ''}. When they return, record the RTW interview here.
+            </p>
+            {canEdit && (
+              <button type="button" onClick={openHandoffRtw} className={`${BTN.secondary} ${BTN.xs}`}>
+                Start RTW Interview
+              </button>
+            )}
+          </div>
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Something needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Tab bar */}
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
@@ -315,7 +389,17 @@ export default function AbsenceManager() {
                 </tr>
               </thead>
               <tbody>
-                {summary.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No absence data</td></tr>}
+                {summary.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className={TABLE.empty}>
+                      <EmptyState
+                        compact
+                        title="No absence data yet"
+                        description="Absence scores will appear here once sickness records and RTW interviews are being recorded."
+                      />
+                    </td>
+                  </tr>
+                )}
                 {summary.map(s => {
                   const trigger = getAbsenceTriggerBadge(s.trigger_level);
                   return (
@@ -363,7 +447,7 @@ export default function AbsenceManager() {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-gray-400">No spell records available.</p>
+              <EmptyState compact title="No spell records available" description="Select another staff member or record an absence spell to build the history." />
             )}
           </div>
         )}
@@ -389,7 +473,19 @@ export default function AbsenceManager() {
               </tr>
             </thead>
             <tbody>
-              {rtwList.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No RTW interviews</td></tr>}
+              {rtwList.length === 0 && (
+                <tr>
+                  <td colSpan={6} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No RTW interviews yet"
+                      description={canEdit ? 'Use the button below to record the first return-to-work interview.' : 'No return-to-work interviews have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New RTW Interview' : undefined}
+                      onAction={canEdit ? openNewRtw : undefined}
+                    />
+                  </td>
+                </tr>
+              )}
               {rtwList.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>
@@ -432,7 +528,19 @@ export default function AbsenceManager() {
               </tr>
             </thead>
             <tbody>
-              {ohList.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No OH referrals</td></tr>}
+              {ohList.length === 0 && (
+                <tr>
+                  <td colSpan={6} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No OH referrals yet"
+                      description={canEdit ? 'Use the button below when a return-to-work interview or trigger review needs occupational health input.' : 'No occupational health referrals have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New OH Referral' : undefined}
+                      onAction={canEdit ? openNewOh : undefined}
+                    />
+                  </td>
+                </tr>
+              )}
               {ohList.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>
@@ -461,128 +569,165 @@ export default function AbsenceManager() {
 
   function renderRtwModal() {
     return (
-      <Modal isOpen={true} onClose={() => { setShowRtwModal(false); setEditingRtw(null); setRtwForm(emptyRtw()); }} title={editingRtw ? 'Edit RTW Interview' : 'New RTW Interview'} size="xl">
+      <Modal isOpen={true} onClose={() => { setShowRtwModal(false); setEditingRtw(null); setRtwModalSection('absence'); setRtwForm(emptyRtw()); }} title={editingRtw ? 'Edit RTW Interview' : 'New RTW Interview'} size="xl">
+        <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
+          {[
+            { id: 'absence', label: 'Absence Details' },
+            { id: 'assessment', label: 'Return Assessment' },
+            { id: 'fit-note', label: 'Fit Note' },
+            { id: 'trigger', label: 'Trigger Assessment' },
+          ].map(section => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => setRtwModalSection(section.id)}
+              className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+                rtwModalSection === section.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <StaffPicker value={rtwForm.staff_id || ''} onChange={val => rf('staff_id', val)} label="Staff Member" />
-            <div>
-              <label htmlFor={rtwDateId} className={INPUT.label}>RTW Date</label>
-              <input id={rtwDateId} type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor={rtwAbsenceStartId} className={INPUT.label}>Absence Start Date</label>
-              <input id={rtwAbsenceStartId} type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={rtwAbsenceEndId} className={INPUT.label}>Absence End Date</label>
-              <input id={rtwAbsenceEndId} type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor={rtwConductedById} className={INPUT.label}>Conducted By</label>
-              <input id={rtwConductedById} className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={rtwAbsenceReasonId} className={INPUT.label}>Absence Reason</label>
-              <input id={rtwAbsenceReasonId} className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
-            </div>
-          </div>
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={rtwForm.fit_for_work} onChange={e => rf('fit_for_work', e.target.checked)} />
-              Fit for Work
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={rtwForm.referral_needed} onChange={e => rf('referral_needed', e.target.checked)} />
-              OH Referral Needed
-            </label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input id={rtwUnderlyingConditionId} type="checkbox" checked={rtwForm.underlying_condition} onChange={e => rf('underlying_condition', e.target.checked)} />
-            <label htmlFor={rtwUnderlyingConditionId} className="text-sm text-gray-700">Underlying Condition Suspected</label>
-          </div>
-          <div>
-            <label htmlFor={rtwAdjustmentsId} className={INPUT.label}>Adjustments</label>
-            <textarea id={rtwAdjustmentsId} className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
-          </div>
-          <div>
-            <label htmlFor={rtwFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
-            <input id={rtwFollowUpDateId} type="date" className={INPUT.base} value={rtwForm.follow_up_date} onChange={e => rf('follow_up_date', e.target.value)} />
-          </div>
-          <div className="border rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold">Fit Note</p>
-            <div className="flex items-center gap-2">
-              <input id={rtwFitNoteReceivedId} type="checkbox" checked={rtwForm.fit_note_received} onChange={e => rf('fit_note_received', e.target.checked)} />
-              <label htmlFor={rtwFitNoteReceivedId} className="text-sm text-gray-700">Fit Note Received</label>
-            </div>
-            {rtwForm.fit_note_received && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor={rtwFitNoteDateId} className={INPUT.label}>Fit Note Date</label>
-                    <input id={rtwFitNoteDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_date} onChange={e => rf('fit_note_date', e.target.value)} />
+          {rtwModalSection === 'absence' && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <StaffPicker value={rtwForm.staff_id || ''} onChange={val => rf('staff_id', val)} label="Staff Member *" />
+                <div>
+                  <label htmlFor={rtwDateId} className={INPUT.label}>RTW Date *</label>
+                  <input id={rtwDateId} type="date" className={INPUT.base} value={rtwForm.rtw_date} onChange={e => rf('rtw_date', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={rtwAbsenceStartId} className={INPUT.label}>Absence Start Date</label>
+                  <input id={rtwAbsenceStartId} type="date" className={INPUT.base} value={rtwForm.absence_start_date} onChange={e => rf('absence_start_date', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={rtwAbsenceEndId} className={INPUT.label}>Absence End Date</label>
+                  <input id={rtwAbsenceEndId} type="date" className={INPUT.base} value={rtwForm.absence_end_date} onChange={e => rf('absence_end_date', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={rtwConductedById} className={INPUT.label}>Conducted By *</label>
+                  <input id={rtwConductedById} className={INPUT.base} value={rtwForm.conducted_by} onChange={e => rf('conducted_by', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={rtwAbsenceReasonId} className={INPUT.label}>Absence Reason</label>
+                  <input id={rtwAbsenceReasonId} className={INPUT.base} value={rtwForm.absence_reason} onChange={e => rf('absence_reason', e.target.value)} />
+                </div>
+              </div>
+            </>
+          )}
+
+          {rtwModalSection === 'assessment' && (
+            <>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={rtwForm.fit_for_work} onChange={e => rf('fit_for_work', e.target.checked)} />
+                  Fit for Work
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={rtwForm.referral_needed} onChange={e => rf('referral_needed', e.target.checked)} />
+                  OH Referral Needed
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input id={rtwUnderlyingConditionId} type="checkbox" checked={rtwForm.underlying_condition} onChange={e => rf('underlying_condition', e.target.checked)} />
+                <label htmlFor={rtwUnderlyingConditionId} className="text-sm text-gray-700">Underlying Condition Suspected</label>
+              </div>
+              <div>
+                <label htmlFor={rtwAdjustmentsId} className={INPUT.label}>Adjustments</label>
+                <textarea id={rtwAdjustmentsId} className={INPUT.base} rows={3} value={rtwForm.adjustments} onChange={e => rf('adjustments', e.target.value)} placeholder="Adjustments required on return..." />
+              </div>
+              <div>
+                <label htmlFor={rtwFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
+                <input id={rtwFollowUpDateId} type="date" className={INPUT.base} value={rtwForm.follow_up_date} onChange={e => rf('follow_up_date', e.target.value)} />
+              </div>
+            </>
+          )}
+
+          {rtwModalSection === 'fit-note' && (
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold">Fit Note</p>
+              <div className="flex items-center gap-2">
+                <input id={rtwFitNoteReceivedId} type="checkbox" checked={rtwForm.fit_note_received} onChange={e => rf('fit_note_received', e.target.checked)} />
+                <label htmlFor={rtwFitNoteReceivedId} className="text-sm text-gray-700">Fit Note Received</label>
+              </div>
+              {rtwForm.fit_note_received && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor={rtwFitNoteDateId} className={INPUT.label}>Fit Note Date</label>
+                      <input id={rtwFitNoteDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_date} onChange={e => rf('fit_note_date', e.target.value)} />
+                    </div>
+                    <div>
+                      <label htmlFor={rtwFitNoteTypeId} className={INPUT.label}>Fit Note Type</label>
+                      <select id={rtwFitNoteTypeId} className={INPUT.select} value={rtwForm.fit_note_type} onChange={e => rf('fit_note_type', e.target.value)}>
+                        <option value="">Select...</option>
+                        <option value="not_fit">Not Fit for Work</option>
+                        <option value="may_be_fit">May Be Fit for Work</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label htmlFor={rtwFitNoteTypeId} className={INPUT.label}>Fit Note Type</label>
-                    <select id={rtwFitNoteTypeId} className={INPUT.select} value={rtwForm.fit_note_type} onChange={e => rf('fit_note_type', e.target.value)}>
-                      <option value="">Select...</option>
-                      <option value="not_fit">Not Fit for Work</option>
-                      <option value="may_be_fit">May Be Fit for Work</option>
+                    <label htmlFor={rtwFitNoteAdjustmentsId} className={INPUT.label}>Fit Note Adjustments</label>
+                    <textarea id={rtwFitNoteAdjustmentsId} className={INPUT.base} rows={2} value={rtwForm.fit_note_adjustments} onChange={e => rf('fit_note_adjustments', e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor={rtwFitNoteReviewDateId} className={INPUT.label}>Fit Note Review Date</label>
+                    <input id={rtwFitNoteReviewDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_review_date} onChange={e => rf('fit_note_review_date', e.target.value)} />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {rtwModalSection === 'trigger' && (
+            <>
+              <div className="border rounded-lg p-3 space-y-3">
+                <p className="text-xs font-semibold">Trigger Assessment</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor={rtwBradfordScoreId} className={INPUT.label}>Bradford Score After RTW</label>
+                    <input id={rtwBradfordScoreId} type="number" className={INPUT.base} value={rtwForm.bradford_score_after} onChange={e => rf('bradford_score_after', e.target.value)} />
+                    <p className="mt-1 text-xs text-gray-500">Bradford score = spells squared × days absent.</p>
+                  </div>
+                  <div>
+                    <label htmlFor={rtwTriggerReachedId} className={INPUT.label}>Trigger Reached</label>
+                    <select id={rtwTriggerReachedId} className={INPUT.select} value={rtwForm.trigger_reached} onChange={e => rf('trigger_reached', e.target.value)}>
+                      <option value="">None</option>
+                      <option value="informal">Informal</option>
+                      <option value="formal_1">Formal Stage 1</option>
+                      <option value="formal_2">Formal Stage 2</option>
+                      <option value="final">Final</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={rtwActionTakenId} className={INPUT.label}>Action Taken</label>
+                    <select id={rtwActionTakenId} className={INPUT.select} value={rtwForm.action_taken} onChange={e => rf('action_taken', e.target.value)}>
+                      <option value="">None</option>
+                      <option value="none">None</option>
+                      <option value="informal_chat">Informal Chat</option>
+                      <option value="formal_meeting">Formal Meeting</option>
+                      <option value="referral">OH Referral</option>
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label htmlFor={rtwFitNoteAdjustmentsId} className={INPUT.label}>Fit Note Adjustments</label>
-                  <textarea id={rtwFitNoteAdjustmentsId} className={INPUT.base} rows={2} value={rtwForm.fit_note_adjustments} onChange={e => rf('fit_note_adjustments', e.target.value)} />
-                </div>
-                <div>
-                  <label htmlFor={rtwFitNoteReviewDateId} className={INPUT.label}>Fit Note Review Date</label>
-                  <input id={rtwFitNoteReviewDateId} type="date" className={INPUT.base} value={rtwForm.fit_note_review_date} onChange={e => rf('fit_note_review_date', e.target.value)} />
-                </div>
-              </>
-            )}
-          </div>
-          <div className="border rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold">Trigger Assessment</p>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label htmlFor={rtwBradfordScoreId} className={INPUT.label}>Bradford Score After RTW</label>
-                <input id={rtwBradfordScoreId} type="number" className={INPUT.base} value={rtwForm.bradford_score_after} onChange={e => rf('bradford_score_after', e.target.value)} />
               </div>
               <div>
-                <label htmlFor={rtwTriggerReachedId} className={INPUT.label}>Trigger Reached</label>
-                <select id={rtwTriggerReachedId} className={INPUT.select} value={rtwForm.trigger_reached} onChange={e => rf('trigger_reached', e.target.value)}>
-                  <option value="">None</option>
-                  <option value="informal">Informal</option>
-                  <option value="formal_1">Formal Stage 1</option>
-                  <option value="formal_2">Formal Stage 2</option>
-                  <option value="final">Final</option>
-                </select>
+                <label htmlFor={rtwNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={rtwNotesId} className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
               </div>
-              <div>
-                <label htmlFor={rtwActionTakenId} className={INPUT.label}>Action Taken</label>
-                <select id={rtwActionTakenId} className={INPUT.select} value={rtwForm.action_taken} onChange={e => rf('action_taken', e.target.value)}>
-                  <option value="">None</option>
-                  <option value="none">None</option>
-                  <option value="informal_chat">Informal Chat</option>
-                  <option value="formal_meeting">Formal Meeting</option>
-                  <option value="referral">OH Referral</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label htmlFor={rtwNotesId} className={INPUT.label}>Notes</label>
-            <textarea id={rtwNotesId} className={INPUT.base} rows={2} value={rtwForm.notes} onChange={e => rf('notes', e.target.value)} />
-          </div>
+            </>
+          )}
         </div>
         <FileAttachments caseType="rtw_interview" caseId={editingRtw?.id} />
         {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} disabled={saving} onClick={() => setShowRtwModal(false)}>Cancel</button>
+          <button className={BTN.secondary} disabled={saving} onClick={() => { setShowRtwModal(false); setEditingRtw(null); setRtwModalSection('absence'); setRtwForm(emptyRtw()); }}>Cancel</button>
           <button className={BTN.primary} disabled={saving} onClick={handleSaveRtw}>{saving ? 'Saving...' : editingRtw ? 'Update' : 'Create'}</button>
         </div>
       </Modal>
@@ -593,112 +738,146 @@ export default function AbsenceManager() {
 
   function renderOhModal() {
     return (
-      <Modal isOpen={true} onClose={() => { setShowOhModal(false); setEditingOh(null); setOhForm(emptyOh()); }} title={editingOh ? 'Edit OH Referral' : 'New OH Referral'} size="xl">
+      <Modal isOpen={true} onClose={() => { setShowOhModal(false); setEditingOh(null); setOhModalSection('referral'); setOhForm(emptyOh()); }} title={editingOh ? 'Edit OH Referral' : 'New OH Referral'} size="xl">
+        <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
+          {[
+            { id: 'referral', label: 'Referral' },
+            { id: 'consent', label: 'Consent' },
+            { id: 'report', label: 'Report' },
+            { id: 'follow-up', label: 'Follow-up' },
+          ].map(section => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => setOhModalSection(section.id)}
+              className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+                ohModalSection === section.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <StaffPicker value={ohForm.staff_id || ''} onChange={val => ohf('staff_id', val)} label="Staff Member" />
-            <div>
-              <label htmlFor={ohReferralDateId} className={INPUT.label}>Referral Date</label>
-              <input id={ohReferralDateId} type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor={ohReasonId} className={INPUT.label}>Reason</label>
-              <input id={ohReasonId} className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={ohReferredById} className={INPUT.label}>Referred By</label>
-              <input id={ohReferredById} className={INPUT.base} value={ohForm.referred_by} onChange={e => ohf('referred_by', e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor={ohProviderId} className={INPUT.label}>Provider</label>
-              <input id={ohProviderId} className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={ohAppointmentDateId} className={INPUT.label}>Appointment Date</label>
-              <input id={ohAppointmentDateId} type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
-            </div>
-          </div>
-          <div className="border rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold">Employee Consent (GDPR Article 9)</p>
-            <div className="flex items-center gap-2">
-              <input id={ohConsentObtainedId} type="checkbox" checked={ohForm.employee_consent_obtained} onChange={e => ohf('employee_consent_obtained', e.target.checked)} />
-              <label htmlFor={ohConsentObtainedId} className="text-sm text-gray-700">Consent Obtained</label>
-            </div>
-            {ohForm.employee_consent_obtained && (
-              <div>
-                <label htmlFor={ohConsentDateId} className={INPUT.label}>Consent Date</label>
-                <input id={ohConsentDateId} type="date" className={INPUT.base} value={ohForm.consent_date} onChange={e => ohf('consent_date', e.target.value)} />
-              </div>
-            )}
-          </div>
-          <div>
-            <label htmlFor={ohQuestionsId} className={INPUT.label}>Questions for OH Provider</label>
-            <textarea id={ohQuestionsId} className={INPUT.base} rows={3} value={ohForm.questions_for_oh} onChange={e => ohf('questions_for_oh', e.target.value)} placeholder="One question per line" />
-          </div>
-          <div className="flex items-center gap-2">
-            <input id={ohReportReceivedId} type="checkbox" checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
-            <label htmlFor={ohReportReceivedId} className="text-sm">Report Received</label>
-          </div>
-          {ohForm.report_received && (
-            <div>
-              <label htmlFor={ohReportDateId} className={INPUT.label}>Report Date</label>
-              <input id={ohReportDateId} type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
-            </div>
-          )}
-          {ohForm.report_received && (
+          {ohModalSection === 'referral' && (
             <>
-              <div>
-                <label htmlFor={ohReportSummaryId} className={INPUT.label}>Report Summary</label>
-                <textarea id={ohReportSummaryId} className={INPUT.base} rows={3} value={ohForm.report_summary} onChange={e => ohf('report_summary', e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <StaffPicker value={ohForm.staff_id || ''} onChange={val => ohf('staff_id', val)} label="Staff Member *" />
+                <div>
+                  <label htmlFor={ohReferralDateId} className={INPUT.label}>Referral Date *</label>
+                  <input id={ohReferralDateId} type="date" className={INPUT.base} value={ohForm.referral_date} onChange={e => ohf('referral_date', e.target.value)} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor={ohFitForRoleId} className={INPUT.label}>Fit for Role</label>
-                  <select id={ohFitForRoleId} className={INPUT.select} value={ohForm.fit_for_role} onChange={e => ohf('fit_for_role', e.target.value)}>
-                    <option value="">Not assessed</option>
-                    <option value="yes">Yes</option>
-                    <option value="yes_with_adjustments">Yes, with adjustments</option>
-                    <option value="no_currently">No, currently</option>
-                    <option value="no_permanently">No, permanently</option>
-                  </select>
+                  <label htmlFor={ohReasonId} className={INPUT.label}>Reason</label>
+                  <input id={ohReasonId} className={INPUT.base} value={ohForm.reason} onChange={e => ohf('reason', e.target.value)} />
                 </div>
                 <div>
-                  <label htmlFor={ohDisabilityLikelyId} className={INPUT.label}>Disability Likely</label>
-                  <select id={ohDisabilityLikelyId} className={INPUT.select} value={ohForm.disability_likely} onChange={e => ohf('disability_likely', e.target.value)}>
-                    <option value="">Not assessed</option>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                    <option value="possible">Possible</option>
-                  </select>
+                  <label htmlFor={ohReferredById} className={INPUT.label}>Referred By *</label>
+                  <input id={ohReferredById} className={INPUT.base} value={ohForm.referred_by} onChange={e => ohf('referred_by', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={ohProviderId} className={INPUT.label}>Provider</label>
+                  <input id={ohProviderId} className={INPUT.base} value={ohForm.provider} onChange={e => ohf('provider', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={ohAppointmentDateId} className={INPUT.label}>Appointment Date</label>
+                  <input id={ohAppointmentDateId} type="date" className={INPUT.base} value={ohForm.appointment_date} onChange={e => ohf('appointment_date', e.target.value)} />
                 </div>
               </div>
               <div>
-                <label htmlFor={ohEstimatedReturnDateId} className={INPUT.label}>Estimated Return Date</label>
-                <input id={ohEstimatedReturnDateId} type="date" className={INPUT.base} value={ohForm.estimated_return_date} onChange={e => ohf('estimated_return_date', e.target.value)} />
+                <label htmlFor={ohQuestionsId} className={INPUT.label}>Questions for OH Provider</label>
+                <textarea id={ohQuestionsId} className={INPUT.base} rows={3} value={ohForm.questions_for_oh} onChange={e => ohf('questions_for_oh', e.target.value)} placeholder="One question per line" />
               </div>
             </>
           )}
-          <div>
-            <label htmlFor={ohRecommendationsId} className={INPUT.label}>Recommendations</label>
-            <textarea id={ohRecommendationsId} className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor={ohFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
-            <input id={ohFollowUpDateId} type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor={ohNotesId} className={INPUT.label}>Notes</label>
-            <textarea id={ohNotesId} className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
-          </div>
+
+          {ohModalSection === 'consent' && (
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold">Employee Consent (GDPR Article 9)</p>
+              <div className="flex items-center gap-2">
+                <input id={ohConsentObtainedId} type="checkbox" checked={ohForm.employee_consent_obtained} onChange={e => ohf('employee_consent_obtained', e.target.checked)} />
+                <label htmlFor={ohConsentObtainedId} className="text-sm text-gray-700">Consent Obtained</label>
+              </div>
+              {ohForm.employee_consent_obtained && (
+                <div>
+                  <label htmlFor={ohConsentDateId} className={INPUT.label}>Consent Date</label>
+                  <input id={ohConsentDateId} type="date" className={INPUT.base} value={ohForm.consent_date} onChange={e => ohf('consent_date', e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {ohModalSection === 'report' && (
+            <>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id={ohReportReceivedId} checked={ohForm.report_received} onChange={e => ohf('report_received', e.target.checked)} />
+                <label htmlFor={ohReportReceivedId} className="text-sm">Report Received</label>
+              </div>
+              {ohForm.report_received && (
+                <>
+                  <div>
+                    <label htmlFor={ohReportDateId} className={INPUT.label}>Report Date</label>
+                    <input id={ohReportDateId} type="date" className={INPUT.base} value={ohForm.report_date} onChange={e => ohf('report_date', e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor={ohReportSummaryId} className={INPUT.label}>Report Summary</label>
+                    <textarea id={ohReportSummaryId} className={INPUT.base} rows={3} value={ohForm.report_summary} onChange={e => ohf('report_summary', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor={ohFitForRoleId} className={INPUT.label}>Fit for Role</label>
+                      <select id={ohFitForRoleId} className={INPUT.select} value={ohForm.fit_for_role} onChange={e => ohf('fit_for_role', e.target.value)}>
+                        <option value="">Not assessed</option>
+                        <option value="yes">Yes</option>
+                        <option value="yes_with_adjustments">Yes, with adjustments</option>
+                        <option value="no_currently">No, currently</option>
+                        <option value="no_permanently">No, permanently</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor={ohDisabilityLikelyId} className={INPUT.label}>Disability Likely</label>
+                      <select id={ohDisabilityLikelyId} className={INPUT.select} value={ohForm.disability_likely} onChange={e => ohf('disability_likely', e.target.value)}>
+                        <option value="">Not assessed</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                        <option value="possible">Possible</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor={ohEstimatedReturnDateId} className={INPUT.label}>Estimated Return Date</label>
+                    <input id={ohEstimatedReturnDateId} type="date" className={INPUT.base} value={ohForm.estimated_return_date} onChange={e => ohf('estimated_return_date', e.target.value)} />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {ohModalSection === 'follow-up' && (
+            <>
+              <div>
+                <label htmlFor={ohRecommendationsId} className={INPUT.label}>Recommendations</label>
+                <textarea id={ohRecommendationsId} className={INPUT.base} rows={3} value={ohForm.recommendations} onChange={e => ohf('recommendations', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor={ohFollowUpDateId} className={INPUT.label}>Follow-up Date</label>
+                <input id={ohFollowUpDateId} type="date" className={INPUT.base} value={ohForm.follow_up_date} onChange={e => ohf('follow_up_date', e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor={ohNotesId} className={INPUT.label}>Notes</label>
+                <textarea id={ohNotesId} className={INPUT.base} rows={2} value={ohForm.notes} onChange={e => ohf('notes', e.target.value)} />
+              </div>
+            </>
+          )}
         </div>
         <FileAttachments caseType="oh_referral" caseId={editingOh?.id} />
         {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
         <div className={MODAL.footer}>
-          <button className={BTN.secondary} disabled={saving} onClick={() => setShowOhModal(false)}>Cancel</button>
+          <button className={BTN.secondary} disabled={saving} onClick={() => { setShowOhModal(false); setEditingOh(null); setOhModalSection('referral'); setOhForm(emptyOh()); }}>Cancel</button>
           <button className={BTN.primary} disabled={saving} onClick={handleSaveOh}>{saving ? 'Saving...' : editingOh ? 'Update' : 'Create'}</button>
         </div>
       </Modal>
