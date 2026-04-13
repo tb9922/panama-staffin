@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import GrievanceTracker from '../GrievanceTracker.jsx';
-
-// ── Module mocks ───────────────────────────────────────────────────────────────
 
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
@@ -19,7 +18,9 @@ vi.mock('../../lib/api.js', async () => {
     updateGrievanceAction: vi.fn(),
     getHrCaseNotes: vi.fn(),
     createHrCaseNote: vi.fn(),
-    getHrStaffList: vi.fn().mockResolvedValue([]),
+    getHrStaffList: vi.fn().mockResolvedValue([
+      { id: 'S002', name: 'Bob Smith', role: 'Senior Carer', active: true },
+    ]),
   };
 });
 
@@ -28,8 +29,6 @@ vi.mock('../../lib/excel.js', () => ({
 }));
 
 import * as api from '../../lib/api.js';
-
-// ── Fixtures ───────────────────────────────────────────────────────────────────
 
 const MOCK_CASE = {
   id: 'GRV-001',
@@ -55,43 +54,47 @@ const MOCK_NON_CONFIDENTIAL = {
 const MOCK_RESPONSE = { rows: [MOCK_CASE], total: 1 };
 const EMPTY_RESPONSE = { rows: [], total: 0 };
 
-// ── Setup ──────────────────────────────────────────────────────────────────────
+function renderAdmin() {
+  return renderWithProviders(<GrievanceTracker />, {
+    user: { username: 'admin', role: 'admin' },
+  });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   api.getHrGrievance.mockResolvedValue(MOCK_RESPONSE);
-  api.getHrStaffList.mockResolvedValue([]);
+  api.getHrStaffList.mockResolvedValue([
+    { id: 'S002', name: 'Bob Smith', role: 'Senior Carer', active: true },
+  ]);
+  api.getGrievanceActions.mockResolvedValue([]);
+  api.getHrCaseNotes.mockResolvedValue([]);
 });
 
-// ── Tests ──────────────────────────────────────────────────────────────────────
-
 describe('GrievanceTracker', () => {
-  it('smoke test — renders without crashing', async () => {
-    renderWithProviders(<GrievanceTracker />);
+  it('smoke test - renders without crashing', async () => {
+    renderAdmin();
     await waitFor(() => {
-      expect(
-        screen.queryByText(/Loading grievance/i) ||
-        screen.queryByText(/Grievance Tracker/i)
-      ).not.toBeNull();
+      expect(screen.queryByText(/Loading grievance/i) || screen.queryByText(/Grievance Tracker/i)).not.toBeNull();
     });
   });
 
   it('shows loading state while data is fetching', () => {
     api.getHrGrievance.mockReturnValue(new Promise(() => {}));
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     expect(screen.getByText('Loading grievance cases...')).toBeInTheDocument();
   });
 
-  it('shows error state when API call fails', async () => {
+  it('shows retryable error state when API call fails', async () => {
     api.getHrGrievance.mockRejectedValue(new Error('Connection lost'));
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Grievance Tracker')).toBeInTheDocument();
+      expect(screen.getByText('Connection lost')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
   });
 
   it('displays page heading and subtitle after load', async () => {
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('Grievance Tracker')).toBeInTheDocument();
     });
@@ -99,7 +102,7 @@ describe('GrievanceTracker', () => {
   });
 
   it('displays case row with staff ID and date', async () => {
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('S002')).toBeInTheDocument();
     });
@@ -107,7 +110,7 @@ describe('GrievanceTracker', () => {
   });
 
   it('shows confidential badge for confidential cases', async () => {
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('Yes')).toBeInTheDocument();
     });
@@ -115,31 +118,45 @@ describe('GrievanceTracker', () => {
 
   it('shows non-confidential badge for non-confidential cases', async () => {
     api.getHrGrievance.mockResolvedValue({ rows: [MOCK_NON_CONFIDENTIAL], total: 1 });
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('No')).toBeInTheDocument();
     });
   });
 
-  it('shows empty state when no cases exist', async () => {
+  it('shows action-first empty state when no cases exist', async () => {
     api.getHrGrievance.mockResolvedValue(EMPTY_RESPONSE);
-    renderWithProviders(<GrievanceTracker />);
+    renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No grievance cases')).toBeInTheDocument();
+      expect(screen.getByText('No grievance cases yet')).toBeInTheDocument();
     });
+    expect(screen.getAllByRole('button', { name: /New Case/i }).length).toBeGreaterThan(1);
   });
 
-  it('shows New Case button', async () => {
-    renderWithProviders(<GrievanceTracker />);
+  it('shows a success notice after creating a grievance case', async () => {
+    const user = userEvent.setup();
+    api.createHrGrievance.mockResolvedValue({ id: 'GRV-003' });
+    renderAdmin();
+
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /New Case/i })).toBeInTheDocument();
     });
-  });
 
-  it('shows Export Excel button', async () => {
-    renderWithProviders(<GrievanceTracker />);
+    await user.click(screen.getByRole('button', { name: /New Case/i }));
+    await user.selectOptions(screen.getByLabelText(/Staff Member/i), 'S002');
+    await user.selectOptions(screen.getByLabelText(/Category/i), 'working_conditions');
+    await user.type(screen.getByLabelText(/Description/i), 'The grievance details are recorded here.');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
+      expect(api.createHrGrievance).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        staff_id: 'S002',
+        category: 'working_conditions',
+      }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Grievance case created.')).toBeInTheDocument();
     });
   });
 });
