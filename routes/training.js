@@ -18,6 +18,7 @@ import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
@@ -27,6 +28,7 @@ const recordIdSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 const staffIdSchema = z.string().min(1).max(20);
 const typeIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
+const attachmentDescriptionSchema = z.string().max(5000).nullable().optional();
 
 function safePath(segment) {
   return String(segment).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -211,6 +213,11 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
 
     const filePath = req.file.path;
     try {
+      const descriptionParsed = attachmentDescriptionSchema.safeParse(req.body.description || null);
+      if (!descriptionParsed.success) {
+        await unlink(filePath).catch(() => {});
+        return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
+      }
       const detected = await fileTypeFromFile(filePath);
       if (detected && detected.mime !== req.file.mimetype) {
         await unlink(filePath).catch(() => {});
@@ -221,7 +228,7 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
         stored_name: req.file.filename,
         mime_type: req.file.mimetype,
         size_bytes: req.file.size,
-        description: req.body.description || null,
+        description: descriptionParsed.data || null,
         uploaded_by: req.user.username,
       });
       await auditService.log('training_attachment_upload', req.home.slug, req.user.username, {
@@ -239,8 +246,8 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
 
 router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid attachment ID' });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
     const attachment = await trainingAttachmentsRepo.findById(id, req.home.id);
     if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
     const uploadDir = path.resolve(config.upload.dir);
@@ -253,16 +260,10 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       attachment.stored_name,
     ));
     if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
-    const safeName = attachment.original_name.replace(/["\r\n;]/g, '_');
-    res.set({
-      'Content-Type': attachment.mime_type,
-      'Content-Disposition': `attachment; filename="${safeName}"`,
-      'Content-Length': attachment.size_bytes,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'DENY',
+    sendStoredDownload(res, next, filePath, {
+      originalName: attachment.original_name,
+      mimeType: attachment.mime_type,
     });
-    res.sendFile(filePath);
   } catch (err) { next(err); }
 });
 

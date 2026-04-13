@@ -30,7 +30,9 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
 
 export async function sync(homeId, arr, client) {
   const conn = client || pool;
-  if (!arr) return;
+  // An empty array often means the frontend has not loaded records yet.
+  // Treating that as "delete everything" is too destructive.
+  if (!arr || arr.length === 0) return;
   const incomingIds = arr.map(r => r.id);
 
   // Batch upsert — 16 per-row params (id + 14 fields + status; homeId=$1, updated_at=NOW())
@@ -84,14 +86,10 @@ export async function sync(homeId, arr, client) {
     );
   }
 
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE risk_register SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(`UPDATE risk_register SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL`, [homeId]);
-  }
+  await conn.query(
+    `UPDATE risk_register SET deleted_at = NOW() WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 // ── Individual CRUD (Mode 2 endpoints) ────────────────────────────────────────

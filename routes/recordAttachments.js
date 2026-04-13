@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { createReadStream, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { config } from '../config.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
 import * as auditService from '../services/auditService.js';
@@ -89,16 +90,10 @@ router.get('/download/:id', readRateLimiter, requireAuth, requireHomeAccess, asy
       if (!filePath.startsWith(uploadDir)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-      const safeName = attachment.original_name.replace(/["\r\n;]/g, '_');
-      res.set({
-        'Content-Type': attachment.mime_type,
-        'Content-Disposition': `attachment; filename="${safeName}"`,
-        'Content-Length': attachment.size_bytes,
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-        'X-Frame-Options': 'DENY',
+      sendStoredDownload(res, next, filePath, {
+        originalName: attachment.original_name,
+        mimeType: attachment.mime_type,
       });
-      createReadStream(filePath).pipe(res);
     });
   } catch (err) { next(err); }
 });

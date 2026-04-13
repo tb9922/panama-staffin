@@ -17,6 +17,18 @@ import useTransientNotice from '../hooks/useTransientNotice.js';
 const PROTECTED_TYPES = ['maternity', 'adoption'];
 const LIMIT = 50;
 
+function normalizeLeaveType(value) {
+  if (value === 'parental') return 'parental_unpaid';
+  if (value === 'bereavement') return 'parental_bereavement';
+  return value || 'maternity';
+}
+
+function normalizeLeaveStatus(value) {
+  if (value === 'planned') return 'requested';
+  if (value === 'ended') return 'returned';
+  return value || 'requested';
+}
+
 function typeName(id) {
   return FAMILY_LEAVE_TYPES.find(t => t.id === id)?.name || id;
 }
@@ -30,11 +42,11 @@ const blankForm = () => ({
   leave_type: 'maternity',
   start_date: '',
   end_date: '',
-  status: 'planned',
+  status: 'requested',
   expected_return: '',
   actual_return: '',
   kit_days_used: 0,
-  pay_type: '',
+  pay_type: 'none',
   notes: '',
 });
 
@@ -103,14 +115,14 @@ export default function FamilyLeaveTracker() {
     setEditing(item);
     setForm({
       staff_id: item.staff_id || '',
-      leave_type: item.leave_type || 'maternity',
+      leave_type: normalizeLeaveType(item.leave_type),
       start_date: item.start_date || '',
       end_date: item.end_date || '',
-      status: item.status || 'planned',
+      status: normalizeLeaveStatus(item.status),
       expected_return: item.expected_return || '',
       actual_return: item.actual_return || '',
       kit_days_used: item.kit_days_used ?? 0,
-      pay_type: item.pay_type || '',
+      pay_type: item.pay_type || 'none',
       notes: item.notes || '',
     });
     setFormError('');

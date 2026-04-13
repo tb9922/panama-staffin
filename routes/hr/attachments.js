@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { createReadStream, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
 import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
 import { config } from '../../config.js';
+import { sendStoredDownload } from '../../lib/sendDownload.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { caseTypeSchema } from './schemas.js';
@@ -45,6 +46,23 @@ function fileFilter(req, file, cb) {
 }
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: config.upload.maxFileSize } });
+
+// GET /api/hr/attachments/download/:id?home=X
+router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
+    const att = await hrRepo.findAttachmentById(id, req.home.id);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    const uploadDir = path.resolve(config.upload.dir);
+    const filePath = path.resolve(path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name));
+    if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
+    sendStoredDownload(res, next, filePath, {
+      originalName: att.original_name,
+      mimeType: att.mime_type,
+    });
+  } catch (err) { next(err); }
+});
 
 // GET /api/hr/attachments/:caseType/:caseId?home=X
 router.get('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
@@ -95,29 +113,6 @@ router.post('/attachments/:caseType/:caseId', requireAuth, requireHomeAccess, re
         res.status(201).json(attachment);
       } catch (e) { next(e); }
     });
-  } catch (err) { next(err); }
-});
-
-// GET /api/hr/attachments/download/:id?home=X
-router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireModule('hr', 'read'), async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid attachment ID' });
-    const att = await hrRepo.findAttachmentById(id, req.home.id);
-    if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    const uploadDir = path.resolve(config.upload.dir);
-    const filePath = path.resolve(path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name));
-    if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
-    const safeName = att.original_name.replace(/["\r\n;]/g, '_');
-    res.set({
-      'Content-Type': att.mime_type,
-      'Content-Disposition': `attachment; filename="${safeName}"`,
-      'Content-Length': att.size_bytes,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'DENY',
-    });
-    createReadStream(filePath).pipe(res);
   } catch (err) { next(err); }
 });
 

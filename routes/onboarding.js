@@ -10,6 +10,7 @@ import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { config } from '../config.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachments.js';
@@ -26,14 +27,14 @@ const sectionSchema = z.enum([
 const dateSchema = nullableDateInput;
 
 function safePath(segment) {
-  return String(segment).replace(/[^a-zA-Z0-9_-]/g, '');
+  return String(segment || '').replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
     const staffId = safePath(req.params.staffId);
     const section = safePath(req.params.section);
-    if (!staffId || !section) return cb(new Error('Invalid path'));
+    if (!staffId || !section) return cb(new Error('Invalid path parameters'));
     const dir = path.join(config.upload.dir, String(req.home.id), 'onboarding', staffId, section);
     mkdirSync(dir, { recursive: true });
     cb(null, dir);
@@ -173,13 +174,18 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
         await unlink(filePath).catch(() => {});
         return res.status(400).json({ error: 'File content does not match declared type' });
       }
+      const descriptionParsed = z.string().max(500).optional().safeParse(req.body.description);
+      if (!descriptionParsed.success) {
+        await unlink(filePath).catch(() => {});
+        return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
+      }
 
       const attachment = await onboardingAttachmentsRepo.create(req.home.id, staffIdParsed.data, sectionParsed.data, {
         original_name: req.file.originalname,
         stored_name: req.file.filename,
         mime_type: req.file.mimetype,
         size_bytes: req.file.size,
-        description: req.body.description || null,
+        description: descriptionParsed.data || null,
         uploaded_by: req.user.username,
       });
 
@@ -198,8 +204,8 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
 
 router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid ID' });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid ID' });
     const attachment = await onboardingAttachmentsRepo.findById(id, req.home.id);
     if (!attachment) return res.status(404).json({ error: 'File not found' });
 
@@ -208,22 +214,15 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       config.upload.dir,
       String(req.home.id),
       'onboarding',
-      attachment.staff_id,
-      attachment.section,
+      safePath(attachment.staff_id),
+      safePath(attachment.section),
       attachment.stored_name,
     ));
     if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
-
-    const safeName = attachment.original_name.replace(/["\r\n]/g, '_');
-    res.set({
-      'Content-Type': attachment.mime_type,
-      'Content-Disposition': `attachment; filename="${safeName}"`,
-      'Content-Length': attachment.size_bytes,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'DENY',
+    sendStoredDownload(res, next, filePath, {
+      originalName: attachment.original_name,
+      mimeType: attachment.mime_type,
     });
-    res.sendFile(filePath);
   } catch (err) { next(err); }
 });
 

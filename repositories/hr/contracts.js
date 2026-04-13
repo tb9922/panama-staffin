@@ -103,8 +103,9 @@ export async function updateContract(id, homeId, data, client, version) {
       fields.push(`${key} = $${params.length}`);
     }
   }
+  if (fields.length === 0) return findContractById(id, homeId, client);
   fields.push('version = version + 1');
-  if (fields.length === 1) return findContractById(id, homeId, client);
+  fields.push('updated_at = NOW()');
   let where = 'WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
   if (version != null) { params.push(version); where += ` AND version = $${params.length}`; }
   const { rows, rowCount } = await conn.query(

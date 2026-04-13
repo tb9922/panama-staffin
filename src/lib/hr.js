@@ -130,6 +130,16 @@ export const PERFORMANCE_TYPES = [
   { id: 'probation_concern', name: 'Probation Concern' },
 ];
 
+export const PERFORMANCE_AREAS = [
+  { id: 'clinical_competence', name: 'Clinical Competence' },
+  { id: 'communication', name: 'Communication' },
+  { id: 'attendance', name: 'Attendance' },
+  { id: 'teamwork', name: 'Teamwork' },
+  { id: 'documentation', name: 'Documentation' },
+  { id: 'compliance', name: 'Compliance' },
+  { id: 'other', name: 'Other' },
+];
+
 export const PERFORMANCE_STATUSES = [
   { id: 'open', name: 'Open', badgeKey: 'blue' },
   { id: 'informal', name: 'Informal Stage', badgeKey: 'blue' },
@@ -148,16 +158,15 @@ export const CONTRACT_TYPES = [
   { id: 'fixed_term', name: 'Fixed Term' },
   { id: 'zero_hours', name: 'Zero Hours' },
   { id: 'bank', name: 'Bank' },
-  { id: 'agency', name: 'Agency' },
-  { id: 'apprenticeship', name: 'Apprenticeship' },
+  { id: 'casual', name: 'Casual' },
 ];
 
 export const CONTRACT_STATUSES = [
   { id: 'active', name: 'Active', badgeKey: 'green' },
   { id: 'probation', name: 'Probation', badgeKey: 'amber' },
-  { id: 'notice', name: 'Notice Period', badgeKey: 'orange' },
+  { id: 'notice_period', name: 'Notice Period', badgeKey: 'orange' },
+  { id: 'suspended', name: 'Suspended', badgeKey: 'amber' },
   { id: 'terminated', name: 'Terminated', badgeKey: 'red' },
-  { id: 'expired', name: 'Expired', badgeKey: 'gray' },
 ];
 
 // ── Family Leave Types (ERA 2025 day-one rights) ─────────────────────────────
@@ -167,15 +176,17 @@ export const FAMILY_LEAVE_TYPES = [
   { id: 'paternity', name: 'Paternity Leave' },
   { id: 'shared_parental', name: 'Shared Parental Leave' },
   { id: 'adoption', name: 'Adoption Leave' },
-  { id: 'parental', name: 'Parental Leave (Unpaid)' },
-  { id: 'bereavement', name: 'Parental Bereavement' },
+  { id: 'parental_unpaid', name: 'Parental Leave (Unpaid)' },
+  { id: 'parental_bereavement', name: 'Parental Bereavement' },
   { id: 'neonatal', name: 'Neonatal Care Leave' },
 ];
 
 export const FAMILY_LEAVE_STATUSES = [
-  { id: 'planned', name: 'Planned', badgeKey: 'blue' },
+  { id: 'requested', name: 'Requested', badgeKey: 'blue' },
+  { id: 'approved', name: 'Approved', badgeKey: 'blue' },
   { id: 'active', name: 'Active', badgeKey: 'green' },
-  { id: 'ended', name: 'Ended', badgeKey: 'gray' },
+  { id: 'kit_day', name: 'KIT Day', badgeKey: 'amber' },
+  { id: 'returned', name: 'Returned', badgeKey: 'gray' },
   { id: 'cancelled', name: 'Cancelled', badgeKey: 'gray' },
 ];
 

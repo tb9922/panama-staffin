@@ -2,7 +2,7 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { createReadStream, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
@@ -18,6 +18,7 @@ import { computeCqcReadiness } from '../services/assessmentService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { config } from '../config.js';
 import { splitVersion } from '../lib/versionedPayload.js';
@@ -423,16 +424,10 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       att.stored_name
     ));
     if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
-    const safeName = att.original_name.replace(/["\r\n;]/g, '_');
-    res.set({
-      'Content-Type': att.mime_type,
-      'Content-Disposition': `attachment; filename="${safeName}"`,
-      'Content-Length': att.size_bytes,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'DENY',
+    sendStoredDownload(res, next, filePath, {
+      originalName: att.original_name,
+      mimeType: att.mime_type,
     });
-    createReadStream(filePath).pipe(res);
   } catch (err) {
     next(err);
   }

@@ -72,7 +72,9 @@ export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
  */
 export async function sync(homeId, incidentsArr, client) {
   const conn = client || pool;
-  if (!incidentsArr) return;
+  // An empty array often means the frontend has not loaded records yet.
+  // Treating that as "delete everything" is too destructive.
+  if (!incidentsArr || incidentsArr.length === 0) return;
 
   const incomingIds = incidentsArr.map(i => i.id);
 
@@ -198,18 +200,11 @@ export async function sync(homeId, incidentsArr, client) {
   }
 
   // Soft-delete records removed from the frontend (skip frozen records)
-  if (incomingIds.length > 0) {
-    await conn.query(
-      `UPDATE incidents SET deleted_at = NOW()
-       WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL AND frozen_at IS NULL`,
-      [homeId, incomingIds]
-    );
-  } else {
-    await conn.query(
-      `UPDATE incidents SET deleted_at = NOW() WHERE home_id = $1 AND deleted_at IS NULL AND frozen_at IS NULL`,
-      [homeId]
-    );
-  }
+  await conn.query(
+    `UPDATE incidents SET deleted_at = NOW()
+     WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL AND frozen_at IS NULL`,
+    [homeId, incomingIds]
+  );
 }
 
 // ── Incident freeze ────────────────────────────────────────────────────────────

@@ -7,8 +7,8 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
-import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
+import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance, getLoggedInUser } from '../lib/api.js';
+import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, PERFORMANCE_AREAS, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
@@ -33,6 +33,7 @@ const emptyForm = () => ({
   staff_id: '',
   date_raised: todayLocalISO(),
   type: 'capability',
+  performance_area: 'other',
   description: '',
   status: 'open',
   informal_notes: '',
@@ -114,6 +115,7 @@ export default function PerformanceTracker() {
       staff_id: item.staff_id || '',
       date_raised: item.date_raised || '',
       type: item.type || 'capability',
+      performance_area: item.performance_area || 'other',
       description: item.description || '',
       status: item.status || 'open',
       informal_notes: item.informal_notes || '',
@@ -139,6 +141,7 @@ export default function PerformanceTracker() {
     const missing = [];
     if (!form.staff_id) missing.push('Staff member');
     if (!form.date_raised) missing.push('Date raised');
+    if (!form.performance_area) missing.push('Performance area');
     if (missing.length) {
       setModalError(`Required fields missing: ${missing.join(', ')}`);
       return;
@@ -149,7 +152,10 @@ export default function PerformanceTracker() {
       if (editing) {
         await updateHrPerformance(editing.id, { ...form, _version: editing.version });
       } else {
-        await createHrPerformance(home, form);
+        await createHrPerformance(home, {
+          ...form,
+          raised_by: getLoggedInUser()?.username || 'system',
+        });
       }
       setShowModal(false);
       setForm(emptyForm());
@@ -316,6 +322,12 @@ export default function PerformanceTracker() {
                   <label className={INPUT.label}>Type</label>
                   <select className={INPUT.select} value={form.type} onChange={e => setField('type', e.target.value)}>
                     {PERFORMANCE_TYPES.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Performance Area *</label>
+                  <select className={INPUT.select} value={form.performance_area} onChange={e => setField('performance_area', e.target.value)}>
+                    {PERFORMANCE_AREAS.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
                 {editing && (

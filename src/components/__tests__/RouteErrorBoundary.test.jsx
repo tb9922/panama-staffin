@@ -7,6 +7,10 @@ function ThrowingComponent() {
   throw new Error('Route render error');
 }
 
+function ChunkThrowingComponent() {
+  throw new Error('Failed to fetch dynamically imported module');
+}
+
 // Component whose throw behaviour is controlled via a ref-like mutable flag
 // so we can reset it between renders without prop drilling.
 let shouldThrow = false;
@@ -55,6 +59,25 @@ describe('RouteErrorBoundary', () => {
       </RouteErrorBoundary>,
     );
     expect(screen.getByRole('button', { name: /Try again/i })).toBeInTheDocument();
+  });
+
+  it('shows a "Reload app" button in the error UI', () => {
+    render(
+      <RouteErrorBoundary>
+        <ThrowingComponent />
+      </RouteErrorBoundary>,
+    );
+    expect(screen.getByRole('button', { name: /Reload app/i })).toBeInTheDocument();
+  });
+
+  it('shows refresh guidance for stale lazy-load errors', () => {
+    render(
+      <RouteErrorBoundary>
+        <ChunkThrowingComponent />
+      </RouteErrorBoundary>,
+    );
+    expect(screen.getByText('This page needs a refresh')).toBeInTheDocument();
+    expect(screen.getByText(/app may have been updated while this tab was open/i)).toBeInTheDocument();
   });
 
   it('does not show the error UI when children render successfully', () => {
