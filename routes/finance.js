@@ -6,6 +6,7 @@ import * as financeService from '../services/financeService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 
@@ -525,8 +526,8 @@ router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireHo
 router.get('/dashboard', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const now = new Date();
-    const from = safeDate(req.query.from) || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
-    const to = safeDate(req.query.to) || now.toISOString().slice(0, 10);
+    const from = safeDate(req.query.from) || startOfLocalMonthISO(now);
+    const to = safeDate(req.query.to) || todayLocalISO(now);
     if (from > to) return res.status(400).json({ error: '"from" date must not be after "to" date' });
     res.json(await financeService.getFinanceDashboard(req.home.id, from, to));
   } catch (err) { next(err); }

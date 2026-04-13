@@ -39,6 +39,9 @@ export default function AppLayout() {
   }, [canManageUsers, canUseEvidenceHub, canRead, homeRole, isPlatformAdmin]);
 
   const visibleTopItems = NAV_TOP.filter(item => isNavItemVisible(item));
+  const activeTopItem = visibleTopItems.find(item =>
+    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+  ) || null;
 
   const allVisibleSections = NAV_SECTIONS
     .map(section => ({
@@ -80,6 +83,20 @@ export default function AppLayout() {
     })
     .filter(section => section.visibleItems.length > 0);
 
+  const activeSection = visibleSections.find(section =>
+    section.visibleItems.some(item =>
+      location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+    )
+  ) || null;
+
+  const activeSectionItem = activeSection?.visibleItems.find(item =>
+    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+  ) || null;
+
+  const activeHomeName = homes.find(h => h.id === activeHome)?.name || 'No home selected';
+  const activeNavLabel = activeTopItem?.label || activeSectionItem?.label || activeHomeName;
+  const activeNavSectionLabel = activeTopItem ? 'Workspace' : activeSection?.label || null;
+
   const visibleSectionIds = visibleSections.map(section => section.id);
   const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
   if (currentSectionId) {
@@ -93,8 +110,6 @@ export default function AppLayout() {
         : !!defaultExpandedSections[section.id],
     ]),
   );
-
-  const activeHomeName = homes.find(h => h.id === activeHome)?.name || 'No home selected';
 
   if (loading) return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50" role="status">
@@ -327,15 +342,38 @@ export default function AppLayout() {
         )}
       </aside>
 
-      <main id="main-content" className="relative flex-1 overflow-auto">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur print:hidden">
+      <main id="main-content" className="relative flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.98))]">
+        <div className="sticky top-0 z-20 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 bg-white/92 px-4 py-3 shadow-sm shadow-slate-100/60 backdrop-blur print:hidden">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">{activeHomeName}</p>
-            <p className="truncate text-xs text-slate-500">{user.displayName || user.username} - {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}</p>
+            {activeNavSectionLabel && (
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+                {activeNavSectionLabel}
+              </p>
+            )}
+            <p className="truncate text-base font-semibold text-slate-900">{activeNavLabel}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+                {user.displayName || user.username}
+              </span>
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+                {homes.find(h => h.id === activeHome)?.name}
+              </span>
+              <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}
+              </span>
+            </div>
+            <p className="truncate text-xs text-slate-500">Workspace overview and alerts for the current home.</p>
           </div>
           <button
             type="button"
-            className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
+            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
+            onClick={() => setChangePwOpen(true)}
+          >
+            Password
+          </button>
+          <button
+            type="button"
+            className="relative ml-2 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
             onClick={() => setNotificationOpen(current => !current)}
             aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
           >
@@ -352,7 +390,7 @@ export default function AppLayout() {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {getRoleLabel(homeRole)} - some features may be read-only or hidden
+            {getRoleLabel(homeRole)} workspace - some tools are read-only or hidden for this role
           </div>
         )}
         {error && (

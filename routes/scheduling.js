@@ -16,6 +16,7 @@ import {
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
 } from '../shared/rotation.js';
 import { isOwnDataOnly } from '../shared/roles.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 
@@ -133,9 +134,8 @@ const TRAINING_BLOCKING_CARE_ROLES = new Set([
 ]);
 const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
 
-function getUtcTodayStr() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString().slice(0, 10);
+function getTodayStr() {
+  return todayLocalISO();
 }
 
 function isValidIsoDateOnly(value) {
@@ -151,7 +151,7 @@ function assertEditLock(req, config, dates) {
   const expectedPin = String(config?.edit_lock_pin || '');
   if (!expectedPin) return;
 
-  const lockedDates = [...new Set(dates.filter(date => date < getUtcTodayStr()))];
+  const lockedDates = [...new Set(dates.filter(date => date < getTodayStr()))];
   if (lockedDates.length === 0) return;
 
   if (String(req.get('X-Edit-Lock-Pin') || '') === expectedPin) return;
@@ -195,7 +195,7 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
   if (!trainingTypes?.length) return null;
 
   const conn = client || pool;
-  const effectiveDateStr = effectiveDate || getUtcTodayStr();
+  const effectiveDateStr = effectiveDate || getTodayStr();
 
   // Get staff role/name + latest expiry per blocking type in a single query.
   // NULL expiry (never-expiring training) is mapped to '9999-12-31' so it never triggers blocking.
@@ -248,8 +248,9 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     if (requestedTo && !isValidIsoDateOnly(requestedTo)) {
       return res.status(400).json({ error: 'Invalid to date' });
     }
-    const fromDate = requestedFrom || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
-    const toDate = requestedTo || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
+    const today = todayLocalISO(now);
+    const fromDate = requestedFrom || addDaysLocalISO(today, -90);
+    const toDate = requestedTo || addDaysLocalISO(today, 90);
     // Cap range to 400 days to prevent unbounded queries
     const daySpan = (new Date(toDate) - new Date(fromDate)) / 86400000;
     if (daySpan < 0 || daySpan > 400) {

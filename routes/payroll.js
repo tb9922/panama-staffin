@@ -36,6 +36,7 @@ import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
@@ -697,7 +698,7 @@ router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requi
 router.get('/pension-config', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     if (blockOwnDataRole(req, res, 'payroll')) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     const config = await pensionRepo.getPensionConfig(today);
     res.json(config || {});
   } catch (err) { next(err); }
