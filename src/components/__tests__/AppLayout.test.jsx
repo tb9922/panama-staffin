@@ -225,6 +225,10 @@ describe('AppLayout', () => {
     renderLayout({ username: 'viewer', role: 'viewer' });
     expect(screen.getByText('Scheduling')).toBeInTheDocument();
     expect(screen.getByText('System')).toBeInTheDocument();
+    expect(screen.getByText('Handover Book')).toBeInTheDocument();
+    expect(screen.getByText('Roster')).toBeInTheDocument();
+    expect(screen.queryByText('Daily Status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Scenarios')).not.toBeInTheDocument();
     expect(screen.queryByText('Staff')).not.toBeInTheDocument();
     expect(screen.queryByText('Finance')).not.toBeInTheDocument();
     expect(screen.queryByText('Compliance')).not.toBeInTheDocument();

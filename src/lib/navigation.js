@@ -196,6 +196,17 @@ const FOCUSED_SECTION_IDS_BY_ROLE = {
   viewer: ['scheduling', 'system'],
 };
 
+const FOCUSED_ITEM_PATHS_BY_ROLE = {
+  staff_member: {
+    scheduling: ['/handover', '/rotation', '/leave'],
+    payroll_ops: ['/payroll/monthly-timesheet'],
+  },
+  viewer: {
+    scheduling: ['/handover', '/rotation'],
+    system: ['/reports', '/evidence'],
+  },
+};
+
 const DEFAULT_EXPANDED_SECTION_IDS = {
   home_manager: ['home', 'scheduling'],
   deputy_manager: ['scheduling', 'staff'],
@@ -218,4 +229,8 @@ export function getDefaultExpandedSections(roleId, visibleSectionIds = [], isPla
 
 export function getFocusedSectionIds(roleId) {
   return FOCUSED_SECTION_IDS_BY_ROLE[roleId] || null;
+}
+
+export function getFocusedItemPaths(roleId) {
+  return FOCUSED_ITEM_PATHS_BY_ROLE[roleId] || null;
 }

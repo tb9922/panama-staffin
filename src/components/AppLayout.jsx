@@ -2,7 +2,7 @@ import { useCallback, useState, Suspense } from 'react';
 import { NavLink, Navigate, useLocation } from 'react-router-dom';
 import { changeOwnPassword } from '../lib/api.js';
 import { BTN, INPUT, MODAL } from '../lib/design.js';
-import { NAV_TOP, NAV_SECTIONS, getDefaultExpandedSections, getFocusedSectionIds } from '../lib/navigation.js';
+import { NAV_TOP, NAV_SECTIONS, getDefaultExpandedSections, getFocusedSectionIds, getFocusedItemPaths } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { useNotifications } from '../contexts/NotificationContext.jsx';
@@ -57,11 +57,28 @@ export default function AppLayout() {
   )?.id;
 
   const focusedSectionIds = getFocusedSectionIds(homeRole);
-  const visibleSections = !focusedSectionIds
+  const focusedItemPaths = getFocusedItemPaths(homeRole);
+  const visibleSections = (!focusedSectionIds
     ? allVisibleSections
     : allVisibleSections.filter(section =>
       focusedSectionIds.includes(section.id) || section.id === currentSectionId
-    );
+    ))
+    .map(section => {
+      const preferredPaths = focusedItemPaths?.[section.id];
+      if (!preferredPaths) return section;
+
+      const filteredItems = section.visibleItems.filter(item =>
+        preferredPaths.includes(item.path)
+        || location.pathname === item.path
+        || location.pathname.startsWith(`${item.path}/`)
+      );
+
+      return {
+        ...section,
+        visibleItems: filteredItems.length > 0 ? filteredItems : section.visibleItems,
+      };
+    })
+    .filter(section => section.visibleItems.length > 0);
 
   const visibleSectionIds = visibleSections.map(section => section.id);
   const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
