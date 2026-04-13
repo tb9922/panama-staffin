@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import {
   getCurrentHome, listUsersForHome, createUser, updateUser, resetUserPassword,
@@ -35,11 +39,11 @@ const ROLE_GROUPS = [
 export default function UserManagement() {
   const { isPlatformAdmin } = useAuth();
   const { homeRole } = useData();
+  const { showToast } = useToast();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const homeSlug = getCurrentHome();
 
   // Modal state
@@ -63,20 +67,25 @@ export default function UserManagement() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Clear success message after 4s
-  useEffect(() => {
-    if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 4000);
-    return () => clearTimeout(t);
-  }, [success]);
-
   // Group users by role hierarchy
   const grouped = ROLE_GROUPS.map(g => ({
     ...g,
     users: users.filter(u => g.roles.includes(u.role_id)),
   })).filter(g => g.users.length > 0);
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading users...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading users..." /></div>;
+
+  if (error && users.length === 0) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="User access needs attention"
+          message={error}
+          onRetry={() => void refresh()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -88,22 +97,18 @@ export default function UserManagement() {
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-lg border border-red-200 mb-4 flex justify-between items-center">
-          {error}
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs font-medium ml-4">Dismiss</button>
-        </div>
-      )}
-      {success && (
-        <div className="bg-emerald-50 text-emerald-700 text-sm px-4 py-2.5 rounded-lg border border-emerald-200 mb-4">
-          {success}
-        </div>
+        <ErrorState title="User action needs attention" message={error} onRetry={() => void refresh()} className="mb-4" />
       )}
 
       {users.length === 0 ? (
         <div className={CARD.padded}>
-          <p className="text-gray-400 text-sm text-center py-8">
-            No users assigned to this home.{canManageUsers ? ' Use Add User to create one.' : ''}
-          </p>
+          <EmptyState
+            title="No users assigned to this home yet"
+            description={canManageUsers ? 'Add the first user for this home to get started.' : 'A home manager or platform admin can assign users here.'}
+            actionLabel={canManageUsers ? 'Add User' : null}
+            onAction={canManageUsers ? () => setAddOpen(true) : null}
+            compact
+          />
         </div>
       ) : (
         <div className="space-y-4">
@@ -166,13 +171,13 @@ export default function UserManagement() {
         </div>
       )}
 
-      {addOpen && <AddUserModal homeSlug={homeSlug} onClose={() => setAddOpen(false)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
-      {editUser && <EditUserModal user={editUser} homeSlug={homeSlug} onClose={() => setEditUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />}
-      {resetPwUser && <ResetPasswordModal user={resetPwUser} homeSlug={homeSlug} onClose={() => setResetPwUser(null)} onSuccess={(msg) => { setSuccess(msg); }} />}
+      {addOpen && <AddUserModal homeSlug={homeSlug} onClose={() => setAddOpen(false)} onSuccess={(msg) => { showToast({ title: msg }); void refresh(); }} />}
+      {editUser && <EditUserModal user={editUser} homeSlug={homeSlug} onClose={() => setEditUser(null)} onSuccess={(msg) => { showToast({ title: msg }); void refresh(); }} />}
+      {resetPwUser && <ResetPasswordModal user={resetPwUser} homeSlug={homeSlug} onClose={() => setResetPwUser(null)} onSuccess={(msg) => { showToast({ title: msg }); }} />}
       {rolesUser && (
         isPlatformAdmin
-          ? <PlatformRolesModal user={rolesUser} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />
-          : <HomeRoleModal user={rolesUser} homeSlug={homeSlug} onClose={() => setRolesUser(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); }} />
+          ? <PlatformRolesModal user={rolesUser} onClose={() => setRolesUser(null)} onSuccess={(msg) => { showToast({ title: msg }); void refresh(); }} />
+          : <HomeRoleModal user={rolesUser} homeSlug={homeSlug} onClose={() => setRolesUser(null)} onSuccess={(msg) => { showToast({ title: msg }); void refresh(); }} />
       )}
     </div>
   );

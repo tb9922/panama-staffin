@@ -19,8 +19,12 @@ import {
 } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const SHIFTS = [
   { id: 'E', label: 'Early Shift' },
@@ -58,6 +62,7 @@ export default function HandoverNotes() {
   const { canWrite } = useData();
   const canEdit = canWrite('scheduling');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { showToast } = useToast();
   const slug = getCurrentHome();
   const todayStr = useLiveDate();
 
@@ -121,9 +126,11 @@ export default function HandoverNotes() {
         const body = { entry_date: dateStr, shift: form.shift, category: form.category, priority: form.priority, content: form.content.trim(), incident_id: form.incident_id || null };
         const created = await createHandoverEntry(slug, body);
         setEntries(prev => [...prev, created].sort(sortEntries));
+        showToast({ title: 'Handover entry added', message: SHIFTS.find(s => s.id === body.shift)?.label || body.shift });
       } else {
         const updated = await updateHandoverEntry(slug, editId, { content: form.content.trim(), priority: form.priority, _version: form._version });
         setEntries(prev => prev.map(e => e.id === editId ? updated : e));
+        showToast({ title: 'Handover entry updated', message: updated.author || 'Entry saved' });
       }
       closeModal();
     } catch (err) {
@@ -140,6 +147,7 @@ export default function HandoverNotes() {
     try {
       await deleteHandoverEntry(slug, id);
       setEntries(prev => prev.filter(e => e.id !== id));
+      showToast({ title: 'Handover entry deleted' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -153,6 +161,7 @@ export default function HandoverNotes() {
     try {
       const updated = await acknowledgeHandoverEntry(slug, id);
       setEntries(prev => prev.map(e => e.id === id ? updated : e));
+      showToast({ title: 'Handover entry acknowledged', message: updated.acknowledged_by || 'Acknowledged' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -211,13 +220,15 @@ export default function HandoverNotes() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center justify-between">
-          {error}
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs font-medium ml-3">Dismiss</button>
-        </div>
+        <ErrorState
+          title="Handover entry needs attention"
+          message={error}
+          onRetry={() => window.location.reload()}
+          className="mb-4"
+        />
       )}
 
-      {loading && <div className="text-sm text-gray-400 py-8 text-center">Loading...</div>}
+      {loading && <LoadingState message="Loading handover notes..." card compact />}
 
       {/* Shift sections */}
       {!loading && SHIFTS.map(shift => {
@@ -237,7 +248,15 @@ export default function HandoverNotes() {
             </div>
 
             {shiftEntries.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-gray-400 text-center">No handover entries for {shift.label.toLowerCase()}</div>
+              <div className="px-4 py-6">
+                <EmptyState
+                  title={`No ${shift.label.toLowerCase()} entries yet`}
+                  description={canEdit ? 'Start the handover with a note, risk, or update for the next shift.' : 'No notes have been handed over for this shift yet.'}
+                  actionLabel={canEdit ? 'Add Entry' : null}
+                  onAction={canEdit ? () => openAdd(shift.id) : null}
+                  compact
+                />
+              </div>
             ) : (
               <div className="divide-y divide-gray-50">
                 {CATEGORIES.map(cat => {

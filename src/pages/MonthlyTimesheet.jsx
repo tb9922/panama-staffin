@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
@@ -16,6 +19,7 @@ import {
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
@@ -70,9 +74,11 @@ export default function MonthlyTimesheet() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [entries, setEntries] = useState([]);
+  const [schedLoading, setSchedLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
 
   // Edit modal state
   const [editModal, setEditModal] = useState(null); // { row }
@@ -114,7 +120,22 @@ export default function MonthlyTimesheet() {
 
   useEffect(() => {
     if (!homeSlug) return;
-    getSchedulingData(homeSlug, { from: monthStart, to: monthEnd }).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+    let cancelled = false;
+    setSchedLoading(true);
+    getSchedulingData(homeSlug, { from: monthStart, to: monthEnd })
+      .then((data) => {
+        if (!cancelled) setSchedData(data);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setSchedData(null);
+          setError(e.message || 'Failed to load scheduling data');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSchedLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [homeSlug, monthStart, monthEnd]);
 
   // Fetch timesheet entries for staff + month
@@ -254,6 +275,7 @@ export default function MonthlyTimesheet() {
       });
       setEditModal(null);
       await fetchEntries();
+      showToast({ title: 'Timesheet updated', message: `${staff?.name || selectedStaffId} · ${editForm.date || editModal?.row?.dateStr}` });
     } catch (e) {
       setError(e.message || 'Failed to save entry');
     } finally {
@@ -268,6 +290,7 @@ export default function MonthlyTimesheet() {
     try {
       await approveTimesheet(homeSlug, entry.id);
       await fetchEntries();
+      showToast({ title: 'Timesheet approved', message: `${entry.staff_id} · ${entry.date}` });
     } catch (e) {
       setError(e.message || 'Failed to approve entry');
     } finally {
@@ -288,6 +311,7 @@ export default function MonthlyTimesheet() {
       await disputeTimesheet(homeSlug, disputeModal.entry.id, disputeReason.trim());
       setDisputeModal(null);
       await fetchEntries();
+      showToast({ title: 'Timesheet disputed', message: `${disputeModal.entry.staff_id} · ${disputeModal.entry.date}` });
     } catch (e) {
       setError(e.message || 'Failed to dispute entry');
     } finally {
@@ -317,6 +341,7 @@ export default function MonthlyTimesheet() {
         status: 'pending',
       });
       await fetchEntries();
+      showToast({ title: 'Missing day recorded', message: `${staff?.name || selectedStaffId} · ${row.dateStr}` });
     } catch (e) {
       setError(e.message || 'Failed to record entry');
     } finally {
@@ -359,6 +384,7 @@ export default function MonthlyTimesheet() {
       }
       await batchUpsertTimesheets(homeSlug, entriesToCreate);
       await fetchEntries();
+      showToast({ title: 'Missing days confirmed', message: `${entriesToCreate.length} day${entriesToCreate.length === 1 ? '' : 's'} copied from roster` });
     } catch (e) {
       setError(e.message || 'Failed to confirm entries');
     } finally {
@@ -376,6 +402,9 @@ export default function MonthlyTimesheet() {
         setError('No pending entries to approve');
       }
       await fetchEntries();
+      if (result.approved > 0) {
+        showToast({ title: 'Pending entries approved', message: `${result.approved} day${result.approved === 1 ? '' : 's'} for ${staff?.name || selectedStaffId}` });
+      }
     } catch (e) {
       setError(e.message || 'Failed to approve entries');
     } finally {
@@ -491,7 +520,21 @@ export default function MonthlyTimesheet() {
     return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes, editForm.date);
   }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.date, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
 
-  if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
+  if (schedLoading) {
+    return <div className={PAGE.container}><LoadingState message="Loading monthly timesheet..." /></div>;
+  }
+
+  if (!schedData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Timesheet data needs attention"
+          message={error || 'We could not load the monthly timesheet right now.'}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
 
   const monthName = new Date(year, month - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
@@ -564,10 +607,29 @@ export default function MonthlyTimesheet() {
         </div>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-4" role="alert">{error}</p>}
+      {error && (
+        <ErrorState
+          title="Some timesheet actions need attention"
+          message={error}
+          onRetry={() => void fetchEntries()}
+          className="mb-4"
+        />
+      )}
+
+      {activeStaff.length === 0 && (
+        <div className={`${CARD.padded} mb-4`}>
+          <EmptyState
+            title="No active staff available yet"
+            description="Add or reactivate staff records before using the monthly timesheet view."
+            actionLabel="Open Staff Database"
+            actionTo="/staff"
+            compact
+          />
+        </div>
+      )}
 
       {/* Action buttons */}
-      {canEdit && (
+      {canEdit && activeStaff.length > 0 && (
         <div className="flex gap-3 mb-4 print:hidden">
           <button
             className={BTN.secondary + ' ' + BTN.sm}
@@ -587,8 +649,8 @@ export default function MonthlyTimesheet() {
       )}
 
       {/* Monthly grid */}
-      {loading ? (
-        <p className="text-gray-400 py-8 text-center">Loading...</p>
+      {activeStaff.length === 0 ? null : loading ? (
+        <LoadingState message="Loading recorded timesheet entries..." card compact />
       ) : (
         <div className={CARD.flush + ' overflow-x-auto'}>
           <table className={TABLE.table}>

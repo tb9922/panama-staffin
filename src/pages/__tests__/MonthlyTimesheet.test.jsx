@@ -156,7 +156,7 @@ describe('MonthlyTimesheet', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getTimesheetPeriod.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<MonthlyTimesheet />);
-    expect(screen.getByText('Loading data...')).toBeInTheDocument();
+    expect(screen.getByText('Loading monthly timesheet...')).toBeInTheDocument();
   });
 
   it('loads scheduling data for the visible payroll month only', async () => {
@@ -173,14 +173,15 @@ describe('MonthlyTimesheet', () => {
     });
   });
 
-  it('stays on loading screen when scheduling data fails', async () => {
+  it('shows a retryable error state when scheduling data fails', async () => {
     api.getSchedulingData.mockRejectedValue(new Error('Server down'));
     api.getTimesheetPeriod.mockResolvedValue([]);
     renderWithProviders(<MonthlyTimesheet />);
-    // schedData stays null, so the component keeps showing the loading fallback
     await waitFor(() =>
-      expect(screen.getByText('Loading data...')).toBeInTheDocument()
+      expect(screen.getByText('Timesheet data needs attention')).toBeInTheDocument()
     );
+    expect(screen.getByText('Server down')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
   it('renders summary cards after data loads', async () => {

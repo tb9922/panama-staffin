@@ -2,9 +2,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import {
   getCurrentHome,
   getRopaActivities,
@@ -33,6 +37,7 @@ export default function RopaManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { showToast } = useToast();
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -74,8 +79,13 @@ export default function RopaManager() {
     }
     setSaving(true); setFormError('');
     try {
-      if (editing) await updateRopaActivity(home, editing.id, { ...form, _version: editing.version });
-      else await createRopaActivity(home, form);
+      if (editing) {
+        await updateRopaActivity(home, editing.id, { ...form, _version: editing.version });
+        showToast({ title: 'Processing activity updated', message: form.purpose });
+      } else {
+        await createRopaActivity(home, form);
+        showToast({ title: 'Processing activity added', message: form.purpose });
+      }
       closeModal(); load();
     } catch (e) { setFormError(e.message || 'Save failed'); }
     finally { setSaving(false); }
@@ -83,7 +93,11 @@ export default function RopaManager() {
 
   async function handleDelete(id) {
     if (!await confirm('Archive this processing activity?')) return;
-    try { await deleteRopaActivity(home, id); load(); }
+    try {
+      await deleteRopaActivity(home, id);
+      showToast({ title: 'Processing activity archived' });
+      load();
+    }
     catch (e) { setError(e.message); }
   }
 
@@ -93,7 +107,26 @@ export default function RopaManager() {
     review: items.filter(i => i.status === 'under_review').length,
   }), [items, total]);
 
-  if (!home) return <div className={PAGE.container}><p>Select a home</p></div>;
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="Select a home to review processing activities"
+          description="Choose a home to view the record of processing activities."
+        />
+      </div>
+    );
+  }
+
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading processing activities..." /></div>;
+
+  if (error && items.length === 0) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Processing register needs attention" message={error} onRetry={() => void load()} />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -105,7 +138,7 @@ export default function RopaManager() {
         {canEdit && <button className={BTN.primary} onClick={openNew}>+ Add Activity</button>}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {error && <ErrorState title="Processing activity needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className={CARD.padded}><p className="text-xs text-gray-500">Total Activities</p><p className="text-2xl font-bold">{stats.total}</p></div>

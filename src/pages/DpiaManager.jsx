@@ -2,9 +2,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import {
   getCurrentHome,
   getDpiaAssessments,
@@ -34,6 +38,7 @@ export default function DpiaManager() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { showToast } = useToast();
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -73,15 +78,24 @@ export default function DpiaManager() {
     }
     setSaving(true); setFormError('');
     try {
-      if (editing) await updateDpiaAssessment(home, editing.id, { ...form, _version: editing.version });
-      else await createDpiaAssessment(home, form);
+      if (editing) {
+        await updateDpiaAssessment(home, editing.id, { ...form, _version: editing.version });
+        showToast({ title: 'DPIA updated', message: form.title });
+      } else {
+        await createDpiaAssessment(home, form);
+        showToast({ title: 'DPIA created', message: form.title });
+      }
       closeModal(); load();
     } catch (e) { setFormError(e.message || 'Save failed'); }
     finally { setSaving(false); }
   }
 
   async function handleStatusChange(id, status, version) {
-    try { await updateDpiaAssessment(home, id, { status, _version: version }); load(); }
+    try {
+      await updateDpiaAssessment(home, id, { status, _version: version });
+      showToast({ title: 'DPIA status updated', message: STATUS_LABELS[status] || status });
+      load();
+    }
     catch (e) { setError(e.message); }
   }
 
@@ -89,6 +103,7 @@ export default function DpiaManager() {
     if (!await confirm('Archive this DPIA?')) return;
     try {
       await deleteDpiaAssessment(home, id);
+      showToast({ title: 'DPIA archived' });
       load();
     } catch (e) {
       setError(e.message);
@@ -101,7 +116,26 @@ export default function DpiaManager() {
     highRisk: items.filter(i => i.risk_level === 'high' || i.risk_level === 'very_high').length,
   }), [items, total]);
 
-  if (!home) return <div className={PAGE.container}><p>Select a home</p></div>;
+  if (!home) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="Select a home to review DPIAs"
+          description="Choose a home to view impact assessments, risks, and supporting evidence."
+        />
+      </div>
+    );
+  }
+
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading DPIAs..." /></div>;
+
+  if (error && items.length === 0) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="DPIA register needs attention" message={error} onRetry={() => void load()} />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -113,7 +147,7 @@ export default function DpiaManager() {
         {canEdit && <button className={BTN.primary} onClick={openNew}>+ New DPIA</button>}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {error && <ErrorState title="DPIA action needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className={CARD.padded}><p className="text-xs text-gray-500">Total DPIAs</p><p className="text-2xl font-bold">{stats.total}</p></div>

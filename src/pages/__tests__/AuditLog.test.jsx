@@ -37,7 +37,8 @@ describe('AuditLog', () => {
 
   it('renders the page heading', async () => {
     renderWithProviders(<AuditLog />);
-    expect(screen.getByText('Audit Log')).toBeInTheDocument();
+    expect(screen.getByText('Loading audit log...')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Audit Log')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText('login')).toBeInTheDocument());
   });
 
