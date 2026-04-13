@@ -146,7 +146,7 @@ describe('DolsTracker', () => {
     api.getDols.mockRejectedValue(new Error('Failed to load DoLS'));
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('Could not load DoLS or MCA records')).toBeInTheDocument();
+      expect(screen.getByText('Unable to load DoLS and MCA records')).toBeInTheDocument();
     });
     expect(screen.getByText('Failed to load DoLS')).toBeInTheDocument();
   });
@@ -183,7 +183,7 @@ describe('DolsTracker', () => {
     api.getDols.mockResolvedValue(EMPTY_RESPONSE);
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No DoLS/LPS records')).toBeInTheDocument();
+      expect(screen.getByText('No DoLS/LPS records yet')).toBeInTheDocument();
     });
   });
 
@@ -261,7 +261,7 @@ describe('DolsTracker', () => {
     await user.click(screen.getByRole('button', { name: /MCA Assessments/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('No MCA assessments recorded')).toBeInTheDocument();
+      expect(screen.getByText('No MCA assessments recorded yet')).toBeInTheDocument();
     });
   });
 

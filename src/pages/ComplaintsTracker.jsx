@@ -174,15 +174,17 @@ export default function ComplaintsTracker() {
   async function handleSave() {
     if (saving) return;
     if (!form.date || !form.title) return;
+    setSaveError(null);
     setSaving(true);
     try {
       if (editingId) {
         await updateComplaint(home, editingId, form);
+        showNotice('Complaint updated.');
       } else {
         await createComplaint(home, { ...form, reported_by: getLoggedInUser()?.username || 'admin' });
+        showNotice('Complaint logged.');
       }
       setShowModal(false);
-      showNotice(editingId ? 'Complaint updated.' : 'Complaint logged.');
       load();
     } catch (err) {
       setSaveError(err.message || 'Failed to save complaint');
@@ -193,11 +195,12 @@ export default function ComplaintsTracker() {
     if (saving) return;
     if (!editingId) return;
     if (!await confirm('Delete this complaint?')) return;
+    setSaveError(null);
     setSaving(true);
     try {
       await deleteComplaint(home, editingId);
       setShowModal(false);
-      showNotice('Complaint deleted.', { variant: 'warning' });
+      showNotice('Complaint deleted.');
       load();
     } catch (err) {
       setSaveError(err.message || 'Failed to delete complaint');
@@ -221,15 +224,17 @@ export default function ComplaintsTracker() {
   async function handleSaveSurvey() {
     if (saving) return;
     if (!surveyForm.date || !surveyForm.type) return;
+    setSurveyError(null);
     setSaving(true);
     try {
       if (editingSurveyId) {
         await updateComplaintSurvey(home, editingSurveyId, { ...surveyForm, _version: surveyForm._version });
+        showNotice('Survey updated.');
       } else {
         await createComplaintSurvey(home, surveyForm);
+        showNotice('Survey added.');
       }
       setShowSurveyModal(false);
-      showNotice(editingSurveyId ? 'Survey updated.' : 'Survey added.');
       load();
     } catch (err) {
       setSurveyError(err.message || 'Failed to save survey');
@@ -240,11 +245,12 @@ export default function ComplaintsTracker() {
     if (saving) return;
     if (!editingSurveyId) return;
     if (!await confirm('Delete this survey?')) return;
+    setSurveyError(null);
     setSaving(true);
     try {
       await deleteComplaintSurvey(home, editingSurveyId);
       setShowSurveyModal(false);
-      showNotice('Survey deleted.', { variant: 'warning' });
+      showNotice('Survey deleted.');
       load();
     } catch (err) {
       setSurveyError(err.message || 'Failed to delete survey');
@@ -287,13 +293,19 @@ export default function ComplaintsTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <ErrorState title="Could not load complaints" message={error} onRetry={load} />
+        <ErrorState title="Unable to load complaints" message={error} onRetry={load} />
       </div>
     );
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Complaints & Feedback</h1>
         <div className="flex gap-2">
@@ -311,12 +323,6 @@ export default function ComplaintsTracker() {
           )}
         </div>
       </div>
-
-      {notice && (
-        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
-          {notice.content}
-        </InlineNotice>
-      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -359,114 +365,118 @@ export default function ComplaintsTracker() {
           </div>
 
           {/* Complaints Table */}
-          {filtered.length === 0 ? (
-            <div className={CARD.padded}>
-              <EmptyState
-                title="No complaints recorded yet"
-                description={canEdit ? "Log the first complaint to start tracking response times and outcomes." : 'Complaints will appear here once they are recorded.'}
-                actionLabel={canEdit ? 'Log Complaint' : undefined}
-                onAction={canEdit ? openAdd : undefined}
-              />
-            </div>
-          ) : (
-            <div className={CARD.flush}>
-              <div className="overflow-x-auto">
-                <table className={TABLE.table}>
-                  <thead className={TABLE.thead}>
+          <div className={CARD.flush}>
+            <div className="overflow-x-auto">
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr>
+                    <th scope="col" className={TABLE.th}>Date</th>
+                    <th scope="col" className={TABLE.th}>Raised By</th>
+                    <th scope="col" className={TABLE.th}>Category</th>
+                    <th scope="col" className={TABLE.th}>Title</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
+                    <th scope="col" className={TABLE.th}>Deadline</th>
+                    <th scope="col" className={TABLE.th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 && (
                     <tr>
-                      <th scope="col" className={TABLE.th}>Date</th>
-                      <th scope="col" className={TABLE.th}>Raised By</th>
-                      <th scope="col" className={TABLE.th}>Category</th>
-                      <th scope="col" className={TABLE.th}>Title</th>
-                      <th scope="col" className={TABLE.th}>Status</th>
-                      <th scope="col" className={TABLE.th}>Deadline</th>
-                      <th scope="col" className={TABLE.th}></th>
+                      <td colSpan={7} className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No complaints recorded yet"
+                          description={canEdit ? 'Use "Log Complaint" to record the first complaint for this home.' : 'No complaints have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'Log Complaint' : undefined}
+                          onAction={canEdit ? openAdd : undefined}
+                        />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(c => {
-                      const cat = complaintCategories.find(cat => cat.id === c.category);
-                      const st = getComplaintStatus(c, COMPLAINT_CONFIG);
-                      return (
-                        <tr key={c.id} className={TABLE.tr}>
-                          <td className={TABLE.tdMono}>{c.date}</td>
-                          <td className={TABLE.td}>
-                            <div className="text-sm">{c.raised_by_name || '--'}</div>
-                            <div className="text-xs text-gray-400">{RAISED_BY_TYPES.find(r => r.id === c.raised_by)?.name || c.raised_by}</div>
-                          </td>
-                          <td className={TABLE.td}>{cat?.name || c.category}</td>
-                          <td className={TABLE.td}>
-                            <div className="text-sm font-medium max-w-xs truncate">{c.title || '--'}</div>
-                          </td>
-                          <td className={TABLE.td}>
-                            {statusBadge(c.status)}
-                            {st.isOverdueResponse && <span className={`${BADGE.red} ml-1`}>Overdue</span>}
-                          </td>
-                          <td className={TABLE.tdMono}>
-                            {c.response_deadline || '--'}
-                          </td>
-                          <td className={TABLE.td}>
-                            {canEdit && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                  {filtered.map(c => {
+                    const cat = complaintCategories.find(cat => cat.id === c.category);
+                    const st = getComplaintStatus(c, COMPLAINT_CONFIG);
+                    return (
+                      <tr key={c.id} className={TABLE.tr}>
+                        <td className={TABLE.tdMono}>{c.date}</td>
+                        <td className={TABLE.td}>
+                          <div className="text-sm">{c.raised_by_name || '--'}</div>
+                          <div className="text-xs text-gray-400">{RAISED_BY_TYPES.find(r => r.id === c.raised_by)?.name || c.raised_by}</div>
+                        </td>
+                        <td className={TABLE.td}>{cat?.name || c.category}</td>
+                        <td className={TABLE.td}>
+                          <div className="text-sm font-medium max-w-xs truncate">{c.title || '--'}</div>
+                        </td>
+                        <td className={TABLE.td}>
+                          {statusBadge(c.status)}
+                          {st.isOverdueResponse && <span className={`${BADGE.red} ml-1`}>Overdue</span>}
+                        </td>
+                        <td className={TABLE.tdMono}>
+                          {c.response_deadline || '--'}
+                        </td>
+                        <td className={TABLE.td}>
+                          {canEdit && <button onClick={() => openEdit(c)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </>
       ) : (
         <>
           {/* Surveys Table */}
-          {surveys.length === 0 ? (
-            <div className={CARD.padded}>
-              <EmptyState
-                title="No surveys recorded yet"
-                description={canEdit ? 'Add a survey to start tracking feedback and satisfaction trends.' : 'Survey results will appear here once they are recorded.'}
-                actionLabel={canEdit ? 'Add Survey' : undefined}
-                onAction={canEdit ? openAddSurvey : undefined}
-              />
-            </div>
-          ) : (
-            <div className={CARD.flush}>
-              <div className="overflow-x-auto">
-                <table className={TABLE.table}>
-                  <thead className={TABLE.thead}>
+          <div className={CARD.flush}>
+            <div className="overflow-x-auto">
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr>
+                    <th scope="col" className={TABLE.th}>Date</th>
+                    <th scope="col" className={TABLE.th}>Type</th>
+                    <th scope="col" className={TABLE.th}>Title</th>
+                    <th scope="col" className={TABLE.th}>Responses</th>
+                    <th scope="col" className={TABLE.th}>Satisfaction</th>
+                    <th scope="col" className={TABLE.th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {surveys.length === 0 && (
                     <tr>
-                      <th scope="col" className={TABLE.th}>Date</th>
-                      <th scope="col" className={TABLE.th}>Type</th>
-                      <th scope="col" className={TABLE.th}>Title</th>
-                      <th scope="col" className={TABLE.th}>Responses</th>
-                      <th scope="col" className={TABLE.th}>Satisfaction</th>
-                      <th scope="col" className={TABLE.th}></th>
+                      <td colSpan={6} className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No surveys recorded yet"
+                          description={canEdit ? 'Add a survey when you are ready to capture resident or relative feedback.' : 'No surveys have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'Add Survey' : undefined}
+                          onAction={canEdit ? openAddSurvey : undefined}
+                        />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {[...surveys].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => (
-                      <tr key={s.id} className={TABLE.tr}>
-                        <td className={TABLE.tdMono}>{s.date}</td>
-                        <td className={TABLE.td}>{SURVEY_TYPES.find(t => t.id === s.type)?.name || s.type}</td>
-                        <td className={TABLE.td}>{s.title || '--'}</td>
-                        <td className={TABLE.td}>{s.responses || 0}/{s.total_sent || 0}</td>
-                        <td className={TABLE.td}>
-                          {s.overall_satisfaction ? (
-                            <span className={BADGE[s.overall_satisfaction >= 4 ? 'green' : s.overall_satisfaction >= 3 ? 'amber' : 'red']}>
-                              {s.overall_satisfaction}/5
-                            </span>
-                          ) : '--'}
-                        </td>
-                        <td className={TABLE.td}>
-                          {canEdit && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                  {[...surveys].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => (
+                    <tr key={s.id} className={TABLE.tr}>
+                      <td className={TABLE.tdMono}>{s.date}</td>
+                      <td className={TABLE.td}>{SURVEY_TYPES.find(t => t.id === s.type)?.name || s.type}</td>
+                      <td className={TABLE.td}>{s.title || '--'}</td>
+                      <td className={TABLE.td}>{s.responses || 0}/{s.total_sent || 0}</td>
+                      <td className={TABLE.td}>
+                        {s.overall_satisfaction ? (
+                          <span className={BADGE[s.overall_satisfaction >= 4 ? 'green' : s.overall_satisfaction >= 3 ? 'amber' : 'red']}>
+                            {s.overall_satisfaction}/5
+                          </span>
+                        ) : '--'}
+                      </td>
+                      <td className={TABLE.td}>
+                        {canEdit && <button onClick={() => openEditSurvey(s)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </>
       )}
 
