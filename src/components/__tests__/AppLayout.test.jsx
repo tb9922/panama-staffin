@@ -95,10 +95,10 @@ function mockNotifications(overrides = {}) {
   });
 }
 
-function renderLayout(userOption = {}) {
+function renderLayout(userOption = {}, options = {}) {
   // renderWithProviders wraps in AuthProvider + RouterProvider.
   // Since we mock useAuth/useData, the providers are pass-through.
-  return renderWithProviders(<AppLayout />, { user: userOption });
+  return renderWithProviders(<AppLayout />, { user: userOption, ...options });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -257,6 +257,11 @@ describe('AppLayout', () => {
     renderLayout({ username: 'mystery', role: 'viewer' });
     fireEvent.click(screen.getByRole('button', { name: 'System' }));
     expect(screen.queryByRole('link', { name: 'Evidence Hub' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the current route section expanded when landing on a nested page', () => {
+    renderLayout({}, { route: '/policies' });
+    expect(screen.getByRole('link', { name: 'Policies' })).toBeInTheDocument();
   });
 
   // 8. Platform section only visible to platform admin

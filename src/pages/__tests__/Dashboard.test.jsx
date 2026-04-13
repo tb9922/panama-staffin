@@ -173,15 +173,18 @@ describe('Dashboard', () => {
     expect(screen.getByText('Annual proj:')).toBeInTheDocument();
   });
 
-  it('viewer with finance read access sees cost summary figures', async () => {
+  it('viewer lands on the read-only workspace instead of the operations dashboard', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
-      expect(screen.getByText('Cost Summary (28-day)')).toBeInTheDocument()
+      expect(screen.getByText('Read-Only Workspace')).toBeInTheDocument()
     );
-    expect(screen.getByText('This cycle:')).toBeInTheDocument();
-    expect(screen.getByText('Monthly proj:')).toBeInTheDocument();
+    expect(screen.getByText('Pinned Tools')).toBeInTheDocument();
+    expect(screen.getByText('Roster')).toBeInTheDocument();
+    expect(screen.getByText('Reports')).toBeInTheDocument();
+    expect(screen.queryByText('Cost Summary (28-day)')).not.toBeInTheDocument();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('shows an error message when the scheduling API call fails', async () => {
@@ -284,9 +287,11 @@ describe('Dashboard', () => {
     renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
-      expect(screen.getByText('Alerts')).toBeInTheDocument()
+      expect(screen.getByText('Read-Only Workspace')).toBeInTheDocument()
     );
     expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alerts')).not.toBeInTheDocument();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 
   it('renders the coverage heatmap legend', async () => {
@@ -339,9 +344,29 @@ describe('Dashboard', () => {
     renderDashboard({ username: 'staff', role: 'staff_member' });
 
     await waitFor(() =>
-      expect(screen.getByText('Dashboard is not available for staff self-service accounts.')).toBeInTheDocument()
+      expect(screen.getByText('My Workspace')).toBeInTheDocument()
     );
+    expect(screen.getByText('My Rota')).toBeInTheDocument();
+    expect(screen.getByText('My Hours')).toBeInTheDocument();
     expect(api.getSchedulingData).not.toHaveBeenCalled();
     expect(api.getDashboardSummary).not.toHaveBeenCalled();
+  });
+
+  it('shows a finance workspace instead of the operations dashboard for finance officers', async () => {
+    useData.mockReturnValue({
+      canRead: module => ['finance', 'payroll'].includes(module),
+      canWrite: () => true,
+      homeRole: 'finance_officer',
+      staffId: null,
+    });
+
+    renderDashboard({ username: 'finance', role: 'viewer' });
+
+    await waitFor(() =>
+      expect(screen.getByText('Finance Workspace')).toBeInTheDocument()
+    );
+    expect(screen.getByText('Income & Billing')).toBeInTheDocument();
+    expect(screen.getByText('Timesheets')).toBeInTheDocument();
+    expect(api.getSchedulingData).not.toHaveBeenCalled();
   });
 });

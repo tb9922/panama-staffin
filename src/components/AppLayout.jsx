@@ -52,6 +52,14 @@ export default function AppLayout() {
 
   const visibleSectionIds = visibleSections.map(section => section.id);
   const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
+  const currentSectionId = visibleSections.find(section =>
+    section.visibleItems.some(item =>
+      location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+    )
+  )?.id;
+  if (currentSectionId) {
+    defaultExpandedSections[currentSectionId] = true;
+  }
   const expandedSections = Object.fromEntries(
     visibleSections.map(section => [
       section.id,

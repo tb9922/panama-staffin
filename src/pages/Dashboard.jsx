@@ -9,7 +9,7 @@ import { getHrAlerts } from '../lib/hr.js';
 import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, isAbortLikeError } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { startOfNextLocalDay } from '../lib/localDates.js';
-import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
+import { CARD, BADGE, BTN, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
@@ -24,6 +24,113 @@ function withPriority(alert, priority = null) {
     ...alert,
     priority: alert.priority ?? priority ?? DEFAULT_PRIORITY[alert.type] ?? 1,
   };
+}
+
+const WORKSPACE_ROLES = new Set(['staff_member', 'finance_officer', 'training_lead', 'hr_officer', 'viewer']);
+
+const ROLE_WORKSPACE_CONFIG = {
+  staff_member: {
+    title: 'My Workspace',
+    subtitle: 'Everything you need for your own shifts, leave, handover, and pay view is gathered here.',
+    tone: 'blue',
+    cards: [
+      { path: '/rotation', label: 'My Rota', description: 'Check your upcoming shifts and any rota changes.', module: 'scheduling' },
+      { path: '/leave', label: 'My Leave', description: 'Review leave requests and upcoming time off.', module: 'scheduling' },
+      { path: '/handover', label: 'My Handover', description: 'Read and update your own handover notes safely.', module: 'scheduling' },
+      { path: '/payroll/monthly-timesheet', label: 'My Hours', description: 'Review your monthly hours and payroll-ready view.', module: 'payroll' },
+    ],
+  },
+  finance_officer: {
+    title: 'Finance Workspace',
+    subtitle: 'Your core billing, collections, payables, and payroll tools are front and centre here.',
+    tone: 'emerald',
+    cards: [
+      { path: '/finance', label: 'Finance Dashboard', description: 'Start with the headline finance position for the home.', module: 'finance' },
+      { path: '/finance/income', label: 'Income & Billing', description: 'Manage resident charges, fee history, and billing notes.', module: 'finance' },
+      { path: '/finance/receivables', label: 'Receivables', description: 'Follow outstanding balances and incoming payments.', module: 'finance' },
+      { path: '/finance/payables', label: 'Payables', description: 'Track supplier liabilities and payment status.', module: 'finance' },
+      { path: '/payroll', label: 'Payroll Runs', description: 'Move through payroll runs and final approvals.', module: 'payroll' },
+      { path: '/payroll/timesheets', label: 'Timesheets', description: 'Cross-check hours before payroll is calculated.', module: 'payroll' },
+    ],
+  },
+  training_lead: {
+    title: 'Learning Workspace',
+    subtitle: 'Keep onboarding, training, and evidence tasks together in one place.',
+    tone: 'purple',
+    cards: [
+      { path: '/training', label: 'Training', description: 'Monitor expiry, compliance, and individual training records.', module: 'compliance' },
+      { path: '/care-cert', label: 'Care Certificate', description: 'Track care certificate progress and evidence.', module: 'compliance' },
+      { path: '/onboarding', label: 'Onboarding', description: 'Finish new-starter checks and missing onboarding steps.', module: 'compliance' },
+      { path: '/cqc', label: 'CQC Evidence', description: 'Link training evidence into the wider compliance picture.', module: 'compliance' },
+    ],
+  },
+  hr_officer: {
+    title: 'HR Workspace',
+    subtitle: 'People cases, contracts, absence, and renewals are grouped here so the handoffs feel tighter.',
+    tone: 'amber',
+    cards: [
+      { path: '/hr', label: 'HR Dashboard', description: 'Start from the HR overview and current case load.', module: 'hr' },
+      { path: '/hr/absence', label: 'Absence', description: 'Manage sickness, return-to-work, and OH follow-up.', module: 'hr' },
+      { path: '/hr/contracts', label: 'Contracts', description: 'Review contract changes and issued paperwork.', module: 'hr' },
+      { path: '/hr/family-leave', label: 'Family Leave', description: 'Track statutory family leave cases and pay type.', module: 'hr' },
+      { path: '/hr/renewals', label: 'DBS & RTW', description: 'Stay ahead of renewal and right-to-work deadlines.', module: 'hr' },
+    ],
+  },
+  viewer: {
+    title: 'Read-Only Workspace',
+    subtitle: 'Quick links to the parts of the home you can review without editing anything.',
+    tone: 'slate',
+    cards: [
+      { path: '/rotation', label: 'Roster', description: 'View the rota without stepping into edit-heavy tools.', module: 'scheduling' },
+      { path: '/handover', label: 'Handover Book', description: 'Read the latest handover context and updates.', module: 'scheduling' },
+      { path: '/reports', label: 'Reports', description: 'Jump straight into reporting and exported summaries.', module: 'reports' },
+    ],
+  },
+};
+
+function getWorkspaceToneClasses(tone) {
+  switch (tone) {
+    case 'emerald':
+      return {
+        hero: 'border-emerald-200 bg-emerald-50',
+        eyebrow: 'text-emerald-700',
+        icon: 'bg-emerald-100 text-emerald-700',
+        accent: 'border-emerald-200',
+        button: BTN.success,
+      };
+    case 'purple':
+      return {
+        hero: 'border-purple-200 bg-purple-50',
+        eyebrow: 'text-purple-700',
+        icon: 'bg-purple-100 text-purple-700',
+        accent: 'border-purple-200',
+        button: `${BTN.secondary} border-purple-200 text-purple-700 hover:bg-purple-50`,
+      };
+    case 'amber':
+      return {
+        hero: 'border-amber-200 bg-amber-50',
+        eyebrow: 'text-amber-700',
+        icon: 'bg-amber-100 text-amber-700',
+        accent: 'border-amber-200',
+        button: `${BTN.secondary} border-amber-200 text-amber-700 hover:bg-amber-50`,
+      };
+    case 'slate':
+      return {
+        hero: 'border-slate-200 bg-slate-50',
+        eyebrow: 'text-slate-700',
+        icon: 'bg-slate-200 text-slate-700',
+        accent: 'border-slate-200',
+        button: BTN.secondary,
+      };
+    default:
+      return {
+        hero: 'border-blue-200 bg-blue-50',
+        eyebrow: 'text-blue-700',
+        icon: 'bg-blue-100 text-blue-700',
+        accent: 'border-blue-200',
+        button: BTN.primary,
+      };
+  }
 }
 
 function CoverageGauge({ period, cov }) {
@@ -69,14 +176,14 @@ export default function Dashboard() {
   const { homeRole } = useData();
   const [schedState, setSchedState] = useState({ homeSlug: null, data: null, error: null });
   const homeSlug = getCurrentHome();
-  const isOwnDataDashboard = homeRole === 'staff_member';
+  const usesWorkspaceHome = WORKSPACE_ROLES.has(homeRole);
   const scopedSchedState = schedState.homeSlug === homeSlug ? schedState : { homeSlug: null, data: null, error: null };
   const schedData = scopedSchedState.data;
   const error = scopedSchedState.error;
-  const loading = Boolean(homeSlug && !isOwnDataDashboard && !schedData && !error);
+  const loading = Boolean(homeSlug && !usesWorkspaceHome && !schedData && !error);
 
   useEffect(() => {
-    if (!homeSlug || isOwnDataDashboard) return undefined;
+    if (!homeSlug || usesWorkspaceHome) return undefined;
     let cancelled = false;
     const controller = new AbortController();
     getSchedulingData(homeSlug, { signal: controller.signal })
@@ -93,7 +200,7 @@ export default function Dashboard() {
       cancelled = true;
       controller.abort();
     };
-  }, [homeSlug, isOwnDataDashboard]);
+  }, [homeSlug, usesWorkspaceHome]);
 
   if (!homeSlug) {
     return (
@@ -106,21 +213,80 @@ export default function Dashboard() {
     );
   }
 
-  if (isOwnDataDashboard) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-sm text-gray-500">Dashboard is not available for staff self-service accounts.</p>
-        </div>
-      </div>
-    );
-  }
+  if (usesWorkspaceHome) return <RoleWorkspaceHome roleId={homeRole} />;
 
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
   if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
 
   return <DashboardInner schedData={schedData} />;
+}
+
+function RoleWorkspaceHome({ roleId }) {
+  const navigate = useNavigate();
+  const { canRead } = useData();
+  const config = ROLE_WORKSPACE_CONFIG[roleId] || ROLE_WORKSPACE_CONFIG.viewer;
+  const tone = getWorkspaceToneClasses(config.tone);
+  const visibleCards = config.cards.filter(card => !card.module || canRead(card.module));
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <section className={`${CARD.padded} ${tone.hero}`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-3xl">
+            <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone.eyebrow}`}>Role Workspace</p>
+            <h1 className="mt-2 text-2xl font-bold text-gray-900">{config.title}</h1>
+            <p className="mt-2 text-sm text-gray-600">{config.subtitle}</p>
+          </div>
+          <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3 text-sm text-gray-600 shadow-sm">
+            <p className="font-semibold text-gray-900">Start here</p>
+            <p className="mt-1 max-w-xs">Use these pinned tools to jump straight into the parts of the app that match your role instead of landing on the operations dashboard.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Pinned Tools</h2>
+            <p className="text-sm text-gray-500">The links below stay intentionally focused so the workspace feels lighter than the full sidebar.</p>
+          </div>
+          <span className={BADGE.gray}>{visibleCards.length} shortcuts</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleCards.map(card => (
+            <button
+              key={card.path}
+              type="button"
+              onClick={() => navigate(card.path)}
+              className={`${CARD.padded} ${tone.accent} text-left transition hover:-translate-y-0.5 hover:shadow-md`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">{card.label}</h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-600">{card.description}</p>
+                </div>
+                <span className={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${tone.icon}`}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </div>
+              <div className="mt-5">
+                <span className={`${tone.button} ${BTN.sm}`}>Open {card.label}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className={CARD.padded}>
+        <h2 className="text-base font-semibold text-gray-900">What changed</h2>
+        <p className="mt-2 text-sm text-gray-600">
+          This dashboard is now role-aware. We keep the full operational dashboard for management roles, and give everyone else a faster workspace home so the app feels clearer from the first click.
+        </p>
+      </section>
+    </div>
+  );
 }
 
 function DashboardInner({ schedData }) {
