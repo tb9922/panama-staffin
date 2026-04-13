@@ -197,6 +197,39 @@ describe('AppLayout', () => {
     expect(screen.queryByText('Finance')).not.toBeInTheDocument();
   });
 
+  it('finance officer sees a focused finance-first sidebar', () => {
+    mockAuth({ user: { username: 'finance', role: 'viewer', displayName: 'Finance User' }, isViewer: false, isPlatformAdmin: false });
+    mockData({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'finance_officer',
+    });
+    renderLayout({ username: 'finance', role: 'viewer' });
+    expect(screen.getByText('Home')).toBeInTheDocument();
+    expect(screen.getByText('Finance')).toBeInTheDocument();
+    expect(screen.getByText('Payroll')).toBeInTheDocument();
+    expect(screen.getByText('Statutory')).toBeInTheDocument();
+    expect(screen.getByText('System')).toBeInTheDocument();
+    expect(screen.queryByText('Scheduling')).not.toBeInTheDocument();
+    expect(screen.queryByText('Compliance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Governance')).not.toBeInTheDocument();
+  });
+
+  it('viewer sees a lighter read-only sidebar by default', () => {
+    mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
+    mockData({
+      canRead: () => true,
+      canWrite: () => false,
+      homeRole: 'viewer',
+    });
+    renderLayout({ username: 'viewer', role: 'viewer' });
+    expect(screen.getByText('Scheduling')).toBeInTheDocument();
+    expect(screen.getByText('System')).toBeInTheDocument();
+    expect(screen.queryByText('Staff')).not.toBeInTheDocument();
+    expect(screen.queryByText('Finance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Compliance')).not.toBeInTheDocument();
+  });
+
   it('staff_member only sees audited own-data-safe links', () => {
     mockAuth({ user: { username: 'staff', role: 'viewer', displayName: 'Staff User' }, isViewer: false, isPlatformAdmin: false });
     mockData({
@@ -262,6 +295,18 @@ describe('AppLayout', () => {
   it('keeps the current route section expanded when landing on a nested page', () => {
     renderLayout({}, { route: '/policies' });
     expect(screen.getByRole('link', { name: 'Policies' })).toBeInTheDocument();
+  });
+
+  it('keeps the current route section visible even when the sidebar is otherwise focused elsewhere', () => {
+    mockAuth({ user: { username: 'finance', role: 'viewer', displayName: 'Finance User' }, isViewer: false, isPlatformAdmin: false });
+    mockData({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'finance_officer',
+    });
+    renderLayout({ username: 'finance', role: 'viewer' }, { route: '/handover' });
+    expect(screen.getByText('Scheduling')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Handover Book' })).toBeInTheDocument();
   });
 
   // 8. Platform section only visible to platform admin

@@ -188,6 +188,14 @@ export const NAV_SECTIONS = [
   },
 ];
 
+const FOCUSED_SECTION_IDS_BY_ROLE = {
+  staff_member: ['scheduling', 'payroll_ops'],
+  finance_officer: ['home', 'finance', 'payroll_ops', 'payroll_statutory', 'system'],
+  training_lead: ['staff', 'compliance', 'system'],
+  hr_officer: ['staff', 'hr_cases', 'hr_admin', 'system'],
+  viewer: ['scheduling', 'system'],
+};
+
 const DEFAULT_EXPANDED_SECTION_IDS = {
   home_manager: ['home', 'scheduling'],
   deputy_manager: ['scheduling', 'staff'],
@@ -206,4 +214,8 @@ export function getDefaultExpandedSections(roleId, visibleSectionIds = [], isPla
   const selected = preferred.filter(id => visibleSectionIds.includes(id)).slice(0, 2);
   const fallback = visibleSectionIds.filter(id => !selected.includes(id)).slice(0, Math.max(0, 2 - selected.length));
   return Object.fromEntries([...selected, ...fallback].map(id => [id, true]));
+}
+
+export function getFocusedSectionIds(roleId) {
+  return FOCUSED_SECTION_IDS_BY_ROLE[roleId] || null;
 }

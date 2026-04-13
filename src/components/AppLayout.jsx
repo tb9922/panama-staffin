@@ -2,7 +2,7 @@ import { useCallback, useState, Suspense } from 'react';
 import { NavLink, Navigate, useLocation } from 'react-router-dom';
 import { changeOwnPassword } from '../lib/api.js';
 import { BTN, INPUT, MODAL } from '../lib/design.js';
-import { NAV_TOP, NAV_SECTIONS, getDefaultExpandedSections } from '../lib/navigation.js';
+import { NAV_TOP, NAV_SECTIONS, getDefaultExpandedSections, getFocusedSectionIds } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { useNotifications } from '../contexts/NotificationContext.jsx';
@@ -40,7 +40,7 @@ export default function AppLayout() {
 
   const visibleTopItems = NAV_TOP.filter(item => isNavItemVisible(item));
 
-  const visibleSections = NAV_SECTIONS
+  const allVisibleSections = NAV_SECTIONS
     .map(section => ({
       ...section,
       visibleItems: (section.items || []).filter(item => isNavItemVisible(item, section.module)),
@@ -50,13 +50,21 @@ export default function AppLayout() {
       return section.visibleItems.length > 0;
     });
 
-  const visibleSectionIds = visibleSections.map(section => section.id);
-  const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
-  const currentSectionId = visibleSections.find(section =>
+  const currentSectionId = allVisibleSections.find(section =>
     section.visibleItems.some(item =>
       location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
     )
   )?.id;
+
+  const focusedSectionIds = getFocusedSectionIds(homeRole);
+  const visibleSections = !focusedSectionIds
+    ? allVisibleSections
+    : allVisibleSections.filter(section =>
+      focusedSectionIds.includes(section.id) || section.id === currentSectionId
+    );
+
+  const visibleSectionIds = visibleSections.map(section => section.id);
+  const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
   if (currentSectionId) {
     defaultExpandedSections[currentSectionId] = true;
   }
