@@ -6,6 +6,10 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getSchedulingData, getTrainingData,
@@ -26,6 +30,7 @@ import {
 import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
 import { getAllEvidenceCategories, getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
@@ -220,6 +225,7 @@ export default function CQCEvidence() {
   const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!homeSlug) return;
@@ -266,13 +272,37 @@ export default function CQCEvidence() {
         mca_assessments: dols.mcaAssessments || [],
         care_certificate: cc.careCert || {},
       });
-    }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [homeSlug]);
+      setError(null);
+    }).catch((e) => {
+      if (!cancelled) setError(e.message || 'Failed to load CQC data');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
-  if (error || !moduleData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load CQC data'}</div>;
+    return () => { cancelled = true; };
+  }, [homeSlug, refreshKey]);
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading CQC data..." />
+      </div>
+    );
+  }
+  if (error || !moduleData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Unable to load CQC evidence"
+          message={error || 'Failed to load CQC data'}
+          onRetry={() => {
+            setLoading(true);
+            setRefreshKey((value) => value + 1);
+          }}
+        />
+      </div>
+    );
+  }
 
   return <CQCEvidenceInner data={moduleData} />;
 }
@@ -281,6 +311,7 @@ function CQCEvidenceInner({ data }) {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { showToast } = useToast();
   const isMounted = useRef(true);
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
@@ -426,6 +457,10 @@ function CQCEvidenceInner({ data }) {
     try {
       await createSnapshot(home, 'cqc', formatDate(dateRange.from), formatDate(dateRange.to));
       await loadSnapshots();
+      showToast({
+        title: 'Snapshot saved',
+        message: 'The current CQC evidence and readiness state has been frozen for review.',
+      });
     } catch (e) {
       if (e?.status === 409 && /identical snapshot/i.test(e.message || '')) {
         await loadSnapshots();
@@ -457,6 +492,10 @@ function CQCEvidenceInner({ data }) {
         const snap = await getSnapshot(home, id);
         setViewingSnapshot(snap);
       }
+      showToast({
+        title: 'Snapshot signed off',
+        message: 'The selected CQC snapshot is now independently signed off.',
+      });
     } catch (e) { setSnapshotError(e.message); }
   }
 
@@ -537,7 +576,11 @@ function CQCEvidenceInner({ data }) {
   }, [observations]);
 
   if (!data?.config || !score) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Preparing the CQC evidence workspace..." />
+      </div>
+    );
   }
 
   const bandColorMap = { green: 'emerald', amber: 'amber', red: 'red' };
@@ -799,6 +842,10 @@ function CQCEvidenceInner({ data }) {
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
       generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
       logReportDownload('cqc-evidence', `${dateRangeDays} days`);
+      showToast({
+        title: 'Evidence pack export started',
+        message: 'The live CQC evidence pack PDF is being generated.',
+      });
     } catch (err) {
       setPdfError('Failed to generate PDF: ' + err.message);
     } finally {
@@ -823,6 +870,10 @@ function CQCEvidenceInner({ data }) {
       headers: ['CQC Ref', 'Statement', 'Type', 'Title', 'Value', 'Detail', 'Source / Date Range'],
       rows,
     }]);
+    showToast({
+      title: 'Excel export started',
+      message: 'The CQC evidence workbook is downloading.',
+    });
   }
 
   const categories = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
@@ -847,13 +898,13 @@ function CQCEvidenceInner({ data }) {
         </div>
       </div>
 
-      {pdfError && <p className="mb-3 text-sm text-red-600">{pdfError}</p>}
-      {snapshotNotice && <p className="mb-3 text-sm text-amber-700">{snapshotNotice}</p>}
-      {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
-      {narrativeNotice && <p className="mb-3 text-sm text-emerald-700">{narrativeNotice}</p>}
-      {narrativeError && <p className="mb-3 text-sm text-red-600">{narrativeError}</p>}
-      {structuredNotice && <p className="mb-3 text-sm text-emerald-700">{structuredNotice}</p>}
-      {structuredError && <p className="mb-3 text-sm text-red-600">{structuredError}</p>}
+      {pdfError && <InlineNotice variant="error" className="mb-3">{pdfError}</InlineNotice>}
+      {snapshotNotice && <InlineNotice variant="warning" className="mb-3">{snapshotNotice}</InlineNotice>}
+      {snapshotError && <InlineNotice variant="error" className="mb-3">{snapshotError}</InlineNotice>}
+      {narrativeNotice && <InlineNotice variant="success" className="mb-3">{narrativeNotice}</InlineNotice>}
+      {narrativeError && <InlineNotice variant="error" className="mb-3">{narrativeError}</InlineNotice>}
+      {structuredNotice && <InlineNotice variant="success" className="mb-3">{structuredNotice}</InlineNotice>}
+      {structuredError && <InlineNotice variant="error" className="mb-3">{structuredError}</InlineNotice>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -895,9 +946,9 @@ function CQCEvidenceInner({ data }) {
           {readinessLoading ? <span className={BADGE.gray}>Refreshing...</span> : null}
         </div>
         {readinessError ? (
-          <p className="mb-3 text-xs text-amber-700">
+          <InlineNotice variant="warning" className="mb-3" role="status">
             Live readiness could not be refreshed from the server, so this view is temporarily using the local fallback calculation.
-          </p>
+          </InlineNotice>
         ) : null}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
           {categories.map((question) => {
@@ -1106,11 +1157,13 @@ function CQCEvidenceInner({ data }) {
                           )}
                         </div>
                         {structuredLoading ? (
-                          <div className="text-xs text-gray-400">Loading partner feedback...</div>
+                          <LoadingState compact message="Loading partner feedback..." />
                         ) : feedbackItems.length === 0 ? (
-                          <div className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
-                            No structured partner feedback recorded for this statement yet.
-                          </div>
+                          <EmptyState
+                            compact
+                            title="No partner feedback recorded yet"
+                            description="Capture family, professional, or stakeholder feedback here when it supports this statement."
+                          />
                         ) : (
                           <div className="space-y-1.5">
                             {feedbackItems.map((entry) => (
@@ -1167,11 +1220,13 @@ function CQCEvidenceInner({ data }) {
                           )}
                         </div>
                         {structuredLoading ? (
-                          <div className="text-xs text-gray-400">Loading observations...</div>
+                          <LoadingState compact message="Loading observations..." />
                         ) : observationItems.length === 0 ? (
-                          <div className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-xs text-gray-500">
-                            No structured observations recorded for this statement yet.
-                          </div>
+                          <EmptyState
+                            compact
+                            title="No structured observations yet"
+                            description="Use observation notes when this statement needs a direct practice example rather than a document."
+                          />
                         ) : (
                           <div className="space-y-1.5">
                             {observationItems.map((entry) => (
@@ -1300,7 +1355,7 @@ function CQCEvidenceInner({ data }) {
                       </div>
 
                       {evidenceLoading ? (
-                        <span className="text-xs text-gray-400">Loading evidence...</span>
+                        <span className="text-xs text-gray-400">Refreshing evidence…</span>
                       ) : canEdit ? (
                         <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
@@ -1342,7 +1397,15 @@ function CQCEvidenceInner({ data }) {
         {showSnapshots && (
           <div className={CARD.flush}>
             {snapshots.length === 0 ? (
-              <div className="p-4 text-sm text-gray-400">No snapshots saved yet. Click "Save Snapshot" to create one.</div>
+              <div className="p-4">
+                <EmptyState
+                  compact
+                  title="No snapshots saved yet"
+                  description="Save a snapshot when you want to freeze today’s readiness and evidence pack for review."
+                  actionLabel={canEdit ? 'Save Snapshot' : undefined}
+                  onAction={canEdit ? handleCreateSnapshot : undefined}
+                />
+              </div>
             ) : (
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>

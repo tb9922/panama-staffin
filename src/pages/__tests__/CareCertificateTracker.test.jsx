@@ -100,7 +100,7 @@ describe('CareCertificateTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getCareCertData.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading care certificate tracker...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
@@ -135,7 +135,7 @@ describe('CareCertificateTracker', () => {
     api.getCareCertData.mockResolvedValue(EMPTY_RESPONSE);
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText(/No staff are being tracked/i)).toBeInTheDocument();
+      expect(screen.getByText('No care certificate records yet')).toBeInTheDocument();
     });
   });
 

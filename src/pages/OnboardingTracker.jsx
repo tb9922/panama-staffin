@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import {
@@ -13,6 +13,10 @@ import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome,
@@ -26,6 +30,7 @@ import {
   downloadOnboardingFile,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -42,7 +47,8 @@ export default function OnboardingTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
   const { confirm, ConfirmDialog } = useConfirm();
-  const [searchParams] = useSearchParams();
+  const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,6 +67,19 @@ export default function OnboardingTracker() {
   const [refreshKey, setRefreshKey] = useState(0);
   useDirtyGuard(showModal);
   const focusedStaffId = searchParams.get('staffId') || '';
+
+  const loadOnboardingData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getOnboardingData(homeSlug);
+      setState(data);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [homeSlug]);
 
   useEffect(() => {
     let stale = false;
@@ -127,6 +146,14 @@ export default function OnboardingTracker() {
     setExpanded(focusedStaffId);
   }, [focusedStaffId]);
 
+  const clearFocusedStaff = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('staffId');
+    setSearchParams(next);
+    setSearch('');
+    setExpanded(null);
+  }, [searchParams, setSearchParams]);
+
   const fullyOnboarded = useMemo(() => {
     return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete).length;
   }, [activeStaff, onboardingData]);
@@ -174,6 +201,10 @@ export default function OnboardingTracker() {
       await upsertOnboardingSection(homeSlug, modalStaffId, modalSection, modalForm);
       setRefreshKey(k => k + 1);
       setShowModal(false);
+      showToast({
+        title: 'Onboarding section saved',
+        message: `${sectionName || 'This section'} has been updated for ${staffName || 'this staff member'}.`,
+      });
     } catch (e) {
       setError('Failed to save: ' + e.message);
     } finally {
@@ -188,6 +219,10 @@ export default function OnboardingTracker() {
       await clearOnboardingSection(homeSlug, modalStaffId, modalSection);
       setRefreshKey(k => k + 1);
       setShowModal(false);
+      showToast({
+        title: 'Onboarding section removed',
+        message: `${sectionName || 'This section'} has been cleared for ${staffName || 'this staff member'}.`,
+      });
     } catch (e) {
       setError('Failed to remove: ' + e.message);
     } finally {
@@ -212,6 +247,10 @@ export default function OnboardingTracker() {
       ];
     });
     downloadXLSX('onboarding_tracker', [{ name: 'Onboarding', headers, rows }]);
+    showToast({
+      title: 'Excel export started',
+      message: 'The onboarding tracker export is downloading.',
+    });
   }
 
   // ── Modal Field Rendering ─────────────────────────────────────────────────
@@ -814,14 +853,31 @@ export default function OnboardingTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading staff onboarding..." />
+      </div>
+    );
+  }
+  if (error && !state) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Unable to load staff onboarding"
+          message={error}
+          onRetry={loadOnboardingData}
+        />
+      </div>
+    );
+  }
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';
   const staffName = activeStaff.find(s => s.id === modalStaffId)?.name || '';
+  const focusedStaffName = activeStaff.find((staffMember) => staffMember.id === focusedStaffId)?.name || focusedStaffId;
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className={PAGE.container}>
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Staff Onboarding</h1>
@@ -830,7 +886,26 @@ export default function OnboardingTracker() {
         <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert">{error}</div>}
+      {focusedStaffId && (
+        <InlineNotice variant="info" className="mb-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Focused on <span className="font-semibold">{focusedStaffName}</span> from the new starter handoff so you can carry on with the next onboarding steps straight away.
+            </span>
+            <button type="button" onClick={clearFocusedStaff} className={`${BTN.secondary} ${BTN.xs} whitespace-nowrap`}>
+              Show all staff
+            </button>
+          </div>
+        </InlineNotice>
+      )}
+
+      {error && (
+        <ErrorState
+          title="Onboarding action failed"
+          message={error}
+          className="mb-4"
+        />
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -957,11 +1032,32 @@ export default function OnboardingTracker() {
             </div>
           );
         })}
-        {filteredStaff.length === 0 && <div className="p-8 text-center text-sm text-gray-400">No staff match the current filters</div>}
+        {filteredStaff.length === 0 && (
+          <div className={CARD.padded}>
+            <EmptyState
+              compact
+              title={activeStaff.length === 0 ? 'No active staff found' : 'No staff match these filters'}
+              description={
+                activeStaff.length === 0
+                  ? 'Create or reactivate a staff profile first, then come back here to continue onboarding.'
+                  : 'Clear the search or team filters to bring the full onboarding tracker back into view.'
+              }
+              actionLabel={activeStaff.length > 0 ? 'Clear filters' : undefined}
+              onAction={activeStaff.length > 0 ? () => {
+                setSearch('');
+                setFilterTeam('All');
+                setFilterStatus('all');
+              } : undefined}
+            />
+          </div>
+        )}
       </div>
 
       {/* Section Modal */}
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); setError(null); }} title={`${sectionName} — ${staffName}`} size="lg">
+            <InlineNotice variant="info" className="mb-4">
+              Update the section status first, then add documents and notes so the audit trail tells a clear onboarding story.
+            </InlineNotice>
             <div className="mb-4">
               <label className={INPUT.label}>Status</label>
               <select value={modalForm.status || ONBOARDING_STATUS.NOT_STARTED} onChange={e => setField('status', e.target.value)} className={`${INPUT.select} w-auto`}>
@@ -986,10 +1082,17 @@ export default function OnboardingTracker() {
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-gray-700">Recent Changes</h4>
-                {historyLoading && <span className="text-xs text-gray-400">Loading...</span>}
+                {historyLoading && <span className="text-xs text-gray-400">Refreshing…</span>}
               </div>
+              {historyLoading ? (
+                <LoadingState compact message="Loading recent changes..." />
+              ) : null}
               {!historyLoading && modalHistory.length === 0 && (
-                <p className="text-sm text-gray-400">No previous versions recorded for this section yet.</p>
+                <EmptyState
+                  compact
+                  title="No previous versions yet"
+                  description="The first save for this section will create the audit trail shown here."
+                />
               )}
               {modalHistory.length > 0 && (
                 <div className="space-y-2 max-h-48 overflow-y-auto">

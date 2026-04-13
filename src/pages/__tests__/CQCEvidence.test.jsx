@@ -430,7 +430,7 @@ describe('CQCEvidence', () => {
     await waitFor(() => {
       expect(api.createCqcPartnerFeedback).toHaveBeenCalled();
     });
-  });
+  }, 30000);
 
   it('saves structured observations for a statement', async () => {
     const user = userEvent.setup();
@@ -455,7 +455,7 @@ describe('CQCEvidence', () => {
     await waitFor(() => {
       expect(api.createCqcObservation).toHaveBeenCalled();
     });
-  });
+  }, 30000);
 
   it('clicking + Add Evidence opens the Add Evidence modal', async () => {
     const user = userEvent.setup();

@@ -122,7 +122,7 @@ describe('OnboardingTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getOnboardingData.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading staff onboarding...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
@@ -218,7 +218,7 @@ describe('OnboardingTracker', () => {
     await user.type(searchInput, 'zzznomatch');
 
     await waitFor(() => {
-      expect(screen.getByText(/No staff match the current filters/i)).toBeInTheDocument();
+      expect(screen.getByText('No staff match these filters')).toBeInTheDocument();
     });
   });
 
@@ -277,8 +277,10 @@ describe('OnboardingTracker', () => {
       expect(screen.getByDisplayValue('S002')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+    expect(screen.getAllByText('Bob Jones').length).toBeGreaterThan(0);
     expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
     expect(screen.getByText('Pre-Employment Checks')).toBeInTheDocument();
+    expect(screen.getByText(/Focused on/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show all staff' })).toBeInTheDocument();
   });
 });
