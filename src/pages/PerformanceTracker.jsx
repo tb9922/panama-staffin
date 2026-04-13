@@ -322,7 +322,12 @@ export default function PerformanceTracker() {
                   </div>
                   <div>
                     <label className={INPUT.label}>Appeal Outcome</label>
-                    <input className={INPUT.base} value={form.appeal_outcome} onChange={e => f('appeal_outcome', e.target.value)} placeholder="e.g. Upheld, Overturned" />
+                    <select className={INPUT.select} value={form.appeal_outcome} onChange={e => f('appeal_outcome', e.target.value)}>
+                      <option value="">— Select —</option>
+                      <option value="upheld">Upheld</option>
+                      <option value="partially_upheld">Partially Upheld</option>
+                      <option value="overturned">Overturned</option>
+                    </select>
                   </div>
                 </div>
               </>}

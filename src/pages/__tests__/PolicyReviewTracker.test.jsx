@@ -187,7 +187,7 @@ describe('PolicyReviewTracker', () => {
     api.getPolicies.mockResolvedValue({ policies: [] });
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No policies recorded')).toBeInTheDocument();
+      expect(screen.getByText('No policies recorded yet')).toBeInTheDocument();
     });
   });
 

@@ -6,6 +6,10 @@ import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getCurrentHome, getWhistleblowingConcerns, createWhistleblowingConcern,
   updateWhistleblowingConcern, deleteWhistleblowingConcern,
@@ -20,6 +24,7 @@ import { clickableRowProps } from '../lib/a11y.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 import { addDaysLocalISO } from '../lib/localDates.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'details', label: 'Concern Details' },
@@ -53,6 +58,7 @@ export default function WhistleblowingTracker() {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const today = useLiveDate();
   const homeSlug = getCurrentHome();
@@ -135,6 +141,7 @@ export default function WhistleblowingTracker() {
         await createWhistleblowingConcern(homeSlug, form);
       }
       setShowModal(false);
+      showNotice(editingId ? 'Concern updated.' : 'Concern logged.');
       await load();
     } catch (err) {
       setSaveError('Failed to save: ' + err.message);
@@ -147,6 +154,7 @@ export default function WhistleblowingTracker() {
     try {
       await deleteWhistleblowingConcern(homeSlug, editingId);
       setShowModal(false);
+      showNotice('Concern deleted.', { variant: 'warning' });
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -200,10 +208,10 @@ export default function WhistleblowingTracker() {
   };
 
   if (loading) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return <div className={PAGE.container}><LoadingState message="Loading concerns..." card /></div>;
   }
   if (error) {
-    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+    return <div className={PAGE.container}><ErrorState title="Could not load concerns" message={error} onRetry={() => void load()} /></div>;
   }
 
   return (
@@ -219,6 +227,12 @@ export default function WhistleblowingTracker() {
           {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Concern</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -262,54 +276,62 @@ export default function WhistleblowingTracker() {
       </div>
 
       {/* Concerns Table */}
-      <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Date</th>
-                <th scope="col" className={TABLE.th}>Category</th>
-                <th scope="col" className={TABLE.th}>Severity</th>
-                <th scope="col" className={TABLE.th}>Reporter</th>
-                <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className={TABLE.empty}>No concerns recorded</td></tr>
-              )}
-              {filtered.map(concern => {
-                const catDef = CONCERN_CATEGORIES.find(c => c.id === concern.category);
-                const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
-                const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
-                return (
-                  <tr key={concern.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(concern))}>
-                    <td className={TABLE.td}>{concern.date_raised}</td>
-                    <td className={TABLE.td}>{catDef?.name || concern.category}</td>
-                    <td className={TABLE.td}>
-                      <span className={sevBadge(concern.severity)}>
-                        {CONCERN_SEVERITIES.find(s => s.id === concern.severity)?.name || concern.severity}
-                      </span>
-                    </td>
-                    <td className={TABLE.td}>
-                      {concern.anonymous
-                        ? <span className={BADGE.purple}>Anonymous</span>
-                        : <span className="text-sm text-gray-700">{roleDef?.name || concern.raised_by_role || '-'}</span>}
-                    </td>
-                    <td className={TABLE.td}>
-                      <span className={statusBadge(concern.status)}>
-                        {CONCERN_STATUSES.find(s => s.id === concern.status)?.name || concern.status}
-                      </span>
-                    </td>
-                    <td className={TABLE.td}>{outcomeDef?.name || concern.outcome || <span className="text-gray-300">-</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {filtered.length === 0 ? (
+        <div className={CARD.padded}>
+          <EmptyState
+            title="No concerns recorded yet"
+            description={canEdit ? "Log the first concern to start tracking investigations, protections, and outcomes." : 'Concerns will appear here once they are recorded.'}
+            actionLabel={canEdit ? 'New Concern' : undefined}
+            onAction={canEdit ? openAdd : undefined}
+          />
         </div>
-      </div>
+      ) : (
+        <div className={CARD.flush}>
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Date</th>
+                  <th scope="col" className={TABLE.th}>Category</th>
+                  <th scope="col" className={TABLE.th}>Severity</th>
+                  <th scope="col" className={TABLE.th}>Reporter</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(concern => {
+                  const catDef = CONCERN_CATEGORIES.find(c => c.id === concern.category);
+                  const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
+                  const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
+                  return (
+                    <tr key={concern.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(concern))}>
+                      <td className={TABLE.td}>{concern.date_raised}</td>
+                      <td className={TABLE.td}>{catDef?.name || concern.category}</td>
+                      <td className={TABLE.td}>
+                        <span className={sevBadge(concern.severity)}>
+                          {CONCERN_SEVERITIES.find(s => s.id === concern.severity)?.name || concern.severity}
+                        </span>
+                      </td>
+                      <td className={TABLE.td}>
+                        {concern.anonymous
+                          ? <span className={BADGE.purple}>Anonymous</span>
+                          : <span className="text-sm text-gray-700">{roleDef?.name || concern.raised_by_role || '-'}</span>}
+                      </td>
+                      <td className={TABLE.td}>
+                        <span className={statusBadge(concern.status)}>
+                          {CONCERN_STATUSES.find(s => s.id === concern.status)?.name || concern.status}
+                        </span>
+                      </td>
+                      <td className={TABLE.td}>{outcomeDef?.name || concern.outcome || <span className="text-gray-300">-</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Concern' : 'New Concern'} size="lg">

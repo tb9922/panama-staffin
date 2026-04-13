@@ -265,7 +265,14 @@ export default function FamilyLeaveTracker() {
               </div>
               <div>
                 <label className={INPUT.label}>Pay Type</label>
-                <input className={INPUT.base} value={form.pay_type} onChange={e => set('pay_type', e.target.value)} placeholder="e.g. SMP, SPP, ShPP" />
+                <select className={INPUT.select} value={form.pay_type} onChange={e => set('pay_type', e.target.value)}>
+                  <option value="">Select pay type</option>
+                  <option value="SMP">SMP</option>
+                  <option value="SPP">SPP</option>
+                  <option value="ShPP">ShPP</option>
+                  <option value="SAP">SAP</option>
+                  <option value="none">No statutory pay</option>
+                </select>
               </div>
               <div>
                 <label className={INPUT.label}>Notes</label>

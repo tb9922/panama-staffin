@@ -478,7 +478,12 @@ export default function GrievanceTracker() {
         </div>
         <div>
           <label className={INPUT.label}>Appeal Outcome</label>
-          <input className={INPUT.base} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value)} placeholder="e.g. upheld, overturned, modified" />
+          <select className={INPUT.select} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value)}>
+            <option value="">— Select —</option>
+            <option value="upheld">Upheld</option>
+            <option value="overturned">Overturned</option>
+            <option value="modified">Modified</option>
+          </select>
         </div>
       </div>
     );

@@ -6,7 +6,12 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   getCurrentHome, getPolicies, createPolicy, updatePolicy, deletePolicy,
   getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
@@ -47,6 +52,7 @@ export default function PolicyReviewTracker() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal);
 
@@ -152,6 +158,7 @@ export default function PolicyReviewTracker() {
         });
       }
       setShowModal(false);
+      showNotice(editingId ? 'Policy updated.' : 'Policy added.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save');
@@ -191,6 +198,7 @@ export default function PolicyReviewTracker() {
     try {
       await updatePolicy(home, editingId, record);
       setShowModal(false);
+      showNotice('Policy marked reviewed.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save');
@@ -203,6 +211,7 @@ export default function PolicyReviewTracker() {
     try {
       await deletePolicy(home, editingId);
       setShowModal(false);
+      showNotice('Policy deleted.', { variant: 'warning' });
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to delete');
@@ -259,7 +268,7 @@ export default function PolicyReviewTracker() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-gray-500 py-12 text-center">Loading policy reviews...</div>
+        <LoadingState message="Loading policy reviews..." card />
       </div>
     );
   }
@@ -267,7 +276,7 @@ export default function PolicyReviewTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-red-600 py-12 text-center" role="alert">{error}</div>
+        <ErrorState title="Could not load policy reviews" message={error} onRetry={() => void load()} />
       </div>
     );
   }
@@ -285,6 +294,12 @@ export default function PolicyReviewTracker() {
           {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Policy</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -322,44 +337,52 @@ export default function PolicyReviewTracker() {
       </div>
 
       {/* Policy Table */}
-      <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Policy Name</th>
-                <th scope="col" className={TABLE.th}>Ref</th>
-                <th scope="col" className={TABLE.th}>Version</th>
-                <th scope="col" className={TABLE.th}>Last Reviewed</th>
-                <th scope="col" className={TABLE.th}>Next Due</th>
-                <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Reviewed By</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No policies recorded</td></tr>
-              )}
-              {filtered.map(policy => {
-                const s = getPolicyStatus(policy, today);
-                return (
-                  <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(policy))}>
-                    <td className={TABLE.td}>{policy.policy_name}</td>
-                    <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
-                    <td className={TABLE.td}>{policy.version}</td>
-                    <td className={TABLE.td}>{policy.last_reviewed || 'Never'}</td>
-                    <td className={TABLE.td}>{policy.next_review_due || '-'}</td>
-                    <td className={TABLE.td}>
-                      <span className={statusBadge(s.status)}>{statusLabel(s.status)}</span>
-                    </td>
-                    <td className={TABLE.td}>{policy.reviewed_by || '-'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {filtered.length === 0 ? (
+        <div className={CARD.padded}>
+          <EmptyState
+            title="No policies recorded yet"
+            description={canEdit ? 'Add the first policy record to start tracking review deadlines and compliance.' : 'Policy review records will appear here once they are created.'}
+            actionLabel={canEdit ? 'New Policy' : undefined}
+            onAction={canEdit ? openAdd : undefined}
+          />
         </div>
-      </div>
+      ) : (
+        <div className={CARD.flush}>
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Policy Name</th>
+                  <th scope="col" className={TABLE.th}>Ref</th>
+                  <th scope="col" className={TABLE.th}>Version</th>
+                  <th scope="col" className={TABLE.th}>Last Reviewed</th>
+                  <th scope="col" className={TABLE.th}>Next Due</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Reviewed By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(policy => {
+                  const s = getPolicyStatus(policy, today);
+                  return (
+                    <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(policy))}>
+                      <td className={TABLE.td}>{policy.policy_name}</td>
+                      <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
+                      <td className={TABLE.td}>{policy.version}</td>
+                      <td className={TABLE.td}>{policy.last_reviewed || 'Never'}</td>
+                      <td className={TABLE.td}>{policy.next_review_due || '-'}</td>
+                      <td className={TABLE.td}>
+                        <span className={statusBadge(s.status)}>{statusLabel(s.status)}</span>
+                      </td>
+                      <td className={TABLE.td}>{policy.reviewed_by || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Policy' : 'New Policy'} size="lg">

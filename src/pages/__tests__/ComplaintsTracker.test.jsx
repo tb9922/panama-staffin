@@ -168,7 +168,7 @@ describe('ComplaintsTracker', () => {
     api.getComplaints.mockResolvedValue(EMPTY_RESPONSE);
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No complaints recorded')).toBeInTheDocument();
+      expect(screen.getByText('No complaints recorded yet')).toBeInTheDocument();
     });
   });
 

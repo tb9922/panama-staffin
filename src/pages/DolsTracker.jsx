@@ -6,7 +6,11 @@ import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import ResidentPicker from '../components/ResidentPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   getCurrentHome, getDols, createDols, updateDols, deleteDols,
   createMcaAssessment, updateMcaAssessment, deleteMcaAssessment,
@@ -50,6 +54,7 @@ export default function DolsTracker() {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal);
 
@@ -154,6 +159,7 @@ export default function DolsTracker() {
         await createDols(homeSlug, form);
       }
       setShowModal(false);
+      showNotice(editingId ? 'DoLS/LPS record updated.' : 'DoLS/LPS record added.');
       await load();
     } catch (err) {
       setSaveError('Failed to save: ' + err.message);
@@ -166,6 +172,7 @@ export default function DolsTracker() {
     try {
       await deleteDols(homeSlug, editingId);
       setShowModal(false);
+      showNotice('DoLS/LPS record deleted.', { variant: 'warning' });
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -208,6 +215,7 @@ export default function DolsTracker() {
         await createMcaAssessment(homeSlug, form);
       }
       setShowModal(false);
+      showNotice(editingId ? 'MCA assessment updated.' : 'MCA assessment added.');
       await load();
     } catch (err) {
       setSaveError('Failed to save: ' + err.message);
@@ -220,6 +228,7 @@ export default function DolsTracker() {
     try {
       await deleteMcaAssessment(homeSlug, editingId);
       setShowModal(false);
+      showNotice('MCA assessment deleted.', { variant: 'warning' });
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -287,10 +296,10 @@ export default function DolsTracker() {
   const typeBadge = (type) => type === 'lps' ? BADGE.purple : BADGE.blue;
 
   if (loading) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return <div className={PAGE.container}><LoadingState message="Loading DoLS and MCA records..." card /></div>;
   }
   if (error) {
-    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+    return <div className={PAGE.container}><ErrorState title="Could not load DoLS or MCA records" message={error} onRetry={() => void load()} /></div>;
   }
 
   return (
@@ -308,6 +317,12 @@ export default function DolsTracker() {
           </button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">

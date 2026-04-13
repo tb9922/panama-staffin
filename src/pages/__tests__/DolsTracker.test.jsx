@@ -139,15 +139,16 @@ describe('DolsTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getDols.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading DoLS and MCA records...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
     api.getDols.mockRejectedValue(new Error('Failed to load DoLS'));
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText(/Error: Failed to load DoLS/i)).toBeInTheDocument();
+      expect(screen.getByText('Could not load DoLS or MCA records')).toBeInTheDocument();
     });
+    expect(screen.getByText('Failed to load DoLS')).toBeInTheDocument();
   });
 
   it('displays page heading and subtitle after successful load', async () => {
