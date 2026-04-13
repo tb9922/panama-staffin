@@ -5,6 +5,7 @@ import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
@@ -157,52 +158,62 @@ export default function DpiaManager() {
       </div>
 
       <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th className={TABLE.th}>Title</th>
-                <th className={TABLE.th}>Screening</th>
-                <th className={TABLE.th}>Risk Level</th>
-                <th className={TABLE.th}>Status</th>
-                {canEdit && <th className={TABLE.th}>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty} role="status">Loading…</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty}>No DPIAs recorded</td></tr>
-              ) : items.map(item => (
-                <tr key={item.id} className={TABLE.tr}>
-                  <td className={TABLE.td}>
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.processing_description}</div>
-                  </td>
-                  <td className={TABLE.td}><span className={BADGE[item.screening_result === 'required' ? 'red' : item.screening_result === 'recommended' ? 'amber' : 'green']}>{SCREENING_LABELS[item.screening_result] || item.screening_result?.replace(/_/g, ' ')}</span></td>
-                  <td className={TABLE.td}>{item.risk_level && <span className={BADGE[RISK_BADGES[item.risk_level] || 'gray']}>{item.risk_level?.replace(/_/g, ' ')}</span>}</td>
-                  <td className={TABLE.td}><span className={BADGE[STATUS_BADGES[item.status] || 'gray']}>{STATUS_LABELS[item.status] || item.status}</span></td>
-                  {canEdit && (
-                    <td className={TABLE.td}>
-                      <div className="flex gap-1 flex-wrap">
-                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(item)}>Edit</button>
-                        {item.status === 'screening' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'in_progress', item.version)}>Start</button>}
-                        {item.status === 'in_progress' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'completed', item.version)}>Complete</button>}
-                        {item.status === 'completed' && <button className={`${BTN.success} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'approved', item.version)}>Approve</button>}
-                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleDelete(item.id)}>Archive</button>
-                      </div>
-                    </td>
-                  )}
+        {items.length === 0 ? (
+          <EmptyState
+            title="No DPIAs recorded"
+            description={canEdit
+              ? 'Start the first impact assessment so screening, risk, and evidence can be tracked together.'
+              : 'No DPIAs are recorded for this home yet.'}
+            actionLabel={canEdit ? 'New DPIA' : undefined}
+            onAction={canEdit ? openNew : undefined}
+          />
+        ) : (
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th className={TABLE.th}>Title</th>
+                  <th className={TABLE.th}>Screening</th>
+                  <th className={TABLE.th}>Risk Level</th>
+                  <th className={TABLE.th}>Status</th>
+                  {canEdit && <th className={TABLE.th}>Actions</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id} className={TABLE.tr}>
+                    <td className={TABLE.td}>
+                      <div className="font-medium">{item.title}</div>
+                      <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.processing_description}</div>
+                    </td>
+                    <td className={TABLE.td}><span className={BADGE[item.screening_result === 'required' ? 'red' : item.screening_result === 'recommended' ? 'amber' : 'green']}>{SCREENING_LABELS[item.screening_result] || item.screening_result?.replace(/_/g, ' ')}</span></td>
+                    <td className={TABLE.td}>{item.risk_level && <span className={BADGE[RISK_BADGES[item.risk_level] || 'gray']}>{item.risk_level?.replace(/_/g, ' ')}</span>}</td>
+                    <td className={TABLE.td}><span className={BADGE[STATUS_BADGES[item.status] || 'gray']}>{STATUS_LABELS[item.status] || item.status}</span></td>
+                    {canEdit && (
+                      <td className={TABLE.td}>
+                        <div className="flex gap-1 flex-wrap">
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(item)}>Edit</button>
+                          {item.status === 'screening' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'in_progress', item.version)}>Start</button>}
+                          {item.status === 'in_progress' && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'completed', item.version)}>Complete</button>}
+                          {item.status === 'completed' && <button className={`${BTN.success} ${BTN.xs}`} onClick={() => handleStatusChange(item.id, 'approved', item.version)}>Approve</button>}
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleDelete(item.id)}>Archive</button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit DPIA' : 'New DPIA'} size="xl">
         <div className="space-y-4">
-          {formError && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{formError}</div>}
+          <InlineNotice>
+            <p>Capture the screening decision, legal basis, risk triggers, and evidence together so the DPIA can move cleanly through review.</p>
+          </InlineNotice>
+          {formError && <ErrorState title="DPIA details need attention" message={formError} />}
           <div>
             <label className={INPUT.label} htmlFor="dpia-title">Title *</label>
             <input id="dpia-title" className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. New biometric clock-in system" />

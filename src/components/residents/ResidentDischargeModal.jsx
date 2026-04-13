@@ -11,6 +11,7 @@ import {
 } from '../../lib/api.js';
 import { todayLocalISO } from '../../lib/localDates.js';
 import Modal from '../Modal.jsx';
+import InlineNotice from '../InlineNotice.jsx';
 
 const DISCHARGE_REASONS = [
   { id: 'discharged', label: 'Discharged' },
@@ -51,7 +52,11 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
 
   return (
     <Modal isOpen onClose={onClose} title={`Discharge — ${resident.resident_name}`} size="sm">
-      {error && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>}
+      {error && (
+        <InlineNotice variant="error" className="mb-3">
+          {error}
+        </InlineNotice>
+      )}
 
       {hasBed && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">

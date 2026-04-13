@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
   getCurrentHome, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
@@ -139,9 +142,7 @@ export default function PayRatesConfig() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
-      )}
+      {error && <ErrorState title="Pay rate action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Enhancement Rules */}
       <div className={`${CARD.flush} mb-6`}>
@@ -150,7 +151,7 @@ export default function PayRatesConfig() {
           <p className="text-xs text-gray-500 mt-0.5">Enhancements stack additively — not multiplicatively. A Sunday night shift gets night% + sunday%, not multiplied.</p>
         </div>
         {loading ? (
-          <div className="py-10 text-center text-sm text-gray-400">Loading rules…</div>
+          <LoadingState message="Loading rules…" compact />
         ) : (
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
@@ -166,7 +167,15 @@ export default function PayRatesConfig() {
               </thead>
               <tbody>
                 {rules.length === 0 ? (
-                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No active rules. Click + Add Rule to create one.</td></tr>
+                  <tr>
+                    <td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>
+                      <EmptyState
+                        compact
+                        title="No active rules. Click + Add Rule to create one."
+                        description="Create enhancement rules here for nights, weekends, bank holidays, sleep-ins, and overtime."
+                      />
+                    </td>
+                  </tr>
                 ) : rules.map(rule => (
                   <tr key={rule.id} className={TABLE.tr}>
                     <td className={`${TABLE.td} font-medium`}>{rule.name}</td>

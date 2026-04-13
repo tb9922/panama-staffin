@@ -3,6 +3,8 @@ import { syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -107,7 +109,7 @@ export default function Config() {
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <p className="text-gray-500 text-sm">Loading settings...</p>
+        <LoadingState message="Loading settings..." card />
       </div>
     );
   }
@@ -115,10 +117,11 @@ export default function Config() {
   if (loadError) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-          {loadError}
-          <button onClick={load} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
-        </div>
+        <ErrorState
+          title="Settings need attention"
+          message={loadError}
+          onRetry={load}
+        />
       </div>
     );
   }
@@ -130,7 +133,9 @@ export default function Config() {
       {dirty && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
-          <button onClick={handleSave} disabled={saving} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>{saving ? 'Saving...' : 'Save Now'}</button>
+          <button onClick={handleSave} disabled={saving} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>
+            {saving ? 'Saving...' : 'Save Now'}
+          </button>
         </div>
       )}
       {saveError && (

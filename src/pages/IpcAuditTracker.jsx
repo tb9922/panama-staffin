@@ -4,6 +4,10 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -194,21 +198,12 @@ export default function IpcAuditTracker() {
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
 
-  if (loading) {
-    return (
-      <div className={PAGE.container}>
-        <div className="text-center py-12 text-gray-400">Loading IPC audits...</div>
-      </div>
-    );
-  }
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading IPC audits..." /></div>;
 
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-red-500">{error}</div>
-        <div className="text-center">
-          <button onClick={load} className={BTN.primary}>Retry</button>
-        </div>
+        <ErrorState title="IPC audit data needs attention" message={error} onRetry={() => void load()} />
       </div>
     );
   }
@@ -277,7 +272,17 @@ export default function IpcAuditTracker() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No IPC audits recorded</td></tr>
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No IPC audits recorded"
+                      description={canEdit ? 'Record the first IPC audit to start tracking scores, outbreaks, and corrective actions.' : 'No IPC audits have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New Audit' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(audit => {
                 const typeDef = auditTypes.find(t => t.id === audit.audit_type);
@@ -512,7 +517,11 @@ export default function IpcAuditTracker() {
           {editingId && canEdit && (
             <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
           )}
-          {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
+          {saveError && (
+            <InlineNotice variant="error" className="mr-auto max-w-md">
+              {saveError}
+            </InlineNotice>
+          )}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
           {canEdit && (
             <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>

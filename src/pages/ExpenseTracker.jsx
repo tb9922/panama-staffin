@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getCurrentHome, getLoggedInUser, getFinanceExpenses, createFinanceExpense,
   updateFinanceExpense, approveFinanceExpense,
@@ -137,7 +140,7 @@ export default function ExpenseTracker() {
     });
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading expenses...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading expenses..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -148,7 +151,7 @@ export default function ExpenseTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="Expense action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className={`${INPUT.select} w-auto`}>
@@ -181,7 +184,15 @@ export default function ExpenseTracker() {
             </tr></thead>
             <tbody>
               {expenses.length === 0 ? (
-                <tr><td colSpan={9} className={TABLE.empty}>No expenses found</td></tr>
+                <tr>
+                  <td colSpan={9} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No expenses found"
+                      description={canEdit ? 'Create the first expense to start tracking approvals, payment status, and receipts.' : 'No expense records match the current filters.'}
+                    />
+                  </td>
+                </tr>
               ) : expenses.map(exp => (
                 <tr key={exp.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openEdit(exp))}>
                   <td className={TABLE.td}>{exp.expense_date}</td>

@@ -633,6 +633,7 @@ export async function uploadCqcEvidenceFile(_caseType, evidenceId, file, descrip
     body: formData,
   });
   if (res.status === 401) {
+    expireClientSession();
     const err = new Error('Session expired - please log in again');
     err.status = 401;
     throw err;
@@ -1239,6 +1240,7 @@ export async function uploadHrAttachment(caseType, caseId, file, description) {
     body: formData,
   });
   if (res.status === 401) {
+    expireClientSession();
     const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;
@@ -1286,6 +1288,7 @@ export async function uploadRecordAttachment(moduleId, recordId, file, descripti
     body: formData,
   });
   if (res.status === 401) {
+    expireClientSession();
     const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;
@@ -1640,7 +1643,8 @@ export async function uploadOnboardingFile(_caseType, staffIdAndSection, file, d
     body: formData,
   });
   if (res.status === 401) {
-    const err = new Error('Session expired â€” please log in again');
+    expireClientSession();
+    const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;
   }
@@ -1690,6 +1694,7 @@ export async function uploadTrainingFile(_caseType, staffIdAndType, file, descri
     body: formData,
   });
   if (res.status === 401) {
+    expireClientSession();
     const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;

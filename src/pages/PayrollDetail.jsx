@@ -5,6 +5,7 @@ import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
@@ -295,9 +296,7 @@ export default function PayrollDetail() {
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
-      )}
+      {error && <ErrorState title="Payroll run needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       {canEdit && (
         <div className={`${CARD.padded} mb-4`}>

@@ -17,6 +17,9 @@ import {
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 import IncidentTrackerModal from '../components/incidents/IncidentTrackerModal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { addDaysLocalISO } from '../lib/localDates.js';
 
 const TABS = [
@@ -304,7 +307,7 @@ export default function IncidentTracker() {
     return def ? BADGE[def.badgeKey] : BADGE.gray;
   };
 
-  if (loading) return <div className="p-6 text-gray-400" role="status">Loading...</div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -320,7 +323,7 @@ export default function IncidentTracker() {
         </div>
       </div>
 
-      {error && <div className="mb-4 text-red-600 text-sm" role="alert">{error}</div>}
+      {error && <ErrorState title="Incident action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -391,7 +394,17 @@ export default function IncidentTracker() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={9} className={TABLE.empty}>No incidents recorded</td></tr>
+                <tr>
+                  <td colSpan={9} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No incidents recorded"
+                      description={canEdit ? 'Use "+ New Incident" to log the first incident for this home.' : 'No incidents have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New Incident' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(inc => {
                 const typeDef = incidentTypes.find(t => t.id === inc.type);

@@ -10,6 +10,9 @@ import ResidentTable from '../components/residents/ResidentTable.jsx';
 import ResidentAdmitModal from '../components/residents/ResidentAdmitModal.jsx';
 import ResidentEditModal from '../components/residents/ResidentEditModal.jsx';
 import ResidentDischargeModal from '../components/residents/ResidentDischargeModal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -119,17 +122,18 @@ export default function Residents() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex justify-between items-center">
-          <span>{error}</span>
-          <button className="text-red-500 hover:text-red-700" onClick={() => setError(null)}>Dismiss</button>
-        </div>
+        <ErrorState
+          title="Resident register needs attention"
+          message={error}
+          onRetry={() => void load()}
+          className="mb-4"
+        />
       )}
 
       {toast && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex justify-between items-center">
-          <span>{toast}</span>
-          <button className="text-blue-500 hover:text-blue-700" onClick={() => setToast(null)}>Dismiss</button>
-        </div>
+        <InlineNotice variant="success" onDismiss={() => setToast(null)} className="mb-4">
+          {toast}
+        </InlineNotice>
       )}
 
       <ResidentSummaryBar stats={stats} />
@@ -166,7 +170,7 @@ export default function Residents() {
       </div>
 
       {loading ? (
-        <p className="text-center text-gray-500 py-12">Loading residents...</p>
+        <LoadingState message="Loading resident register..." card />
       ) : (
         <ResidentTable
           residents={residents}

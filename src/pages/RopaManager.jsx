@@ -5,6 +5,7 @@ import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { useData } from '../contexts/DataContext.jsx';
@@ -157,52 +158,62 @@ export default function RopaManager() {
       </div>
 
       <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th className={TABLE.th}>Purpose</th>
-                <th className={TABLE.th}>Legal Basis</th>
-                <th className={TABLE.th}>Individuals</th>
-                <th className={TABLE.th}>Data Categories</th>
-                <th className={TABLE.th}>Status</th>
-                {canEdit && <th className={TABLE.th}></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty} role="status">Loading…</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No processing activities recorded</td></tr>
-              ) : items.map(item => (
-                <tr key={item.id} className={TABLE.tr}>
-                  <td className={TABLE.td}>
-                    <div className="font-medium">{item.purpose}</div>
-                    {item.special_category && <span className={`${BADGE.purple} text-[10px] mt-0.5`}>Special Category</span>}
-                    {item.dpia_required && <span className={`${BADGE.amber} text-[10px] mt-0.5 ml-1`}>DPIA Required</span>}
-                  </td>
-                  <td className={TABLE.td}><span className={BADGE.blue}>{LEGAL_BASES.find(b => b.id === item.legal_basis)?.label || item.legal_basis}</span></td>
-                  <td className={TABLE.td}><span className="text-sm">{item.categories_of_individuals}</span></td>
-                  <td className={TABLE.td}><span className="text-sm">{item.categories_of_data}</span></td>
-                  <td className={TABLE.td}><span className={BADGE[STATUS_BADGES[item.status] || 'gray']}>{item.status?.replace(/_/g, ' ')}</span></td>
-                  {canEdit && (
-                    <td className={TABLE.td}>
-                      <div className="flex gap-1">
-                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(item)}>Edit</button>
-                        <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleDelete(item.id)}>Archive</button>
-                      </div>
-                    </td>
-                  )}
+        {items.length === 0 ? (
+          <EmptyState
+            title="No processing activities recorded"
+            description={canEdit
+              ? 'Start the first processing record so legal basis, data categories, and evidence are all documented here.'
+              : 'No processing activities are recorded for this home yet.'}
+            actionLabel={canEdit ? 'Add activity' : undefined}
+            onAction={canEdit ? openNew : undefined}
+          />
+        ) : (
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th className={TABLE.th}>Purpose</th>
+                  <th className={TABLE.th}>Legal Basis</th>
+                  <th className={TABLE.th}>Individuals</th>
+                  <th className={TABLE.th}>Data Categories</th>
+                  <th className={TABLE.th}>Status</th>
+                  {canEdit && <th className={TABLE.th}></th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id} className={TABLE.tr}>
+                    <td className={TABLE.td}>
+                      <div className="font-medium">{item.purpose}</div>
+                      {item.special_category && <span className={`${BADGE.purple} text-[10px] mt-0.5`}>Special Category</span>}
+                      {item.dpia_required && <span className={`${BADGE.amber} text-[10px] mt-0.5 ml-1`}>DPIA Required</span>}
+                    </td>
+                    <td className={TABLE.td}><span className={BADGE.blue}>{LEGAL_BASES.find(b => b.id === item.legal_basis)?.label || item.legal_basis}</span></td>
+                    <td className={TABLE.td}><span className="text-sm">{item.categories_of_individuals}</span></td>
+                    <td className={TABLE.td}><span className="text-sm">{item.categories_of_data}</span></td>
+                    <td className={TABLE.td}><span className={BADGE[STATUS_BADGES[item.status] || 'gray']}>{item.status?.replace(/_/g, ' ')}</span></td>
+                    {canEdit && (
+                      <td className={TABLE.td}>
+                        <div className="flex gap-1">
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(item)}>Edit</button>
+                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleDelete(item.id)}>Archive</button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Processing Activity' : 'Add Processing Activity'} size="xl">
         <div className="space-y-4">
-          {formError && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{formError}</div>}
+          <InlineNotice>
+            <p>Document the legal basis, data categories, recipients, and safeguards together so the processing record stays inspection-ready.</p>
+          </InlineNotice>
+          {formError && <ErrorState title="Processing activity needs attention" message={formError} />}
           <div>
             <label className={INPUT.label}>Purpose of Processing *</label>
             <input className={INPUT.base} value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Staff payroll processing" />

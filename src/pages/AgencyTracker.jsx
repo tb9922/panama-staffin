@@ -3,6 +3,10 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
@@ -12,6 +16,7 @@ import {
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const TABS = [
   { id: 'shifts', label: 'Shift Log' },
@@ -57,7 +62,10 @@ function ProviderModal({ existing, onSave, onClose }) {
       } else {
         await createAgencyProvider(homeSlug, payload);
       }
-      onSave();
+      onSave({
+        title: existing ? 'Agency provider updated' : 'Agency provider added',
+        message: payload.name,
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -67,7 +75,10 @@ function ProviderModal({ existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Provider' : 'Add Agency Provider'}>
-      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
+      <InlineNotice className="mb-4">
+        <p>Keep provider rates and contact details current here, then attach agreements or onboarding documents once the provider is saved.</p>
+      </InlineNotice>
+      {err && <ErrorState title="Provider details need attention" message={err} className="mb-3" />}
       <div className="space-y-4">
         <div>
           <label className={INPUT.label}>Provider Name *</label>
@@ -170,7 +181,10 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
       } else {
         await createAgencyShift(homeSlug, payload);
       }
-      onSave();
+      onSave({
+        title: existing ? 'Agency shift updated' : 'Agency shift logged',
+        message: `${payload.date} · ${payload.shift_code}`,
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -180,7 +194,10 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Agency Shift' : 'Log Agency Shift'} size="lg">
-      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
+      <InlineNotice className="mb-4">
+        <p>Log the provider, hours, and evidence together so agency usage and invoice reconciliation stay aligned.</p>
+      </InlineNotice>
+      {err && <ErrorState title="Agency shift needs attention" message={err} className="mb-3" />}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -266,6 +283,7 @@ export default function AgencyTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const { showToast } = useToast();
 
   // Default last 12 weeks
   const defaultEnd = todayLocalISO();
@@ -349,7 +367,7 @@ export default function AgencyTracker() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
+        <ErrorState title="Agency tracker needs attention" message={error} onRetry={() => void loadAll()} className="mb-4" />
       )}
 
       {/* Summary Cards */}
@@ -395,58 +413,67 @@ export default function AgencyTracker() {
           </div>
           <div className={CARD.flush}>
             {loading ? (
-              <div className="py-10 text-center text-sm text-gray-400">Loading shifts…</div>
+              <LoadingState message="Loading agency shifts..." compact />
             ) : (
-              <div className={TABLE.wrapper}>
-                <table className={TABLE.table}>
-                  <thead className={TABLE.thead}>
-                    <tr>
-                      <th scope="col" className={TABLE.th}>Date</th>
-                      <th scope="col" className={TABLE.th}>Provider</th>
-                      <th scope="col" className={TABLE.th}>Shift</th>
-                      <th scope="col" className={TABLE.th}>Worker</th>
-                      <th scope="col" className={TABLE.th}>Role Covered</th>
-                      <th scope="col" className={TABLE.th + ' text-right'}>Hours</th>
-                      <th scope="col" className={TABLE.th + ' text-right'}>Rate</th>
-                      <th scope="col" className={TABLE.th + ' text-right'}>Cost</th>
-                      <th scope="col" className={TABLE.th}>Invoice</th>
-                      <th scope="col" className={TABLE.th}>Status</th>
-                      {canEdit && <th scope="col" className={TABLE.th}></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shifts.length === 0 ? (
-                      <tr><td colSpan={canEdit ? 11 : 10} className={TABLE.empty}>No agency shifts logged for this period.</td></tr>
-                    ) : shifts.map(sh => (
-                      <tr key={sh.id} className={TABLE.tr}>
-                        <td className={TABLE.td}>{sh.date}</td>
-                        <td className={TABLE.td + ' text-sm'}>{providerName(sh.agency_id)}</td>
-                        <td className={TABLE.td}>
-                          <span className="inline-block bg-gray-100 rounded px-1.5 py-0.5 text-xs font-mono">{sh.shift_code}</span>
-                        </td>
-                        <td className={TABLE.td + ' text-sm text-gray-500'}>{sh.worker_name || '—'}</td>
-                        <td className={TABLE.td + ' text-sm text-gray-500'}>{sh.role_covered || '—'}</td>
-                        <td className={TABLE.td + ' text-right font-mono text-sm'}>{parseFloat(sh.hours).toFixed(2)}h</td>
-                        <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(sh.hourly_rate)}</td>
-                        <td className={TABLE.td + ' text-right font-mono text-sm font-semibold'}>{fmt(sh.total_cost)}</td>
-                        <td className={TABLE.td + ' text-xs text-gray-500'}>{sh.invoice_ref || '—'}</td>
-                        <td className={TABLE.td}>
-                          <span className={sh.reconciled ? BADGE.green : BADGE.amber}>
-                            {sh.reconciled ? 'Reconciled' : 'Pending'}
-                          </span>
-                        </td>
-                        {canEdit && (
-                          <td className={TABLE.td}>
-                            <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditShift(sh); setShowShiftModal(true); }}>
-                              Edit
-                            </button>
-                          </td>
-                        )}
+              shifts.length === 0 ? (
+                <EmptyState
+                  title="No agency shifts logged for this period"
+                  description={canEdit
+                    ? 'Log the first shift to track spend, reconciliation, and provider usage.'
+                    : 'There are no agency shifts to review for the selected dates.'}
+                  actionLabel={canEdit ? 'Log shift' : undefined}
+                  onAction={canEdit ? () => { setEditShift(null); setShowShiftModal(true); } : undefined}
+                />
+              ) : (
+                <div className={TABLE.wrapper}>
+                  <table className={TABLE.table}>
+                    <thead className={TABLE.thead}>
+                      <tr>
+                        <th scope="col" className={TABLE.th}>Date</th>
+                        <th scope="col" className={TABLE.th}>Provider</th>
+                        <th scope="col" className={TABLE.th}>Shift</th>
+                        <th scope="col" className={TABLE.th}>Worker</th>
+                        <th scope="col" className={TABLE.th}>Role Covered</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Hours</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Rate</th>
+                        <th scope="col" className={TABLE.th + ' text-right'}>Cost</th>
+                        <th scope="col" className={TABLE.th}>Invoice</th>
+                        <th scope="col" className={TABLE.th}>Status</th>
+                        {canEdit && <th scope="col" className={TABLE.th}></th>}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {shifts.map(sh => (
+                        <tr key={sh.id} className={TABLE.tr}>
+                          <td className={TABLE.td}>{sh.date}</td>
+                          <td className={TABLE.td + ' text-sm'}>{providerName(sh.agency_id)}</td>
+                          <td className={TABLE.td}>
+                            <span className="inline-block bg-gray-100 rounded px-1.5 py-0.5 text-xs font-mono">{sh.shift_code}</span>
+                          </td>
+                          <td className={TABLE.td + ' text-sm text-gray-500'}>{sh.worker_name || '—'}</td>
+                          <td className={TABLE.td + ' text-sm text-gray-500'}>{sh.role_covered || '—'}</td>
+                          <td className={TABLE.td + ' text-right font-mono text-sm'}>{parseFloat(sh.hours).toFixed(2)}h</td>
+                          <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(sh.hourly_rate)}</td>
+                          <td className={TABLE.td + ' text-right font-mono text-sm font-semibold'}>{fmt(sh.total_cost)}</td>
+                          <td className={TABLE.td + ' text-xs text-gray-500'}>{sh.invoice_ref || '—'}</td>
+                          <td className={TABLE.td}>
+                            <span className={sh.reconciled ? BADGE.green : BADGE.amber}>
+                              {sh.reconciled ? 'Reconciled' : 'Pending'}
+                            </span>
+                          </td>
+                          {canEdit && (
+                            <td className={TABLE.td}>
+                              <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditShift(sh); setShowShiftModal(true); }}>
+                                Edit
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
           </div>
         </>
@@ -455,42 +482,51 @@ export default function AgencyTracker() {
       {/* ── Providers Tab ── */}
       {tab === 'providers' && (
         <div className={CARD.flush}>
-          <div className={TABLE.wrapper}>
-            <table className={TABLE.table}>
-              <thead className={TABLE.thead}>
-                <tr>
-                  <th scope="col" className={TABLE.th}>Provider</th>
-                  <th scope="col" className={TABLE.th}>Contact</th>
-                  <th scope="col" className={TABLE.th + ' text-right'}>Day Rate</th>
-                  <th scope="col" className={TABLE.th + ' text-right'}>Night Rate</th>
-                  <th scope="col" className={TABLE.th}>Status</th>
-                  {canEdit && <th scope="col" className={TABLE.th}></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {providers.length === 0 ? (
-                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No providers added yet.</td></tr>
-                ) : providers.map(p => (
-                  <tr key={p.id} className={TABLE.tr}>
-                    <td className={TABLE.td + ' font-medium'}>{p.name}</td>
-                    <td className={TABLE.td + ' text-sm text-gray-500'}>{p.contact || '—'}</td>
-                    <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(p.rate_day)}</td>
-                    <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(p.rate_night)}</td>
-                    <td className={TABLE.td}>
-                      <span className={p.active ? BADGE.green : BADGE.gray}>{p.active ? 'Active' : 'Inactive'}</span>
-                    </td>
-                    {canEdit && (
-                      <td className={TABLE.td}>
-                        <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditProvider(p); setShowProvModal(true); }}>
-                          Edit
-                        </button>
-                      </td>
-                    )}
+          {providers.length === 0 ? (
+            <EmptyState
+              title="No providers added yet"
+              description={canEdit
+                ? 'Add the agencies you work with so rates and supporting documents are ready before shifts are logged.'
+                : 'No agency providers are configured for this home yet.'}
+              actionLabel={canEdit ? 'Add provider' : undefined}
+              onAction={canEdit ? () => { setEditProvider(null); setShowProvModal(true); } : undefined}
+            />
+          ) : (
+            <div className={TABLE.wrapper}>
+              <table className={TABLE.table}>
+                <thead className={TABLE.thead}>
+                  <tr>
+                    <th scope="col" className={TABLE.th}>Provider</th>
+                    <th scope="col" className={TABLE.th}>Contact</th>
+                    <th scope="col" className={TABLE.th + ' text-right'}>Day Rate</th>
+                    <th scope="col" className={TABLE.th + ' text-right'}>Night Rate</th>
+                    <th scope="col" className={TABLE.th}>Status</th>
+                    {canEdit && <th scope="col" className={TABLE.th}></th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {providers.map(p => (
+                    <tr key={p.id} className={TABLE.tr}>
+                      <td className={TABLE.td + ' font-medium'}>{p.name}</td>
+                      <td className={TABLE.td + ' text-sm text-gray-500'}>{p.contact || '—'}</td>
+                      <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(p.rate_day)}</td>
+                      <td className={TABLE.td + ' text-right font-mono text-sm'}>{fmt(p.rate_night)}</td>
+                      <td className={TABLE.td}>
+                        <span className={p.active ? BADGE.green : BADGE.gray}>{p.active ? 'Active' : 'Inactive'}</span>
+                      </td>
+                      {canEdit && (
+                        <td className={TABLE.td}>
+                          <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => { setEditProvider(p); setShowProvModal(true); }}>
+                            Edit
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -498,7 +534,12 @@ export default function AgencyTracker() {
       {tab === 'metrics' && (
         <div>
           {!metrics || !metrics.weekly?.length ? (
-            <div className={`${CARD.padded} text-center text-sm text-gray-500 py-8`}>No weekly trend data yet.</div>
+            <div className={CARD.flush}>
+              <EmptyState
+                title="No weekly trend data yet"
+                description="Weekly trend cards appear once shifts are logged for recent weeks."
+              />
+            </div>
           ) : (
             <>
               <div className={CARD.flush}>
@@ -536,7 +577,12 @@ export default function AgencyTracker() {
       {showProvModal && (
         <ProviderModal
           existing={editProvider}
-          onSave={async () => { setShowProvModal(false); setEditProvider(null); await loadProviders(); }}
+          onSave={async (notice) => {
+            setShowProvModal(false);
+            setEditProvider(null);
+            await loadProviders();
+            if (notice) showToast(notice);
+          }}
           onClose={() => { setShowProvModal(false); setEditProvider(null); }}
         />
       )}
@@ -546,10 +592,11 @@ export default function AgencyTracker() {
         <ShiftModal
           providers={providers}
           existing={editShift}
-          onSave={async () => {
+          onSave={async (notice) => {
             setShowShiftModal(false);
             setEditShift(null);
             await Promise.all([loadShifts(), loadMetrics()]);
+            if (notice) showToast(notice);
           }}
           onClose={() => { setShowShiftModal(false); setEditShift(null); }}
         />

@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { formatDate, parseDate } from '../lib/rotation.js';
-import { CARD, INPUT, BTN } from '../lib/design.js';
+import { CARD, INPUT, BTN, PAGE } from '../lib/design.js';
 import { getCurrentHome, getSchedulingData, getSnapshots, getSnapshot, logReportDownload } from '../lib/api.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 
 function getMonday(date) {
@@ -27,8 +30,24 @@ export default function Reports() {
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading report data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading report data..." card />
+      </div>
+    );
+  }
+  if (error || !schedData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Reports need attention"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
 
   return <ReportsInner data={schedData} />;
 }
@@ -189,7 +208,11 @@ function ReportsInner({ data }) {
         <p className="text-sm text-gray-500">Generate downloadable PDF reports for CQC inspections, management, and compliance</p>
       </div>
 
-      {genError && <p className="mb-4 text-sm text-red-600">{genError}</p>}
+      {genError && (
+        <InlineNotice variant="error" className="mb-4" role="alert">
+          {genError}
+        </InlineNotice>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {reports.map(report => {

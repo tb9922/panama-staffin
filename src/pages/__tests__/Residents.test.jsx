@@ -88,7 +88,7 @@ describe('Residents', () => {
     api.getResidentsWithBeds.mockReturnValue(new Promise(() => {}));
     api.getBeds.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<Residents />);
-    expect(screen.getByText('Loading residents...')).toBeInTheDocument();
+    expect(screen.getByText('Loading resident register...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {

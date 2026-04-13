@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getPayrollRuns, createPayrollRun, voidPayrollRun, getCurrentHome } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -108,9 +111,7 @@ export default function PayrollDashboard() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
-      )}
+      {error && <ErrorState title="Payroll action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Summary Cards */}
       {latest && (
@@ -142,7 +143,7 @@ export default function PayrollDashboard() {
       {/* Runs Table */}
       <div className={CARD.flush}>
         {loading ? (
-          <div className="py-10 text-center text-sm text-gray-400">Loading payroll runs…</div>
+          <LoadingState message="Loading payroll runs…" compact />
         ) : (
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
@@ -160,7 +161,15 @@ export default function PayrollDashboard() {
               </thead>
               <tbody>
                 {runs.length === 0 ? (
-                  <tr><td colSpan={8} className={TABLE.empty}>No payroll runs yet. Create your first run to get started.</td></tr>
+                  <tr>
+                    <td colSpan={8} className={TABLE.empty}>
+                      <EmptyState
+                        compact
+                        title="No payroll runs yet. Create your first run to get started."
+                        description="Draft a payroll run here, then move into calculation, approval, export, and payslip checks."
+                      />
+                    </td>
+                  </tr>
                 ) : runs.map(run => (
                   <tr key={run.id} className={TABLE.tr}>
                     <td className={TABLE.td}>

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getHrStats, getHrWarnings } from '../lib/api.js';
 import { WARNING_LEVELS } from '../lib/hr.js';
 
@@ -46,7 +49,7 @@ export default function HrDashboard() {
     }]);
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading HR data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading HR data..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -57,7 +60,7 @@ export default function HrDashboard() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="HR dashboard needs attention" message={error} onRetry={load} className="mb-4" />}
 
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
@@ -67,7 +70,13 @@ export default function HrDashboard() {
   );
 
   function renderOverview() {
-    if (!stats) return <div className={CARD.padded}><p className="text-gray-400">No stats available</p></div>;
+    if (!stats) {
+      return (
+        <div className={CARD.padded}>
+          <EmptyState compact title="No stats available" description="HR summary metrics will appear here once records are available for this home." />
+        </div>
+      );
+    }
 
     const cards = [
       { label: 'Open Disciplinary', value: stats.disciplinary_open ?? 0, color: stats.disciplinary_open > 0 ? 'text-amber-600' : '' },
@@ -124,7 +133,11 @@ export default function HrDashboard() {
               </thead>
               <tbody>
                 {warnings.length === 0 && (
-                  <tr><td colSpan={6} className={TABLE.empty}>No active warnings</td></tr>
+                  <tr>
+                    <td colSpan={6} className={TABLE.empty}>
+                      <EmptyState compact title="No active warnings" description="Current disciplinary or warning outcomes will appear here while they are live." />
+                    </td>
+                  </tr>
                 )}
                 {warnings.map(w => {
                   const level = WARNING_LEVELS.find(l => l.id === w.outcome);

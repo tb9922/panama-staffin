@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
 import { EDI_RECORD_TYPES, EDI_STATUSES, HARASSMENT_CATEGORIES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -201,7 +204,7 @@ export default function EdiTracker() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading EDI data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading EDI data..." card /></div>;
 
   const isHarassment = form.record_type === 'harassment_complaint';
   const isAdjustment = form.record_type === 'reasonable_adjustment';
@@ -219,7 +222,7 @@ export default function EdiTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="EDI action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -245,7 +248,17 @@ export default function EdiTracker() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No EDI records</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={6} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No EDI records"
+                      description={canEdit ? 'Add the first diversity, declaration, or incident-linked EDI record for this home.' : 'No EDI records have been recorded for this home yet.'}
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>{recordTypeName(item.record_type)}</td>

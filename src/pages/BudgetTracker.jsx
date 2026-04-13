@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
-import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
+import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import { getCurrentHome, getSchedulingData, saveConfig, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../lib/api.js';
 import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
@@ -40,8 +42,20 @@ export default function BudgetTracker() {
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading budget data...</div>;
-  if (error) return <div className="p-6 text-red-600" role="alert">Error: {error}</div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading budget data..." card />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Budget tracker needs attention" message={`Error: ${error}`} onRetry={() => window.location.reload()} />
+      </div>
+    );
+  }
   if (!schedData) return null;
 
   return <BudgetTrackerInner schedData={schedData} setSchedData={setSchedData} editingBudget={editingBudget} setEditingBudget={setEditingBudget} budgetInput={budgetInput} setBudgetInput={setBudgetInput} agencyCapInput={agencyCapInput} setAgencyCapInput={setAgencyCapInput} />;

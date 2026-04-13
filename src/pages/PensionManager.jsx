@@ -172,7 +172,7 @@ export default function PensionManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading pension enrolments..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -201,11 +201,11 @@ export default function PensionManager() {
 
       {/* Unrecorded alert */}
       {unrecorded.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>{unrecorded.length} staff member{unrecorded.length !== 1 ? 's' : ''} have no pension enrolment record:</strong>{' '}
           {unrecorded.map(s => s.name).join(', ')}.{' '}
           These staff will not have pension deductions calculated during payroll. Add their enrolment status.
-        </div>
+        </InlineNotice>
       )}
 
       {/* Pension config summary */}

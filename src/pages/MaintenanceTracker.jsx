@@ -6,6 +6,10 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getMaintenanceStats,
@@ -16,6 +20,7 @@ import {
   getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const EMPTY_FORM = {
   category: '', category_name: '', description: '', frequency: 'annual',
@@ -32,8 +37,9 @@ function normalizeNullFields(record) {
 
 export default function MaintenanceTracker() {
   const { canWrite } = useData();
-  const canEdit = canWrite('governance');
+  const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { showToast } = useToast();
   const [checks, setChecks] = useState([]);
   const [maintenanceCategories, setMaintenanceCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +57,7 @@ export default function MaintenanceTracker() {
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
       const result = await getMaintenance(home);
       setChecks(result.checks || []);
@@ -115,8 +122,10 @@ export default function MaintenanceTracker() {
     try {
       if (editingId) {
         await updateMaintenanceCheck(home, editingId, { ...saveItem, _version: form._version });
+        showToast({ title: 'Maintenance check updated', message: saveItem.category_name || saveItem.category });
       } else {
         await createMaintenanceCheck(home, saveItem);
+        showToast({ title: 'Maintenance check added', message: saveItem.category_name || saveItem.category });
       }
       setShowModal(false);
       await load();
@@ -130,6 +139,7 @@ export default function MaintenanceTracker() {
     if (!await confirm('Delete this maintenance record?')) return;
     try {
       await deleteMaintenanceCheck(home, editingId);
+      showToast({ title: 'Maintenance check deleted' });
       setShowModal(false);
       await load();
     } catch (err) {
@@ -159,6 +169,7 @@ export default function MaintenanceTracker() {
         'Items Checked', 'Items Passed', 'Items Failed'],
       rows,
     }]);
+    showToast({ title: 'Maintenance checks exported', message: `${items.length} record${items.length === 1 ? '' : 's'} downloaded` });
   }
 
   const statusBadge = (status) => {
@@ -169,7 +180,7 @@ export default function MaintenanceTracker() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-gray-400">Loading maintenance checks...</div>
+        <LoadingState message="Loading maintenance checks..." />
       </div>
     );
   }
@@ -177,10 +188,7 @@ export default function MaintenanceTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-red-500">{error}</div>
-        <div className="text-center">
-          <button onClick={load} className={BTN.primary}>Retry</button>
-        </div>
+        <ErrorState title="Maintenance schedule needs attention" message={error} onRetry={() => void load()} />
       </div>
     );
   }
@@ -235,49 +243,60 @@ export default function MaintenanceTracker() {
 
       {/* Table */}
       <div className={CARD.flush}>
-        <div className="overflow-x-auto">
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Category</th>
-                <th scope="col" className={TABLE.th}>Frequency</th>
-                <th scope="col" className={TABLE.th}>Last Completed</th>
-                <th scope="col" className={TABLE.th}>Next Due</th>
-                <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Certificate</th>
-                <th scope="col" className={TABLE.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 && (
-                <tr><td colSpan="7" className={`${TABLE.td} text-center text-gray-400`}>No maintenance checks recorded</td></tr>
-              )}
-              {items.map(m => (
-                <tr key={m.id} className={TABLE.tr}>
-                  <td className={TABLE.td}>
-                    <div className="text-sm font-medium">{m.category_name || m.category}</div>
-                    {m.description && <div className="text-xs text-gray-400 max-w-xs truncate">{m.description}</div>}
-                  </td>
-                  <td className={TABLE.td}>{FREQUENCY_OPTIONS.find(f => f.id === m.frequency)?.name || m.frequency}</td>
-                  <td className={TABLE.tdMono}>{m.last_completed || '--'}</td>
-                  <td className={TABLE.tdMono}>{m._status.nextDue || m.next_due || '--'}</td>
-                  <td className={TABLE.td}>
-                    {statusBadge(m._status.status)}
-                    {m._status.isOverdue && <div className="text-xs text-red-500 mt-0.5">{m._status.daysOverdue}d overdue</div>}
-                  </td>
-                  <td className={TABLE.td}>{m.certificate_ref || '--'}</td>
-                  <td className={TABLE.td}>
-                    {canEdit && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
-                  </td>
+        {items.length === 0 ? (
+          <EmptyState
+            title="No maintenance checks recorded"
+            description={canEdit
+              ? 'Start the first maintenance record so due dates and certificates can be tracked here.'
+              : 'There are no maintenance checks to review for the current filters.'}
+            actionLabel={canEdit ? 'Add check' : undefined}
+            onAction={canEdit ? openAdd : undefined}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Category</th>
+                  <th scope="col" className={TABLE.th}>Frequency</th>
+                  <th scope="col" className={TABLE.th}>Last Completed</th>
+                  <th scope="col" className={TABLE.th}>Next Due</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Certificate</th>
+                  <th scope="col" className={TABLE.th}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {items.map(m => (
+                  <tr key={m.id} className={TABLE.tr}>
+                    <td className={TABLE.td}>
+                      <div className="text-sm font-medium">{m.category_name || m.category}</div>
+                      {m.description && <div className="text-xs text-gray-400 max-w-xs truncate">{m.description}</div>}
+                    </td>
+                    <td className={TABLE.td}>{FREQUENCY_OPTIONS.find(f => f.id === m.frequency)?.name || m.frequency}</td>
+                    <td className={TABLE.tdMono}>{m.last_completed || '--'}</td>
+                    <td className={TABLE.tdMono}>{m._status.nextDue || m.next_due || '--'}</td>
+                    <td className={TABLE.td}>
+                      {statusBadge(m._status.status)}
+                      {m._status.isOverdue && <div className="text-xs text-red-500 mt-0.5">{m._status.daysOverdue}d overdue</div>}
+                    </td>
+                    <td className={TABLE.td}>{m.certificate_ref || '--'}</td>
+                    <td className={TABLE.td}>
+                      {canEdit && <button onClick={() => openEdit(m)} className={`${BTN.ghost} ${BTN.xs}`}>Edit</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingId ? 'Edit Maintenance Check' : 'Add Maintenance Check'} size="lg">
+            <InlineNotice className="mb-4">
+              <p>Track when the check was completed, when it is next due, and any certificates so maintenance evidence stays together.</p>
+            </InlineNotice>
 
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -395,7 +414,11 @@ export default function MaintenanceTracker() {
 
             <div className={MODAL.footer}>
               {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
-              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
+              {saveError && (
+                <div className="mr-auto min-w-0 flex-1">
+                  <ErrorState title="Maintenance update needs attention" message={saveError} />
+                </div>
+              )}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}

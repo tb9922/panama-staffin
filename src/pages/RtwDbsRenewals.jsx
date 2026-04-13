@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getHrRenewals, createHrRenewal, updateHrRenewal } from '../lib/api.js';
 import { RENEWAL_CHECK_TYPES, RENEWAL_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -186,7 +189,7 @@ export default function RtwDbsRenewals() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading renewal data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading renewal data..." card /></div>;
 
   const overdueCount = items.filter(isHighlighted).length;
 
@@ -206,7 +209,7 @@ export default function RtwDbsRenewals() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="Renewal action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -237,7 +240,17 @@ export default function RtwDbsRenewals() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No renewal records</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No renewal records"
+                      description={canEdit ? 'Record DBS and right-to-work renewal checks here to track expiry and evidence.' : 'No renewal checks have been recorded for this home yet.'}
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => {
                 const highlighted = isHighlighted(item);
                 return (

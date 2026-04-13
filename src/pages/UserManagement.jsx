@@ -4,6 +4,7 @@ import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
@@ -222,7 +223,11 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
   return (
     <Modal isOpen={true} onClose={onClose} title="Add User">
       <form onSubmit={handleSubmit}>
-        {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+        {localError && (
+          <InlineNotice variant="error" role="alert" className="mb-4">
+            {localError}
+          </InlineNotice>
+        )}
         <div className="space-y-3">
           <div>
             <label className={INPUT.label}>Username</label>
@@ -290,7 +295,11 @@ function EditUserModal({ user, homeSlug, onClose, onSuccess }) {
   return (
     <Modal isOpen={true} onClose={onClose} title={`Edit User \u2014 ${user.username}`}>
       <form onSubmit={handleSubmit}>
-        {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+        {localError && (
+          <InlineNotice variant="error" role="alert" className="mb-4">
+            {localError}
+          </InlineNotice>
+        )}
         <div className="space-y-3">
           <div>
             <label className={INPUT.label}>Display Name</label>
@@ -350,7 +359,11 @@ function ResetPasswordModal({ user, homeSlug, onClose, onSuccess }) {
   return (
     <Modal isOpen={true} onClose={onClose} title={`Reset Password \u2014 ${user.username}`} size="sm">
       <form onSubmit={handleSubmit}>
-        {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+        {localError && (
+          <InlineNotice variant="error" role="alert" className="mb-4">
+            {localError}
+          </InlineNotice>
+        )}
         <p className="text-xs text-gray-500 mb-3">This will revoke all active sessions for this user.</p>
         <div className="space-y-3">
           <div>
@@ -398,7 +411,11 @@ function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Role \u2014 ${user.username}`} size="sm">
-      {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+      {localError && (
+        <InlineNotice variant="error" role="alert" className="mb-4">
+          {localError}
+        </InlineNotice>
+      )}
       <p className="text-xs text-gray-500 mb-3">Set the role for this user at the current home.</p>
       <select className={INPUT.select} value={roleId} onChange={e => setRoleId(e.target.value)}>
         <option value="">Select role...</option>
@@ -467,11 +484,15 @@ function PlatformRolesModal({ user, onClose, onSuccess }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Roles \u2014 ${user.username}`} size="lg">
-      {localError && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-200 mb-4">{localError}</div>}
+      {localError && (
+        <InlineNotice variant="error" role="alert" className="mb-4">
+          {localError}
+        </InlineNotice>
+      )}
       {loading ? (
-        <p className="text-gray-400 text-sm py-4 text-center">Loading...</p>
+        <LoadingState message="Loading..." compact />
       ) : allHomes.length === 0 ? (
-        <p className="text-gray-400 text-sm py-4 text-center">No homes configured</p>
+        <EmptyState compact title="No homes configured" description="Add a home before assigning multi-home roles." />
       ) : (
         <>
           <p className="text-xs text-gray-500 mb-3">

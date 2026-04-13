@@ -146,7 +146,7 @@ export default function SickPayTracker() {
     setShowUpdate(period);
   }
 
-  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading sick pay records..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -177,14 +177,14 @@ export default function SickPayTracker() {
 
       {/* Fit note alerts */}
       {fitNoteAlerts.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>Fit note required for {fitNoteAlerts.length} staff member{fitNoteAlerts.length !== 1 ? 's' : ''}:</strong>{' '}
           {fitNoteAlerts.map(p => {
             const days = daysOpen(p.start_date, p.end_date);
             return `${staffMap[p.staff_id]?.name || p.staff_id} (${days} days)`;
           }).join(', ')}.{' '}
           A GP fit note is required for absences exceeding 7 calendar days.
-        </div>
+        </InlineNotice>
       )}
 
       {/* SSP config */}

@@ -5,6 +5,9 @@ import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { startOfNextLocalDay } from '../lib/localDates.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 
 function downloadCSV(filename, headers, rows) {
@@ -57,15 +60,31 @@ export default function CostTracker() {
     return (
       <div className={PAGE.container}>
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Cost Tracker</h1>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-sm">
+        <InlineNotice variant="warning">
           Admin access required to view cost data.
-        </div>
+        </InlineNotice>
       </div>
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading cost data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading cost data..." card />
+      </div>
+    );
+  }
+  if (error || !schedData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Cost tracker needs attention"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
 
   return <CostTrackerInner schedData={schedData} monthOffset={monthOffset} setMonthOffset={setMonthOffset} today={today} />;
 }

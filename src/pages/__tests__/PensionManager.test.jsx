@@ -114,7 +114,7 @@ describe('PensionManager', () => {
     api.getPensionEnrolments.mockReturnValue(new Promise(() => {}));
     api.getPensionConfig.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<PensionManager />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading pension enrolments...')).toBeInTheDocument();
   });
 
   it('shows an error message when the API fails', async () => {

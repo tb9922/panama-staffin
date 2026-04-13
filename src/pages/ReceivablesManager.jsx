@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getCurrentHome,
   getReceivablesDetail,
@@ -16,6 +20,7 @@ import { CHASE_METHODS, PAYER_TYPES, getLabel, formatCurrency } from '../lib/fin
 import { clickableRowProps } from '../lib/a11y.js';
 import { todayLocalISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 const BUCKETS = [
@@ -39,7 +44,9 @@ export default function ReceivablesManager() {
   const [showChaseModal, setShowChaseModal] = useState(false);
   const [chaseForm, setChaseForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [chaseError, setChaseError] = useState(null);
   const home = getCurrentHome();
+  const { showToast } = useToast();
   useDirtyGuard(!!showChaseModal);
 
   const load = useCallback(async () => {
@@ -57,6 +64,7 @@ export default function ReceivablesManager() {
   async function openChaseModal(invoice) {
     setSelectedInvoice(invoice);
     setError(null);
+    setChaseError(null);
     setChaseForm({ chase_date: todayLocalISO(), method: 'phone' });
     try {
       setChases(await getInvoiceChases(home, invoice.id));
@@ -69,21 +77,26 @@ export default function ReceivablesManager() {
     setSelectedInvoice(null);
     setChases([]);
     setChaseForm({});
+    setChaseError(null);
   }
 
   async function handleAddChase() {
     if (saving) return;
-    setError(null);
+    setChaseError(null);
     if (!selectedInvoice || !chaseForm.chase_date || !chaseForm.method) {
-      setError('Please fill in chase date and method');
+      setChaseError('Please fill in chase date and method before recording the chase.');
       return;
     }
     setSaving(true);
     try {
       await createInvoiceChase(home, selectedInvoice.id, chaseForm);
       setChases(await getInvoiceChases(home, selectedInvoice.id));
-      load();
-    } catch (e) { setError(e.message); }
+      await load();
+      showToast({
+        title: 'Chase recorded',
+        message: `${selectedInvoice.invoice_number} · ${chaseForm.chase_date}`,
+      });
+    } catch (e) { setChaseError(e.message); }
     finally { setSaving(false); }
   }
 
@@ -99,6 +112,10 @@ export default function ReceivablesManager() {
         i.last_chase?.chase_date || '', i.last_chase?.method || '', i.last_chase?.next_action_date || '',
       ]),
     }]);
+    showToast({
+      title: 'Receivables exported',
+      message: `${data.overdue_items.length} invoice${data.overdue_items.length === 1 ? '' : 's'} downloaded`,
+    });
   }
 
   const setChaseField = (k, v) => setChaseForm(f => ({ ...f, [k]: v }));
@@ -110,7 +127,21 @@ export default function ReceivablesManager() {
     return item.days_overdue >= bucket.min && item.days_overdue <= bucket.max;
   }) || [];
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading receivables...</p></div></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading receivables..." card />
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Receivables need attention" message={error} onRetry={() => void load()} />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -124,7 +155,14 @@ export default function ReceivablesManager() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && data && (
+        <ErrorState
+          title="Receivables need attention"
+          message={error}
+          onRetry={() => void load()}
+          className="mb-4"
+        />
+      )}
 
       {/* Ageing Cards */}
       {data && (
@@ -147,9 +185,12 @@ export default function ReceivablesManager() {
 
       {/* Chase Follow-ups Banner */}
       {data?.chases_due?.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg mb-4 text-sm">
-          {data.chases_due.length} chase follow-up{data.chases_due.length > 1 ? 's' : ''} due today or overdue
-        </div>
+        <InlineNotice variant="warning" className="mb-4">
+          <p>
+            {data.chases_due.length} chase follow-up{data.chases_due.length > 1 ? 's' : ''} due today or overdue.
+            Open an invoice to record the next contact and keep the recovery trail current.
+          </p>
+        </InlineNotice>
       )}
 
       {/* Filter */}
@@ -162,58 +203,70 @@ export default function ReceivablesManager() {
 
       {/* Outstanding Invoices Table */}
       <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}><tr>
-              <th scope="col" className={TABLE.th}>Invoice #</th>
-              <th scope="col" className={TABLE.th}>Payer</th>
-              <th scope="col" className={TABLE.th}>Type</th>
-              <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
-              <th scope="col" className={`${TABLE.th} text-right`}>Outstanding</th>
-              <th scope="col" className={TABLE.th}>Due Date</th>
-              <th scope="col" className={`${TABLE.th} text-right`}>Days Overdue</th>
-              <th scope="col" className={TABLE.th}>Last Chase</th>
-              <th scope="col" className={TABLE.th}>Next Action</th>
-            </tr></thead>
-            <tbody>
-              {filteredItems.length === 0 ? (
-                <tr><td colSpan={9} className={TABLE.empty}>No outstanding invoices</td></tr>
-              ) : filteredItems.map(item => {
-                const today = todayLocalISO();
-                const actionOverdue = item.last_chase?.next_action_date && item.last_chase.next_action_date <= today;
-                return (
-                  <tr key={item.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openChaseModal(item))}>
-                    <td className={`${TABLE.td} font-medium font-mono`}>{item.invoice_number}</td>
-                    <td className={TABLE.td}>{item.payer_name}</td>
-                    <td className={TABLE.td}>{getLabel(item.payer_type, PAYER_TYPES)}</td>
-                    <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(item.total_amount)}</td>
-                    <td className={`${TABLE.tdMono} text-right text-red-600`}>{formatCurrency(item.outstanding)}</td>
-                    <td className={TABLE.td}>{item.due_date}</td>
-                    <td className={`${TABLE.tdMono} text-right`}>
-                      <span className={item.days_overdue > 90 ? 'text-red-600 font-bold' : item.days_overdue > 60 ? 'text-red-600' : item.days_overdue > 30 ? 'text-orange-600' : 'text-amber-600'}>
-                        {item.days_overdue}
-                      </span>
-                    </td>
-                    <td className={TABLE.td}>
-                      {item.last_chase ? (
-                        <span className="text-xs">{item.last_chase.chase_date} <span className={BADGE.gray}>{item.last_chase.method}</span></span>
-                      ) : <span className="text-gray-400 text-xs">None</span>}
-                    </td>
-                    <td className={TABLE.td}>
-                      {item.last_chase?.next_action_date ? (
-                        <span className={`text-xs ${actionOverdue ? 'text-red-600 font-bold' : ''}`}>{item.last_chase.next_action_date}</span>
-                      ) : <span className="text-gray-400 text-xs">&mdash;</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {filteredItems.length === 0 ? (
+          <EmptyState
+            title="No outstanding invoices"
+            description={filterBucket === 'all'
+              ? 'All invoices are current or already settled.'
+              : 'Try another ageing bucket to review invoices in a different arrears window.'}
+            actionLabel={filterBucket !== 'all' ? 'Show all invoices' : undefined}
+            onAction={filterBucket !== 'all' ? () => setFilterBucket('all') : undefined}
+          />
+        ) : (
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}><tr>
+                <th scope="col" className={TABLE.th}>Invoice #</th>
+                <th scope="col" className={TABLE.th}>Payer</th>
+                <th scope="col" className={TABLE.th}>Type</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Outstanding</th>
+                <th scope="col" className={TABLE.th}>Due Date</th>
+                <th scope="col" className={`${TABLE.th} text-right`}>Days Overdue</th>
+                <th scope="col" className={TABLE.th}>Last Chase</th>
+                <th scope="col" className={TABLE.th}>Next Action</th>
+              </tr></thead>
+              <tbody>
+                {filteredItems.map(item => {
+                  const today = todayLocalISO();
+                  const actionOverdue = item.last_chase?.next_action_date && item.last_chase.next_action_date <= today;
+                  return (
+                    <tr key={item.id} className={`${TABLE.tr} cursor-pointer`} {...clickableRowProps(() => openChaseModal(item))}>
+                      <td className={`${TABLE.td} font-medium font-mono`}>{item.invoice_number}</td>
+                      <td className={TABLE.td}>{item.payer_name}</td>
+                      <td className={TABLE.td}>{getLabel(item.payer_type, PAYER_TYPES)}</td>
+                      <td className={`${TABLE.tdMono} text-right`}>{formatCurrency(item.total_amount)}</td>
+                      <td className={`${TABLE.tdMono} text-right text-red-600`}>{formatCurrency(item.outstanding)}</td>
+                      <td className={TABLE.td}>{item.due_date}</td>
+                      <td className={`${TABLE.tdMono} text-right`}>
+                        <span className={item.days_overdue > 90 ? 'text-red-600 font-bold' : item.days_overdue > 60 ? 'text-red-600' : item.days_overdue > 30 ? 'text-orange-600' : 'text-amber-600'}>
+                          {item.days_overdue}
+                        </span>
+                      </td>
+                      <td className={TABLE.td}>
+                        {item.last_chase ? (
+                          <span className="text-xs">{item.last_chase.chase_date} <span className={BADGE.gray}>{item.last_chase.method}</span></span>
+                        ) : <span className="text-gray-400 text-xs">None</span>}
+                      </td>
+                      <td className={TABLE.td}>
+                        {item.last_chase?.next_action_date ? (
+                          <span className={`text-xs ${actionOverdue ? 'text-red-600 font-bold' : ''}`}>{item.last_chase.next_action_date}</span>
+                        ) : <span className="text-gray-400 text-xs">&mdash;</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Chase Modal */}
       <Modal isOpen={!!(showChaseModal && selectedInvoice)} onClose={closeChaseModal} title={`Chase Log \u2014 ${selectedInvoice?.invoice_number || ''}`} size="lg">
+        <InlineNotice className="mb-4">
+          <p>Record each contact attempt, next action, and any supporting evidence so the finance team always has a clear collection trail.</p>
+        </InlineNotice>
         <div className="flex items-center gap-4 mb-4 text-sm">
           <span><strong>Payer:</strong> {selectedInvoice?.payer_name}</span>
           <span><strong>Outstanding:</strong> <span className="text-red-600 font-bold">{formatCurrency(selectedInvoice?.outstanding)}</span></span>
@@ -223,7 +276,11 @@ export default function ReceivablesManager() {
         {/* Chase History */}
         <h3 className="text-sm font-semibold text-gray-700 mb-2">Chase History</h3>
         {chases.length === 0 ? (
-          <p className="text-gray-400 text-sm py-3 text-center">No chase records yet</p>
+          <EmptyState
+            compact
+            title="No chase records yet"
+            description="Record the first contact attempt to start the collection history for this invoice."
+          />
         ) : (
           <div className={`${TABLE.wrapper} mb-4`}>
             <table className={TABLE.table}>
@@ -251,6 +308,13 @@ export default function ReceivablesManager() {
 
         {/* Add Chase Form */}
         <h3 className="text-sm font-semibold text-gray-700 mb-2 mt-4">Record Chase</h3>
+        {chaseError && (
+          <ErrorState
+            title="Chase update needs attention"
+            message={chaseError}
+            className="mb-4"
+          />
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div><label className={INPUT.label}>Date *</label>
             <input type="date" value={chaseForm.chase_date || ''} onChange={e => setChaseField('chase_date', e.target.value)} className={INPUT.base} /></div>

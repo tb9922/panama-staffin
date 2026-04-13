@@ -12,6 +12,8 @@ import {
   downloadRecordAttachment,
 } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import InlineNotice from '../InlineNotice.jsx';
+import EmptyState from '../EmptyState.jsx';
 
 export default function ResidentEditModal({ home, resident, canEdit, onClose, onSaved }) {
   const [tab, setTab] = useState('profile');
@@ -86,7 +88,11 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
         </div>
       )}
 
-      {error && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>}
+      {error && (
+        <InlineNotice variant="error" className="mb-3">
+          {error}
+        </InlineNotice>
+      )}
 
       <div className="flex gap-2 mb-4 border-b">
         {tabs.map(t => (
@@ -158,10 +164,12 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={INPUT.label}>CHC Contribution</label>
+              <p className="text-xs text-gray-500 mb-1">NHS Continuing Healthcare contribution paid toward the weekly fee.</p>
               <input type="number" step="0.01" className={INPUT.base} value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} disabled={readOnly} />
             </div>
             <div>
               <label className={INPUT.label}>FNC Amount</label>
+              <p className="text-xs text-gray-500 mb-1">Funded Nursing Care contribution from the NHS, where applicable.</p>
               <input type="number" step="0.01" className={INPUT.base} value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} disabled={readOnly} />
             </div>
           </div>
@@ -213,7 +221,11 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
       {tab === 'history' && (
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {feeHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">No fee changes recorded.</p>
+            <EmptyState
+              compact
+              title="No fee changes recorded yet"
+              description="Fee review history will appear here once the weekly fee is amended and saved."
+            />
           ) : (
             feeHistory.map((h, i) => (
               <div key={i} className="p-2 bg-gray-50 rounded text-sm">

@@ -5,6 +5,10 @@ import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getCurrentHome,
   getSchedulingData,
@@ -17,6 +21,7 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -42,6 +47,7 @@ function getCenteredSchedulingRange(date, radiusDays = 200) {
 export default function AnnualLeave() {
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -217,6 +223,7 @@ export default function AnnualLeave() {
     try {
       await deleteOverride(getCurrentHome(), dateKey, staffId, getEditLockOptions(dateKey));
       await loadData();
+      showNotice('Annual leave booking cancelled.', { variant: 'warning' });
     } catch (e) {
       if (e.status === 423) {
         handleLockedError(dateKey, () => cancelAL(staffId, dateKey));
@@ -249,18 +256,17 @@ export default function AnnualLeave() {
     return bookings;
   }, [schedData, today]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingState message="Loading annual leave..." className="min-h-64" />;
 
   if (!homeSlug) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Annual Leave</h1>
-          <p className="text-sm text-gray-500">Select a home to view annual leave planning.</p>
+          <EmptyState
+            compact
+            title="Annual Leave"
+            description="Select a home to view annual leave planning."
+          />
         </div>
       </div>
     );
@@ -270,8 +276,11 @@ export default function AnnualLeave() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Annual Leave</h1>
-          <p className="text-sm text-gray-500">Annual leave planning is not available for staff self-service accounts.</p>
+          <EmptyState
+            compact
+            title="Annual Leave"
+            description="Annual leave planning is not available for staff self-service accounts."
+          />
         </div>
       </div>
     );
@@ -279,7 +288,7 @@ export default function AnnualLeave() {
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
+      <ErrorState title="Unable to load annual leave planning" message={error} onRetry={() => void loadData()} />
     </div>
   );
 
@@ -303,6 +312,12 @@ export default function AnnualLeave() {
         </div>
         <button onClick={() => window.print()} className={BTN.secondary}>Print</button>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4 print:hidden">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {showLockPrompt && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -392,8 +407,16 @@ export default function AnnualLeave() {
               </div>
             </div>
             <div className="text-xs text-gray-500">Max {schedData.config.max_al_same_day} staff on AL per day</div>
-            {bookingError && <p className="text-sm text-red-600">{bookingError}</p>}
-            {bookingMsg && <p className="text-sm text-emerald-700">{bookingMsg}</p>}
+            {bookingError && (
+              <InlineNotice variant="error" role="alert">
+                {bookingError}
+              </InlineNotice>
+            )}
+            {bookingMsg && (
+              <InlineNotice variant="success">
+                {bookingMsg}
+              </InlineNotice>
+            )}
             <button onClick={bookAL} disabled={!bookingStaff || !bookingStart || !bookingEnd || saving || (selectedAccrual?.missingContractHours)}
               className={`w-full inline-flex items-center justify-center px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-medium shadow-sm transition-colors duration-150 disabled:opacity-50`}>
               {saving ? 'Booking...' : 'Book Annual Leave'}
@@ -516,7 +539,11 @@ export default function AnnualLeave() {
         <div className={`lg:col-span-3 ${CARD.padded}`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Upcoming AL Bookings</h2>
           {upcomingAL.length === 0 ? (
-            <div className="text-sm text-gray-400">No upcoming AL bookings</div>
+            <EmptyState
+              compact
+              title="No upcoming AL bookings"
+              description={canEdit ? 'Book annual leave to see the next confirmed leave dates here.' : 'Upcoming annual leave will appear here once bookings are in place.'}
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               {upcomingAL.slice(0, 20).map((b, i) => (

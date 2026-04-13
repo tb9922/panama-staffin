@@ -116,7 +116,7 @@ export default function HMRCDashboard() {
   const now = currentTaxYear();
   for (let y = now; y >= now - 4; y--) taxYearOptions.push(y);
 
-  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading HMRC liabilities..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -155,10 +155,10 @@ export default function HMRCDashboard() {
 
       {/* Overdue alert */}
       {overdue.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>{overdue.length} overdue payment{overdue.length !== 1 ? 's' : ''}.</strong>{' '}
           HMRC penalties may apply. Total overdue: {fmt(overdue.reduce((s, l) => s + parseFloat(l.total_due || 0), 0))}.
-        </div>
+        </InlineNotice>
       )}
 
       {/* Summary cards */}

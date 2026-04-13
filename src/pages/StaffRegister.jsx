@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
@@ -265,7 +268,7 @@ export default function StaffRegister() {
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <p className="text-gray-500 text-sm">Loading staff...</p>
+        <LoadingState message="Loading staff..." card />
       </div>
     );
   }
@@ -273,10 +276,11 @@ export default function StaffRegister() {
   if (error) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-          {error}
-          <button onClick={() => setRefreshKey(k => k + 1)} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
-        </div>
+        <ErrorState
+          title="Staff database needs attention"
+          message={error}
+          onRetry={() => setRefreshKey(k => k + 1)}
+        />
       </div>
     );
   }
@@ -473,6 +477,15 @@ export default function StaffRegister() {
 
       {/* Table */}
       <div className={CARD.flush + ' overflow-x-auto'}>
+        {staff.length === 0 ? (
+          <EmptyState
+            title="No staff records match these filters"
+            description={allStaff.length === 0 ? 'Add the first staff record to start building the staffing database.' : 'Adjust the search or filters to bring matching staff back into view.'}
+            actionLabel={allStaff.length === 0 && canEdit ? 'Add Staff' : undefined}
+            onAction={allStaff.length === 0 && canEdit ? () => { setNewStaff({ ...EMPTY_STAFF, hourly_rate: nlwRate }); setShowAdd(true); } : undefined}
+            className="px-4"
+          />
+        ) : (
         <table className={TABLE.table + ' min-w-[1100px]'}>
           <thead className={TABLE.thead}>
             <tr>
@@ -717,6 +730,7 @@ export default function StaffRegister() {
             })}
           </tbody>
         </table>
+        )}
       </div>
 
       {/* Financial impact note */}

@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
@@ -50,7 +53,7 @@ export default function PlatformHomes() {
     return () => clearTimeout(t);
   }, [success]);
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading homes...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading homes..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -59,7 +62,7 @@ export default function PlatformHomes() {
         <button className={BTN.primary} onClick={() => setAddOpen(true)}>Add Home</button>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="Home management needs attention" message={error} onRetry={refresh} className="mb-4" />}
       {success && <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{success}</div>}
 
       <div className={CARD.base}>
@@ -78,7 +81,11 @@ export default function PlatformHomes() {
           </thead>
           <tbody>
             {homes.length === 0 && (
-              <tr><td colSpan={8} className={`${TABLE.td} text-center text-gray-400`}>No homes configured</td></tr>
+              <tr>
+                <td colSpan={8} className={TABLE.empty}>
+                  <EmptyState compact title="No homes configured" description="Add the first home here to start assigning staff, residents, and users." />
+                </td>
+              </tr>
             )}
             {homes.map(home => (
               <tr key={home.id} className={TABLE.tr}>

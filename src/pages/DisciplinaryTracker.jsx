@@ -3,6 +3,11 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import RepeatableRowsEditor from '../components/RepeatableRowsEditor.jsx';
 import {
   getCurrentHome, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
@@ -20,6 +25,7 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { todayLocalISO } from '../lib/localDates.js';
 
 const MODAL_TABS = [
@@ -32,10 +38,50 @@ const MODAL_TABS = [
   { id: 'notes', label: 'Notes' },
 ];
 
+const WITNESS_COLUMNS = [
+  { key: 'name', label: 'Name', placeholder: 'Witness name' },
+  { key: 'role', label: 'Role', placeholder: 'Role or relationship' },
+  { key: 'statement_summary', label: 'Statement Summary', type: 'textarea', rows: 2, fullWidth: true, placeholder: 'Key points from the witness statement' },
+];
+
+const EVIDENCE_COLUMNS = [
+  { key: 'description', label: 'Description', type: 'textarea', rows: 2, fullWidth: true, placeholder: 'What evidence was reviewed?' },
+  { key: 'type', label: 'Type', placeholder: 'Document, CCTV, rota, statement...' },
+  { key: 'date', label: 'Date', type: 'date' },
+];
+
+function toStructuredRows(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function compactStructuredRows(rows, allowedKeys) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => Object.fromEntries(
+      allowedKeys
+        .map((key) => {
+          const value = row?.[key];
+          const cleaned = typeof value === 'string' ? value.trim() : value;
+          return [key, cleaned];
+        })
+        .filter(([, value]) => value != null && value !== '')
+    ))
+    .filter((row) => Object.keys(row).length > 0);
+}
+
 export default function DisciplinaryTracker() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [pageError, setPageError] = useState(null);
+  const [modalError, setModalError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -48,10 +94,10 @@ export default function DisciplinaryTracker() {
   const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [jsonErrors, setJsonErrors] = useState({});
   useDirtyGuard(showModal);
   const home = getCurrentHome();
   const { canWrite } = useData();
+  const { showToast } = useToast();
   const canEdit = canWrite('hr');
   const editReqRef = useRef(0);
   useEffect(() => setOffset(0), [filterStaff, filterStatus]);
@@ -68,8 +114,8 @@ export default function DisciplinaryTracker() {
         if (filterStaff) filters.staffId = filterStaff;
         if (filterStatus) filters.status = filterStatus;
         const res = await getHrDisciplinary(home, filters);
-        if (!stale) { setCases(res?.rows || []); setTotal(res?.total || 0); setError(null); }
-      } catch (e) { if (!stale) setError(e.message); }
+        if (!stale) { setCases(res?.rows || []); setTotal(res?.total || 0); setPageError(null); }
+      } catch (e) { if (!stale) setPageError(e.message); }
       finally { if (!stale) setLoading(false); }
     })();
     return () => { stale = true; };
@@ -77,20 +123,33 @@ export default function DisciplinaryTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: todayLocalISO(), category: 'misconduct', status: 'open', source: 'other' });
+    setForm({
+      date_raised: todayLocalISO(),
+      category: 'misconduct',
+      status: 'open',
+      source: 'other',
+      witnesses: [],
+      evidence_items: [],
+    });
     setModalTab('details');
     setCaseNotes([]);
     setNoteText('');
+    setModalError(null);
     setShowModal(true);
   }
 
   async function openEdit(c) {
     const reqId = ++editReqRef.current;
     setEditing(c);
-    setForm({ ...c });
+    setForm({
+      ...c,
+      witnesses: toStructuredRows(c.witnesses),
+      evidence_items: toStructuredRows(c.evidence_items),
+    });
     setModalTab('details');
     setNoteText('');
     setCaseNotes([]);
+    setModalError(null);
     setShowModal(true);
     if (c.id) {
       try {
@@ -106,41 +165,38 @@ export default function DisciplinaryTracker() {
     setForm({});
     setCaseNotes([]);
     setNoteText('');
-    setError(null);
-    setJsonErrors({});
-  }
-
-  function validateJsonField(field, value) {
-    if (!value || !value.trim()) { setJsonErrors(prev => ({ ...prev, [field]: null })); return true; }
-    try { JSON.parse(value); setJsonErrors(prev => ({ ...prev, [field]: null })); return true; }
-    catch { setJsonErrors(prev => ({ ...prev, [field]: 'Invalid JSON' })); return false; }
+    setModalError(null);
   }
 
   async function handleSave() {
-    setError(null);
+    setModalError(null);
     const missing = [];
     if (!form.staff_id) missing.push('Staff member');
     if (!form.date_raised) missing.push('Date raised');
     if (!form.category) missing.push('Category');
     if (!form.raised_by?.trim()) missing.push('Raised by');
-    if (missing.length) { setError(`Required fields missing: ${missing.join(', ')}`); return; }
-    const w = typeof form.witnesses === 'string' ? validateJsonField('witnesses', form.witnesses) : true;
-    const e = typeof form.evidence_items === 'string' ? validateJsonField('evidence_items', form.evidence_items) : true;
-    if (!w || !e) return;
+    if (missing.length) { setModalError(`Required fields missing: ${missing.join(', ')}`); return; }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        witnesses: compactStructuredRows(form.witnesses, ['name', 'role', 'statement_summary']),
+        evidence_items: compactStructuredRows(form.evidence_items, ['description', 'type', 'date']),
+      };
       if (editing?.id) {
-        await updateHrDisciplinary(editing.id, { ...form, _version: editing.version });
+        await updateHrDisciplinary(editing.id, { ...payload, _version: editing.version });
+        showToast({ title: 'Disciplinary case updated', message: `${form.staff_id} - ${form.category}` });
       } else {
-        await createHrDisciplinary(home, form);
+        await createHrDisciplinary(home, payload);
+        showToast({ title: 'Disciplinary case created', message: `${form.staff_id} - ${form.category}` });
       }
       closeModal();
       setRefreshKey(k => k + 1);
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
-        setError('This record was modified by another user. Please close and reopen to get the latest version.');
+        setModalError('This record was modified by another user. Please close and reopen to get the latest version.');
         setRefreshKey(k => k + 1);
-      } else { setError(e.message); }
+      } else { setModalError(e.message); }
     }
     finally { setSaving(false); }
   }
@@ -152,7 +208,8 @@ export default function DisciplinaryTracker() {
       await createHrCaseNote(home, 'disciplinary', editing.id, { note: noteText.trim() });
       setCaseNotes(await getHrCaseNotes(home, 'disciplinary', editing.id));
       setNoteText('');
-    } catch (e) { setError(e.message); }
+      showToast({ title: 'Case note added', message: 'The note is now part of the disciplinary record.' });
+    } catch (e) { setModalError(e.message); }
     finally { setSaving(false); }
   }
 
@@ -169,6 +226,7 @@ export default function DisciplinaryTracker() {
         c.raised_by || '', c.source || '',
       ]),
     }]);
+    showToast({ title: 'Excel export started', message: 'The disciplinary tracker workbook is downloading.' });
   }
 
   function clearFilters() {
@@ -178,7 +236,31 @@ export default function DisciplinaryTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading disciplinary cases...</p></div></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading disciplinary cases..." card />
+      </div>
+    );
+  }
+
+  if (pageError && cases.length === 0) {
+    return (
+      <div className={PAGE.container}>
+        <div className={PAGE.header}>
+          <div>
+            <h1 className={PAGE.title}>Disciplinary Tracker</h1>
+            <p className={PAGE.subtitle}>ACAS-compliant disciplinary case management</p>
+          </div>
+        </div>
+        <ErrorState
+          title="Disciplinary tracker needs attention"
+          message={pageError}
+          onRetry={() => setRefreshKey((value) => value + 1)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -208,22 +290,40 @@ export default function DisciplinaryTracker() {
         )}
       </div>
 
+      {pageError && (
+        <ErrorState
+          title="Disciplinary action needs attention"
+          message={pageError}
+          onRetry={() => setRefreshKey((value) => value + 1)}
+          className="mb-4"
+        />
+      )}
+
       {/* Table */}
-      <div className={CARD.flush}>
-        <div className={TABLE.wrapper}>
-          <table className={TABLE.table}>
-            <thead className={TABLE.thead}>
-              <tr>
-                <th scope="col" className={TABLE.th}>Staff ID</th>
-                <th scope="col" className={TABLE.th}>Date Raised</th>
-                <th scope="col" className={TABLE.th}>Category</th>
-                <th scope="col" className={TABLE.th}>Status</th>
-                <th scope="col" className={TABLE.th}>Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No disciplinary cases</td></tr>}
-              {cases.map(c => (
+      {cases.length === 0 ? (
+        <div className={CARD.padded}>
+          <EmptyState
+            title="No disciplinary cases"
+            description={canEdit ? 'Start the first disciplinary case to capture the allegation, investigation, hearings, and outcomes in one place.' : 'Disciplinary cases will appear here once they are recorded.'}
+            actionLabel={canEdit ? 'New Case' : undefined}
+            onAction={canEdit ? openCreate : undefined}
+          />
+        </div>
+      ) : (
+        <div className={CARD.flush}>
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Staff ID</th>
+                  <th scope="col" className={TABLE.th}>Date Raised</th>
+                  <th scope="col" className={TABLE.th}>Category</th>
+                  <th scope="col" className={TABLE.th}>Status</th>
+                  <th scope="col" className={TABLE.th}>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cases.map(c => (
                 <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(c))}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
                   <td className={TABLE.td}>{c.date_raised}</td>
@@ -236,14 +336,15 @@ export default function DisciplinaryTracker() {
                   <td className={TABLE.td}>
                     {c.outcome
                       ? DISCIPLINARY_OUTCOMES.find(o => o.id === c.outcome)?.name || c.outcome
-                      : '—'}
+                      : '-'}
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
       <Pagination total={total} limit={LIMIT} offset={offset} onChange={setOffset} />
 
       {/* Modal */}
@@ -257,7 +358,10 @@ export default function DisciplinaryTracker() {
           {/* Modal tabs */}
           <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes')} activeTab={modalTab} onTabChange={setModalTab} />
 
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+          <InlineNotice variant="info" className="mb-4">
+            Save the case details first, then keep the investigation, evidence, hearings, and notes together here as the case progresses.
+          </InlineNotice>
+          {modalError && <ErrorState title="This disciplinary case needs attention" message={modalError} className="mb-4" />}
 
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'investigation' && renderInvestigationTab()}
@@ -360,24 +464,26 @@ export default function DisciplinaryTracker() {
             {INVESTIGATION_RECOMMENDATIONS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
-        <div>
-          <label className={INPUT.label}>Witnesses (JSON)</label>
-          <textarea className={INPUT.base + ' font-mono text-xs' + (jsonErrors.witnesses ? ' border-red-400' : '')} rows={3}
-            value={form.witnesses ? (typeof form.witnesses === 'string' ? form.witnesses : JSON.stringify(form.witnesses, null, 2)) : '[]'}
-            onChange={e => f('witnesses', e.target.value)}
-            onBlur={e => validateJsonField('witnesses', e.target.value)}
-            placeholder='[{"name":"...","role":"..."}]' />
-          {jsonErrors.witnesses && <p className="text-red-600 text-xs mt-1">{jsonErrors.witnesses}</p>}
-        </div>
-        <div>
-          <label className={INPUT.label}>Evidence Items (JSON)</label>
-          <textarea className={INPUT.base + ' font-mono text-xs' + (jsonErrors.evidence_items ? ' border-red-400' : '')} rows={3}
-            value={form.evidence_items ? (typeof form.evidence_items === 'string' ? form.evidence_items : JSON.stringify(form.evidence_items, null, 2)) : '[]'}
-            onChange={e => f('evidence_items', e.target.value)}
-            onBlur={e => validateJsonField('evidence_items', e.target.value)}
-            placeholder='[{"description":"...","type":"..."}]' />
-          {jsonErrors.evidence_items && <p className="text-red-600 text-xs mt-1">{jsonErrors.evidence_items}</p>}
-        </div>
+        <RepeatableRowsEditor
+          title="Witness"
+          description="Capture each witness separately so the case record stays readable and exportable."
+          rows={Array.isArray(form.witnesses) ? form.witnesses : []}
+          onChange={(rows) => f('witnesses', rows)}
+          columns={WITNESS_COLUMNS}
+          addLabel="Add witness"
+          emptyTitle="No witnesses captured yet"
+          emptyDescription="Add each witness with their role and a short statement summary instead of pasting raw JSON."
+        />
+        <RepeatableRowsEditor
+          title="Evidence Item"
+          description="Track the documents, recordings, or other material reviewed during the investigation."
+          rows={Array.isArray(form.evidence_items) ? form.evidence_items : []}
+          onChange={(rows) => f('evidence_items', rows)}
+          columns={EVIDENCE_COLUMNS}
+          addLabel="Add evidence item"
+          emptyTitle="No evidence items listed yet"
+          emptyDescription="Add each supporting item so the investigation record is easy to follow for managers and auditors."
+        />
         <InvestigationMeetings caseType="disciplinary" caseId={editing?.id} />
         <FileAttachments caseType="disciplinary" caseId={editing?.id} />
       </div>
@@ -613,12 +719,18 @@ export default function DisciplinaryTracker() {
     return (
       <div className="space-y-4">
         <div className="space-y-3 max-h-60 overflow-y-auto">
-          {caseNotes.length === 0 && <p className="text-sm text-gray-400">No case notes yet</p>}
+          {caseNotes.length === 0 && (
+            <EmptyState
+              title="No case notes yet"
+              description="Add investigation updates, manager decisions, and key case history here."
+              compact
+            />
+          )}
           {caseNotes.map(n => (
             <div key={n.id} className="border border-gray-100 rounded-lg p-3">
               <p className="text-sm text-gray-800">{n.content}</p>
               <p className="text-xs text-gray-400 mt-1">
-                {n.author || 'System'} — {n.created_at ? new Date(n.created_at).toLocaleString('en-GB') : ''}
+                {n.author || 'System'} - {n.created_at ? new Date(n.created_at).toLocaleString('en-GB') : ''}
               </p>
             </div>
           ))}

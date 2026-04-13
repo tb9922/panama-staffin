@@ -5,6 +5,10 @@ import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
 import StaffPicker from '../components/StaffPicker.jsx';
 import ResidentPicker from '../components/ResidentPicker.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getDataRequests, createDataRequest, updateDataRequest, gatherRequestData, executeErasure,
   getDataBreaches, createDataBreach, updateDataBreach, assessBreach,
@@ -34,6 +38,16 @@ const TABS = [
   { id: 'complaints', label: 'Complaints' },
   { id: 'access',     label: 'Access Log' },
 ];
+
+function renderTableEmpty(colSpan, title, description) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className={TABLE.empty}>
+        <EmptyState compact title={title} description={description} />
+      </td>
+    </tr>
+  );
+}
 
 export default function GdprDashboard() {
   const { canWrite } = useData();
@@ -326,7 +340,13 @@ export default function GdprDashboard() {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading GDPR data..." card />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -338,8 +358,12 @@ export default function GdprDashboard() {
         {canEdit && <button onClick={handleCreateGdprSnapshot} disabled={saving} className={`${BTN.secondary} ${BTN.sm}`}>Save Snapshot</button>}
       </div>
 
-      {snapshotNotice && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg mb-4">{snapshotNotice}</div>}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {snapshotNotice && (
+        <InlineNotice variant="warning" onDismiss={() => setSnapshotNotice(null)} className="mb-4">
+          {snapshotNotice}
+        </InlineNotice>
+      )}
+      {error && <ErrorState title="GDPR action needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       {/* Tab bar */}
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
@@ -596,7 +620,7 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Type</th><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Received</th><th scope="col" className={TABLE.th}>Deadline</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {requests.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data requests</td></tr>}
+                {requests.length === 0 && renderTableEmpty(6, 'No data requests', 'Record a subject access, rectification, or erasure request to start the log.')}
                 {requests.map(r => {
                   const days = daysUntilDeadline(r.deadline);
                   const overdue = r.status !== 'completed' && r.status !== 'rejected' && days < 0;
@@ -654,7 +678,7 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Title</th><th scope="col" className={TABLE.th}>Discovered</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {breaches.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data breaches recorded</td></tr>}
+                {breaches.length === 0 && renderTableEmpty(6, 'No data breaches recorded', 'Incident and near-miss reviews with a data impact will appear here once logged.')}
                 {breaches.map(b => (
                   <tr key={b.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{b.title}<br /><span className="text-xs text-gray-400">{b.individuals_affected} affected</span></td>
@@ -704,6 +728,7 @@ export default function GdprDashboard() {
                 </tr>
               </thead>
               <tbody>
+                {(retentionScan || retention).length === 0 && renderTableEmpty(retentionScan ? 7 : 5, 'No retention schedule entries', 'Add retention schedule rules to monitor expiry and scanning coverage.')}
                 {(retentionScan || retention).map((r, i) => (
                   <tr key={i} className={TABLE.tr}>
                     <td className={TABLE.td + ' font-medium'}>{r.data_category}</td>
@@ -741,7 +766,7 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Purpose</th><th scope="col" className={TABLE.th}>Legal Basis</th><th scope="col" className={TABLE.th}>Given</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {consent.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No consent records</td></tr>}
+                {consent.length === 0 && renderTableEmpty(6, 'No consent records', 'Consent entries will appear here once they are recorded for staff or residents.')}
                 {consent.map(c => (
                   <tr key={c.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{c.subject_name || c.subject_id}<br /><span className="text-xs text-gray-400">{c.subject_type}</span></td>
@@ -780,7 +805,7 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Date</th><th scope="col" className={TABLE.th}>Category</th><th scope="col" className={TABLE.th}>Description</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {complaints.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No DP complaints</td></tr>}
+                {complaints.length === 0 && renderTableEmpty(7, 'No DP complaints', 'Log a complaint here to track severity, ICO involvement, and progress.')}
                 {complaints.map(c => (
                   <tr key={c.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{c.date_received}</td>
@@ -816,7 +841,7 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Time</th><th scope="col" className={TABLE.th}>User</th><th scope="col" className={TABLE.th}>Role</th><th scope="col" className={TABLE.th}>Method</th><th scope="col" className={TABLE.th}>Endpoint</th><th scope="col" className={TABLE.th}>Categories</th><th scope="col" className={TABLE.th}>Status</th></tr>
               </thead>
               <tbody>
-                {accessLogData.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No access log entries</td></tr>}
+                {accessLogData.length === 0 && renderTableEmpty(7, 'No access log entries', 'Access logging will populate here as authenticated requests are recorded.')}
                 {accessLogData.map(a => (
                   <tr key={a.id} className={TABLE.tr}>
                     <td className={TABLE.td + ' text-xs font-mono'}>{a.ts ? new Date(a.ts).toLocaleString('en-GB') : '—'}</td>

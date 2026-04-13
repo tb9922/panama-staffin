@@ -2,11 +2,16 @@ import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { getCurrentHome, getHrTupe, createHrTupe, updateHrTupe } from '../lib/api.js';
 import { TUPE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TRANSFER_TYPES = [
   { id: 'incoming', name: 'Incoming' },
@@ -22,6 +27,7 @@ const emptyForm = () => ({
 });
 
 export default function TupeManager() {
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -126,6 +132,7 @@ export default function TupeManager() {
       };
       if (editing) await updateHrTupe(editing.id, { ...payload, _version: editing.version });
       else await createHrTupe(home, payload);
+      showNotice(editing ? 'TUPE transfer updated.' : 'TUPE transfer created.');
       setShowModal(false); setEditing(null); setForm(emptyForm()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -152,10 +159,22 @@ export default function TupeManager() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading TUPE transfers...</p></div></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading TUPE transfers..." card />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       <div className={PAGE.header}>
         <div>
           <h1 className={PAGE.title}>TUPE Transfers</h1>
@@ -167,7 +186,7 @@ export default function TupeManager() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="TUPE action needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
 
       {/* Table */}
       <div className={CARD.flush}>
@@ -185,7 +204,19 @@ export default function TupeManager() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No TUPE transfers</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No TUPE transfers"
+                      description={canEdit ? 'Create a transfer record to track consultation, due diligence, and employee impact.' : 'No TUPE transfers have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New Transfer' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
@@ -317,7 +348,11 @@ export default function TupeManager() {
               </div>
             </div>
             <FileAttachments caseType="tupe" caseId={editing?.id} />
-            {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
+            {formError && (
+              <InlineNotice variant="error" role="alert" className="mt-2">
+                {formError}
+              </InlineNotice>
+            )}
             <div className={MODAL.footer}>
               <button className={BTN.secondary} onClick={closeModal} disabled={saving}>Cancel</button>
               <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>

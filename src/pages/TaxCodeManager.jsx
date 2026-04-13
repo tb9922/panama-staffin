@@ -133,7 +133,7 @@ export default function TaxCodeManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container}><LoadingState message="Loading..." /></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading tax code records..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -163,11 +163,11 @@ export default function TaxCodeManager() {
 
       {/* Missing code alert */}
       {missingCodes.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <InlineNotice variant="warning" className="mb-4">
           <strong>No tax code on file for {missingCodes.length} staff member{missingCodes.length !== 1 ? 's' : ''}:</strong>{' '}
           {missingCodes.map(s => s.name).join(', ')}.{' '}
           Payroll will use 1257L cumulative (Category A) for these staff. Add their tax codes to ensure accurate deductions.
-        </div>
+        </InlineNotice>
       )}
 
       {/* Tax codes table */}

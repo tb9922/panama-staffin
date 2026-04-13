@@ -95,7 +95,7 @@ describe('SickPayTracker', () => {
     api.getSSPConfig.mockReturnValue(new Promise(() => {}));
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<SickPayTracker />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading sick pay records...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {

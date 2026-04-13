@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { getCurrentHome, getTrainingData } from '../lib/api.js';
 import { PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import TrainingGrid from '../components/training/TrainingGrid.jsx';
 import SupervisionPanel from '../components/training/SupervisionPanel.jsx';
@@ -40,14 +42,30 @@ export default function TrainingMatrix() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading..." card />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Training workspace needs attention"
+          message={error}
+          onRetry={() => setRefreshKey((value) => value + 1)}
+        />
+      </div>
+    );
+  }
   if (!state) return null;
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
       {/* Print header */}
-      <div className="hidden print:block print-header">
+      <div className="hidden print:block print-header" aria-hidden="true">
         <h1 className="text-xl font-bold">Training Matrix</h1>
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>

@@ -311,7 +311,7 @@ export default function MonthlyTimesheet() {
       await disputeTimesheet(homeSlug, disputeModal.entry.id, disputeReason.trim());
       setDisputeModal(null);
       await fetchEntries();
-      showToast({ title: 'Timesheet disputed', message: `${disputeModal.entry.staff_id} · ${disputeModal.entry.date}` });
+      showToast({ title: 'Timesheet disputed', message: `${disputeModal.entry.staff_id} - ${disputeModal.entry.date}` });
     } catch (e) {
       setError(e.message || 'Failed to dispute entry');
     } finally {
@@ -564,7 +564,7 @@ export default function MonthlyTimesheet() {
             }}
           >
             {activeStaff.map(s => (
-              <option key={s.id} value={s.id}>{s.id} — {s.name} ({s.role})</option>
+              <option key={s.id} value={s.id}>{s.id} - {s.name} ({s.role})</option>
             ))}
           </select>
         </div>
@@ -577,7 +577,7 @@ export default function MonthlyTimesheet() {
 
       {/* Print header */}
       <div className="hidden print:block mb-4">
-        <p className="text-lg font-bold">{staff?.name} ({staff?.id}) — {staff?.role}</p>
+        <p className="text-lg font-bold">{staff?.name} ({staff?.id}) - {staff?.role}</p>
         <p className="text-sm text-gray-600">{monthName}</p>
       </div>
 
@@ -740,10 +740,10 @@ export default function MonthlyTimesheet() {
       </div>
 
       {/* Edit Modal */}
-      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${staff?.name} — ${editModal.row.dateStr}` : ''} size="lg">
+      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title={editModal ? `${staff?.name} - ${editModal.row.dateStr}` : ''} size="lg">
           {editModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
-              {staff?.role} — Roster: {editModal.row.rosterShift}
+              {staff?.role} - Roster: {editModal.row.rosterShift}
               {editModal.row.entry?.status === 'disputed' && (
                 <span className="ml-2 text-red-500">Disputed: {editModal.row.entry.dispute_reason}</span>
               )}
@@ -774,7 +774,7 @@ export default function MonthlyTimesheet() {
                   Payable hours: {parseFloat(editPayable || 0).toFixed(2)}h
                 </p>
                 <p className="text-xs text-gray-500">
-                  Scheduled: {editForm.scheduled_start} — {editForm.scheduled_end} ({editModal.row.rosterHours.toFixed(1)}h)
+                  Scheduled: {editForm.scheduled_start} - {editForm.scheduled_end} ({editModal.row.rosterHours.toFixed(1)}h)
                 </p>
               </div>
             )}
@@ -813,7 +813,7 @@ export default function MonthlyTimesheet() {
       <Modal isOpen={!!disputeModal} onClose={() => setDisputeModal(null)} title="Dispute Entry">
           {disputeModal && <>
             <p className="text-sm text-gray-500 -mt-2 mb-4">
-              {staff?.name} — {disputeModal.entry.date}
+              {staff?.name} - {disputeModal.entry.date}
             </p>
 
             <div className="mb-4">

@@ -4,6 +4,10 @@ import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import {
@@ -18,6 +22,7 @@ import {
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'details', label: 'Risk Details' },
@@ -44,6 +49,7 @@ const HEATMAP_COLORS = {
 export default function RiskRegister() {
   const { canWrite } = useData();
   const canEdit = canWrite('governance');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const { confirm, ConfirmDialog } = useConfirm();
   const [risks, setRisks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -154,8 +160,10 @@ export default function RiskRegister() {
     try {
       if (editingId) {
         await updateRisk(home, editingId, record);
+        showNotice('Risk updated.');
       } else {
         await createRisk(home, record);
+        showNotice('Risk created.');
       }
       setShowModal(false);
       await load();
@@ -170,6 +178,7 @@ export default function RiskRegister() {
     try {
       await deleteRisk(home, editingId);
       setShowModal(false);
+      showNotice('Risk deleted.', { variant: 'warning' });
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to delete');
@@ -219,21 +228,29 @@ export default function RiskRegister() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-gray-500 py-12 text-center">Loading risk register...</div>
+        <LoadingState message="Loading risk register..." />
       </div>
     );
   }
 
-  if (error) {
+  if (error && risks.length === 0) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-red-600 py-12 text-center" role="alert">{error}</div>
+        <ErrorState title="Unable to load the risk register" message={error} onRetry={() => void load()} />
       </div>
     );
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Risk register action needs attention" message={error} onRetry={() => void load()} className="mb-4" />}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -369,7 +386,17 @@ export default function RiskRegister() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No risks recorded</td></tr>
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No risks recorded"
+                      description={canEdit ? 'Create the first risk to start tracking reviews, controls, and actions.' : 'No risks match the current filters.'}
+                      actionLabel={canEdit ? 'New Risk' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(risk => {
                 const catDef = RISK_CATEGORIES.find(c => c.id === risk.category);
@@ -606,7 +633,13 @@ export default function RiskRegister() {
               {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
-              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
+              {saveError && (
+                <div className="mr-auto flex-1 max-w-md">
+                  <InlineNotice variant="error" role="alert">
+                    {saveError}
+                  </InlineNotice>
+                </div>
+              )}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && <button onClick={handleSave} disabled={!form.title || !form.category} className={BTN.primary}>
                 {editingId ? 'Update' : 'Save'}

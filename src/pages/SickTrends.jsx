@@ -1,10 +1,13 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { formatDate, isCareRole, getActualShift, parseDate } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
 import { useData } from '../contexts/DataContext.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 function getMonthRange(monthsBack) {
   const months = [];
@@ -41,19 +44,58 @@ export default function SickTrends() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!homeSlug) return;
+  const load = useCallback(async () => {
+    if (!homeSlug) {
+      setSchedData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     // SickTrends shows 6 months back — request wider override window
     const from = startOfLocalMonthISO(new Date(), -6);
     const to = endOfLocalMonthISO(new Date(), 0);
-    getSchedulingData(homeSlug, { from, to })
-      .then(setSchedData)
-      .catch(e => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    setError(null);
+    try {
+      setSchedData(await getSchedulingData(homeSlug, { from, to }));
+    } catch (e) {
+      setError(e.message || 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading sick trend data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) return <LoadingState message="Loading sick trend data..." className="py-10" />;
+
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className={CARD.padded}>
+          <EmptyState
+            compact
+            title="Sick Trend Analytics"
+            description="Select a home to review absence patterns."
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !schedData) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <ErrorState
+          title="Unable to load sick trend analytics"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => void load()}
+        />
+      </div>
+    );
+  }
 
   return <SickTrendsInner schedData={schedData} canEdit={canEdit} />;
 }
@@ -265,7 +307,11 @@ function SickTrendsInner({ schedData, canEdit }) {
         <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Highest Absence</h2>
           {staffWithSick.length === 0 ? (
-            <div className="text-sm text-green-600 font-medium py-4">No sick days recorded</div>
+            <EmptyState
+              compact
+              title="No sick days recorded"
+              description="Sickness trends will appear here once absence overrides are recorded."
+            />
           ) : (
             <div className="space-y-2">
               {staffWithSick.slice(0, 10).map((s, i) => {
@@ -381,7 +427,13 @@ function SickTrendsInner({ schedData, canEdit }) {
           </div>
         </div>
         {filteredLog.length === 0 ? (
-          <div className={TABLE.empty}>No sick days recorded{filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}</div>
+          <div className={TABLE.empty}>
+            <EmptyState
+              compact
+              title={`No sick days recorded${filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}`}
+              description="Adjust the staff or month filters to widen the results."
+            />
+          </div>
         ) : (
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>

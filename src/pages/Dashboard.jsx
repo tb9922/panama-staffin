@@ -10,6 +10,9 @@ import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanc
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { startOfNextLocalDay } from '../lib/localDates.js';
 import { CARD, BADGE, BTN, ESC_COLORS, HEATMAP } from '../lib/design.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
@@ -206,8 +209,11 @@ export default function Dashboard() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-sm text-gray-500">Select a home to view the dashboard.</p>
+          <EmptyState
+            title="Dashboard"
+            description="Select a home to view the dashboard."
+            compact
+          />
         </div>
       </div>
     );
@@ -215,8 +221,24 @@ export default function Dashboard() {
 
   if (usesWorkspaceHome) return <RoleWorkspaceHome roleId={homeRole} />;
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <LoadingState message="Loading dashboard..." card />
+      </div>
+    );
+  }
+  if (error || !schedData) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <ErrorState
+          title="Dashboard needs attention"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
 
   return <DashboardInner schedData={schedData} />;
 }
