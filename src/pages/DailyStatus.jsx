@@ -12,6 +12,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, PAGE, ESC_COLORS } from '../lib/design.
 import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import {
   getCurrentHome,
   getSchedulingData,
@@ -25,6 +26,11 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 import DailyStatusCoverageGapPanel from '../components/scheduling/DailyStatusCoverageGapPanel.jsx';
 import DailyStatusModal from '../components/scheduling/DailyStatusModal.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 function getCenteredSchedulingRange(date, radiusDays = 200) {
   return {
@@ -53,6 +59,7 @@ export default function DailyStatus() {
   const [error, setError] = useState(null);
   const [overrideWarnings, setOverrideWarnings] = useState([]);
   const [saving, setSaving] = useState(false);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const [modal, setModal] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
@@ -139,7 +146,7 @@ export default function DailyStatus() {
     });
   }, [availableStaff, schedData, currentDate]);
 
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
   const {
     showLockPrompt,
@@ -299,6 +306,23 @@ export default function DailyStatus() {
     setSaving(false);
     setModal(null);
     setSelectedStaff('');
+    const absentStaff = staffForDay.find(member => member.id === staffId);
+    const handoffPath = `/hr/absence?tab=rtw&staffId=${encodeURIComponent(staffId)}&source=daily-status&date=${encodeURIComponent(dateStr)}`;
+    showNotice(
+      <div className="space-y-2">
+        <p>
+          {absentStaff?.name || staffId} marked sick for {dateStr}. When they return, record the RTW interview in Absence Management.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(handoffPath)}
+          className={`${BTN.secondary} ${BTN.xs}`}
+        >
+          Open RTW Interview
+        </button>
+      </div>,
+      { duration: 10000 },
+    );
     if (projectedCoverage.overallLevel >= 1) {
       setShowGapPanel(true);
       setGapPanelDate(dateStr);
@@ -509,11 +533,7 @@ export default function DailyStatus() {
     </div>
   );
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingState message="Loading daily status..." className="h-64" />;
 
   if (!homeSlug) {
     return (
@@ -539,17 +559,30 @@ export default function DailyStatus() {
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm flex items-center justify-between">
-        <span>{error}</span>
-        <button onClick={() => { setError(null); loadData(); }} className="text-red-900 underline text-xs ml-4">Retry</button>
-      </div>
+      <ErrorState title="Could not load daily status" message={error} onRetry={() => { setError(null); loadData(); }} />
     </div>
   );
 
-  if (!schedData) return null;
+  if (!schedData) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No daily status available"
+          description="We could not find scheduling data for this day yet."
+          actionLabel="Retry"
+          onAction={() => loadData()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{schedData.config.home_name} — Daily Status</h1>
@@ -575,7 +608,7 @@ export default function DailyStatus() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
-          <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
+          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
         </div>
       </div>
 

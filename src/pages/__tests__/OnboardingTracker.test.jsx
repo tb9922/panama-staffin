@@ -84,6 +84,14 @@ function renderAdmin() {
   });
 }
 
+function renderAdminAt(route) {
+  api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  return renderWithProviders(<OnboardingTracker />, {
+    route,
+    user: { username: 'admin', role: 'admin' },
+  });
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -260,5 +268,17 @@ describe('OnboardingTracker', () => {
     expect(screen.getByText('Recent Changes')).toBeInTheDocument();
     expect(screen.getByText(/Updated/)).toBeInTheDocument();
     expect(screen.getAllByText(/admin/)).toHaveLength(2);
+  });
+
+  it('supports staff handoff links from staff register', async () => {
+    renderAdminAt('/onboarding?staffId=S002');
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('S002')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+    expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
+    expect(screen.getByText('Pre-Employment Checks')).toBeInTheDocument();
   });
 });

@@ -150,6 +150,29 @@ export async function loadAuditLog(limit = 100) {
   return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
 }
 
+export async function listNotifications() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function markNotificationsRead(keys) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications/read?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ keys }),
+  });
+}
+
+export async function markAllNotificationsRead(keys) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications/read-all?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ keys }),
+  });
+}
+
 export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modules, limit = 50, offset = 0 } = {}) {
   const home = getCurrentHome();
   const params = new URLSearchParams({

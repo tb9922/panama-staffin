@@ -15,6 +15,11 @@ vi.mock('../../contexts/DataContext.jsx', () => ({
   useData: vi.fn(),
 }));
 
+vi.mock('../../contexts/NotificationContext.jsx', () => ({
+  NotificationProvider: ({ children }) => children,
+  useNotifications: vi.fn(),
+}));
+
 // AppRoutes renders real lazy-loaded pages — stub it to keep tests fast
 vi.mock('../AppRoutes.jsx', () => ({
   default: () => <div data-testid="app-routes">Page Content</div>,
@@ -40,6 +45,7 @@ vi.mock('../../lib/api.js', async () => {
 
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
+import { useNotifications } from '../../contexts/NotificationContext.jsx';
 
 const ADMIN_USER = { username: 'admin', role: 'admin', displayName: 'Admin User' };
 const VIEWER_USER = { username: 'viewer', role: 'viewer', displayName: 'View Only' };
@@ -76,6 +82,19 @@ function mockData(overrides = {}) {
   });
 }
 
+function mockNotifications(overrides = {}) {
+  useNotifications.mockReturnValue({
+    items: [],
+    unreadCount: 0,
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+    ...overrides,
+  });
+}
+
 function renderLayout(userOption = {}) {
   // renderWithProviders wraps in AuthProvider + RouterProvider.
   // Since we mock useAuth/useData, the providers are pass-through.
@@ -88,6 +107,7 @@ describe('AppLayout', () => {
   beforeEach(() => {
     mockAuth();
     mockData();
+    mockNotifications();
   });
 
   // 1. Loading spinner
@@ -122,6 +142,7 @@ describe('AppLayout', () => {
   // 4. Sidebar navigation groups are rendered
   it('shows sidebar navigation section labels', () => {
     renderLayout();
+    expect(screen.getByText('Home')).toBeInTheDocument();
     expect(screen.getByText('Scheduling')).toBeInTheDocument();
     expect(screen.getByText('Staff')).toBeInTheDocument();
     expect(screen.getByText('Compliance')).toBeInTheDocument();
@@ -133,7 +154,7 @@ describe('AppLayout', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false });
     renderLayout();
     expect(screen.getByText('Admin User')).toBeInTheDocument();
-    expect(screen.getByText(/Home Manager/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Home Manager/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows username when displayName is absent', () => {
@@ -146,10 +167,11 @@ describe('AppLayout', () => {
   });
 
   // 6. Admin sees admin-only sections (HR, Finance)
-  it('admin user sees the HR & People nav section', () => {
+  it('admin user sees the HR Cases nav section', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: false });
     renderLayout();
-    expect(screen.getByText('HR & People')).toBeInTheDocument();
+    expect(screen.getByText('HR Cases')).toBeInTheDocument();
+    expect(screen.getByText('HR Admin')).toBeInTheDocument();
   });
 
   it('admin user sees the Finance nav section', () => {
@@ -159,12 +181,12 @@ describe('AppLayout', () => {
   });
 
   // 7. Viewer does NOT see admin-only sections (HR, Finance)
-  it('viewer user does not see the HR & People nav section', () => {
+  it('viewer user does not see the HR Cases nav section', () => {
     mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
     const viewerCanRead = (mod) => ['scheduling', 'staff', 'reports'].includes(mod);
     mockData({ canRead: viewerCanRead, canWrite: () => false, homeRole: 'viewer' });
     renderLayout({ username: 'viewer', role: 'viewer' });
-    expect(screen.queryByText('HR & People')).not.toBeInTheDocument();
+    expect(screen.queryByText('HR Cases')).not.toBeInTheDocument();
   });
 
   it('viewer user does not see the Finance nav section', () => {
@@ -178,7 +200,7 @@ describe('AppLayout', () => {
   it('staff_member only sees audited own-data-safe links', () => {
     mockAuth({ user: { username: 'staff', role: 'viewer', displayName: 'Staff User' }, isViewer: false, isPlatformAdmin: false });
     mockData({
-      canRead: () => false,
+      canRead: (mod) => ['scheduling', 'payroll'].includes(mod),
       canWrite: () => false,
       homeRole: 'staff_member',
       staffId: 'S001',
@@ -186,10 +208,10 @@ describe('AppLayout', () => {
     renderLayout({ username: 'staff', role: 'viewer' });
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
     expect(screen.queryByText('Daily Status')).not.toBeInTheDocument();
-    expect(screen.queryByText('Roster')).not.toBeInTheDocument();
+    expect(screen.getByText('Roster')).toBeInTheDocument();
     expect(screen.queryByText('Scenarios')).not.toBeInTheDocument();
-    expect(screen.queryByText('Annual Leave')).not.toBeInTheDocument();
-    expect(screen.queryByText('Handover Book')).not.toBeInTheDocument();
+    expect(screen.getByText('Annual Leave')).toBeInTheDocument();
+    expect(screen.getByText('Handover Book')).toBeInTheDocument();
     expect(screen.getByText('Payroll')).toBeInTheDocument();
     expect(screen.getByText('Monthly View')).toBeInTheDocument();
     expect(screen.queryByText('Timesheets')).not.toBeInTheDocument();
@@ -203,7 +225,14 @@ describe('AppLayout', () => {
       homeRole: 'deputy_manager',
     });
     renderLayout({ username: 'deputy', role: 'admin' });
-    fireEvent.click(screen.getByRole('button', { name: 'System' }));
+    const homeButton = screen.getByRole('button', { name: 'Home' });
+    if (homeButton.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(homeButton);
+    }
+    const systemButton = screen.getByRole('button', { name: 'System' });
+    if (systemButton.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(systemButton);
+    }
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   });
@@ -243,11 +272,11 @@ describe('AppLayout', () => {
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
   });
 
-  it('lets a platform admin with no homes reach platform setup', () => {
+  it('lets a platform admin with no homes reach platform setup', async () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: true });
     mockData({ homes: [], activeHome: null, homeRole: null });
     renderWithProviders(<AppLayout />, { route: '/platform/homes', path: '*', user: { ...ADMIN_USER, isPlatformAdmin: true } });
-    expect(screen.getByText('Platform Setup')).toBeInTheDocument();
+    expect(await screen.findByText('Platform Setup')).toBeInTheDocument();
     expect(screen.getByText(/Create the first home below/)).toBeInTheDocument();
     expect(screen.getByTestId('app-routes')).toBeInTheDocument();
   });
@@ -278,8 +307,8 @@ describe('AppLayout', () => {
     renderLayout();
     const selector = screen.getByRole('combobox');
     expect(selector).toBeInTheDocument();
-    expect(screen.getByText('Sunrise Care Home')).toBeInTheDocument();
-    expect(screen.getByText('Meadowbrook')).toBeInTheDocument();
+    expect(selector).toHaveDisplayValue('Sunrise Care Home');
+    expect(screen.getByRole('option', { name: 'Meadowbrook' })).toBeInTheDocument();
   });
 
   // 12. No home selector when only one home

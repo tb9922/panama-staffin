@@ -3,6 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
@@ -52,6 +56,7 @@ export default function PayrollDetail() {
   const [action, setAction]               = useState(null); // 'calculating' | 'approving' | 'exporting'
   const [expanded, setExpanded]           = useState({});   // staffId → bool
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useEffect(() => {
     const h = getCurrentHome();
@@ -115,6 +120,20 @@ export default function PayrollDetail() {
       const slipMap = {};
       (slips || []).forEach(s => { slipMap[s.staff_id] = s; });
       setPayslips(slipMap);
+      showNotice(
+        <div className="space-y-2">
+          <p>Payroll run calculated. Before approving, cross-check timesheets and pay rates.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(result.run?.period_end || '')}`)} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Timesheets
+            </button>
+            <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Pay Rates
+            </button>
+          </div>
+        </div>,
+        { duration: 8000 },
+      );
     } catch (e) {
       setError(e.message);
     } finally {
@@ -131,6 +150,7 @@ export default function PayrollDetail() {
       setRun(updated);
       setShowApproveConfirm(false);
       await load();
+      showNotice('Payroll run approved and ready for export.', { duration: 7000 });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -171,18 +191,12 @@ export default function PayrollDetail() {
     setExpanded(prev => ({ ...prev, [staffId]: !prev[staffId] }));
   }
 
-  if (loading) {
-    return (
-      <div className={PAGE.container}>
-        <div className="py-10 text-center text-sm text-gray-400">Loading payroll run…</div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingState message="Loading payroll run..." className={PAGE.container} />;
 
   if (!run) {
     return (
       <div className={PAGE.container}>
-        <div className="py-10 text-center text-sm text-gray-500">Payroll run not found.</div>
+        <EmptyState title="Payroll run not found" description="We could not load that pay run." />
       </div>
     );
   }
@@ -225,6 +239,11 @@ export default function PayrollDetail() {
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Header */}
       <div className={PAGE.header}>
         <div className="flex items-center gap-3">
@@ -280,6 +299,27 @@ export default function PayrollDetail() {
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
       )}
 
+      {canEdit && (
+        <div className={`${CARD.padded} mb-4`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Payroll Cross-check</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Check actual hours in Timesheets and confirm pay rate rules before approval.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(run.period_end)}`)} className={`${BTN.secondary} ${BTN.sm}`}>
+                Review Timesheets
+              </button>
+              <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.sm}`}>
+                Review Pay Rates
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* NMW Alert Banner */}
       {nmwViolations.length > 0 && (
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
@@ -290,11 +330,14 @@ export default function PayrollDetail() {
             Approval is blocked until all violations are resolved. Check base pay rates and hours for:{' '}
             {nmwViolations.map(l => staffMap[l.staff_id]?.name || l.staff_id).join(', ')}.
           </p>
-          {run.status === 'calculated' && (
-            <p className="text-xs text-red-600 mt-1">
-              Tip: update pay rate rules then recalculate to resolve.
-            </p>
-          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.xs}`}>
+              Open Pay Rates
+            </button>
+            <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(run.period_end)}`)} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Timesheets
+            </button>
+          </div>
         </div>
       )}
 

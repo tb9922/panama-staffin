@@ -236,6 +236,38 @@ describe('DailyStatus', () => {
     });
   });
 
+  it('shows an RTW handoff notice after marking someone sick', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    let shiftButtons = [];
+    await waitFor(() => {
+      shiftButtons = screen.getAllByRole('button', { name: 'Change shift for Alice Smith' });
+      expect(shiftButtons.length).toBeGreaterThan(0);
+    });
+
+    await user.click(shiftButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Change Status' })).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'SICK');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.upsertOverride).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          date: FIXED_DATE,
+          staffId: 'S001',
+          shift: 'SICK',
+        }),
+        expect.any(Object),
+      );
+    });
+
+    expect(screen.getByRole('button', { name: 'Open RTW Interview' })).toBeInTheDocument();
+  });
+
   it('displays Handover Notes textarea', async () => {
     renderAdmin();
     await waitFor(() => {

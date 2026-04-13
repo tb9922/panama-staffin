@@ -1,47 +1,67 @@
-import { useState, Suspense } from 'react';
+import { useCallback, useState, Suspense } from 'react';
 import { NavLink, Navigate, useLocation } from 'react-router-dom';
 import { changeOwnPassword } from '../lib/api.js';
 import { BTN, INPUT, MODAL } from '../lib/design.js';
-import { NAV_TOP, NAV_SECTIONS } from '../lib/navigation.js';
+import { NAV_TOP, NAV_SECTIONS, getDefaultExpandedSections } from '../lib/navigation.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
-import { ROLES, getRoleLabel, hasModuleAccess } from '../../shared/roles.js';
+import { useNotifications } from '../contexts/NotificationContext.jsx';
+import { ROLES, getRoleLabel, isOwnDataOnly } from '../../shared/roles.js';
 import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 import Modal from './Modal.jsx';
 import CoverageAlertBanner from './CoverageAlertBanner.jsx';
 import AppRoutes from './AppRoutes.jsx';
+import LoadingState from './LoadingState.jsx';
+import NotificationPanel from './NotificationPanel.jsx';
 import ToastViewport from './ToastViewport.jsx';
 
 export default function AppLayout() {
+  const location = useLocation();
   const { user, isPlatformAdmin, logout } = useAuth();
   const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const canUseEvidenceHub = isPlatformAdmin || canAccessEvidenceHub(homeRole);
-  const location = useLocation();
-
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedSections, setExpandedSections] = useState({ scheduling: true, staff: true });
+  const [sectionOverrides, setSectionOverrides] = useState({});
   const [changePwOpen, setChangePwOpen] = useState(false);
-  const canAccessOwnSafeItem = (moduleId, ownDataSafe) => (
-    Boolean(
-      ownDataSafe &&
-      homeRole &&
-      hasModuleAccess(homeRole, moduleId, 'own'),
-    )
-  );
-  const canSeeNavItem = (item, sectionModule = null) => {
-    if (item.platformAdminOnly) return isPlatformAdmin;
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const { unreadCount } = useNotifications();
+
+  const isNavItemVisible = useCallback((item, sectionModule) => {
+    if (item.platformAdminOnly && !isPlatformAdmin) return false;
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
-    const moduleId = item.module || sectionModule;
-    if (!moduleId) return true;
-    return canRead(moduleId) || canAccessOwnSafeItem(moduleId, item.ownDataSafe);
-  };
-  const canSeeSection = (section) => {
-    if (section.platformAdminOnly) return isPlatformAdmin;
-    if (section.module && canRead(section.module)) return true;
-    return (section.items || []).some(item => canSeeNavItem(item, section.module));
-  };
+
+    const effectiveModule = item.module || sectionModule;
+    if (effectiveModule && !canRead(effectiveModule)) return false;
+    if (effectiveModule && isOwnDataOnly(homeRole, effectiveModule)) return item.ownDataSafe === true;
+    return true;
+  }, [canManageUsers, canUseEvidenceHub, canRead, homeRole, isPlatformAdmin]);
+
+  const visibleTopItems = NAV_TOP.filter(item => isNavItemVisible(item));
+
+  const visibleSections = NAV_SECTIONS
+    .map(section => ({
+      ...section,
+      visibleItems: (section.items || []).filter(item => isNavItemVisible(item, section.module)),
+    }))
+    .filter(section => {
+      if (section.platformAdminOnly) return isPlatformAdmin;
+      return section.visibleItems.length > 0;
+    });
+
+  const visibleSectionIds = visibleSections.map(section => section.id);
+  const defaultExpandedSections = getDefaultExpandedSections(homeRole, visibleSectionIds, isPlatformAdmin);
+  const expandedSections = Object.fromEntries(
+    visibleSections.map(section => [
+      section.id,
+      Object.prototype.hasOwnProperty.call(sectionOverrides, section.id)
+        ? sectionOverrides[section.id]
+        : !!defaultExpandedSections[section.id],
+    ]),
+  );
+
+  const activeHomeName = homes.find(h => h.id === activeHome)?.name || 'No home selected';
 
   if (loading) return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-50" role="status">
@@ -92,7 +112,7 @@ export default function AppLayout() {
               <button onClick={() => { void logout({ forceLocal: true }); }} className={BTN.secondary}>Logout</button>
             </div>
           </div>
-          <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading...</div>}>
+          <Suspense fallback={<LoadingState message="Loading page..." compact className="py-10" />}>
             <AppRoutes />
           </Suspense>
         </main>
@@ -123,7 +143,6 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen bg-slate-50">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg">Skip to content</a>
-      {/* Mobile top bar */}
       <div className="mobile-topbar hidden bg-gray-900 text-white items-center justify-between px-3 py-2.5 print:hidden">
         <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white p-1" aria-label="Open navigation menu">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -131,22 +150,25 @@ export default function AppLayout() {
           </svg>
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center">
-            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <button
+            type="button"
+            className="relative rounded-md p-1 text-gray-300 transition hover:bg-gray-800 hover:text-white"
+            onClick={() => setNotificationOpen(current => !current)}
+            aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-          </div>
-          <span className="text-sm font-semibold">Panama Staffing</span>
+            {unreadCount > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{unreadCount}</span>}
+          </button>
+          <span className="text-[10px] text-gray-400">{user.username}</span>
         </div>
-        <span className="text-[10px] text-gray-400">{user.username}</span>
       </div>
 
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="sidebar-mobile-overlay hidden md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside aria-label="Main navigation" className={`${sidebarOpen ? 'w-56' : 'w-14'} bg-gray-900 text-white flex flex-col transition-all duration-200 flex-shrink-0 print:hidden sidebar-mobile ${!sidebarOpen ? 'sidebar-closed' : ''} md:!relative md:!transform-none`}>
         <div className="p-3 border-b border-gray-800 flex items-center gap-2.5">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white transition-colors" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
@@ -166,7 +188,6 @@ export default function AppLayout() {
           )}
         </div>
 
-        {/* Home Selector */}
         {sidebarOpen && homes.length > 1 && (
           <div className="px-3 py-2.5 border-b border-gray-800">
             <select value={activeHome || ''} onChange={e => switchHome(e.target.value)}
@@ -177,8 +198,7 @@ export default function AppLayout() {
         )}
 
         <nav className="flex-1 py-1.5 px-2 overflow-y-auto space-y-0.5">
-          {/* Top-level items */}
-          {NAV_TOP.filter(item => canSeeNavItem(item)).map(item => (
+          {visibleTopItems.map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -202,13 +222,12 @@ export default function AppLayout() {
             </NavLink>
           ))}
 
-          {/* Grouped sections */}
-          {NAV_SECTIONS.filter(canSeeSection).map(section => {
+          {visibleSections.map(section => {
             const isOpen = expandedSections[section.id];
             return (
               <div key={section.id}>
                 <button
-                  onClick={() => setExpandedSections(prev => ({ ...prev, [section.id]: !prev[section.id] }))}
+                  onClick={() => setSectionOverrides(prev => ({ ...prev, [section.id]: !expandedSections[section.id] }))}
                   aria-expanded={isOpen}
                   aria-label={!sidebarOpen ? section.label : undefined}
                   className={`w-full flex items-center px-2.5 py-2 text-xs rounded-lg transition-colors duration-150 ${
@@ -229,7 +248,7 @@ export default function AppLayout() {
                 </button>
                 {isOpen && sidebarOpen && (
                   <div className="ml-3 border-l border-gray-800 pl-1.5 mt-0.5 mb-1 space-y-0.5">
-                    {section.items.filter(item => canSeeNavItem(item, section.module)).map(item => (
+                    {section.visibleItems.map(item => (
                       <NavLink
                         key={item.path}
                         to={item.path}
@@ -256,6 +275,7 @@ export default function AppLayout() {
             );
           })}
         </nav>
+
         {sidebarOpen && (
           <div className="p-3 border-t border-gray-800">
             <div className="flex items-center justify-between">
@@ -274,14 +294,32 @@ export default function AppLayout() {
         )}
       </aside>
 
-      {/* Main Content */}
-      <main id="main-content" className="flex-1 overflow-auto">
+      <main id="main-content" className="relative flex-1 overflow-auto">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur print:hidden">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">{activeHomeName}</p>
+            <p className="truncate text-xs text-slate-500">{user.displayName || user.username} - {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}</p>
+          </div>
+          <button
+            type="button"
+            className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-100"
+            onClick={() => setNotificationOpen(current => !current)}
+            aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span>Notifications</span>
+            {unreadCount > 0 && <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">{unreadCount}</span>}
+          </button>
+        </div>
+        <NotificationPanel open={notificationOpen} onClose={() => setNotificationOpen(false)} />
         {homeRole && homeRole !== 'home_manager' && !isPlatformAdmin && (
           <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 text-xs text-blue-700 flex items-center gap-2 print:hidden">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {getRoleLabel(homeRole)} — some features may be read-only or hidden
+            {getRoleLabel(homeRole)} - some features may be read-only or hidden
           </div>
         )}
         {error && (
@@ -296,7 +334,7 @@ export default function AppLayout() {
           </div>
         )}
         <CoverageAlertBanner />
-        <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading...</div>}>
+        <Suspense fallback={<LoadingState message="Loading page..." compact className="py-10" />}>
           <AppRoutes key={activeHome} />
         </Suspense>
       </main>

@@ -280,6 +280,26 @@ describe('StaffRegister', () => {
     expect(screen.getByRole('heading', { name: 'Add New Staff' })).toBeInTheDocument();
   });
 
+  it('shows an onboarding continuation notice after creating staff', async () => {
+    const user = userEvent.setup();
+    api.createStaff.mockResolvedValue({ id: 'S999', warnings: [] });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ Add Staff/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /\+ Add Staff/i }));
+    await user.type(screen.getByLabelText('Name'), 'New Starter');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(api.createStaff).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('link', { name: /Continue in Onboarding/i })).toHaveAttribute('href', '/onboarding?staffId=S999');
+  });
+
   it('shows staff count in filter row', async () => {
     renderAdmin();
     await waitFor(() => {

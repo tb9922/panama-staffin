@@ -181,7 +181,7 @@ describe('PayrollDetail', () => {
     renderWithProviders(<PayrollDetail />);
     // When getPayrollRun fails, run stays null, so the not-found state shows
     await waitFor(() =>
-      expect(screen.getByText('Payroll run not found.')).toBeInTheDocument()
+      expect(screen.getByText('Payroll run not found')).toBeInTheDocument()
     );
   });
 
@@ -208,6 +208,15 @@ describe('PayrollDetail', () => {
     expect(screen.getByText('Total Gross')).toBeInTheDocument();
     expect(screen.getByText('Enhancements')).toBeInTheDocument();
     expect(screen.getByText('Payroll Evidence')).toBeInTheDocument();
+  });
+
+  it('shows payroll cross-check guidance with direct fix links', async () => {
+    renderAdmin(MOCK_CALCULATED_RUN);
+    await waitFor(() =>
+      expect(screen.getByText('Payroll Cross-check')).toBeInTheDocument()
+    );
+    expect(screen.getAllByRole('button', { name: 'Review Timesheets' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Review Pay Rates' }).length).toBeGreaterThan(0);
   });
 
   it('shows Calculate button for admin on draft run', async () => {

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
-import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
+import { Link } from 'react-router-dom';
+import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
@@ -19,6 +20,9 @@ import {
 } from '../lib/api.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -67,6 +71,7 @@ export default function StaffRegister() {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(!!editing || showAdd || showEvidenceModal);
 
@@ -136,7 +141,7 @@ export default function StaffRegister() {
       const updated = { ...prev, [field]: value };
       // Auto-set leaving_date when deactivating
       if (field === 'active' && value === false && !prev.leaving_date) {
-        updated.leaving_date = formatDate(new Date());
+        updated.leaving_date = todayLocalISO();
       }
       // Clear leaving_date when reactivating
       if (field === 'active' && value === true) {
@@ -188,6 +193,17 @@ export default function StaffRegister() {
     setRowWarning(null);
     try {
       const result = await createStaff(homeSlug, staffEntry);
+      showNotice(
+        <>
+          Staff member added.{' '}
+          {result?.id && (
+            <Link to={`/onboarding?staffId=${encodeURIComponent(result.id)}`} className="underline font-medium">
+              Continue in Onboarding {'->'}
+            </Link>
+          )}
+        </>,
+        { duration: 10000 },
+      );
       setNewStaff({ ...EMPTY_STAFF });
       setShowAdd(false);
       setRefreshKey(k => k + 1);
@@ -316,6 +332,12 @@ export default function StaffRegister() {
         </div>
       </div>
 
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap print:hidden">
         <input type="text" placeholder="Search name or ID..." value={search} onChange={e => setSearch(e.target.value)}
@@ -346,8 +368,9 @@ export default function StaffRegister() {
             )}
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Name</label>
+                <label htmlFor="new-staff-name" className={INPUT.label}>Name</label>
                 <input type="text" value={newStaff.name} onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
+                  id="new-staff-name"
                   className={INPUT.base} aria-describedby={rowError?.id === 'add' ? 'add-staff-error' : undefined} aria-invalid={rowError?.id === 'add'} />
               </div>
               <div className="grid grid-cols-2 gap-3">

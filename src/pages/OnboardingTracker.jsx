@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
@@ -41,6 +42,7 @@ export default function OnboardingTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
   const { confirm, ConfirmDialog } = useConfirm();
+  const [searchParams] = useSearchParams();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,6 +60,7 @@ export default function OnboardingTracker() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   useDirtyGuard(showModal);
+  const focusedStaffId = searchParams.get('staffId') || '';
 
   useEffect(() => {
     let stale = false;
@@ -106,7 +109,7 @@ export default function OnboardingTracker() {
     if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(s => s.name.toLowerCase().includes(q));
+      list = list.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
     }
     if (filterStatus === 'incomplete') {
       list = list.filter(s => !getStaffOnboardingProgress(s.id, onboardingData).isComplete);
@@ -115,6 +118,14 @@ export default function OnboardingTracker() {
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, filterTeam, search, filterStatus, onboardingData]);
+
+  useEffect(() => {
+    if (!focusedStaffId) return;
+    setFilterTeam('All');
+    setFilterStatus('all');
+    setSearch(focusedStaffId);
+    setExpanded(focusedStaffId);
+  }, [focusedStaffId]);
 
   const fullyOnboarded = useMemo(() => {
     return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete).length;

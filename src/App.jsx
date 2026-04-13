@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { DataProvider } from './contexts/DataContext.jsx';
+import { NotificationProvider } from './contexts/NotificationContext.jsx';
 import { ToastProvider } from './contexts/ToastContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -10,7 +11,9 @@ function AppInner() {
   return (
     <DataProvider>
       <ToastProvider>
-        <AppLayout />
+        <NotificationProvider>
+          <AppLayout />
+        </NotificationProvider>
       </ToastProvider>
     </DataProvider>
   );
