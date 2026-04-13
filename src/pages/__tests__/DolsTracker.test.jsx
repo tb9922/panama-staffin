@@ -265,6 +265,27 @@ describe('DolsTracker', () => {
     });
   });
 
+  it('opens the new MCA modal from the empty state without crashing', async () => {
+    const user = userEvent.setup();
+    api.getDols.mockResolvedValue({ dols: [], mcaAssessments: [] });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /MCA Assessments/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /MCA Assessments/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No MCA assessments recorded yet')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'New MCA Assessment' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'New MCA Assessment' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Save the MCA assessment first to attach supporting evidence.')).toBeInTheDocument();
+  });
+
   it('type filter dropdown is present in DoLS view', async () => {
     renderAdmin();
     await waitFor(() => {

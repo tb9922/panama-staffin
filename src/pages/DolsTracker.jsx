@@ -111,6 +111,7 @@ export default function DolsTracker() {
     });
     return list;
   }, [mcaAssessments]);
+  const dolsRestrictions = Array.isArray(form.restrictions) ? form.restrictions : [];
 
   // ── DoLS CRUD ──────────────────────────────────────────────────────────────
 
@@ -574,18 +575,18 @@ export default function DolsTracker() {
                 <div className="flex items-center justify-between mb-1">
                   <label className={INPUT.label}>Restrictions / Conditions</label>
                   <button type="button" className={`${BTN.ghost} ${BTN.xs}`}
-                    onClick={() => setForm({ ...form, restrictions: [...form.restrictions, ''] })}>
+                    onClick={() => setForm({ ...form, restrictions: [...dolsRestrictions, ''] })}>
                     + Add Restriction
                   </button>
                 </div>
-                {form.restrictions.length === 0 && <p className="text-xs text-gray-400">No restrictions recorded</p>}
-                {form.restrictions.map((r, i) => (
+                {dolsRestrictions.length === 0 && <p className="text-xs text-gray-400">No restrictions recorded</p>}
+                {dolsRestrictions.map((r, i) => (
                   <div key={i} className="flex gap-2 mb-1.5">
                     <input type="text" className={`${INPUT.sm} flex-1`} placeholder="Restriction detail..."
                       value={r}
-                      onChange={e => { const arr = [...form.restrictions]; arr[i] = e.target.value; setForm({ ...form, restrictions: arr }); }} />
+                      onChange={e => { const arr = [...dolsRestrictions]; arr[i] = e.target.value; setForm({ ...form, restrictions: arr }); }} />
                     <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1"
-                      onClick={() => setForm({ ...form, restrictions: form.restrictions.filter((_, j) => j !== i) })}>Remove</button>
+                      onClick={() => setForm({ ...form, restrictions: dolsRestrictions.filter((_, j) => j !== i) })}>Remove</button>
                   </div>
                 ))}
               </div>
