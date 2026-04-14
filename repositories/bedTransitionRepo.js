@@ -78,7 +78,7 @@ export async function getMonthlyOccupancy(homeId, months = 12, client) {
        ) AS month_start
      ),
      bed_list AS (
-       SELECT id FROM beds WHERE home_id = $1 AND deleted_at IS NULL
+       SELECT id FROM beds WHERE home_id = $1
      ),
      bed_month_status AS (
        SELECT
