@@ -735,6 +735,7 @@ const sickPeriodUpdateSchema = z.object({
   fit_note_received: z.boolean().optional(),
   fit_note_date:     dateSchema.nullable().optional(),
   notes:             z.string().max(1000).nullable().optional(),
+  _version:          z.number().int().nonnegative().optional(),
 });
 
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
@@ -777,7 +778,14 @@ router.put('/sick-periods/:id', writeRateLimiter, requireAuth, requireHomeAccess
     if (!idP.success) return res.status(400).json({ error: 'Invalid period ID' });
     const parsed = sickPeriodUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const updated = await sspRepo.updateSickPeriod(idP.data, req.home.id, parsed.data);
+    const existing = await sspRepo.findSickPeriodById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Sick period not found' });
+    const version = parsed.data._version != null ? parsed.data._version : null;
+    const { _version: _ignoredVersion, ...updates } = parsed.data;
+    const updated = await sspRepo.updateSickPeriod(idP.data, req.home.id, updates, null, version);
+    if (updated === null && version != null) {
+      return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    }
     if (!updated) return res.status(404).json({ error: 'Sick period not found' });
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'sick_period' });
     res.json(updated);

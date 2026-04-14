@@ -7,7 +7,7 @@ const SSP_CONFIG_COLS = 'id, effective_from, weekly_rate, waiting_days, lel_week
 const SICK_PERIOD_COLS = `id, home_id, staff_id, start_date, end_date,
   qualifying_days_per_week, waiting_days_served, ssp_weeks_paid,
   fit_note_received, fit_note_date, linked_to_period_id, notes,
-  created_at, updated_at`;
+  created_at, updated_at, version`;
 
 const ENHANCED_SICK_COLS = 'id, home_id, full_pay_weeks, half_pay_weeks, notes, updated_at';
 
@@ -90,6 +90,18 @@ export async function listSickPeriods(homeId, staffId, client) {
   return rows.map(shapePeriod);
 }
 
+export async function findSickPeriodById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${SICK_PERIOD_COLS}
+       FROM sick_periods
+      WHERE id = $1
+        AND home_id = $2`,
+    [id, homeId]
+  );
+  return rows[0] ? shapePeriod(rows[0]) : null;
+}
+
 export async function createSickPeriod(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
@@ -110,7 +122,7 @@ export async function createSickPeriod(homeId, data, client) {
   return shapePeriod(rows[0]);
 }
 
-export async function updateSickPeriod(id, homeId, data, client) {
+export async function updateSickPeriod(id, homeId, data, client, version = null) {
   const conn = client || pool;
   const ALLOWED = ['end_date', 'waiting_days_served', 'ssp_weeks_paid', 'fit_note_received', 'fit_note_date', 'notes'];
   const fields = [];
@@ -124,8 +136,14 @@ export async function updateSickPeriod(id, homeId, data, client) {
   }
   if (fields.length === 0) return null;
   fields.push('updated_at = NOW()');
+  fields.push('version = version + 1');
+  const versionClause = version == null ? '' : ` AND version = $${idx++}`;
+  if (version != null) values.push(version);
   const { rows } = await conn.query(
-    `UPDATE sick_periods SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 RETURNING ${SICK_PERIOD_COLS}`,
+    `UPDATE sick_periods
+     SET ${fields.join(', ')}
+     WHERE id = $1 AND home_id = $2${versionClause}
+     RETURNING ${SICK_PERIOD_COLS}`,
     values
   );
   return rows[0] ? shapePeriod(rows[0]) : null;
@@ -177,5 +195,6 @@ function shapePeriod(row) {
     fit_note_date: toDateStr(row.fit_note_date),
     linked_to_period_id: row.linked_to_period_id || null,
     notes: row.notes || null,
+    version: row.version,
   };
 }
