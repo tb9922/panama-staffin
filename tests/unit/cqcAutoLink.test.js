@@ -73,6 +73,56 @@ describe('buildAutoLinksForRecord', () => {
     expect(links[0].source_recorded_at).toBe('2026-04-12T00:00:00Z');
   });
 
+  it('maps risk, handover, and care certificate records into the new safe evidence coverage', () => {
+    const riskLinks = buildAutoLinksForRecord(12, 'risk', {
+      id: 'risk-001',
+      title: 'Medication supply gap',
+      last_reviewed: '2026-04-09',
+    });
+    const handoverLinks = buildAutoLinksForRecord(12, 'handover', {
+      id: 'handover-001',
+      date: '2026-04-10',
+      priority: 'action',
+    });
+    const careCertLinks = buildAutoLinksForRecord(12, 'care_certificate', {
+      id: 'S001',
+      start_date: '2026-03-01',
+    });
+
+    expect(riskLinks.map((link) => link.quality_statement)).toEqual(['WL5']);
+    expect(handoverLinks.map((link) => link.quality_statement)).toEqual(['S2']);
+    expect(careCertLinks.map((link) => link.quality_statement)).toEqual(['S6']);
+  });
+
+  it('maps onboarding, DoLS, MCA, and appraisals using source dates', () => {
+    const onboardingLinks = buildAutoLinksForRecord(12, 'onboarding', {
+      id: 'S001:dbs_check',
+      section: 'dbs_check',
+      verified_date: '2026-04-01',
+    });
+    const dolsLinks = buildAutoLinksForRecord(12, 'dols', {
+      id: 'dls-001',
+      application_date: '2026-04-02',
+    });
+    const mcaLinks = buildAutoLinksForRecord(12, 'mca_assessment', {
+      id: 'mca-001',
+      assessment_date: '2026-04-03',
+    });
+    const appraisalLinks = buildAutoLinksForRecord(12, 'appraisal', {
+      id: 'apr-001',
+      date: '2026-04-04',
+    });
+
+    expect(onboardingLinks[0].quality_statement).toBe('S6');
+    expect(onboardingLinks[0].source_recorded_at).toBe('2026-04-01T00:00:00Z');
+    expect(dolsLinks[0].quality_statement).toBe('E6');
+    expect(dolsLinks[0].source_recorded_at).toBe('2026-04-02T00:00:00Z');
+    expect(mcaLinks[0].quality_statement).toBe('E6');
+    expect(mcaLinks[0].source_recorded_at).toBe('2026-04-03T00:00:00Z');
+    expect(appraisalLinks[0].quality_statement).toBe('S6');
+    expect(appraisalLinks[0].source_recorded_at).toBe('2026-04-04T00:00:00Z');
+  });
+
   it('maps safeguarding training to S3 processes evidence', () => {
     const links = buildAutoLinksForRecord(12, 'training_record', {
       id: 'S001::safeguarding-adults',

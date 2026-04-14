@@ -9,6 +9,7 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { addDaysLocalISO } from '../lib/dateOnly.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -75,6 +76,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     };
     const result = await careCertRepo.upsertStaff(req.home.id, staffId, record);
     await auditService.log('care_cert_create', req.home.slug, req.user.username, { staffId });
+    queueAutoLinkSync(req.home.id, 'care_certificate', { id: staffId, staff_id: staffId, ...result }, req.user.username);
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -101,6 +103,7 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     const result = await careCertRepo.upsertStaff(req.home.id, idParsed.data, updated);
     const changes = diffFields(currentRecord, result);
     await auditService.log('care_cert_update', req.home.slug, req.user.username, { staffId: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'care_certificate', { id: idParsed.data, staff_id: idParsed.data, ...result }, req.user.username);
     res.json(result);
   } catch (err) { next(err); }
 });

@@ -17,6 +17,7 @@ import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachment
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -100,6 +101,12 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data, req.user.username);
     const changes = diffFields(beforeSection, bodyParsed.data);
     await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'onboarding', {
+      id: `${staffIdParsed.data}:${sectionParsed.data}`,
+      section: sectionParsed.data,
+      staff_id: staffIdParsed.data,
+      ...bodyParsed.data,
+    }, req.user.username);
     res.json(result);
   } catch (err) { next(err); }
 });

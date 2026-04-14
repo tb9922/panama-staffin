@@ -84,6 +84,7 @@ const HUB_ROWS = [
 describe('EvidenceHub page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     api.searchEvidenceHub.mockResolvedValue({ rows: HUB_ROWS, total: HUB_ROWS.length });
     api.listEvidenceHubUploaders.mockResolvedValue(['finance.user', 'hr.user']);
     api.deleteEvidenceHubAttachment.mockResolvedValue({ ok: true });
@@ -195,5 +196,26 @@ describe('EvidenceHub page', () => {
     await waitFor(() => {
       expect(api.deleteEvidenceHubAttachment).toHaveBeenCalledWith('hr', 91);
     });
+  });
+
+  it('can save and reapply Evidence Hub filters', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EvidenceHub />, {
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('Search'), 'family');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'name');
+    await user.click(screen.getByRole('button', { name: 'Save Filters' }));
+
+    await user.click(screen.getByRole('button', { name: 'Clear Filters' }));
+    await user.click(screen.getByRole('button', { name: 'Use Saved' }));
+
+    expect(screen.getByLabelText('Search')).toHaveValue('family');
+    expect(screen.getByLabelText('Sort by')).toHaveValue('name');
   });
 });

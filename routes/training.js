@@ -349,6 +349,7 @@ router.post('/appraisals', writeRateLimiter, requireAuth, requireHomeAccess, req
     const record = { ...parsed.data, id: `apr-${randomUUID()}` };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
+    queueAutoLinkSync(req.home.id, 'appraisal', appraisal, req.user.username);
     res.status(201).json(appraisal);
   } catch (err) { next(err); }
 });
@@ -363,6 +364,7 @@ router.put('/appraisals/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     const record = { ...parsed.data, id: idParsed.data };
     const appraisal = await appraisalRepo.upsertAppraisal(req.home.id, parsed.data.staffId, record);
     await auditService.log('appraisal_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
+    queueAutoLinkSync(req.home.id, 'appraisal', appraisal, req.user.username);
     res.json(appraisal);
   } catch (err) { next(err); }
 });

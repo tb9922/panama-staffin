@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
@@ -35,6 +35,47 @@ const ROLE_GROUPS = [
   { key: 'staff', label: 'Staff', roles: ['staff_member'] },
 ];
 
+const USER_SORT_OPTIONS = [
+  { id: 'display', label: 'Display name' },
+  { id: 'username', label: 'Username' },
+  { id: 'role', label: 'Role' },
+  { id: 'status', label: 'Status' },
+];
+
+const ROLE_ORDER = Object.fromEntries(ROLE_IDS.map((roleId, index) => [roleId, index]));
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function matchesUserSearch(user, query) {
+  if (!query) return true;
+  const haystack = [
+    user.username,
+    user.display_name,
+    user.staff_id,
+    user.role_id,
+    user.granted_by,
+    user.is_platform_admin ? 'platform admin' : '',
+  ].map(normalizeText).join(' ');
+  return haystack.includes(normalizeText(query));
+}
+
+function compareUsers(a, b, sortBy) {
+  if (sortBy === 'username') {
+    return a.username.localeCompare(b.username, 'en-GB', { sensitivity: 'base' });
+  }
+  if (sortBy === 'role') {
+    return (ROLE_ORDER[a.role_id] ?? 999) - (ROLE_ORDER[b.role_id] ?? 999)
+      || (a.display_name || a.username).localeCompare(b.display_name || b.username, 'en-GB', { sensitivity: 'base' });
+  }
+  if (sortBy === 'status') {
+    return Number(b.active === true) - Number(a.active === true)
+      || (a.display_name || a.username).localeCompare(b.display_name || b.username, 'en-GB', { sensitivity: 'base' });
+  }
+  return (a.display_name || a.username).localeCompare(b.display_name || b.username, 'en-GB', { sensitivity: 'base' })
+    || a.username.localeCompare(b.username, 'en-GB', { sensitivity: 'base' });
+}
 
 
 export default function UserManagement() {
@@ -52,6 +93,10 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState(null);
   const [resetPwUser, setResetPwUser] = useState(null);
   const [rolesUser, setRolesUser] = useState(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('display');
   useDirtyGuard(!!(addOpen || editUser || resetPwUser || rolesUser));
 
   const refresh = useCallback(async () => {
@@ -68,11 +113,32 @@ export default function UserManagement() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Group users by role hierarchy
-  const grouped = ROLE_GROUPS.map(g => ({
-    ...g,
-    users: users.filter(u => g.roles.includes(u.role_id)),
-  })).filter(g => g.users.length > 0);
+  const summary = useMemo(() => ({
+    total: users.length,
+    active: users.filter((user) => user.active).length,
+    inactive: users.filter((user) => !user.active).length,
+    platformAdmins: users.filter((user) => user.is_platform_admin).length,
+  }), [users]);
+
+  const filteredUsers = useMemo(() => users
+    .filter((user) => matchesUserSearch(user, search))
+    .filter((user) => roleFilter === 'all' || user.role_id === roleFilter)
+    .filter((user) => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'active') return user.active;
+      if (statusFilter === 'inactive') return !user.active;
+      if (statusFilter === 'platform_admin') return user.is_platform_admin;
+      return true;
+    })
+    .slice()
+    .sort((a, b) => compareUsers(a, b, sortBy)), [users, search, roleFilter, statusFilter, sortBy]);
+
+  const grouped = useMemo(() => ROLE_GROUPS.map((group) => ({
+    ...group,
+    users: filteredUsers.filter((user) => group.roles.includes(user.role_id)),
+  })).filter((group) => group.users.length > 0), [filteredUsers]);
+
+  const hasFilters = Boolean(search || roleFilter !== 'all' || statusFilter !== 'all' || sortBy !== 'display');
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading users..." /></div>;
 
@@ -101,6 +167,81 @@ export default function UserManagement() {
         <ErrorState title="User action needs attention" message={error} onRetry={() => void refresh()} className="mb-4" />
       )}
 
+      <div className="grid grid-cols-2 gap-3 mb-4 xl:grid-cols-4">
+        <div className={CARD.padded}>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Users at this home</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{summary.total}</div>
+        </div>
+        <div className={CARD.padded}>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Active</div>
+          <div className="mt-1 text-2xl font-semibold text-emerald-600">{summary.active}</div>
+        </div>
+        <div className={CARD.padded}>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Inactive</div>
+          <div className="mt-1 text-2xl font-semibold text-amber-600">{summary.inactive}</div>
+        </div>
+        <div className={CARD.padded}>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Platform admins</div>
+          <div className="mt-1 text-2xl font-semibold text-purple-600">{summary.platformAdmins}</div>
+        </div>
+      </div>
+
+      {users.length > 0 && (
+        <div className={`${CARD.padded} mb-4`}>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            <label className="lg:col-span-2">
+              <span className={INPUT.label}>Search users</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={INPUT.base}
+                placeholder="Username, display name, staff ID, or granted by"
+              />
+            </label>
+            <label>
+              <span className={INPUT.label}>Role</span>
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={INPUT.select}>
+                <option value="all">All roles</option>
+                {ROLE_IDS.map((roleId) => (
+                  <option key={roleId} value={roleId}>{getRoleLabel(roleId)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className={INPUT.label}>Status</span>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT.select}>
+                <option value="all">All statuses</option>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+                <option value="platform_admin">Platform admins</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label>
+              <span className={INPUT.label}>Sort by</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={INPUT.select}>
+                {USER_SORT_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <span className={BADGE.blue}>{filteredUsers.length} matching user{filteredUsers.length === 1 ? '' : 's'}</span>
+            {hasFilters && (
+              <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => {
+                setSearch('');
+                setRoleFilter('all');
+                setStatusFilter('all');
+                setSortBy('display');
+              }}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {users.length === 0 ? (
         <div className={CARD.padded}>
           <EmptyState
@@ -108,6 +249,21 @@ export default function UserManagement() {
             description={canManageUsers ? 'Add the first user for this home to get started.' : 'A home manager or platform admin can assign users here.'}
             actionLabel={canManageUsers ? 'Add User' : null}
             onAction={canManageUsers ? () => setAddOpen(true) : null}
+            compact
+          />
+        </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className={CARD.padded}>
+          <EmptyState
+            title="No users match these filters"
+            description="Try broadening the search, role, or status filters."
+            actionLabel="Clear filters"
+            onAction={() => {
+              setSearch('');
+              setRoleFilter('all');
+              setStatusFilter('all');
+              setSortBy('display');
+            }}
             compact
           />
         </div>

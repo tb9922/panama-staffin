@@ -14,17 +14,30 @@ function getSourceRecordedAt(module, record) {
     case 'complaint':
     case 'fire_drill':
     case 'supervision':
+    case 'appraisal':
       return normaliseRecordedAt(record.date);
+    case 'handover':
+      return normaliseRecordedAt(record.entry_date || record.date || record.created_at);
+    case 'onboarding':
+      return normaliseRecordedAt(record.verified_date || record.date || record.expiry || record.updated_at);
     case 'training_record':
       return normaliseRecordedAt(record.completed || record.updated_at || record.expiry);
+    case 'care_certificate':
+      return normaliseRecordedAt(record.completion_date || record.expected_completion || record.start_date || record.updated_at);
     case 'maintenance':
       return normaliseRecordedAt(record.last_completed || record.next_due || record.updated_at);
     case 'ipc_audit':
       return normaliseRecordedAt(record.audit_date || record.reported_at || record.updated_at);
+    case 'risk':
+      return normaliseRecordedAt(record.last_reviewed || record.next_review || record.updated_at);
     case 'policy_review':
       return normaliseRecordedAt(record.last_reviewed || record.next_review_due || record.updated_at);
     case 'whistleblowing':
       return normaliseRecordedAt(record.resolution_date || record.date_raised || record.reported_at || record.updated_at);
+    case 'dols':
+      return normaliseRecordedAt(record.reviewed_date || record.application_date || record.updated_at);
+    case 'mca_assessment':
+      return normaliseRecordedAt(record.assessment_date || record.next_review_date || record.updated_at);
     case 'cqc_evidence':
       return normaliseRecordedAt(record.date_to || record.date_from || record.added_at || record.created_at);
     case 'cqc_partner_feedback':
@@ -82,6 +95,13 @@ export const AUTO_LINK_RULES = [
     ],
   },
   {
+    module: 'appraisal',
+    condition: () => true,
+    links: [
+      { statement: 'S6', category: 'processes', rationale: 'Appraisal demonstrates staff development and performance review evidence' },
+    ],
+  },
+  {
     module: 'training_record',
     condition: (record) => record.training_type === 'safeguarding-adults' || record.training_type === 'safeguarding_adults',
     links: [
@@ -93,6 +113,13 @@ export const AUTO_LINK_RULES = [
     condition: () => true,
     links: [
       { statement: 'S5', category: 'processes', rationale: 'Maintenance record supports safe environments evidence' },
+    ],
+  },
+  {
+    module: 'risk',
+    condition: () => true,
+    links: [
+      { statement: 'WL5', category: 'processes', rationale: 'Risk register entry demonstrates governance and risk management evidence' },
     ],
   },
   {
@@ -114,6 +141,41 @@ export const AUTO_LINK_RULES = [
     condition: () => true,
     links: [
       { statement: 'WL3', category: 'staff_leader_feedback', rationale: 'Whistleblowing concern demonstrates freedom to speak up evidence' },
+    ],
+  },
+  {
+    module: 'handover',
+    condition: () => true,
+    links: [
+      { statement: 'S2', category: 'processes', rationale: 'Shift handover demonstrates safe transitions and continuity of care evidence' },
+    ],
+  },
+  {
+    module: 'onboarding',
+    condition: () => true,
+    links: [
+      { statement: 'S6', category: 'processes', rationale: 'Onboarding completion demonstrates safe and effective staffing evidence' },
+    ],
+  },
+  {
+    module: 'care_certificate',
+    condition: () => true,
+    links: [
+      { statement: 'S6', category: 'processes', rationale: 'Care Certificate progress demonstrates workforce competence evidence' },
+    ],
+  },
+  {
+    module: 'dols',
+    condition: () => true,
+    links: [
+      { statement: 'E6', category: 'processes', rationale: 'DoLS or LPS authorisation demonstrates consent and capacity evidence' },
+    ],
+  },
+  {
+    module: 'mca_assessment',
+    condition: () => true,
+    links: [
+      { statement: 'E6', category: 'processes', rationale: 'MCA assessment demonstrates consent and best-interest decision evidence' },
     ],
   },
   {

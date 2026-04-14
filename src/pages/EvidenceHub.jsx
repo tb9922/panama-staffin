@@ -22,6 +22,7 @@ import { useToast } from '../contexts/ToastContext.jsx';
 const PAGE_SIZE = 50;
 const BULK_FETCH_SIZE = 200;
 const SOURCE_ORDER = ['cqc_evidence', 'hr', 'onboarding', 'training', 'record'];
+const EVIDENCE_HUB_PREFS_KEY = 'evidenceHubPreferences:v1';
 
 const CQC_STATEMENT_MAP = Object.fromEntries(
   QUALITY_STATEMENTS.map((statement) => [statement.id, statement])
@@ -75,6 +76,46 @@ function defaultFilters() {
     dateTo: '',
     modules: [],
   };
+}
+
+function getStoredPreferences() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(EVIDENCE_HUB_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      filters: { ...defaultFilters(), ...(parsed.filters || {}) },
+      view: parsed.view === 'folders' ? 'folders' : 'list',
+      sortBy: typeof parsed.sortBy === 'string' ? parsed.sortBy : 'newest',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function compareEvidenceRows(a, b, sortBy) {
+  if (sortBy === 'oldest') {
+    return Date.parse(a.createdAt) - Date.parse(b.createdAt)
+      || a.originalName.localeCompare(b.originalName, 'en-GB', { sensitivity: 'base' });
+  }
+  if (sortBy === 'name') {
+    return a.originalName.localeCompare(b.originalName, 'en-GB', { sensitivity: 'base' })
+      || Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  }
+  if (sortBy === 'size') {
+    return (b.sizeBytes || 0) - (a.sizeBytes || 0)
+      || a.originalName.localeCompare(b.originalName, 'en-GB', { sensitivity: 'base' });
+  }
+  if (sortBy === 'review_due') {
+    const aDue = a.reviewDueAt ? Date.parse(a.reviewDueAt) : Number.POSITIVE_INFINITY;
+    const bDue = b.reviewDueAt ? Date.parse(b.reviewDueAt) : Number.POSITIVE_INFINITY;
+    return aDue - bDue
+      || Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  }
+  return Date.parse(b.createdAt) - Date.parse(a.createdAt)
+    || a.originalName.localeCompare(b.originalName, 'en-GB', { sensitivity: 'base' });
 }
 
 function sourceSort(a, b) {
@@ -139,7 +180,7 @@ function getCqcStatementId(row) {
   return match ? match[1].toUpperCase() : 'other';
 }
 
-function createCategory(id, label, rows = []) {
+function createCategory(id, label, rows = [], sortBy = 'newest') {
   const recordMap = {};
 
   for (const row of rows) {
@@ -159,7 +200,7 @@ function createCategory(id, label, rows = []) {
   const records = Object.values(recordMap)
     .map((record) => ({
       ...record,
-      files: record.files.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+      files: record.files.sort((a, b) => compareEvidenceRows(a, b, sortBy)),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -171,7 +212,7 @@ function createCategory(id, label, rows = []) {
   };
 }
 
-function buildHrCategories(rows) {
+function buildHrCategories(rows, sortBy) {
   const byType = {};
   for (const row of rows) {
     const key = row.sourceSubType || 'other';
@@ -179,11 +220,11 @@ function buildHrCategories(rows) {
   }
 
   return Object.entries(byType)
-    .map(([key, categoryRows]) => createCategory(key, formatFolderLabel(key), categoryRows))
+    .map(([key, categoryRows]) => createCategory(key, formatFolderLabel(key), categoryRows, sortBy))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function buildCqcCategories(rows) {
+function buildCqcCategories(rows, sortBy) {
   const byStatement = {};
   for (const row of rows) {
     const statementId = getCqcStatementId(row);
@@ -193,17 +234,18 @@ function buildCqcCategories(rows) {
   const categories = QUALITY_STATEMENTS.map((statement) => createCategory(
     statement.id,
     `${statement.id} - ${statement.name}`,
-    byStatement[statement.id] || []
+    byStatement[statement.id] || [],
+    sortBy,
   ));
 
   if (byStatement.other?.length) {
-    categories.push(createCategory('other', 'Other', byStatement.other));
+    categories.push(createCategory('other', 'Other', byStatement.other, sortBy));
   }
 
   return categories.filter((category) => category.totalCount > 0);
 }
 
-function buildOnboardingCategories(rows) {
+function buildOnboardingCategories(rows, sortBy) {
   const bySection = {};
   for (const row of rows) {
     const key = row.sourceSubType || 'other';
@@ -213,17 +255,18 @@ function buildOnboardingCategories(rows) {
   const categories = ONBOARDING_SECTIONS.map((section) => createCategory(
     section.id,
     section.name,
-    bySection[section.id] || []
+    bySection[section.id] || [],
+    sortBy,
   ));
 
   if (bySection.other?.length) {
-    categories.push(createCategory('other', 'Other', bySection.other));
+    categories.push(createCategory('other', 'Other', bySection.other, sortBy));
   }
 
   return categories.filter((category) => category.totalCount > 0);
 }
 
-function buildTrainingCategories(rows) {
+function buildTrainingCategories(rows, sortBy) {
   const byType = {};
   for (const row of rows) {
     const key = row.sourceSubType || 'other';
@@ -234,12 +277,13 @@ function buildTrainingCategories(rows) {
     .map(([key, categoryRows]) => createCategory(
       key,
       TRAINING_TYPE_MAP[key]?.name || formatFolderLabel(key),
-      categoryRows
+      categoryRows,
+      sortBy
     ))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function buildRecordCategories(rows) {
+function buildRecordCategories(rows, sortBy) {
   const byModule = {};
   for (const row of rows) {
     const key = row.sourceSubType || 'other';
@@ -250,12 +294,13 @@ function buildRecordCategories(rows) {
     .map(([key, categoryRows]) => createCategory(
       key,
       getRecordAttachmentModule(key)?.label || formatFolderLabel(key),
-      categoryRows
+      categoryRows,
+      sortBy
     ))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function buildFolderTree(rows, sources) {
+function buildFolderTree(rows, sources, sortBy) {
   const bySource = {};
   for (const row of rows) {
     (bySource[row.sourceModule] ||= []).push(row);
@@ -267,11 +312,11 @@ function buildFolderTree(rows, sources) {
       const sourceRows = bySource[source.id] || [];
       let categories = [];
 
-      if (source.id === 'hr') categories = buildHrCategories(sourceRows);
-      if (source.id === 'cqc_evidence') categories = buildCqcCategories(sourceRows);
-      if (source.id === 'onboarding') categories = buildOnboardingCategories(sourceRows);
-      if (source.id === 'training') categories = buildTrainingCategories(sourceRows);
-      if (source.id === 'record') categories = buildRecordCategories(sourceRows);
+      if (source.id === 'hr') categories = buildHrCategories(sourceRows, sortBy);
+      if (source.id === 'cqc_evidence') categories = buildCqcCategories(sourceRows, sortBy);
+      if (source.id === 'onboarding') categories = buildOnboardingCategories(sourceRows, sortBy);
+      if (source.id === 'training') categories = buildTrainingCategories(sourceRows, sortBy);
+      if (source.id === 'record') categories = buildRecordCategories(sourceRows, sortBy);
 
       return {
         id: source.id,
@@ -290,6 +335,7 @@ export default function EvidenceHub() {
 
   const [view, setView] = useState('list');
   const [filters, setFilters] = useState(defaultFilters);
+  const [sortBy, setSortBy] = useState('newest');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [rows, setRows] = useState([]);
   const [folderRows, setFolderRows] = useState([]);
@@ -302,9 +348,12 @@ export default function EvidenceHub() {
   const [error, setError] = useState(null);
   const [expandedSources, setExpandedSources] = useState(() => new Set());
   const [expandedCategories, setExpandedCategories] = useState(() => new Set());
+  const [hasSavedPreferences, setHasSavedPreferences] = useState(() => Boolean(getStoredPreferences()));
 
   const availableSources = getReadableEvidenceSources(homeRole);
-  const folderTree = buildFolderTree(folderRows, availableSources);
+  const sortedRows = rows.slice().sort((a, b) => compareEvidenceRows(a, b, sortBy));
+  const sortedFolderRows = folderRows.slice().sort((a, b) => compareEvidenceRows(a, b, sortBy));
+  const folderTree = buildFolderTree(sortedFolderRows, availableSources, sortBy);
   const activeLoading = view === 'folders' ? folderLoading : loading;
   const exportCount = view === 'folders' ? folderRows.length : total;
   const hasFilters = Boolean(debouncedSearch || filters.uploadedBy || filters.dateFrom || filters.dateTo || filters.modules.length > 0);
@@ -538,6 +587,42 @@ export default function EvidenceHub() {
   function clearFilters() {
     setFilters(defaultFilters());
     setView('list');
+    setSortBy('newest');
+  }
+
+  function saveCurrentPreferences() {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(EVIDENCE_HUB_PREFS_KEY, JSON.stringify({
+        filters,
+        view,
+        sortBy,
+      }));
+      setHasSavedPreferences(true);
+      showToast({ title: 'Evidence Hub filters saved' });
+    } catch {
+      setError('Unable to save Evidence Hub filters on this browser.');
+    }
+  }
+
+  function applySavedPreferences() {
+    const saved = getStoredPreferences();
+    if (!saved) {
+      setHasSavedPreferences(false);
+      return;
+    }
+    setFilters(saved.filters);
+    setView(saved.view);
+    setSortBy(saved.sortBy);
+    setOffset(0);
+    showToast({ title: 'Saved Evidence Hub filters applied' });
+  }
+
+  function clearSavedPreferences() {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(EVIDENCE_HUB_PREFS_KEY);
+    setHasSavedPreferences(false);
+    showToast({ title: 'Saved Evidence Hub filters cleared' });
   }
 
   function toggleSource(sourceId) {
@@ -741,6 +826,13 @@ export default function EvidenceHub() {
         </div>
         <div className="flex items-center gap-2">
           <button className={BTN.secondary} onClick={clearFilters} disabled={activeLoading}>Clear Filters</button>
+          <button className={BTN.secondary} onClick={saveCurrentPreferences} disabled={activeLoading}>Save Filters</button>
+          {hasSavedPreferences && (
+            <>
+              <button className={BTN.secondary} onClick={applySavedPreferences} disabled={activeLoading}>Use Saved</button>
+              <button className={BTN.secondary} onClick={clearSavedPreferences} disabled={activeLoading}>Clear Saved</button>
+            </>
+          )}
           <button className={BTN.primary} onClick={handleExport} disabled={activeLoading || exporting || exportCount === 0}>
             {exporting ? 'Exporting XLSX...' : 'Export XLSX'}
           </button>
@@ -781,7 +873,7 @@ export default function EvidenceHub() {
       </div>
 
       <div className={`${CARD.padded} mb-4`}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4 xl:grid-cols-5">
           <div className="md:col-span-2">
             <label htmlFor="evidence-hub-search" className={INPUT.label}>Search</label>
             <input
@@ -826,6 +918,21 @@ export default function EvidenceHub() {
               onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))}
             />
           </div>
+          <div>
+            <label htmlFor="evidence-hub-sort" className={INPUT.label}>Sort by</label>
+            <select
+              id="evidence-hub-sort"
+              className={INPUT.select}
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name">Filename A-Z</option>
+              <option value="size">Largest first</option>
+              <option value="review_due">Review due soonest</option>
+            </select>
+          </div>
         </div>
 
         <div className="mt-4">
@@ -863,7 +970,7 @@ export default function EvidenceHub() {
           </div>
         ) : view === 'folders' ? (
           renderFolderView()
-        ) : rows.length === 0 ? (
+        ) : sortedRows.length === 0 ? (
           <div className="px-4 py-10 text-sm text-gray-500">{getEmptyStateMessage(hasFilters)}</div>
         ) : (
           <div className={TABLE.wrapper}>
@@ -881,7 +988,7 @@ export default function EvidenceHub() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {sortedRows.map((row) => (
                   <tr key={`${row.sourceModule}-${row.attachmentId}`} className={TABLE.tr}>
                     <td className={TABLE.td}>
                       <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} download={row.originalName} className="text-blue-600 hover:text-blue-700 hover:underline font-medium">

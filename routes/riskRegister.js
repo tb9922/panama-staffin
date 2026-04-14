@@ -9,6 +9,7 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { validateRiskStatusChange } from '../lib/statusTransitions.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -60,6 +61,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     parsed.data.residual_risk = (parsed.data.residual_likelihood ?? 0) * (parsed.data.residual_impact ?? 0);
     const risk = await riskRepo.upsert(req.home.id, parsed.data);
     await auditService.log('risk_create', req.home.slug, req.user.username, { id: risk?.id });
+    queueAutoLinkSync(req.home.id, 'risk', risk, req.user.username);
     res.status(201).json(risk);
   } catch (err) { next(err); }
 });
@@ -88,6 +90,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, risk);
     await auditService.log('risk_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'risk', risk, req.user.username);
     res.json(risk);
   } catch (err) { next(err); }
 });

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadAuditLog } from '../lib/api.js';
 import { BTN, CARD, INPUT, PAGE, TABLE, BADGE } from '../lib/design.js';
+import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -34,8 +35,23 @@ export default function AuditLog() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const { showToast } = useToast();
+  const [detailRow, setDetailRow] = useState(null);
+
+  const dateRangeError = useMemo(() => {
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      return 'From date cannot be after To date.';
+    }
+    return null;
+  }, [dateFrom, dateTo]);
 
   const load = useCallback(() => {
+    if (dateRangeError) {
+      setError(dateRangeError);
+      setRows([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     loadAuditLog({ limit: PAGE_SIZE, offset, action: actionFilter, user: userFilter, home: homeFilter, dateFrom, dateTo })
@@ -45,7 +61,7 @@ export default function AuditLog() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [offset, actionFilter, userFilter, homeFilter, dateFrom, dateTo]);
+  }, [offset, actionFilter, userFilter, homeFilter, dateFrom, dateTo, dateRangeError]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -55,6 +71,10 @@ export default function AuditLog() {
   }
 
   async function handleExport() {
+    if (dateRangeError) {
+      setError(dateRangeError);
+      return;
+    }
     setExporting(true);
     try {
       const result = await loadAuditLog({ limit: 10000, offset: 0, action: actionFilter, user: userFilter, home: homeFilter, dateFrom, dateTo });
@@ -82,6 +102,16 @@ export default function AuditLog() {
   }
 
   const hasFilters = Boolean(actionFilter || userFilter || homeFilter || dateFrom || dateTo);
+
+  function applyQuickRange(days) {
+    const today = new Date();
+    const to = today.toISOString().slice(0, 10);
+    const fromDateObj = new Date(today);
+    fromDateObj.setDate(today.getDate() - (days - 1));
+    setDateFrom(fromDateObj.toISOString().slice(0, 10));
+    setDateTo(to);
+    setOffset(0);
+  }
 
   if (loading && rows.length === 0) return <div className={PAGE.container}><LoadingState message="Loading audit log..." /></div>;
   if (error && rows.length === 0) return <div className={PAGE.container}><ErrorState title="Audit log needs attention" message={error} onRetry={load} /></div>;
@@ -123,6 +153,15 @@ export default function AuditLog() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className={BADGE.blue}>{total} matching row{total === 1 ? '' : 's'}</span>
+          <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => applyQuickRange(1)}>
+            Today
+          </button>
+          <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => applyQuickRange(7)}>
+            Last 7 days
+          </button>
+          <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => applyQuickRange(30)}>
+            Last 30 days
+          </button>
           {hasFilters && (
             <button type="button" onClick={() => { setActionFilter(''); setUserFilter(''); setHomeFilter(''); setDateFrom(''); setDateTo(''); setOffset(0); }} className={`${BTN.ghost} ${BTN.sm}`}>
               Clear filters
@@ -130,6 +169,10 @@ export default function AuditLog() {
           )}
         </div>
       </div>
+
+      {dateRangeError && (
+        <ErrorState title="Audit date range needs attention" message={dateRangeError} className="mb-4" />
+      )}
 
       {error && <ErrorState title="Audit query needs attention" message={error} onRetry={load} className="mb-4" />}
 
@@ -164,12 +207,18 @@ export default function AuditLog() {
                         <td className={`${TABLE.td} text-xs`}>{entry.home_slug || entry.home || '—'}</td>
                         <td className={`${TABLE.td} text-xs font-medium`}>{entry.user_name || entry.user || '—'}</td>
                         <td className={`${TABLE.td} text-xs text-gray-500`}>
-                          {details.full && details.full !== details.summary ? (
-                            <details>
-                              <summary className="cursor-pointer text-blue-600 hover:text-blue-800">{details.summary}</summary>
-                              <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] text-gray-600">{details.full}</pre>
-                            </details>
-                          ) : details.summary}
+                          <div className="space-y-1">
+                            <div>{details.summary}</div>
+                            {details.full && details.full !== details.summary && (
+                              <button
+                                type="button"
+                                className="text-blue-600 hover:text-blue-800 hover:underline"
+                                onClick={() => setDetailRow(entry)}
+                              >
+                                View details
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -181,6 +230,40 @@ export default function AuditLog() {
           </>
         )}
       </div>
+
+      <Modal isOpen={!!detailRow} onClose={() => setDetailRow(null)} title={detailRow ? `${detailRow.action} details` : 'Audit details'} size="lg">
+        {detailRow && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <div className={INPUT.label}>Time</div>
+                <div className="text-sm text-gray-800">{new Date(detailRow.ts).toLocaleString('en-GB')}</div>
+              </div>
+              <div>
+                <div className={INPUT.label}>User</div>
+                <div className="text-sm text-gray-800">{detailRow.user_name || detailRow.user || '—'}</div>
+              </div>
+              <div>
+                <div className={INPUT.label}>Home</div>
+                <div className="text-sm text-gray-800">{detailRow.home_slug || detailRow.home || '—'}</div>
+              </div>
+              <div>
+                <div className={INPUT.label}>Action</div>
+                <div className="text-sm text-gray-800">{detailRow.action}</div>
+              </div>
+            </div>
+            <div>
+              <div className={INPUT.label}>Payload</div>
+              <pre className="max-h-[24rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
+                {formatAuditDetails(detailRow.details).full || '—'}
+              </pre>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className={BTN.secondary} onClick={() => setDetailRow(null)}>Close</button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

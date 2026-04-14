@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
@@ -68,6 +69,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const entry = await handoverRepo.createEntry(req.home.id, parsed.data, req.user.username);
     await auditService.log('handover_create', req.home.slug, req.user.username, { id: entry?.id });
+    queueAutoLinkSync(req.home.id, 'handover', entry, req.user.username);
     res.status(201).json(entry);
   } catch (err) {
     next(err);
@@ -84,6 +86,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const entry = await handoverRepo.updateEntry(idParam.data, req.home.id, parsed.data);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
     await auditService.log('handover_update', req.home.slug, req.user.username, { id: idParam.data });
+    queueAutoLinkSync(req.home.id, 'handover', entry, req.user.username);
     res.json(entry);
   } catch (err) {
     next(err);

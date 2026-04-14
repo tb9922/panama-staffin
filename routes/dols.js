@@ -9,6 +9,7 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { validateDolsReviewStatusChange } from '../lib/statusTransitions.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -78,6 +79,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     const record = await dolsRepo.upsertDols(req.home.id, parsed.data);
     await auditService.log('dols_create', req.home.slug, req.user.username, { id: record?.id });
+    queueAutoLinkSync(req.home.id, 'dols', record, req.user.username);
     res.status(201).json(record);
   } catch (err) { next(err); }
 });
@@ -100,6 +102,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, record);
     await auditService.log('dols_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'dols', record, req.user.username);
     res.json(record);
   } catch (err) { next(err); }
 });
@@ -123,6 +126,7 @@ router.post('/mca', writeRateLimiter, requireAuth, requireHomeAccess, requireMod
     if (!parsed.success) return zodError(res, parsed);
     const record = await dolsRepo.upsertMca(req.home.id, parsed.data);
     await auditService.log('mca_create', req.home.slug, req.user.username, { id: record?.id });
+    queueAutoLinkSync(req.home.id, 'mca_assessment', record, req.user.username);
     res.status(201).json(record);
   } catch (err) { next(err); }
 });
@@ -143,6 +147,7 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, require
     }
     const changes = diffFields(existing, record);
     await auditService.log('mca_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'mca_assessment', record, req.user.username);
     res.json(record);
   } catch (err) { next(err); }
 });

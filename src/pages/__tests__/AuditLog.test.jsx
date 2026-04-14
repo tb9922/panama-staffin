@@ -57,4 +57,15 @@ describe('AuditLog', () => {
       }));
     });
   });
+
+  it('opens the details modal for structured audit payloads', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AuditLog />);
+
+    await waitFor(() => expect(screen.getByText('Audit Log')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: /view details/i })[0]);
+
+    expect(screen.getByText(/login details/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/127\.0\.0\.1/i).length).toBeGreaterThan(0);
+  });
 });
