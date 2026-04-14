@@ -4,6 +4,7 @@ import ResidentPicker from '../ResidentPicker.jsx';
 import FileAttachments from '../FileAttachments.jsx';
 import { BADGE, BTN, INPUT, MODAL } from '../../lib/design.js';
 import { getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment } from '../../lib/api.js';
+import { todayLocalISO } from '../../lib/localDates.js';
 import {
   INVESTIGATION_STATUSES,
   LOCATIONS,
@@ -11,7 +12,20 @@ import {
   RIDDOR_CATEGORIES,
   PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES,
+  getCqcNotificationDeadline,
+  addWorkingDays,
 } from '../../lib/incidents.js';
+
+function formatDateTimeDisplay(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function IncidentTrackerModal({
   isOpen,
@@ -39,6 +53,23 @@ export default function IncidentTrackerModal({
   handleAddAddendum,
 }) {
   const title = editingId ? (isFrozen ? 'Incident (Frozen)' : 'Edit Incident') : 'New Incident';
+  const maxPastDate = todayLocalISO();
+  const cqcDeadline = form.cqc_notifiable && form.date
+    ? getCqcNotificationDeadline({
+        cqc_notifiable: true,
+        cqc_notification_deadline: form.cqc_notification_deadline,
+        date: form.date,
+        time: form.time,
+      })
+    : null;
+  const selectedRiddorCategory = RIDDOR_CATEGORIES.find((category) => category.id === form.riddor_category);
+  const riddorDeadline = form.riddor_reportable && form.date && selectedRiddorCategory
+    ? addWorkingDays(new Date(`${form.date}T00:00:00`), selectedRiddorCategory.deadlineDays === 0 ? 1 : selectedRiddorCategory.deadlineDays)
+    : null;
+  const dutyOfCandourDeadline = form.duty_of_candour_applies && form.date
+    ? addWorkingDays(new Date(`${form.date}T00:00:00`), 10)
+    : null;
+  const canFreezeRecord = form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed';
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={onClose} title={title} size="xl">
@@ -54,7 +85,7 @@ export default function IncidentTrackerModal({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={INPUT.label}>Date *</label>
-              <input type="date" className={INPUT.base} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              <input type="date" max={maxPastDate} className={INPUT.base} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Time</label>
@@ -189,8 +220,8 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, witnesses });
                     }}
                   />
-                  <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, witnesses: form.witnesses.filter((_, witnessIndex) => witnessIndex !== index) })}>
-                    Remove
+                  <button type="button" className={`${BTN.ghost} ${BTN.xs} text-red-600 hover:bg-red-50`} onClick={() => setForm({ ...form, witnesses: form.witnesses.filter((_, witnessIndex) => witnessIndex !== index) })}>
+                    Remove witness
                   </button>
                 </div>
                 <textarea
@@ -240,10 +271,11 @@ export default function IncidentTrackerModal({
                       type="text"
                       className={INPUT.base}
                       readOnly
-                      value={form.cqc_notification_deadline === 'immediate' ? 'Immediate (24 hours)' : form.cqc_notification_deadline === '72h' ? 'Within 72 hours' : '-'}
+                      value={cqcDeadline?.deadline ? `${formatDateTimeDisplay(cqcDeadline.deadline)} (${cqcDeadline.hoursAllowed}h window)` : form.cqc_notification_deadline === '72h' ? 'Within 72 hours' : form.cqc_notification_deadline ? 'Without delay' : '-'}
                     />
                   </div>
                 </div>
+                <p className="text-xs text-gray-500">Deadline is calculated from the incident date and time so you can see the actual reporting window.</p>
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input type="checkbox" checked={form.cqc_notified} onChange={e => setForm({ ...form, cqc_notified: e.target.checked })} className="accent-blue-600" />
                   CQC has been notified
@@ -252,7 +284,7 @@ export default function IncidentTrackerModal({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={INPUT.label}>Date Notified</label>
-                      <input type="date" className={INPUT.base} value={form.cqc_notified_date} onChange={e => setForm({ ...form, cqc_notified_date: e.target.value })} />
+                      <input type="date" max={maxPastDate} className={INPUT.base} value={form.cqc_notified_date} onChange={e => setForm({ ...form, cqc_notified_date: e.target.value })} />
                     </div>
                     <div>
                       <label className={INPUT.label}>CQC Reference</label>
@@ -279,6 +311,16 @@ export default function IncidentTrackerModal({
                     {RIDDOR_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
                   </select>
                 </div>
+                <p className="text-xs text-gray-500">
+                  Deaths, specified injuries, and dangerous occurrences should be reported without delay. Over-7-day incapacitation and occupational disease reports are due within 15 days.
+                </p>
+                {selectedRiddorCategory && (
+                  <p className="text-xs text-gray-600">
+                    Deadline for {selectedRiddorCategory.name}: {selectedRiddorCategory.deadlineDays === 0
+                      ? `report without delay, no later than ${riddorDeadline?.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) || '-'}`
+                      : `${riddorDeadline?.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) || '-'} (${selectedRiddorCategory.deadlineDays} day window)`}
+                  </p>
+                )}
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input type="checkbox" checked={form.riddor_reported} onChange={e => setForm({ ...form, riddor_reported: e.target.checked })} className="accent-blue-600" />
                   Reported to HSE
@@ -287,7 +329,7 @@ export default function IncidentTrackerModal({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={INPUT.label}>Date Reported</label>
-                      <input type="date" className={INPUT.base} value={form.riddor_reported_date} onChange={e => setForm({ ...form, riddor_reported_date: e.target.value })} />
+                      <input type="date" max={maxPastDate} className={INPUT.base} value={form.riddor_reported_date} onChange={e => setForm({ ...form, riddor_reported_date: e.target.value })} />
                     </div>
                     <div>
                       <label className={INPUT.label}>HSE F2508 Reference</label>
@@ -307,6 +349,7 @@ export default function IncidentTrackerModal({
             </label>
             {form.safeguarding_referral && (
               <div className="ml-6 space-y-3">
+                <p className="text-xs text-gray-500">Record who the referral was made to and when. In most homes this should be escalated the same day, with the person&apos;s wishes captured alongside the referral.</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className={INPUT.label}>Referred To</label>
@@ -318,7 +361,7 @@ export default function IncidentTrackerModal({
                   </div>
                   <div>
                     <label className={INPUT.label}>Date</label>
-                    <input type="date" className={INPUT.base} value={form.safeguarding_date} onChange={e => setForm({ ...form, safeguarding_date: e.target.value })} />
+                    <input type="date" max={maxPastDate} className={INPUT.base} value={form.safeguarding_date} onChange={e => setForm({ ...form, safeguarding_date: e.target.value })} />
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-2">
@@ -350,6 +393,10 @@ export default function IncidentTrackerModal({
             </label>
             {form.duty_of_candour_applies && (
               <div className="ml-6 space-y-2">
+                <p className="text-xs text-gray-500">
+                  Regulation 20 expects a verbal apology and explanation as soon as possible, followed by written confirmation within 10 working days.
+                  {dutyOfCandourDeadline ? ` Written follow-up due by ${dutyOfCandourDeadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.` : ''}
+                </p>
                 <div>
                   <label className={INPUT.label}>Recipient (Person / Family)</label>
                   <input type="text" className={INPUT.base} placeholder="Name of person or family notified" value={form.candour_recipient} onChange={e => setForm({ ...form, candour_recipient: e.target.value })} />
@@ -357,11 +404,11 @@ export default function IncidentTrackerModal({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={INPUT.label}>Verbal Notification Date</label>
-                    <input type="date" className={INPUT.base} value={form.candour_notification_date} onChange={e => setForm({ ...form, candour_notification_date: e.target.value })} />
+                    <input type="date" max={maxPastDate} className={INPUT.base} value={form.candour_notification_date} onChange={e => setForm({ ...form, candour_notification_date: e.target.value })} />
                   </div>
                   <div>
                     <label className={INPUT.label}>Written Follow-up Sent</label>
-                    <input type="date" className={INPUT.base} value={form.candour_letter_sent_date} onChange={e => setForm({ ...form, candour_letter_sent_date: e.target.value })} />
+                    <input type="date" max={maxPastDate} className={INPUT.base} value={form.candour_letter_sent_date} onChange={e => setForm({ ...form, candour_letter_sent_date: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -382,7 +429,7 @@ export default function IncidentTrackerModal({
                 </div>
                 <div>
                   <label className={INPUT.label}>Date Contacted</label>
-                  <input type="date" className={INPUT.base} value={form.police_contact_date} onChange={e => setForm({ ...form, police_contact_date: e.target.value })} />
+                  <input type="date" max={maxPastDate} className={INPUT.base} value={form.police_contact_date} onChange={e => setForm({ ...form, police_contact_date: e.target.value })} />
                 </div>
               </div>
             )}
@@ -401,7 +448,7 @@ export default function IncidentTrackerModal({
             </div>
             <div>
               <label className={INPUT.label}>Start Date</label>
-              <input type="date" className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
+              <input type="date" max={maxPastDate} className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Investigation Lead</label>
@@ -410,7 +457,7 @@ export default function IncidentTrackerModal({
             {form.investigation_status === 'closed' ? (
               <div>
                 <label className={INPUT.label}>Closed Date</label>
-                <input type="date" className={INPUT.base} value={form.investigation_closed_date} onChange={e => setForm({ ...form, investigation_closed_date: e.target.value })} />
+                <input type="date" max={maxPastDate} className={INPUT.base} value={form.investigation_closed_date} onChange={e => setForm({ ...form, investigation_closed_date: e.target.value })} />
               </div>
             ) : (
               <div>
@@ -450,11 +497,11 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, corrective_actions: actions });
                     }}
                   />
-                  <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
-                    Remove
+                  <button type="button" className={`${BTN.ghost} ${BTN.xs} text-red-600 hover:bg-red-50`} onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
+                    Remove action
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <input
                     type="text"
                     className={INPUT.sm}
@@ -466,28 +513,33 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, corrective_actions: actions });
                     }}
                   />
-                  <input
-                    type="date"
-                    className={INPUT.sm}
-                    title="Due date"
-                    value={action.due_date}
-                    onChange={e => {
-                      const actions = [...form.corrective_actions];
-                      actions[index] = { ...actions[index], due_date: e.target.value };
-                      setForm({ ...form, corrective_actions: actions });
-                    }}
-                  />
-                  <input
-                    type="date"
-                    className={INPUT.sm}
-                    title="Completed date"
-                    value={action.completed_date}
-                    onChange={e => {
-                      const actions = [...form.corrective_actions];
-                      actions[index] = { ...actions[index], completed_date: e.target.value };
-                      setForm({ ...form, corrective_actions: actions });
-                    }}
-                  />
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">Due date</label>
+                    <input
+                      type="date"
+                      className={INPUT.sm}
+                      value={action.due_date}
+                      onChange={e => {
+                        const actions = [...form.corrective_actions];
+                        actions[index] = { ...actions[index], due_date: e.target.value };
+                        setForm({ ...form, corrective_actions: actions });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">Completed date</label>
+                    <input
+                      type="date"
+                      max={maxPastDate}
+                      className={INPUT.sm}
+                      value={action.completed_date}
+                      onChange={e => {
+                        const actions = [...form.corrective_actions];
+                        actions[index] = { ...actions[index], completed_date: e.target.value };
+                        setForm({ ...form, corrective_actions: actions });
+                      }}
+                    />
+                  </div>
                   <select
                     className={INPUT.sm}
                     value={action.status}
@@ -533,7 +585,7 @@ export default function IncidentTrackerModal({
         </div>
       )}
 
-      {editingId && (
+      {editingId ? (
         <FileAttachments
           caseType="incident"
           caseId={editingId}
@@ -544,16 +596,25 @@ export default function IncidentTrackerModal({
           downloadFile={downloadRecordAttachment}
           title="Incident Evidence"
         />
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+          Save the incident first to attach supporting files and evidence.
+        </div>
       )}
 
       <div className={MODAL.footer}>
         {canEdit && editingId && !isFrozen && (
           <button onClick={handleDelete} disabled={saving} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
         )}
-        {canEdit && editingId && !isFrozen && (form.cqc_notified || form.safeguarding_referral || form.investigation_status === 'closed') && (
+        {canEdit && editingId && !isFrozen && canFreezeRecord && (
           <button onClick={handleFreeze} disabled={freezing} className={`${BTN.secondary} ${BTN.sm}`}>
             {freezing ? 'Freezing...' : 'Freeze Record'}
           </button>
+        )}
+        {canEdit && editingId && !isFrozen && !canFreezeRecord && (
+          <p className="mr-auto text-xs text-gray-500">
+            Freeze becomes available once CQC notification or safeguarding is recorded, or the investigation is closed.
+          </p>
         )}
         {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
         <div className="flex-1" />

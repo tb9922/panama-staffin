@@ -36,7 +36,7 @@ export default function DailyStatusCoverageGapPanel({
           : 'Coverage affected - review options below'}
       </p>
       <div className="mb-3">
-        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">1 - Deploy Float</div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">1 - Deploy Float</div>
         {floaters.length === 0 ? (
           <div className="text-xs text-gray-400">No floaters available today</div>
         ) : (
@@ -47,7 +47,7 @@ export default function DailyStatusCoverageGapPanel({
                 <div key={staff.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                   <span className="text-xs font-medium">{staff.name} <span className="text-gray-400 text-[10px]">({staff.role})</span></span>
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
+                    <span className={`text-xs font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`} title={`${fatigue.consecutive} consecutive working days`}>{fatigue.consecutive}d</span>
                     {shortPeriods.map(period => (
                       <button
                         key={period}
@@ -66,18 +66,23 @@ export default function DailyStatusCoverageGapPanel({
         )}
       </div>
       <div className="mb-3">
-        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">2 - Call In (OT)</div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">2 - Call In (Overtime)</div>
         {otCandidates.length === 0 ? (
           <div className="text-xs text-gray-400">No off-duty staff available</div>
         ) : (
           <div className="space-y-1">
+            {otCandidates.length > 5 && (
+              <div className="text-xs text-amber-700">
+                Showing the first 5 of {otCandidates.length} overtime candidates.
+              </div>
+            )}
             {otCandidates.slice(0, 5).map(staff => {
               const fatigue = checkFatigueRisk(staff, currentDate, schedData.overrides, schedData.config);
               return (
                 <div key={staff.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                   <span className="text-xs font-medium">{staff.name} <span className="text-gray-400 text-[10px]">({staff.shift})</span></span>
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`}>{fatigue.consecutive}d</span>
+                    <span className={`text-xs font-medium ${fatigue.exceeded ? 'text-red-500' : fatigue.atRisk ? 'text-amber-500' : 'text-gray-400'}`} title={`${fatigue.consecutive} consecutive working days`}>{fatigue.consecutive}d</span>
                     {shortPeriods.map(period => (
                       <button
                         key={period}
@@ -96,7 +101,7 @@ export default function DailyStatusCoverageGapPanel({
         )}
       </div>
       <div>
-        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">3 - Book Agency</div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">3 - Book Agency</div>
         <button onClick={onOpenAgencyBooking} className={`${BTN.danger} ${BTN.xs}`}>Open Agency Booking</button>
       </div>
     </div>

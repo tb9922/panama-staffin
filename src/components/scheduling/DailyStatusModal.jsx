@@ -85,7 +85,7 @@ export default function DailyStatusModal({
       {modal === 'swap' ? (
         <div className="space-y-3">
           <div>
-            <label className={INPUT.label}>Staff A (gives their shift)</label>
+            <label className={INPUT.label}>First staff member</label>
             <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} className={INPUT.select}>
               <option value="">Select...</option>
               {staffForDay.filter(staff => isWorkingShift(staff.shift) && isCareRole(staff.role)).map(staff => (
@@ -94,7 +94,7 @@ export default function DailyStatusModal({
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Staff B (takes their shift)</label>
+            <label className={INPUT.label}>Second staff member</label>
             <select value={swapTo} onChange={e => setSwapTo(e.target.value)} className={INPUT.select}>
               <option value="">Select...</option>
               {staffForDay.filter(staff => isCareRole(staff.role) && staff.id !== swapFrom).map(staff => (

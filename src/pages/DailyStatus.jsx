@@ -48,6 +48,30 @@ function getShiftEditReason(shift) {
   return 'Manual shift edit';
 }
 
+const SHIFT_LABELS = {
+  E: 'Early shift',
+  L: 'Late shift',
+  EL: 'Full day shift',
+  N: 'Night shift',
+  OFF: 'Day off',
+  AL: 'Annual leave',
+  SICK: 'Sick leave',
+  TRN: 'Training',
+  ADM: 'Admin',
+  'OC-E': 'Overtime early shift',
+  'OC-L': 'Overtime late shift',
+  'OC-EL': 'Overtime full day shift',
+  'OC-N': 'Overtime night shift',
+  'AG-E': 'Agency early shift',
+  'AG-L': 'Agency late shift',
+  'AG-EL': 'Agency full day shift',
+  'AG-N': 'Agency night shift',
+};
+
+function getShiftLabel(shift) {
+  return SHIFT_LABELS[shift] || shift;
+}
+
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
@@ -252,6 +276,7 @@ export default function DailyStatus() {
 
   async function removeOverride(staffId) {
     if (savingRef.current) return;
+    if (!window.confirm('Revert this override? The staff member will return to their scheduled shift for this day.')) return;
     savingRef.current = true;
     setSaving(true);
     try {
@@ -321,7 +346,7 @@ export default function DailyStatus() {
           Open RTW Interview
         </button>
       </div>,
-      { duration: 10000 },
+      { duration: 15000 },
     );
     if (projectedCoverage.overallLevel >= 1) {
       setShowGapPanel(true);
@@ -494,14 +519,15 @@ export default function DailyStatus() {
             })}
             disabled={saving}
             aria-label={`Change shift for ${s.name}`}
+            title={`Current shift: ${getShiftLabel(s.shift)}`}
             className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors duration-150 hover:opacity-80 disabled:opacity-50 ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}
           >
             {s.shift}
           </button>
         ) : (
-          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
+          <span title={getShiftLabel(s.shift)} className={`px-1.5 py-0.5 rounded text-xs font-medium ${SHIFT_COLORS[s.shift] || 'bg-gray-100'}`}>{s.shift}</span>
         )}
-        {s.sleep_in && <span className={`${BADGE.purple} ml-1`}>SI</span>}
+        {s.sleep_in && <span title="Sleep in" aria-label="Sleep in" className={`${BADGE.purple} ml-1`}>SI</span>}
         {s.replaces_staff_id && (() => {
           const replaced = staffForDay.find(m => m.id === s.replaces_staff_id);
           return <span className={`${BADGE.amber} ml-1`} title={`Covers for ${replaced?.name || s.replaces_staff_id}`}>covers {replaced?.name?.split(' ')[0] || s.replaces_staff_id}</span>;
@@ -524,11 +550,13 @@ export default function DailyStatus() {
       {staff.length === 0 ? (
         <div className={TABLE.empty}>None</div>
       ) : (
-        <table className={TABLE.table}>
-          <tbody>
-            {staff.map(s => <StaffRow key={s.id} s={s} />)}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className={TABLE.table}>
+            <tbody>
+              {staff.map(s => <StaffRow key={s.id} s={s} />)}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -590,9 +618,9 @@ export default function DailyStatus() {
       </div>
 
       {/* Date Navigation */}
-      <div className="flex items-center justify-between mb-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <button onClick={() => goDay(-1)} className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
+      <div className="flex flex-col gap-3 mb-4 print:hidden lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => goDay(-1)} aria-label="← Previous day" className={`${BTN.secondary} ${BTN.sm}`}>&larr;</button>
           <h1 className={PAGE.title}>
             {dayName}
             {isLocked && (
@@ -603,12 +631,28 @@ export default function DailyStatus() {
               </span>
             )}
           </h1>
-          <button onClick={() => goDay(1)} className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
+          <button type="button" onClick={() => goDay(1)} aria-label="→ Next day" className={`${BTN.secondary} ${BTN.sm}`}>&rarr;</button>
           {saving && <span className="text-xs text-blue-500">Saving...</span>}
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
-          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-gray-600">
+            Jump to date
+            <input
+              type="date"
+              value={dateStr}
+              onChange={(e) => e.target.value && navigate(`/day/${e.target.value}`)}
+              className={`${INPUT.sm} mt-1 min-w-[11rem]`}
+            />
+          </label>
+          <button type="button" onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
+          <button
+            type="button"
+            onClick={() => navigate(`/day/${todayLocalISO()}`)}
+            disabled={dateStr === today}
+            className={`${dateStr === today ? BTN.secondary : BTN.ghost} ${BTN.sm} ${dateStr === today ? 'cursor-default opacity-70' : 'text-blue-600'}`}
+          >
+            Today
+          </button>
         </div>
       </div>
 
@@ -645,7 +689,7 @@ export default function DailyStatus() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coverage Panel */}
-        <div className={CARD.padded}>
+        <div className={CARD.padded} role="status" aria-live="polite">
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Coverage</h2>
           {['early', 'late', 'night'].map(period => {
             const cov = coverage[period];
@@ -659,8 +703,8 @@ export default function DailyStatus() {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                  <div>Heads: <strong>{cov.coverage.headCount}/{cov.coverage.required.heads}</strong></div>
-                  <div>Skill: <strong>{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</strong></div>
+                  <div>Staff on shift: <strong>{cov.coverage.headCount}/{cov.coverage.required.heads}</strong></div>
+                  <div>Skill points: <strong>{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</strong></div>
                 </div>
               </div>
             );
@@ -722,11 +766,11 @@ export default function DailyStatus() {
         <div className={`lg:col-span-2 ${CARD.padded}`}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
-            {canEdit && <div className="flex gap-1.5 print:hidden">
+            {canEdit && <div className="flex flex-wrap gap-1.5 print:hidden">
               <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
               <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
               <button onClick={() => withLockCheck(() => setModal('ot'))} disabled={saving} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100 disabled:opacity-50`}>+OT</button>
-              <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Agency</button>
+              <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.pink} cursor-pointer transition-colors duration-150 hover:bg-pink-100 disabled:opacity-50`}>+Agency</button>
               <button onClick={() => withLockCheck(() => setModal('training'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Training</button>
               <button onClick={() => withLockCheck(() => setModal('sleepIn'))} disabled={saving} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100 disabled:opacity-50`}>+Sleep In</button>
               <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>Swap</button>
@@ -752,7 +796,7 @@ export default function DailyStatus() {
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
                       s.fatigue.exceeded ? ESC_COLORS.red.badge :
                       s.fatigue.atRisk ? ESC_COLORS.amber.badge : ESC_COLORS.green.badge
-                    }`}>{s.fatigue.consecutive}d</span>
+                    }`} title={`${s.fatigue.consecutive} consecutive working days`} aria-label={`${s.fatigue.consecutive} consecutive working days`}>{s.fatigue.consecutive}d</span>
                   </div>
                 ))}
               </div>

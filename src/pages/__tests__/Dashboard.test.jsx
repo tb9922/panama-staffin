@@ -149,7 +149,7 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('28-Day Coverage Heatmap')).toBeInTheDocument()
     );
-    const dayLabels = screen.getAllByText(/^D\d+$/);
+    const dayLabels = screen.getAllByText(/^Day \d+$/);
     expect(dayLabels).toHaveLength(28);
   });
 
@@ -169,8 +169,8 @@ describe('Dashboard', () => {
       expect(screen.getByText('Cost Summary (28-day)')).toBeInTheDocument()
     );
     expect(screen.getByText('This cycle:')).toBeInTheDocument();
-    expect(screen.getByText('Monthly proj:')).toBeInTheDocument();
-    expect(screen.getByText('Annual proj:')).toBeInTheDocument();
+    expect(screen.getByText('Monthly projection:')).toBeInTheDocument();
+    expect(screen.getByText('Annual projection:')).toBeInTheDocument();
   });
 
   it('viewer lands on the read-only workspace instead of the operations dashboard', async () => {
@@ -181,7 +181,7 @@ describe('Dashboard', () => {
       expect(screen.getByText('Read-Only Workspace')).toBeInTheDocument()
     );
     expect(screen.getByText('Pinned Tools')).toBeInTheDocument();
-    expect(screen.getByText('Roster')).toBeInTheDocument();
+    expect(screen.getByText('Schedule')).toBeInTheDocument();
     expect(screen.getByText('Reports')).toBeInTheDocument();
     expect(screen.queryByText('Cost Summary (28-day)')).not.toBeInTheDocument();
     expect(api.getSchedulingData).not.toHaveBeenCalled();
@@ -257,11 +257,11 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Action This Week')).toBeInTheDocument()
     );
-    expect(screen.getAllByText('CQC overdue').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('3 expired training').length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByRole('button', { name: /cqc overdue/i })).length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByRole('button', { name: /3 expired training/i })).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not render Action This Week card when weekActions is empty', async () => {
+  it('renders an empty Action This Week card when weekActions is empty', async () => {
     api.getDashboardSummary.mockResolvedValue({
       modules: {},
       alerts: [],
@@ -272,7 +272,8 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Alerts')).toBeInTheDocument()
     );
-    expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+    expect(screen.getByText('Action This Week')).toBeInTheDocument();
+    expect(screen.getByText('No actions this week.')).toBeInTheDocument();
   });
 
   it('does not render Action This Week card for viewer role', async () => {
@@ -300,9 +301,9 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Covered')).toBeInTheDocument()
     );
-    expect(screen.getByText('Float/OT')).toBeInTheDocument();
+    expect(screen.getByText('Float or overtime')).toBeInTheDocument();
     expect(screen.getAllByText('Agency').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Short/Unsafe')).toBeInTheDocument();
+    expect(screen.getByText('Below minimum')).toBeInTheDocument();
   });
 
   it('keeps critical summary alerts visible when local alerts exceed the display limit', async () => {
@@ -346,8 +347,8 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('My Workspace')).toBeInTheDocument()
     );
-    expect(screen.getByText('My Rota')).toBeInTheDocument();
-    expect(screen.getByText('My Hours')).toBeInTheDocument();
+    expect(screen.getByText('My Schedule')).toBeInTheDocument();
+    expect(screen.getByText('Monthly Timesheet')).toBeInTheDocument();
     expect(api.getSchedulingData).not.toHaveBeenCalled();
     expect(api.getDashboardSummary).not.toHaveBeenCalled();
   });

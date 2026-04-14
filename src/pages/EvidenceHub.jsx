@@ -17,6 +17,7 @@ import { getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { ONBOARDING_SECTIONS } from '../lib/onboarding.js';
 import { getTrainingTypes } from '../lib/training.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const PAGE_SIZE = 50;
 const BULK_FETCH_SIZE = 200;
@@ -49,6 +50,21 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatDateOnly(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function getEmptyStateMessage(hasFilters) {
+  return hasFilters
+    ? 'No evidence matched the current filters.'
+    : 'No evidence has been uploaded yet.';
 }
 
 function defaultFilters() {
@@ -184,7 +200,7 @@ function buildCqcCategories(rows) {
     categories.push(createCategory('other', 'Other', byStatement.other));
   }
 
-  return categories;
+  return categories.filter((category) => category.totalCount > 0);
 }
 
 function buildOnboardingCategories(rows) {
@@ -204,7 +220,7 @@ function buildOnboardingCategories(rows) {
     categories.push(createCategory('other', 'Other', bySection.other));
   }
 
-  return categories;
+  return categories.filter((category) => category.totalCount > 0);
 }
 
 function buildTrainingCategories(rows) {
@@ -270,6 +286,7 @@ export default function EvidenceHub() {
   const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
   const { homeRole } = useData();
+  const { showToast } = useToast();
 
   const [view, setView] = useState('list');
   const [filters, setFilters] = useState(defaultFilters);
@@ -290,6 +307,10 @@ export default function EvidenceHub() {
   const folderTree = buildFolderTree(folderRows, availableSources);
   const activeLoading = view === 'folders' ? folderLoading : loading;
   const exportCount = view === 'folders' ? folderRows.length : total;
+  const hasFilters = Boolean(debouncedSearch || filters.uploadedBy || filters.dateFrom || filters.dateTo || filters.modules.length > 0);
+  const dateRangeError = filters.dateFrom && filters.dateTo && filters.dateTo < filters.dateFrom
+    ? 'Created To cannot be before Created From.'
+    : null;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(filters.q.trim()), 300);
@@ -317,6 +338,13 @@ export default function EvidenceHub() {
   useEffect(() => {
     let cancelled = false;
     if (view !== 'list') return () => { cancelled = true; };
+    if (dateRangeError) {
+      setError(dateRangeError);
+      setRows([]);
+      setTotal(0);
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
 
     setLoading(true);
     setError(null);
@@ -348,11 +376,17 @@ export default function EvidenceHub() {
     return () => {
       cancelled = true;
     };
-  }, [view, debouncedSearch, filters.uploadedBy, filters.dateFrom, filters.dateTo, filters.modules, offset]);
+  }, [view, debouncedSearch, filters.uploadedBy, filters.dateFrom, filters.dateTo, filters.modules, offset, dateRangeError]);
 
   useEffect(() => {
     let cancelled = false;
     if (view !== 'folders') return () => { cancelled = true; };
+    if (dateRangeError) {
+      setError(dateRangeError);
+      setFolderRows([]);
+      setFolderLoading(false);
+      return () => { cancelled = true; };
+    }
 
     setFolderLoading(true);
     setError(null);
@@ -393,7 +427,7 @@ export default function EvidenceHub() {
     return () => {
       cancelled = true;
     };
-  }, [view, debouncedSearch, filters.uploadedBy, filters.dateFrom, filters.dateTo, filters.modules]);
+  }, [view, debouncedSearch, filters.uploadedBy, filters.dateFrom, filters.dateTo, filters.modules, dateRangeError]);
 
   useEffect(() => {
     if (view !== 'folders') return;
@@ -428,6 +462,10 @@ export default function EvidenceHub() {
   }
 
   async function handleExport() {
+    if (dateRangeError) {
+      setError(dateRangeError);
+      return;
+    }
     setExporting(true);
     setError(null);
     try {
@@ -446,6 +484,10 @@ export default function EvidenceHub() {
           row.description || '',
         ]),
       }]);
+      showToast({
+        title: 'Evidence Hub exported',
+        message: 'The current evidence export has been prepared as an XLSX file.',
+      });
     } catch (err) {
       setError(err.message || 'Export failed');
     } finally {
@@ -475,6 +517,10 @@ export default function EvidenceHub() {
         setRows(refreshed.rows);
         setTotal(refreshed.total);
       }
+      showToast({
+        title: 'Attachment deleted',
+        message: `${row.originalName} was removed from ${row.sourceLabel}.`,
+      });
     } catch (err) {
       setError(err.message || 'Delete failed');
     }
@@ -491,6 +537,7 @@ export default function EvidenceHub() {
 
   function clearFilters() {
     setFilters(defaultFilters());
+    setView('list');
   }
 
   function toggleSource(sourceId) {
@@ -526,7 +573,7 @@ export default function EvidenceHub() {
 
   function renderFolderView() {
     if (folderRows.length === 0) {
-      return <div className="px-4 py-10 text-sm text-gray-500">No evidence matched the current filters.</div>;
+      return <div className="px-4 py-10 text-sm text-gray-500">{getEmptyStateMessage(hasFilters)}</div>;
     }
 
     return (
@@ -617,6 +664,7 @@ export default function EvidenceHub() {
                                               <div className="min-w-0">
                                                 <a
                                                   href={getEvidenceHubDownloadUrl(file.sourceModule, file.attachmentId)}
+                                                  download={file.originalName}
                                                   className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline break-all"
                                                 >
                                                   {file.originalName}
@@ -641,7 +689,7 @@ export default function EvidenceHub() {
                                                   <div className="text-xs text-gray-500 mt-1">
                                                     {file.evidenceOwner ? `Owner ${file.evidenceOwner}` : null}
                                                     {file.evidenceOwner && file.reviewDueAt ? ' | ' : null}
-                                                    {file.reviewDueAt ? `Review due ${file.reviewDueAt}` : null}
+                                                    {file.reviewDueAt ? `Review due ${formatDateOnly(file.reviewDueAt)}` : null}
                                                   </div>
                                                 )}
                                               </div>
@@ -694,16 +742,19 @@ export default function EvidenceHub() {
         <div className="flex items-center gap-2">
           <button className={BTN.secondary} onClick={clearFilters} disabled={activeLoading}>Clear Filters</button>
           <button className={BTN.primary} onClick={handleExport} disabled={activeLoading || exporting || exportCount === 0}>
-            {exporting ? 'Exporting...' : 'Export XLSX'}
+            {exporting ? 'Exporting XLSX...' : 'Export XLSX'}
           </button>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="tablist" aria-label="Evidence view">
         <button
           type="button"
           className={view === 'list' ? `${BTN.primary} ${BTN.sm}` : `${BTN.ghost} ${BTN.sm}`}
           onClick={() => setView('list')}
+          role="tab"
+          aria-selected={view === 'list'}
+          aria-pressed={view === 'list'}
         >
           List
         </button>
@@ -711,6 +762,9 @@ export default function EvidenceHub() {
           type="button"
           className={view === 'folders' ? `${BTN.primary} ${BTN.sm}` : `${BTN.ghost} ${BTN.sm}`}
           onClick={() => setView('folders')}
+          role="tab"
+          aria-selected={view === 'folders'}
+          aria-pressed={view === 'folders'}
         >
           Folders
         </button>
@@ -729,8 +783,9 @@ export default function EvidenceHub() {
       <div className={`${CARD.padded} mb-4`}>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2">
-            <label className={INPUT.label}>Search</label>
+            <label htmlFor="evidence-hub-search" className={INPUT.label}>Search</label>
             <input
+              id="evidence-hub-search"
               className={INPUT.base}
               placeholder="Search filename or description"
               value={filters.q}
@@ -738,8 +793,9 @@ export default function EvidenceHub() {
             />
           </div>
           <div>
-            <label className={INPUT.label}>Uploaded By</label>
+            <label htmlFor="evidence-hub-uploaded-by" className={INPUT.label}>Uploaded By</label>
             <select
+              id="evidence-hub-uploaded-by"
               className={INPUT.select}
               value={filters.uploadedBy}
               onChange={(event) => setFilters((current) => ({ ...current, uploadedBy: event.target.value }))}
@@ -751,8 +807,9 @@ export default function EvidenceHub() {
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Created From</label>
+            <label htmlFor="evidence-hub-date-from" className={INPUT.label}>Created From</label>
             <input
+              id="evidence-hub-date-from"
               type="date"
               className={INPUT.base}
               value={filters.dateFrom}
@@ -760,8 +817,9 @@ export default function EvidenceHub() {
             />
           </div>
           <div>
-            <label className={INPUT.label}>Created To</label>
+            <label htmlFor="evidence-hub-date-to" className={INPUT.label}>Created To</label>
             <input
+              id="evidence-hub-date-to"
               type="date"
               className={INPUT.base}
               value={filters.dateTo}
@@ -772,6 +830,7 @@ export default function EvidenceHub() {
 
         <div className="mt-4">
           <p className="text-sm font-medium text-gray-700 mb-2">Sources</p>
+          <p className="text-xs text-gray-500 mb-2">No source selected means every readable source is included.</p>
           <div className="flex flex-wrap gap-2">
             {availableSources.map((source) => {
               const selected = filters.modules.includes(source.id);
@@ -781,6 +840,7 @@ export default function EvidenceHub() {
                   type="button"
                   className={selected ? BADGE.blue : BADGE.gray}
                   onClick={() => toggleModule(source.id)}
+                  aria-pressed={selected}
                 >
                   {source.label}
                 </button>
@@ -804,7 +864,7 @@ export default function EvidenceHub() {
         ) : view === 'folders' ? (
           renderFolderView()
         ) : rows.length === 0 ? (
-          <div className="px-4 py-10 text-sm text-gray-500">No evidence matched the current filters.</div>
+          <div className="px-4 py-10 text-sm text-gray-500">{getEmptyStateMessage(hasFilters)}</div>
         ) : (
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
@@ -824,7 +884,7 @@ export default function EvidenceHub() {
                 {rows.map((row) => (
                   <tr key={`${row.sourceModule}-${row.attachmentId}`} className={TABLE.tr}>
                     <td className={TABLE.td}>
-                      <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} className="text-blue-600 hover:text-blue-700 hover:underline font-medium">
+                      <a href={getEvidenceHubDownloadUrl(row.sourceModule, row.attachmentId)} download={row.originalName} className="text-blue-600 hover:text-blue-700 hover:underline font-medium">
                         {row.originalName}
                       </a>
                       {row.sourceModule === 'cqc_evidence' && (
@@ -845,7 +905,7 @@ export default function EvidenceHub() {
                         <p className="text-xs text-gray-500 mt-1">
                           {row.evidenceOwner ? `Owner ${row.evidenceOwner}` : null}
                           {row.evidenceOwner && row.reviewDueAt ? ' | ' : null}
-                          {row.reviewDueAt ? `Review due ${row.reviewDueAt}` : null}
+                          {row.reviewDueAt ? `Review due ${formatDateOnly(row.reviewDueAt)}` : null}
                         </p>
                       )}
                     </td>

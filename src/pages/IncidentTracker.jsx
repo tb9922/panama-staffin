@@ -190,7 +190,7 @@ export default function IncidentTracker() {
 
   async function handleFreeze() {
     if (!editingId) return;
-    if (!await confirm('Freeze this incident record? Once frozen, the incident details cannot be edited. You can still add notes.')) return;
+    if (!await confirm('Freeze this incident record? This action cannot be undone. Once frozen, the incident details cannot be edited, although you can still add notes.')) return;
     setFreezing(true);
     try {
       const home = getCurrentHome();
@@ -243,7 +243,7 @@ export default function IncidentTracker() {
     if (saving) return;
     if (isFrozen) return;
     if (!editingId) return;
-    if (!await confirm('Delete this incident record?')) return;
+    if (!await confirm('Delete this incident record permanently? This removes the incident together with its supporting attachments and addenda.')) return;
     const home = getCurrentHome();
     setSaving(true);
     try {

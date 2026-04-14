@@ -113,8 +113,8 @@ function setupApiMocks() {
       { question: 'safe', total: 8, strong: 0, partial: 1, stale: 0, weak: 0, missing: 7 },
       { question: 'effective', total: 6, strong: 0, partial: 0, stale: 0, weak: 0, missing: 6 },
       { question: 'caring', total: 5, strong: 0, partial: 0, stale: 0, weak: 0, missing: 5 },
-      { question: 'responsive', total: 5, strong: 0, partial: 0, stale: 0, weak: 0, missing: 5 },
-      { question: 'well-led', total: 10, strong: 0, partial: 0, stale: 0, weak: 0, missing: 10 },
+      { question: 'responsive', total: 7, strong: 0, partial: 0, stale: 0, weak: 0, missing: 7 },
+      { question: 'well-led', total: 8, strong: 0, partial: 0, stale: 0, weak: 0, missing: 8 },
     ],
     gaps: [
       {
@@ -528,7 +528,7 @@ describe('CQCEvidence', () => {
   it('exports snapshot PDFs from frozen snapshot data, not live metrics', async () => {
     const user = userEvent.setup();
     const frozenEvidencePack = { source: 'snapshot', rows: [{ file: 'frozen.pdf' }] };
-    api.getSnapshots.mockResolvedValueOnce([
+    api.getSnapshots.mockResolvedValue([
       {
         id: 'snap-100',
         computed_at: '2026-03-08T10:00:00Z',
@@ -555,10 +555,13 @@ describe('CQCEvidence', () => {
 
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Show Snapshot History (1)' })).toBeInTheDocument();
+      expect(api.getSnapshots).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Show Snapshot History (1)' }));
+    await user.click(screen.getByRole('button', { name: /Snapshot History/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'View' })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole('button', { name: 'View' }));
 
     await waitFor(() => {

@@ -37,10 +37,10 @@ const ROLE_WORKSPACE_CONFIG = {
     subtitle: 'Everything you need for your own shifts, leave, handover, and pay view is gathered here.',
     tone: 'blue',
     cards: [
-      { path: '/rotation', label: 'My Rota', description: 'Check your upcoming shifts and any rota changes.', module: 'scheduling' },
+      { path: '/rotation', label: 'My Schedule', description: 'Check your upcoming shifts and any rota changes.', module: 'scheduling' },
       { path: '/leave', label: 'My Leave', description: 'Review leave requests and upcoming time off.', module: 'scheduling' },
       { path: '/handover', label: 'My Handover', description: 'Read and update your own handover notes safely.', module: 'scheduling' },
-      { path: '/payroll/monthly-timesheet', label: 'My Hours', description: 'Review your monthly hours and payroll-ready view.', module: 'payroll' },
+      { path: '/payroll/monthly-timesheet', label: 'Monthly Timesheet', description: 'Review your own hours in the payroll-ready timesheet view.', module: 'payroll' },
     ],
   },
   finance_officer: {
@@ -76,7 +76,7 @@ const ROLE_WORKSPACE_CONFIG = {
       { path: '/hr/absence', label: 'Absence', description: 'Manage sickness, return-to-work, and OH follow-up.', module: 'hr' },
       { path: '/hr/contracts', label: 'Contracts', description: 'Review contract changes and issued paperwork.', module: 'hr' },
       { path: '/hr/family-leave', label: 'Family Leave', description: 'Track statutory family leave cases and pay type.', module: 'hr' },
-      { path: '/hr/renewals', label: 'DBS & RTW', description: 'Stay ahead of renewal and right-to-work deadlines.', module: 'hr' },
+      { path: '/hr/renewals', label: 'DBS and Right to Work', description: 'Stay ahead of DBS renewal and right-to-work deadlines.', module: 'hr' },
     ],
   },
   viewer: {
@@ -84,7 +84,7 @@ const ROLE_WORKSPACE_CONFIG = {
     subtitle: 'Quick links to the parts of the home you can review without editing anything.',
     tone: 'slate',
     cards: [
-      { path: '/rotation', label: 'Roster', description: 'View the rota without stepping into edit-heavy tools.', module: 'scheduling' },
+      { path: '/rotation', label: 'Schedule', description: 'View the rota without stepping into edit-heavy tools.', module: 'scheduling' },
       { path: '/handover', label: 'Handover Book', description: 'Read the latest handover context and updates.', module: 'scheduling' },
       { path: '/reports', label: 'Reports', description: 'Jump straight into reporting and exported summaries.', module: 'reports' },
     ],
@@ -136,6 +136,24 @@ function getWorkspaceToneClasses(tone) {
   }
 }
 
+const GBP_FORMATTER = new Intl.NumberFormat('en-GB', {
+  style: 'currency',
+  currency: 'GBP',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatCurrency(value) {
+  return GBP_FORMATTER.format(Number(value) || 0);
+}
+
+function getCoverageHealthLabel(level) {
+  if (level <= 1) return 'Covered';
+  if (level <= 2) return 'Covered with float or overtime';
+  if (level <= 3) return 'Covered with agency';
+  return 'Below minimum';
+}
+
 function CoverageGauge({ period, cov }) {
   if (!cov) return null;
   const headPct = cov.coverage.required.heads > 0
@@ -154,7 +172,7 @@ function CoverageGauge({ period, cov }) {
       <div className="space-y-2">
         <div>
           <div className="flex justify-between text-xs text-gray-600 mb-1">
-            <span>Heads</span>
+            <span>Staff on shift</span>
             <span className="font-mono font-bold">{cov.coverage.headCount}/{cov.coverage.required.heads}</span>
           </div>
           <div className="w-full bg-white/60 rounded-full h-2">
@@ -163,7 +181,7 @@ function CoverageGauge({ period, cov }) {
         </div>
         <div>
           <div className="flex justify-between text-xs text-gray-600 mb-1">
-            <span>Skill</span>
+            <span title="Available skill points against the minimum required">Skill points</span>
             <span className="font-mono font-bold">{cov.coverage.skillPoints.toFixed(1)}/{cov.coverage.required.skill_points}</span>
           </div>
           <div className="w-full bg-white/60 rounded-full h-2">
@@ -255,7 +273,7 @@ function RoleWorkspaceHome({ roleId }) {
       <section className={`${CARD.padded} ${tone.hero}`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="max-w-3xl">
-            <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone.eyebrow}`}>Role Workspace</p>
+            <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone.eyebrow}`}>Workspace</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-900">{config.title}</h1>
             <p className="mt-2 text-sm text-gray-600">{config.subtitle}</p>
           </div>
@@ -524,16 +542,16 @@ function DashboardInner({ schedData }) {
         <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl p-5 mb-6 flex items-center justify-between shadow-lg shadow-blue-900/20">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl p-5 mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shadow-lg shadow-blue-900/20">
         <div>
           <h1 className="text-xl font-bold">{config.home_name}</h1>
           <p className="text-blue-200 text-sm">{config.registered_beds} beds — {config.care_type}</p>
         </div>
-        <div className="text-right">
+        <div className="text-left sm:text-right">
           <div className="text-2xl font-bold">{today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}</div>
-          <div className="flex items-center gap-2 justify-end mt-1">
-            <span className="text-blue-200 text-xs">Panama rotation</span>
-            <button onClick={() => window.print()} className="text-blue-200 hover:text-white text-xs border border-blue-400/50 rounded-lg px-2.5 py-1 print:hidden transition-colors">Print</button>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end mt-1">
+            <span className="text-blue-200 text-xs">Rota cycle</span>
+            <button type="button" onClick={() => window.print()} className="text-blue-200 hover:text-white text-xs border border-blue-400/50 rounded-lg px-2.5 py-1 print:hidden transition-colors">Print</button>
           </div>
         </div>
       </div>
@@ -544,7 +562,7 @@ function DashboardInner({ schedData }) {
         </div>
       )}
 
-      <div className={`${CARD.padded} mb-6 cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate(`/day/${formatDate(today)}`)}>
+      <button type="button" className={`${CARD.padded} mb-6 w-full text-left transition-shadow hover:shadow-md`} onClick={() => navigate(`/day/${formatDate(today)}`)} aria-label={`Open daily status for ${formatDate(today)}`}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Today's Coverage — Live Status</h2>
           <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
@@ -564,30 +582,30 @@ function DashboardInner({ schedData }) {
           <CoverageGauge period="late" cov={todayData.coverage.late} />
           <CoverageGauge period="night" cov={todayData.coverage.night} />
         </div>
-      </div>
+      </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Staffing Summary</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {[
-              ['On Duty', onDuty.length, 'text-emerald-600', 'border-l-emerald-500'],
+              ['On Duty', onDuty.length, onDuty.length === 0 ? 'text-red-600' : 'text-emerald-600', onDuty.length === 0 ? 'border-l-red-500' : 'border-l-emerald-500'],
               ['Sick', sick.length, sick.length > 0 ? 'text-red-600' : 'text-gray-400', 'border-l-red-500'],
               ['Annual Leave', al.length, al.length > 0 ? 'text-yellow-600' : 'text-gray-400', 'border-l-yellow-500'],
-              ['Float Deployed', floatDeployed.length, floatDeployed.length > 0 ? 'text-orange-600' : 'text-gray-400', 'border-l-orange-500'],
-              ['Agency', agencyToday.length, agencyToday.length > 0 ? 'text-red-600' : 'text-gray-400', 'border-l-pink-500'],
+              ['Covering Staff', floatDeployed.length, floatDeployed.length > 0 ? 'text-orange-600' : 'text-gray-400', 'border-l-orange-500'],
+              ['Agency', agencyToday.length, agencyToday.length > 0 ? 'text-pink-600' : 'text-gray-400', 'border-l-pink-500'],
               ['Total Staff', staff.filter(s => s.active !== false).length, 'text-gray-700', 'border-l-blue-500'],
             ].map(([label, count, color, accent]) => (
               <div key={label} className={`border rounded-xl p-3 text-center border-l-4 ${accent}`}>
                 <div className={`text-2xl font-bold ${color}`}>{count}</div>
-                <div className="text-[10px] text-gray-500 mt-0.5">{label}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{label}</div>
               </div>
             ))}
           </div>
         </div>
 
         {canViewFinance ? (
-          <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/costs')}>
+          <button type="button" className={`${CARD.padded} w-full text-left transition-shadow hover:shadow-md`} onClick={() => navigate('/costs')} aria-label={`Open staffing costs. Current 28-day cycle cost ${formatCurrency(cycleCost)}.`}>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -595,11 +613,11 @@ function DashboardInner({ schedData }) {
                 <span className="text-xl font-bold">£{Math.round(cycleCost).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-600 text-sm">Monthly proj:</span>
+                <span className="text-gray-600 text-sm">Monthly projection:</span>
                 <span className="font-semibold">£{Math.round(monthlyProj).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-600 text-sm">Annual proj:</span>
+                <span className="text-gray-600 text-sm">Annual projection:</span>
                 <span className="font-semibold">£{Math.round(annualProj).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
@@ -612,42 +630,45 @@ function DashboardInner({ schedData }) {
                   {agencyPct.toFixed(1)}%
                 </span>
               </div>
+              <p className="text-xs text-gray-500">Target: {((config.agency_target_pct ?? 0.05) * 100).toFixed(1)}% or lower.</p>
             </div>
-          </div>
+          </button>
         ) : (
           <div className={CARD.padded}>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary</h2>
-            <p className="text-sm text-gray-400">Admin access required</p>
+            <p className="text-sm text-gray-400">Ask a finance lead or admin if you need access to staffing costs.</p>
           </div>
         )}
 
         <div className={`${CARD.padded} lg:col-span-2`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">28-Day Coverage Heatmap</h2>
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
             {cycleData.map((d, i) => {
               const isToday = i === todayIdx;
               const dateStr = formatDate(d.date);
               return (
                 <button
+                  type="button"
                   key={dateStr}
                   onClick={() => navigate(`/day/${dateStr}`)}
                   className={`flex flex-col items-center p-1 rounded-lg transition-all hover:scale-105 ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
+                  aria-label={`${isToday ? 'Today, ' : ''}${d.date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}: ${getCoverageHealthLabel(d.coverage.overall)}`}
                   title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}`}
                 >
-                  <div className="text-[9px] text-gray-400 mb-0.5">D{i + 1}</div>
+                  <div className="text-[11px] text-gray-400 mb-0.5">Day {i + 1}</div>
                   <div className={`w-8 h-8 rounded-lg ${HEATMAP[d.coverage.overall] || HEATMAP.empty} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
                     {d.date.getUTCDate()}
                   </div>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
                 </button>
               );
             })}
           </div>
-          <div className="flex gap-5 mt-4 text-[10px] text-gray-500">
+          <div className="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
             <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.green}`} /> Covered</span>
-            <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.amber}`} /> Float/OT</span>
+            <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.amber}`} /> Float or overtime</span>
             <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.yellow}`} /> Agency</span>
-            <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.red}`} /> Short/Unsafe</span>
+            <span className="flex items-center gap-1.5"><span className={`inline-block w-3 h-3 rounded ${HEATMAP.red}`} /> Below minimum</span>
           </div>
         </div>
 
@@ -658,7 +679,7 @@ function DashboardInner({ schedData }) {
           const stats = getComplianceStats(matrix);
           const pctColor = stats.compliancePct >= 90 ? 'text-emerald-600' : stats.compliancePct >= 70 ? 'text-amber-600' : 'text-red-600';
           return (
-            <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/training')}>
+            <button type="button" className={`${CARD.padded} w-full text-left transition-shadow hover:shadow-md`} onClick={() => navigate('/training')} aria-label="Open training compliance">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Training Compliance</h2>
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-3xl font-bold ${pctColor}`}>{stats.compliancePct}%</span>
@@ -696,30 +717,34 @@ function DashboardInner({ schedData }) {
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           );
         })()}
 
-        {canEdit && summary?.weekActions?.length > 0 && (
+        {canEdit && (
           <div className={`${CARD.padded} lg:col-span-2`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Action This Week</h2>
-              <span className={BADGE.red}>{summary.weekActions.length}</span>
+              <span className={(summary?.weekActions?.length || 0) > 0 ? BADGE.red : BADGE.gray}>{summary?.weekActions?.length || 0}</span>
             </div>
-            <ul className="space-y-2">
-              {summary.weekActions.slice(0, 10).map((action, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                    action.priority >= 5 ? 'bg-red-500' :
-                    action.priority >= 4 ? 'bg-orange-500' :
-                    'bg-amber-500'
-                  }`} />
-                  <button className="text-gray-700 hover:text-gray-900 text-left" onClick={() => navigate(action.link)}>
-                    {action.message}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {(summary?.weekActions?.length || 0) === 0 ? (
+              <p className="text-sm text-gray-500">No actions this week.</p>
+            ) : (
+              <ul className="space-y-2">
+                {summary.weekActions.slice(0, 10).map((action, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                      action.priority >= 5 ? 'bg-red-500' :
+                      action.priority >= 4 ? 'bg-orange-500' :
+                      'bg-amber-500'
+                    }`} />
+                    <button type="button" className="text-gray-700 hover:text-gray-900 text-left" onClick={() => navigate(action.link)}>
+                      {action.message}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
@@ -728,14 +753,14 @@ function DashboardInner({ schedData }) {
           {alerts.length === 0 ? (
             degradedSources.length > 0 ? (
               <div className="flex items-center gap-2 text-sm text-amber-700 font-medium">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.07 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
                 No alerts available while some dashboard data is unavailable
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 All clear — full coverage this cycle

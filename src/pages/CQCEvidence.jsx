@@ -55,6 +55,7 @@ const SCORE_STYLES = {
   amber:   { card: 'rounded-xl p-3 bg-amber-50 border border-amber-200',     label: 'text-xs font-medium text-amber-600',   value: 'text-3xl font-bold text-amber-700 mt-0.5' },
   red:     { card: 'rounded-xl p-3 bg-red-50 border border-red-200',         label: 'text-xs font-medium text-red-600',     value: 'text-3xl font-bold text-red-700 mt-0.5' },
 };
+const ALL_STATEMENT_IDS = QUALITY_STATEMENTS.map((statement) => statement.id);
 
 function blankEvidenceForm(statementId = '') {
   return {
@@ -326,7 +327,8 @@ function CQCEvidenceInner({ data }) {
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState(null);
   const [dateRangeDays, setDateRangeDays] = useState(28);
-  const [expandedStatement, setExpandedStatement] = useState(null);
+  const [expandedStatements, setExpandedStatements] = useState([]);
+  const [showAllReadinessGaps, setShowAllReadinessGaps] = useState(false);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
   const [showPartnerFeedbackModal, setShowPartnerFeedbackModal] = useState(false);
@@ -353,8 +355,9 @@ function CQCEvidenceInner({ data }) {
   const [_snapshotLoading, setSnapshotLoading] = useState(false);
   const [viewingSnapshot, setViewingSnapshot] = useState(null);
   const [showSnapshots, setShowSnapshots] = useState(false);
+  const [signOffDraft, setSignOffDraft] = useState(null);
 
-  useDirtyGuard(showAddEvidence || showPartnerFeedbackModal || showObservationModal);
+  useDirtyGuard(showAddEvidence || showPartnerFeedbackModal || showObservationModal || Boolean(signOffDraft));
 
   const loadEvidence = useCallback(async () => {
     try {
@@ -643,6 +646,14 @@ function CQCEvidenceInner({ data }) {
     }));
   }
 
+  function toggleExpandedStatement(statementId) {
+    setExpandedStatements((prev) => (
+      prev.includes(statementId)
+        ? prev.filter((entry) => entry !== statementId)
+        : [...prev, statementId]
+    ));
+  }
+
   async function handleSaveNarrative(statementId) {
     if (savingNarrativeId) return;
     const home = getCurrentHome();
@@ -670,6 +681,10 @@ function CQCEvidenceInner({ data }) {
         [statementId]: blankNarrativeForm(statementId, saved),
       }));
       setNarrativeNotice(`Self-assessment saved for ${statementId}.`);
+      showToast({
+        title: 'Self-assessment saved',
+        message: `${statementId} has been updated with the latest narrative and review details.`,
+      });
     } catch (err) {
       setNarrativeError(`Failed to save self-assessment: ${err.message}`);
     } finally {
@@ -753,6 +768,10 @@ function CQCEvidenceInner({ data }) {
     try {
       await deleteCqcEvidence(home, evId);
       await loadEvidence();
+      showToast({
+        title: 'Evidence removed',
+        message: 'The evidence item was deleted from this statement.',
+      });
     } catch (err) {
       setSaveError('Failed to delete evidence: ' + err.message);
     } finally {
@@ -791,7 +810,10 @@ function CQCEvidenceInner({ data }) {
     try {
       await deleteCqcPartnerFeedback(home, id);
       await loadStructuredEvidence();
-      setStructuredNotice('Partner feedback removed.');
+      showToast({
+        title: 'Partner feedback removed',
+        message: 'The partner feedback entry was deleted.',
+      });
     } catch (err) {
       setStructuredError(`Failed to remove partner feedback: ${err.message}`);
     }
@@ -828,7 +850,10 @@ function CQCEvidenceInner({ data }) {
     try {
       await deleteCqcObservation(home, id);
       await loadStructuredEvidence();
-      setStructuredNotice('Observation removed.');
+      showToast({
+        title: 'Observation removed',
+        message: 'The observation entry was deleted.',
+      });
     } catch (err) {
       setStructuredError(`Failed to remove observation: ${err.message}`);
     }
@@ -878,6 +903,7 @@ function CQCEvidenceInner({ data }) {
 
   const categories = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
   const snapshotPdfAvailable = Boolean(viewingSnapshot?.result?.evidencePackData);
+  const visibleReadinessGaps = showAllReadinessGaps ? readinessGaps : readinessGaps.slice(0, 10);
 
   return (
     <div className={PAGE.container}>
@@ -888,11 +914,11 @@ function CQCEvidenceInner({ data }) {
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
-          {canEdit && <button onClick={handleCreateSnapshot} disabled={generating} className={`${BTN.secondary} ${BTN.sm}`}>
+          <button type="button" onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && <button type="button" onClick={handleCreateSnapshot} disabled={generating} title="Freeze the current evidence, readiness, and score so you can review this exact state later." className={`${BTN.secondary} ${BTN.sm}`}>
             Save Snapshot
           </button>}
-          <button onClick={handleGeneratePDF} disabled={generating} className={BTN.primary}>
+          <button type="button" onClick={handleGeneratePDF} disabled={generating} title={`Generate a PDF evidence pack using the current ${dateRangeDays}-day readiness window.`} className={BTN.primary}>
             {generating ? 'Generating...' : 'Generate Evidence Pack'}
           </button>
         </div>
@@ -943,7 +969,12 @@ function CQCEvidenceInner({ data }) {
       <div className="mb-5">
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">Readiness</h2>
-          {readinessLoading ? <span className={BADGE.gray}>Refreshing...</span> : null}
+          {readinessLoading ? (
+            <span className={`${BADGE.gray} gap-1.5`}>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />
+              Refreshing...
+            </span>
+          ) : null}
         </div>
         {readinessError ? (
           <InlineNotice variant="warning" className="mb-3" role="status">
@@ -980,16 +1011,22 @@ function CQCEvidenceInner({ data }) {
       </div>
 
       {/* Date Range Toggle */}
-      <div className="flex gap-1 mb-5 print:hidden">
-        {RANGE_OPTIONS.map(opt => (
-          <button key={opt.days} onClick={() => setDateRangeDays(opt.days)}
-            className={`${dateRangeDays === opt.days ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
-            {opt.label}
-          </button>
-        ))}
-        <span className="text-xs text-gray-400 self-center ml-2">
-          {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
-        </span>
+      <div className="mb-5 print:hidden">
+        <div className="mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Readiness evidence window</p>
+          <p className="text-xs text-gray-500">Choose which evidence period is included in the readiness scoring and evidence pack.</p>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {RANGE_OPTIONS.map(opt => (
+            <button key={opt.days} type="button" onClick={() => setDateRangeDays(opt.days)}
+              className={`${dateRangeDays === opt.days ? BTN.primary : BTN.ghost} ${BTN.xs}`}>
+              {opt.label}
+            </button>
+          ))}
+          <span className="text-xs text-gray-400 self-center ml-2">
+            {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
+          </span>
+        </div>
       </div>
 
       {readinessGaps.length > 0 && (
@@ -1002,7 +1039,7 @@ function CQCEvidenceInner({ data }) {
             <span className={BADGE.amber}>{readinessGaps.length} open</span>
           </div>
           <div className="space-y-2">
-            {readinessGaps.slice(0, 10).map((gap) => (
+            {visibleReadinessGaps.map((gap) => (
               <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-2">
                   <span className={readinessBadgeClass(gap.status)}>{readinessStatusLabel(gap.status)}</span>
@@ -1012,8 +1049,24 @@ function CQCEvidenceInner({ data }) {
               </div>
             ))}
           </div>
+          {readinessGaps.length > 10 && (
+            <div className="mt-3 flex justify-end">
+              <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setShowAllReadinessGaps((prev) => !prev)}>
+                {showAllReadinessGaps ? 'Show fewer gaps' : `Show all ${readinessGaps.length} gaps`}
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => setExpandedStatements(ALL_STATEMENT_IDS)}>
+          Expand all
+        </button>
+        <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => setExpandedStatements([])}>
+          Collapse all
+        </button>
+      </div>
 
       {/* Quality Statements by Category */}
       {categories.map(cat => (
@@ -1027,7 +1080,7 @@ function CQCEvidenceInner({ data }) {
 
           <div className="space-y-2">
             {QUALITY_STATEMENTS.filter(q => q.category === cat).map(qs => {
-              const isExpanded = expandedStatement === qs.id;
+              const isExpanded = expandedStatements.includes(qs.id);
               const ev = evidenceByStatement[qs.id];
               const readiness = readinessEntries[qs.id];
               const autoCount = ev?.autoEvidence?.length || 0;
@@ -1038,17 +1091,21 @@ function CQCEvidenceInner({ data }) {
 
               return (
                 <div key={qs.id} className={CARD.padded}>
-                  <div className="flex items-center justify-between cursor-pointer"
-                    onClick={() => setExpandedStatement(isExpanded ? null : qs.id)}>
-                    <div className="flex items-center gap-3">
-                      <svg className="h-5 w-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 rounded-lg text-left transition-colors hover:bg-gray-50"
+                      onClick={() => toggleExpandedStatement(qs.id)}
+                      aria-expanded={isExpanded}
+                    >
+                      <svg className="h-5 w-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d={qs.icon} />
                       </svg>
                       <div>
                         <span className="font-medium text-gray-900">{qs.name}</span>
                         <span className="text-xs text-gray-400 ml-2">{qs.cqcRef}</span>
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3">
                       {readiness && <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>}
                       <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
@@ -1057,7 +1114,9 @@ function CQCEvidenceInner({ data }) {
                           {ae.value}{ae.unit}
                         </span>
                       ))}
-                      <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                      <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => toggleExpandedStatement(qs.id)} aria-expanded={isExpanded}>
+                        {isExpanded ? 'Collapse' : 'Expand'}
+                      </button>
                     </div>
                   </div>
 
@@ -1276,7 +1335,7 @@ function CQCEvidenceInner({ data }) {
                             <label className={INPUT.label}>What the evidence shows</label>
                             <textarea
                               aria-label="What the evidence shows"
-                              className={`${INPUT.base} h-20`}
+                              className={`${INPUT.base} h-28`}
                               value={narrativeDraft.narrative}
                               onChange={(e) => updateNarrativeDraft(qs.id, { narrative: e.target.value })}
                               disabled={!canEdit}
@@ -1286,7 +1345,7 @@ function CQCEvidenceInner({ data }) {
                             <label className={INPUT.label}>Current risks</label>
                             <textarea
                               aria-label="Current risks"
-                              className={`${INPUT.base} h-16`}
+                              className={`${INPUT.base} h-24`}
                               value={narrativeDraft.risks}
                               onChange={(e) => updateNarrativeDraft(qs.id, { risks: e.target.value })}
                               disabled={!canEdit}
@@ -1296,7 +1355,7 @@ function CQCEvidenceInner({ data }) {
                             <label className={INPUT.label}>Improvement actions</label>
                             <textarea
                               aria-label="Improvement actions"
-                              className={`${INPUT.base} h-16`}
+                              className={`${INPUT.base} h-24`}
                               value={narrativeDraft.actions}
                               onChange={(e) => updateNarrativeDraft(qs.id, { actions: e.target.value })}
                               disabled={!canEdit}
@@ -1340,6 +1399,7 @@ function CQCEvidenceInner({ data }) {
                           {canEdit ? (
                             <div className="flex justify-end">
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleSaveNarrative(qs.id);
@@ -1357,7 +1417,7 @@ function CQCEvidenceInner({ data }) {
                       {evidenceLoading ? (
                         <span className="text-xs text-gray-400">Refreshing evidence…</span>
                       ) : canEdit ? (
-                        <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
                           + Add Evidence
                         </button>
@@ -1391,7 +1451,7 @@ function CQCEvidenceInner({ data }) {
 
       {/* Snapshot History */}
       <div className="mt-6">
-        <button onClick={() => setShowSnapshots(!showSnapshots)} className={`${BTN.ghost} ${BTN.sm} mb-2`}>
+        <button type="button" onClick={() => setShowSnapshots(!showSnapshots)} className={`${BTN.ghost} ${BTN.sm} mb-2`}>
           {showSnapshots ? 'Hide' : 'Show'} Snapshot History ({snapshots.length})
         </button>
         {showSnapshots && (
@@ -1436,9 +1496,9 @@ function CQCEvidenceInner({ data }) {
                       </td>
                       <td className={TABLE.td}>
                         <div className="flex gap-1">
-                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewSnapshot(s.id)}>View</button>
+                          <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewSnapshot(s.id)}>View</button>
                           {!s.signed_off_by && canEdit && (
-                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOff(s.id, '')}>Sign Off</button>
+                            <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setSignOffDraft({ id: s.id, notes: '' })}>Sign Off</button>
                           )}
                         </div>
                       </td>
@@ -1455,6 +1515,9 @@ function CQCEvidenceInner({ data }) {
       {viewingSnapshot && (
         <Modal isOpen={true} onClose={() => setViewingSnapshot(null)} title={`Snapshot — ${viewingSnapshot.computed_at?.slice(0, 10)}`} size="xl">
           <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              You are viewing a frozen snapshot. This data does not update with the live system until a new snapshot is created.
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className={CARD.padded}>
                 <div className="text-xs text-gray-500">Score</div>
@@ -1516,8 +1579,8 @@ function CQCEvidenceInner({ data }) {
           </div>
           <div className={MODAL.footer}>
             {snapshotError && <p className="text-sm text-red-600 mr-auto">{snapshotError}</p>}
-            <button className={BTN.secondary} onClick={() => setViewingSnapshot(null)}>Close</button>
-            <button className={BTN.primary} onClick={async () => {
+            <button type="button" className={BTN.secondary} onClick={() => setViewingSnapshot(null)}>Close</button>
+            <button type="button" className={BTN.primary} onClick={async () => {
               setGenerating(true);
               setSnapshotError(null);
               try {
@@ -1543,7 +1606,7 @@ function CQCEvidenceInner({ data }) {
 
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Quality Statement</label>
+                <label className={INPUT.label}>Quality Statement *</label>
                 <select className={INPUT.select} value={evidenceForm.quality_statement}
                   onChange={e => setEvidenceForm({ ...evidenceForm, quality_statement: e.target.value })}>
                   <option value="">Select statement...</option>
@@ -1568,7 +1631,7 @@ function CQCEvidenceInner({ data }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Title</label>
+                  <label className={INPUT.label}>Title *</label>
                   <input type="text" className={INPUT.base} placeholder="Brief title..."
                     value={evidenceForm.title} onChange={e => setEvidenceForm({ ...evidenceForm, title: e.target.value })} />
                 </div>
@@ -1898,6 +1961,35 @@ function CQCEvidenceInner({ data }) {
             className={BTN.primary}
           >
             {savingObservation ? 'Saving...' : observationForm.id ? 'Save Changes' : 'Save Observation'}
+          </button>
+        </div>
+      </Modal>
+      <Modal isOpen={Boolean(signOffDraft)} onClose={() => setSignOffDraft(null)} title="Sign Off Snapshot" size="sm">
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">Add a short sign-off note so the audit trail records what was reviewed and approved.</p>
+          <div>
+            <label className={INPUT.label}>Sign-off notes</label>
+            <textarea
+              className={`${INPUT.base} h-24`}
+              value={signOffDraft?.notes || ''}
+              onChange={(e) => setSignOffDraft((current) => current ? { ...current, notes: e.target.value } : current)}
+              placeholder="What was reviewed, any caveats, and who approved it..."
+            />
+          </div>
+        </div>
+        <div className={MODAL.footer}>
+          <button type="button" className={BTN.ghost} onClick={() => setSignOffDraft(null)}>Cancel</button>
+          <button
+            type="button"
+            className={BTN.primary}
+            disabled={!signOffDraft?.notes?.trim()}
+            onClick={async () => {
+              if (!signOffDraft?.id || !signOffDraft.notes.trim()) return;
+              await handleSignOff(signOffDraft.id, signOffDraft.notes.trim());
+              setSignOffDraft(null);
+            }}
+          >
+            Sign Off
           </button>
         </div>
       </Modal>

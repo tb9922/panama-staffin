@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import { Link } from 'react-router-dom';
-import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
+import { calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
@@ -30,6 +30,29 @@ import useTransientNotice from '../hooks/useTransientNotice.js';
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 const PREFS = ['EL', 'E', 'L', 'N', 'ANY'];
+const PREF_LABELS = {
+  EL: 'Full day availability',
+  E: 'Early shift preferred',
+  L: 'Late shift preferred',
+  N: 'Night shift preferred',
+  ANY: 'No fixed preference',
+};
+
+function parseOptionalNumberInput(value) {
+  if (value === '') return '';
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : '';
+}
+
+function getStaffValidationError(staff) {
+  if (!staff.name?.trim()) return 'Name is required.';
+  if (!staff.role) return 'Role is required.';
+  if (!staff.team) return 'Team is required.';
+  if (staff.skill === '' || staff.skill == null) return 'Skill level is required.';
+  if (staff.hourly_rate === '' || staff.hourly_rate == null) return 'Hourly rate is required.';
+  if (staff.hourly_rate <= 0) return 'Hourly rate must be greater than £0.00.';
+  return null;
+}
 
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -93,6 +116,7 @@ export default function StaffRegister() {
   }, [homeSlug, refreshKey]);
 
   const nlwRate = config?.nlw_rate || 12.21;
+  const addValidationError = getStaffValidationError(newStaff);
 
   const staff = useMemo(() => {
     let list = [...allStaff];
@@ -156,6 +180,11 @@ export default function StaffRegister() {
 
   async function commitEdit() {
     if (!editingRow) { setEditing(null); return; }
+    const validationError = getStaffValidationError(editingRow);
+    if (validationError) {
+      setRowError({ id: editingRow.id, msg: validationError });
+      return;
+    }
     setSaving(true);
     setRowError(null);
     setRowWarning(null);
@@ -186,6 +215,11 @@ export default function StaffRegister() {
   }
 
   async function addStaff() {
+    const validationError = getStaffValidationError(newStaff);
+    if (validationError) {
+      setRowError({ id: 'add', msg: validationError });
+      return;
+    }
     const staffEntry = {
       ...newStaff,
       start_date: newStaff.start_date || null,
@@ -395,22 +429,24 @@ export default function StaffRegister() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className={INPUT.label}>Pref</label>
+                  <label className={INPUT.label}>Preferred Shift Pattern</label>
                   <select value={newStaff.pref} onChange={e => setNewStaff({ ...newStaff, pref: e.target.value })}
                     className={INPUT.select}>
                     {PREFS.map(p => <option key={p}>{p}</option>)}
                   </select>
+                  <p className="text-xs text-gray-500 mt-0.5">EL = full day, E/L/N = preferred shift, ANY = no fixed preference.</p>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Skill</label>
-                  <input type="number" step="0.5" value={newStaff.skill}
-                    onChange={e => setNewStaff({ ...newStaff, skill: parseFloat(e.target.value) || 0 })}
+                  <label className={INPUT.label}>Skill Level</label>
+                  <input type="number" step="0.5" min="0" max="2" value={newStaff.skill ?? ''}
+                    onChange={e => setNewStaff({ ...newStaff, skill: parseOptionalNumberInput(e.target.value) })}
                     className={INPUT.base} />
+                  <p className="text-xs text-gray-500 mt-0.5">Use 0 to 2 skill points for safe staffing cover.</p>
                 </div>
                 <div>
                   <label className={INPUT.label}>Rate £/hr</label>
-                  <input type="number" step="0.5" value={newStaff.hourly_rate}
-                    onChange={e => setNewStaff({ ...newStaff, hourly_rate: parseFloat(e.target.value) || 0 })}
+                  <input type="number" step="0.5" min="0" value={newStaff.hourly_rate ?? ''}
+                    onChange={e => setNewStaff({ ...newStaff, hourly_rate: parseOptionalNumberInput(e.target.value) })}
                     className={INPUT.base} />
                   {(() => { const mw = getMinimumWageRate(newStaff.date_of_birth, config); return newStaff.hourly_rate < mw.rate ? <p className="text-xs text-red-600 mt-1">Below {mw.label} (£{mw.rate.toFixed(2)})</p> : null; })()}
                 </div>
@@ -470,7 +506,7 @@ export default function StaffRegister() {
             </div>
             <div className={MODAL.footer}>
               <button onClick={() => { setShowAdd(false); setRowError(null); }} className={BTN.ghost}>Cancel</button>
-              <button onClick={addStaff} disabled={!newStaff.name || saving}
+              <button onClick={addStaff} disabled={Boolean(addValidationError) || saving}
                 className={`${BTN.primary} disabled:opacity-50`}>{saving ? 'Saving...' : 'Add'}</button>
             </div>
       </Modal>
@@ -493,7 +529,7 @@ export default function StaffRegister() {
               <SortHeader col="name">Name</SortHeader>
               <SortHeader col="role">Role</SortHeader>
               <SortHeader col="team">Team</SortHeader>
-              <SortHeader col="pref">Pref</SortHeader>
+              <SortHeader col="pref">Preferred Shift</SortHeader>
               <SortHeader col="skill">Skill</SortHeader>
               {canEdit && <SortHeader col="hourly_rate">Rate</SortHeader>}
               <th scope="col" className={TABLE.th}>Hrs/wk</th>
@@ -550,17 +586,17 @@ export default function StaffRegister() {
                     {/* Pref — editable */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className={INPUT.inlineSelect + ' w-16'}>
+                        <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className={INPUT.inlineSelect + ' w-24'} aria-label={`Preferred shift pattern for ${s.name}`}>
                           {PREFS.map(p => <option key={p}>{p}</option>)}
                         </select>
-                      ) : <span className={`font-mono text-xs transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.pref}</span>}
+                      ) : <span title={PREF_LABELS[s.pref] || s.pref} className={`font-mono text-xs transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.pref}</span>}
                     </td>
 
                     {/* Skill — editable */}
                     <td className={TABLE.td}>
                       {isEd(s.id) ? (
-                        <input type="number" step="0.5" min="0" max="2" value={r.skill}
-                          onChange={e => updateEditingRow('skill', parseFloat(e.target.value) || 0)}
+                        <input type="number" step="0.5" min="0" max="2" value={r.skill ?? ''}
+                          onChange={e => updateEditingRow('skill', parseOptionalNumberInput(e.target.value))}
                           className={INPUT.inline + ' w-14'} />
                       ) : <span className={`transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.skill}</span>}
                     </td>
@@ -572,16 +608,24 @@ export default function StaffRegister() {
                         <div>
                           <div className="flex items-center gap-0.5">
                             <span className="text-xs text-gray-400">£</span>
-                            <input type="number" step="0.25" min={getMinimumWageRate(r.date_of_birth, config).rate} value={r.hourly_rate}
-                              onChange={e => updateEditingRow('hourly_rate', parseFloat(e.target.value) || 0)}
+                            <input type="number" step="0.25" min="0" value={r.hourly_rate ?? ''}
+                              onChange={e => updateEditingRow('hourly_rate', parseOptionalNumberInput(e.target.value))}
                               className={INPUT.inline + ' w-16'} />
                           </div>
-                          {(() => { const mw = getMinimumWageRate(r.date_of_birth, config); return r.hourly_rate < mw.rate ? <p className="text-[10px] text-red-600 mt-0.5">Below {mw.label}</p> : null; })()}
+                          {(() => {
+                            const mw = getMinimumWageRate(r.date_of_birth, config);
+                            return typeof r.hourly_rate === 'number' && r.hourly_rate < mw.rate
+                              ? <p className="text-xs font-medium text-red-700 mt-0.5">Below {mw.label}</p>
+                              : null;
+                          })()}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => startEditing(s)}>
                           <span className="hover:text-blue-600 transition-colors">£{s.hourly_rate?.toFixed(2)}</span>
-                          {(() => { const mw = getMinimumWageRate(s.date_of_birth, config); return isCareRole(s.role) && s.hourly_rate < mw.rate ? <span className={BADGE.red}>Below {mw.label}</span> : null; })()}
+                          {(() => {
+                            const mw = getMinimumWageRate(s.date_of_birth, config);
+                            return s.hourly_rate != null && s.hourly_rate < mw.rate ? <span className={BADGE.red}>Below {mw.label}</span> : null;
+                          })()}
                         </div>
                       )}
                     </td>

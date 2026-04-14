@@ -157,15 +157,15 @@ describe('EvidenceHub page', () => {
       expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Folders' }));
+    await user.click(screen.getByRole('tab', { name: 'Folders' }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Toggle source CQC Evidence' })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Toggle source HR Cases' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle source Onboarding' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle category S1 - Learning Culture' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle category Enhanced DBS Check' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle source Onboarding' })).toBeInTheDocument();
+    expect(screen.getAllByText('No folders currently match this source.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('supports deleting a file from the folder view', async () => {
@@ -178,7 +178,7 @@ describe('EvidenceHub page', () => {
       expect(screen.getByText('Evidence Hub')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Folders' }));
+    await user.click(screen.getByRole('tab', { name: 'Folders' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Toggle category Disciplinary' })).toBeInTheDocument();
     });
