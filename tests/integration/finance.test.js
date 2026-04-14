@@ -537,6 +537,96 @@ describe('Finance: payment schedules', () => {
   });
 });
 
+describe('Finance: scheduled payment processing', () => {
+  let schedId;
+
+  beforeAll(async () => {
+    const created = await financeRepo.createPaymentSchedule(homeA, {
+      supplier: 'Water Board',
+      category: 'utilities',
+      description: 'Quarterly water',
+      frequency: 'monthly',
+      amount: 120.25,
+      next_due: '2026-04-01',
+      auto_approve: true,
+      created_by: 'admin',
+    });
+    schedId = created.id;
+  });
+
+  afterAll(async () => {
+    if (schedId) {
+      await pool.query(`DELETE FROM finance_expenses WHERE home_id = $1 AND schedule_id = $2`, [homeA, schedId]).catch(() => {});
+      await pool.query(`DELETE FROM finance_payment_schedule WHERE id = $1 AND home_id = $2`, [schedId, homeA]).catch(() => {});
+    }
+  });
+
+  it('processes a schedule once and advances next_due', async () => {
+    const current = await financeRepo.findPaymentScheduleById(schedId, homeA);
+    const result = await financeService.processScheduledPayment(schedId, homeA, 'admin', current.version);
+
+    expect(result.duplicate).not.toBe(true);
+    expect(result.expense.schedule_id).toBe(schedId);
+    expect(result.expense.scheduled_for_date).toBe('2026-04-01');
+    expect(result.expense.status).toBe('approved');
+    expect(result.next_due).toBe('2026-05-01');
+
+    const updated = await financeRepo.findPaymentScheduleById(schedId, homeA);
+    expect(updated.next_due).toBe('2026-05-01');
+    expect(updated.version).toBe(current.version + 1);
+  });
+
+  it('rejects stale schedule versions during processing', async () => {
+    await expect(
+      financeService.processScheduledPayment(schedId, homeA, 'admin', 1)
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('returns the existing scheduled expense instead of duplicating the same due date', async () => {
+    const created = await financeRepo.createPaymentSchedule(homeA, {
+      supplier: 'Grounds Supplier',
+      category: 'maintenance',
+      description: 'Gardening',
+      frequency: 'monthly',
+      amount: 75,
+      next_due: '2026-06-01',
+      auto_approve: false,
+      created_by: 'admin',
+    });
+
+    const existingExpense = await financeRepo.createExpense(homeA, {
+      expense_date: '2026-06-01',
+      category: 'maintenance',
+      description: 'Gardening (scheduled)',
+      supplier: 'Grounds Supplier',
+      net_amount: 75,
+      vat_amount: 0,
+      gross_amount: 75,
+      status: 'pending',
+      recurring: true,
+      recurrence_frequency: 'monthly',
+      schedule_id: created.id,
+      scheduled_for_date: '2026-06-01',
+      created_by: 'admin',
+    });
+
+    const result = await financeService.processScheduledPayment(created.id, homeA, 'admin', created.version);
+    expect(result.duplicate).toBe(true);
+    expect(result.expense.id).toBe(existingExpense.id);
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM finance_expenses
+       WHERE home_id = $1 AND schedule_id = $2 AND scheduled_for_date = $3 AND deleted_at IS NULL`,
+      [homeA, created.id, '2026-06-01']
+    );
+    expect(rows[0].count).toBe(1);
+
+    await pool.query(`DELETE FROM finance_expenses WHERE home_id = $1 AND schedule_id = $2`, [homeA, created.id]);
+    await pool.query(`DELETE FROM finance_payment_schedule WHERE id = $1 AND home_id = $2`, [created.id, homeA]);
+  });
+});
+
 // ── Summary Queries ──────────────────────────────────────────────────────────
 
 describe('Finance: summary queries', () => {

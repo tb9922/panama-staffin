@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
 
-const COLS = 'id, home_id, entry_date, shift, category, priority, content, incident_id, author, created_at, updated_at, acknowledged_by, acknowledged_at';
+const COLS = 'id, home_id, entry_date, shift, category, priority, content, incident_id, author, version, created_at, updated_at, acknowledged_by, acknowledged_at';
 
 function shapeRow(row) {
   return {
@@ -14,11 +14,22 @@ function shapeRow(row) {
     content: row.content,
     incident_id: row.incident_id || null,
     author: row.author,
+    version: row.version != null ? parseInt(row.version, 10) : 1,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     acknowledged_by: row.acknowledged_by || null,
     acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : (row.acknowledged_at || null),
   };
+}
+
+export async function findById(id, homeId) {
+  const { rows } = await pool.query(
+    `SELECT ${COLS}
+     FROM handover_entries
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [id, homeId]
+  );
+  return rows[0] ? shapeRow(rows[0]) : null;
 }
 
 /**
@@ -84,13 +95,19 @@ export async function createEntry(homeId, entry, author) {
  * @param {number} homeId  ownership check
  * @param {{ content, priority }} updates
  */
-export async function updateEntry(id, homeId, updates) {
+export async function updateEntry(id, homeId, updates, version) {
+  const params = [id, homeId, updates.content, updates.priority];
+  let sql = `UPDATE handover_entries
+     SET content = $3, priority = $4, updated_at = NOW(), version = version + 1
+     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  sql += ` RETURNING ${COLS}`;
   const { rows } = await pool.query(
-    `UPDATE handover_entries
-     SET content = $3, priority = $4, updated_at = NOW()
-     WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL
-     RETURNING ${COLS}`,
-    [id, homeId, updates.content, updates.priority]
+    sql,
+    params
   );
   return rows[0] ? shapeRow(rows[0]) : null;
 }
@@ -117,10 +134,16 @@ export async function acknowledgeEntry(id, homeId, username) {
  * @param {string} id      UUID
  * @param {number} homeId  ownership check
  */
-export async function deleteEntry(id, homeId) {
+export async function deleteEntry(id, homeId, version) {
+  const params = [id, homeId];
+  let sql = 'UPDATE handover_entries SET deleted_at = NOW(), updated_at = NOW(), version = version + 1 WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL';
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
   const { rowCount } = await pool.query(
-    'UPDATE handover_entries SET deleted_at = NOW() WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL',
-    [id, homeId]
+    sql,
+    params
   );
   return rowCount > 0;
 }

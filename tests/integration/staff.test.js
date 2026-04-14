@@ -125,7 +125,7 @@ describe('POST /api/staff — create', () => {
   afterAll(async () => {
     // Clean up created staff for this block
     await pool.query(
-      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004')`,
+      `DELETE FROM staff WHERE home_id = $1 AND id IN ('ST001', 'ST002', 'ST003', 'ST004', 'S150', 'S151')`,
       [homeAId]
     );
   });
@@ -208,6 +208,24 @@ describe('POST /api/staff — create', () => {
     expect(updated.body.version).toBe(2);
     expect(updated.body.name).toBe('Upsert Target Updated');
     expect(updated.body.hourly_rate).toBe(13.75);
+  });
+
+  it('auto-generates the next S-prefixed staff ID after a manually supplied higher ID', async () => {
+    await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: 'S150', name: 'Manual Counter Seed' }))
+      .expect(201);
+
+    const res = await request(app)
+      .post('/api/staff')
+      .query({ home: homeASlug })
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(makeStaff({ id: undefined, name: 'Auto Generated Staff' }))
+      .expect(201);
+
+    expect(res.body.id).toBe('S151');
   });
 
   it('rejects request with no home parameter', async () => {

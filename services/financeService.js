@@ -420,11 +420,18 @@ export async function updatePaymentSchedule(id, homeId, data, version) {
   return result;
 }
 
-export async function processScheduledPayment(scheduleId, homeId, username) {
+export async function processScheduledPayment(scheduleId, homeId, username, version) {
   return withTransaction(async (client) => {
     const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId, client, true);
     if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
+    if (version != null && schedule.version !== version) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     if (schedule.on_hold) throw Object.assign(new Error('Payment schedule is on hold'), { statusCode: 400 });
+    const existingExpense = await financeRepo.findScheduledExpense(homeId, scheduleId, schedule.next_due, client);
+    if (existingExpense) {
+      return { expense: existingExpense, next_due: schedule.next_due, duplicate: true };
+    }
     const expense = await financeRepo.createExpense(homeId, {
       expense_date: schedule.next_due,
       category: schedule.category,
@@ -438,11 +445,16 @@ export async function processScheduledPayment(scheduleId, homeId, username) {
       approved_date: schedule.auto_approve ? new Date().toISOString().slice(0, 10) : null,
       recurring: true,
       recurrence_frequency: schedule.frequency,
+      schedule_id: scheduleId,
+      scheduled_for_date: schedule.next_due,
       created_by: username,
     }, client);
 
     const nextDue = advanceDate(schedule.next_due, schedule.frequency);
-    await financeRepo.updatePaymentSchedule(scheduleId, homeId, { next_due: nextDue }, client);
+    const updatedSchedule = await financeRepo.updatePaymentSchedule(scheduleId, homeId, { next_due: nextDue }, client, schedule.version);
+    if (!updatedSchedule) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
 
     logger.info({ homeId, scheduleId, expenseId: expense.id, nextDue }, 'Scheduled payment processed');
     return { expense, next_due: nextDue };

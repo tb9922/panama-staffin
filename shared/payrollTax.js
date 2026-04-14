@@ -87,7 +87,10 @@ export function getHMRCPaymentDueDate(taxYear, taxMonth) {
 
 /**
  * Returns the pay period number within the tax year.
- * Weekly: 1-52, fortnightly: 1-26, monthly: 1-12.
+ * Weekly: 1-53, fortnightly: 1-27, monthly: 1-12.
+ * HMRC treats extra weekly/fortnightly periods at year-end as standalone
+ * week-1 / fortnight-1 style calculations rather than folding them into the
+ * cumulative period count.
  */
 export function getPayPeriodNumber(periodEndDate, payFrequency) {
   const d = new Date(periodEndDate);
@@ -97,10 +100,10 @@ export function getPayPeriodNumber(periodEndDate, payFrequency) {
   const msPerDay = 24 * 60 * 60 * 1000;
   const daysDiff = Math.floor((dUtc - taxStartUtc) / msPerDay);
   if (payFrequency === 'weekly') {
-    return Math.min(52, Math.max(1, Math.floor(daysDiff / 7) + 1));
+    return Math.min(53, Math.max(1, Math.floor(daysDiff / 7) + 1));
   }
   if (payFrequency === 'fortnightly') {
-    return Math.min(26, Math.max(1, Math.floor(daysDiff / 14) + 1));
+    return Math.min(27, Math.max(1, Math.floor(daysDiff / 14) + 1));
   }
   // monthly
   const endMonth = d.getUTCMonth();
@@ -209,10 +212,14 @@ export function calculatePAYE(grossPay, parsedCode, payPeriod, periodsInYear, yt
     ? parsedCode.annualAllowance / periodsInYear
     : 0;
 
-  if (basis === 'w1m1') {
+  const useStandaloneBasis = basis === 'w1m1' || payPeriod > periodsInYear;
+
+  if (useStandaloneBasis) {
     // Week1/Month1: treat each period as standalone — no YTD.
     // Note: 0T is NOT forced to W1/M1 — it can be issued on a cumulative basis.
     // W1/M1 basis is indicated only via the tax_codes.basis DB field (set by manager).
+    // HMRC extra weekly / fortnightly periods at year-end follow the same
+    // standalone treatment so employees still get one period's allowance.
     //
     // Annualise the period taxable income, apply the full annual band table, then
     // de-annualise. This correctly handles higher-rate W1/M1 taxpayers — without this,

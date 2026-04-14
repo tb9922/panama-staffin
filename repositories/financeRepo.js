@@ -36,7 +36,7 @@ const EXPENSE_COLS = `id, home_id,
   rejected_by, rejected_date, rejection_reason,
   paid_date, payment_method, payment_reference,
   recurring, recurrence_frequency,
-  notes, version,
+  notes, schedule_id, scheduled_for_date, version,
   created_by, created_at, updated_at`;
 
 const FEE_CHANGE_COLS = `id, home_id, resident_id,
@@ -433,6 +433,8 @@ function shapeExpense(row) {
     paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
     recurring: row.recurring, recurrence_frequency: row.recurrence_frequency,
     notes: row.notes,
+    schedule_id: row.schedule_id != null ? parseInt(row.schedule_id, 10) : null,
+    scheduled_for_date: d(row.scheduled_for_date),
     version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
@@ -470,8 +472,8 @@ export async function createExpense(homeId, data, client) {
        (home_id, expense_date, category, subcategory, description, supplier, invoice_ref,
         net_amount, vat_amount, gross_amount, status,
         approved_by, approved_date, paid_date, payment_method, payment_reference,
-        recurring, recurrence_frequency, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        recurring, recurrence_frequency, notes, schedule_id, scheduled_for_date, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      RETURNING ${EXPENSE_COLS}`,
     [homeId, data.expense_date, data.category, data.subcategory || null,
      data.description, data.supplier || null, data.invoice_ref || null,
@@ -480,7 +482,21 @@ export async function createExpense(homeId, data, client) {
      data.approved_by || null, data.approved_date || null,
      data.paid_date || null, data.payment_method || null, data.payment_reference || null,
      data.recurring ?? false, data.recurrence_frequency || null,
-     data.notes || null, data.created_by]
+     data.notes || null, data.schedule_id || null, data.scheduled_for_date || null, data.created_by]
+  );
+  return shapeExpense(rows[0]);
+}
+
+export async function findScheduledExpense(homeId, scheduleId, scheduledForDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${EXPENSE_COLS}
+     FROM finance_expenses
+     WHERE home_id = $1
+       AND schedule_id = $2
+       AND scheduled_for_date = $3
+       AND deleted_at IS NULL`,
+    [homeId, scheduleId, scheduledForDate]
   );
   return shapeExpense(rows[0]);
 }

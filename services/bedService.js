@@ -268,7 +268,7 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
   return updatedBed.updated;
 }
 
-export async function moveBed(fromBedId, toBedId, homeId, homeSlug, username) {
+export async function moveBed(fromBedId, toBedId, homeId, homeSlug, username, fromClientUpdatedAt, toClientUpdatedAt) {
   const result = await withTransaction(async (client) => {
     const [firstId, secondId] = fromBedId < toBedId
       ? [fromBedId, toBedId]
@@ -281,6 +281,8 @@ export async function moveBed(fromBedId, toBedId, homeId, homeSlug, username) {
 
     if (!fromBed) throw new NotFoundError('Source bed not found');
     if (!toBed) throw new NotFoundError('Destination bed not found');
+    assertNotStale(fromBed, fromClientUpdatedAt);
+    assertNotStale(toBed, toClientUpdatedAt);
     if (fromBed.status !== 'occupied') throw new ValidationError('Source bed must be occupied');
     if (toBed.status !== 'available') throw new ValidationError('Destination bed must be available');
 

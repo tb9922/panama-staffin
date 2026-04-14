@@ -31,6 +31,11 @@ const entryBodySchema = z.object({
 const updateBodySchema = z.object({
   content:  z.string().min(1).max(2000),
   priority: z.enum(['urgent', 'action', 'info']),
+  _version: z.number().int().nonnegative(),
+});
+
+const deleteBodySchema = z.object({
+  _version: z.number().int().nonnegative(),
 });
 
 // GET /api/handover?home=X&date=YYYY-MM-DD
@@ -83,8 +88,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
     const parsed = updateBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const entry = await handoverRepo.updateEntry(idParam.data, req.home.id, parsed.data);
-    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    const existing = await handoverRepo.findById(idParam.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Entry not found' });
+    const entry = await handoverRepo.updateEntry(idParam.data, req.home.id, parsed.data, parsed.data._version);
+    if (!entry) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('handover_update', req.home.slug, req.user.username, { id: idParam.data });
     queueAutoLinkSync(req.home.id, 'handover', entry, req.user.username);
     res.json(entry);
@@ -112,8 +119,12 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });
-    const deleted = await handoverRepo.deleteEntry(idParam.data, req.home.id);
-    if (!deleted) return res.status(404).json({ error: 'Entry not found' });
+    const parsed = deleteBodySchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const existing = await handoverRepo.findById(idParam.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Entry not found' });
+    const deleted = await handoverRepo.deleteEntry(idParam.data, req.home.id, parsed.data._version);
+    if (!deleted) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('handover_delete', req.home.slug, req.user.username, { id: idParam.data });
     res.json({ ok: true });
   } catch (err) {

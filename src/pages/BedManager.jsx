@@ -310,7 +310,9 @@ export default function BedManager() {
     setSubmitting(true);
     try {
       const home = getCurrentHome();
-      await moveBedResident(home, moveBed.id, moveTargetId);
+      const targetBed = beds.find((bed) => String(bed.id) === String(moveTargetId));
+      if (!targetBed) throw new Error('Destination bed could not be refreshed. Please reopen the move dialog.');
+      await moveBedResident(home, moveBed.id, moveTargetId, moveBed.updated_at, targetBed.updated_at);
       setShowMoveModal(false);
       setMoveBed(null);
       await load();

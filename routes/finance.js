@@ -160,6 +160,10 @@ const paymentScheduleUpdateSchema = paymentScheduleBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
 });
 
+const paymentScheduleProcessSchema = z.object({
+  _version: z.number().int().nonnegative(),
+});
+
 // ── Resident Routes ───────────────────────────────────────────────────────────
 
 // Residents with bed assignments — used by standalone Residents page
@@ -501,7 +505,9 @@ router.post('/payment-schedules/:id/process', writeRateLimiter, requireAuth, req
   try {
     const idP = idSchema.safeParse(req.params.id);
     if (!idP.success) return res.status(400).json({ error: 'Invalid schedule ID' });
-    const result = await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username);
+    const parsed = paymentScheduleProcessSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const result = await financeService.processScheduledPayment(idP.data, req.home.id, req.user.username, parsed.data._version);
     await auditService.log('finance_create', req.home.slug, req.user.username, { id: idP.data, entity: 'payment_schedule', action: 'process' });
     res.json(result);
   } catch (err) {

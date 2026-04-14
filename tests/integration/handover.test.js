@@ -62,6 +62,7 @@ describe('Handover: create and read', () => {
     expect(created.priority).toBe('urgent');
     expect(created.content).toContain('room 12');
     expect(created.author).toBe('admin');
+    expect(created.version).toBe(1);
     expect(created.acknowledged_by).toBeNull();
   });
 
@@ -132,20 +133,30 @@ describe('Handover: update', () => {
   });
 
   it('updates content and priority', async () => {
+    const current = await handoverRepo.findById(entryId, homeA);
     const updated = await handoverRepo.updateEntry(entryId, homeA, {
       content: 'Updated content with more detail',
       priority: 'urgent',
-    });
+    }, current.version);
     expect(updated).not.toBeNull();
     expect(updated.content).toBe('Updated content with more detail');
     expect(updated.priority).toBe('urgent');
+    expect(updated.version).toBe(current.version + 1);
   });
 
   it('returns null for wrong home', async () => {
     const updated = await handoverRepo.updateEntry(entryId, homeB, {
       content: 'Cross-home attempt',
       priority: 'info',
-    });
+    }, 1);
+    expect(updated).toBeNull();
+  });
+
+  it('returns null on stale version', async () => {
+    const updated = await handoverRepo.updateEntry(entryId, homeA, {
+      content: 'Stale update attempt',
+      priority: 'info',
+    }, 1);
     expect(updated).toBeNull();
   });
 });
@@ -198,7 +209,8 @@ describe('Handover: soft delete', () => {
   });
 
   it('soft-deletes and excludes from queries', async () => {
-    const deleted = await handoverRepo.deleteEntry(entryId, homeA);
+    const current = await handoverRepo.findById(entryId, homeA);
+    const deleted = await handoverRepo.deleteEntry(entryId, homeA, current.version);
     expect(deleted).toBe(true);
 
     const result = await handoverRepo.findByHomeAndDate(homeA, '2026-05-01');
@@ -206,7 +218,7 @@ describe('Handover: soft delete', () => {
   });
 
   it('returns false for already-deleted entry', async () => {
-    const deleted = await handoverRepo.deleteEntry(entryId, homeA);
+    const deleted = await handoverRepo.deleteEntry(entryId, homeA, 1);
     expect(deleted).toBe(false);
   });
 });

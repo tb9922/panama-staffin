@@ -677,6 +677,44 @@ describe('bedService: moveBed', () => {
       bedService.moveBed(src.id, toBedId, homeA, 'bed-test-a', 'admin')
     ).rejects.toThrow(/destination bed must be available/i);
   });
+
+  it('rejects stale clientUpdatedAt on room move', async () => {
+    const residentForStaleMove = await createResident(homeA, 'Move Bed Resident Stale');
+    const src = await bedService.createBed(homeA, 'bed-test-a', {
+      room_number: 'M005',
+    }, 'admin');
+    bedIds.push(src.id);
+    const srcReserved = await bedService.transitionStatus(src.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: src.updated_at,
+    });
+    const occupiedSrc = await bedService.transitionStatus(src.id, homeA, 'bed-test-a', {
+      status: 'occupied',
+      residentId: residentForStaleMove,
+      username: 'admin',
+      clientUpdatedAt: srcReserved.updated_at,
+    });
+
+    const dest = await bedService.createBed(homeA, 'bed-test-a', {
+      room_number: 'M006',
+      room_name: 'Stale target',
+    }, 'admin');
+    bedIds.push(dest.id);
+    const staleDestinationTimestamp = dest.updated_at;
+    await bedService.updateBed(dest.id, homeA, 'bed-test-a', {
+      room_number: 'M006',
+      room_name: 'Refreshed target',
+      room_type: 'single',
+      floor: null,
+      notes: '',
+      clientUpdatedAt: dest.updated_at,
+    }, 'admin');
+
+    await expect(
+      bedService.moveBed(src.id, dest.id, homeA, 'bed-test-a', 'admin', occupiedSrc.updated_at, staleDestinationTimestamp)
+    ).rejects.toThrow(/updated by someone else|modified by another user/i);
+  });
 });
 
 // ── bedService: revertTransition ─────────────────────────────────────────────

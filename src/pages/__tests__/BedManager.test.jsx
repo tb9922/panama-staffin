@@ -179,8 +179,8 @@ describe('BedManager', () => {
     await user.clear(floorInput);
     await user.type(floorInput, 'Ground');
 
-    const notesInput = within(dialog).getAllByRole('textbox')
-      .find((element) => element.tagName.toLowerCase() === 'textarea');
+    const notesSection = within(dialog).getByText('Notes').closest('div');
+    const notesInput = notesSection?.querySelector('textarea');
     expect(notesInput).toBeTruthy();
     await user.type(notesInput, 'Refreshed room details');
 

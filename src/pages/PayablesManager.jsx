@@ -109,7 +109,7 @@ export default function PayablesManager() {
     setProcessing(sched.id);
     setSaving(true);
     try {
-      await processPaymentSchedule(home, sched.id);
+      await processPaymentSchedule(home, sched.id, sched.version);
       load();
     } catch (e) { setError(e.message); }
     finally { setProcessing(null); setSaving(false); }
