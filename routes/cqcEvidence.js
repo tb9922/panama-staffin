@@ -26,7 +26,7 @@ import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCate
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
-const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-5]|WL([1-9]|10))$/);
+const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
 const dateSchema = nullableDateInput;
 const blankToNull = (value) => (value === '' ? null : value);
 const nullableShortText = z.preprocess(blankToNull, z.string().max(200).nullable());

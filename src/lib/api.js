@@ -611,6 +611,78 @@ export async function deleteCqcObservation(homeSlug, id) {
   });
 }
 
+export async function getCqcEvidenceLinks(homeSlug, { statement, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams({
+    home: homeSlug,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (statement) params.set('statement', statement);
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  return apiFetch(`${API_BASE}/cqc-evidence-links?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getCqcEvidenceLinksBySource(homeSlug, sourceModule, sourceId) {
+  return apiFetch(
+    `${API_BASE}/cqc-evidence-links/source/${encodeURIComponent(sourceModule)}/${encodeURIComponent(sourceId)}?home=${h(homeSlug)}`,
+    { headers: authHeaders() }
+  );
+}
+
+export async function getCqcEvidenceLinkCounts(homeSlug, { dateFrom, dateTo } = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  return apiFetch(`${API_BASE}/cqc-evidence-links/counts?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createCqcEvidenceLink(homeSlug, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createBulkCqcEvidenceLinks(homeSlug, links) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links/bulk?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ links }),
+  });
+}
+
+export async function updateCqcEvidenceLink(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCqcEvidenceLink(homeSlug, id) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function confirmCqcEvidenceLink(homeSlug, id) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links/${encodeURIComponent(id)}/confirm?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function confirmBulkCqcEvidenceLinks(homeSlug, ids) {
+  return apiFetch(`${API_BASE}/cqc-evidence-links/confirm-bulk?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export async function getCqcEvidenceFiles(_caseType, evidenceId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {

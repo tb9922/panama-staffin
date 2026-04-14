@@ -26,8 +26,8 @@ export const ENGINE_VERSION = 'v2';
 
 // ── Quality Statements ──────────────────────────────────────────────────────
 
-// Aligned to CQC Single Assessment Framework (November 2023, operational April 2024).
-// IDs use CQC's per-category numbering: S1-S8, E1-E6, C1-C5, R1-R5, WL1-WL10.
+// Aligned to CQC Single Assessment Framework (April 2024 rollout / May 2025 page update).
+// IDs use CQC's per-category numbering: S1-S8, E1-E6, C1-C5, R1-R7, WL1-WL8.
 // QS references in cqcRef are the sequential CQC quality statement numbers (QS1-QS34).
 // autoMetrics reference IDs handled by getEvidenceForStatement().
 export const QUALITY_STATEMENTS = [
@@ -167,7 +167,7 @@ export const QUALITY_STATEMENTS = [
     autoMetrics: ['supervisionCompletion', 'appraisalCompletion', 'sickRate', 'fatigueBreaches', 'staffTurnover'],
     icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
   },
-  // ── Responsive (R1-R5) — Regulation 9, 10, 16 ─────────────────────────────
+  // ── Responsive (R1-R7) — Regulation 9, 10, 16 ─────────────────────────────
   {
     id: 'R1', category: 'responsive', name: 'Person-Centred Care',
     cqcRef: 'Regulation 9 — Person-Centred Care (QS20)',
@@ -203,76 +203,76 @@ export const QUALITY_STATEMENTS = [
     autoMetrics: ['equalityTrainingCompliance'],
     icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
   },
-  // ── Well-Led (WL1-WL10) — Regulation 17, 18 ───────────────────────────────
+  {
+    id: 'R6', category: 'responsive', name: 'Equity in Experiences & Outcomes',
+    cqcRef: 'Regulation 9 — Person-Centred Care (QS25)',
+    description: 'Equitable experiences and outcomes for people using the service, including reducing inequalities',
+    autoMetrics: ['equalityTrainingCompliance', 'satisfactionScore'],
+    icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
+  },
+  {
+    id: 'R7', category: 'responsive', name: 'Planning for the Future',
+    cqcRef: 'Regulation 9 — Person-Centred Care (QS26)',
+    description: 'Planning ahead with people and those important to them for future care, transitions, and changing needs',
+    autoMetrics: [],
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 8h3m-3 4h3m-6 0h.01M9 12h.01',
+  },
+  // ── Well-Led (WL1-WL8) — Regulation 17, 18 ────────────────────────────────
   {
     id: 'WL1', category: 'well-led', name: 'Shared Direction & Culture',
-    cqcRef: 'Regulation 17 — Good Governance (QS25)',
+    cqcRef: 'Regulation 17 — Good Governance (QS27)',
     description: 'Organisational vision, values, and shared culture evidence',
     autoMetrics: [],
     icon: 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z',
   },
   {
     id: 'WL2', category: 'well-led', name: 'Capable, Compassionate & Inclusive Leaders',
-    cqcRef: 'Regulation 17 — Good Governance (QS26)',
+    cqcRef: 'Regulation 17 — Good Governance (QS28)',
     description: 'Leadership competency, management development, appraisals',
     autoMetrics: ['appraisalCompletion'],
     icon: 'M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {
     id: 'WL3', category: 'well-led', name: 'Freedom to Speak Up',
-    cqcRef: 'Regulation 17 — Good Governance (QS27)',
+    cqcRef: 'Regulation 17 — Good Governance (QS29)',
     description: 'Whistleblowing concern handling, investigation, and protection rates',
     autoMetrics: ['speakUpCulture'],
     icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z',
   },
   {
     id: 'WL4', category: 'well-led', name: 'Workforce Equality, Diversity & Inclusion',
-    cqcRef: 'Regulation 18 — Staffing (QS28)',
+    cqcRef: 'Regulation 18 — Staffing (QS30)',
     description: 'EDI training, staff engagement, sickness, fatigue, turnover',
     autoMetrics: ['equalityTrainingCompliance', 'sickRate', 'fatigueBreaches', 'staffTurnover'],
     icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0',
   },
   {
     id: 'WL5', category: 'well-led', name: 'Governance, Management & Sustainability',
-    cqcRef: 'Regulation 17 — Good Governance (QS29)',
+    cqcRef: 'Regulation 17 — Good Governance (QS31)',
     description: 'Governance frameworks, policy compliance, risk management, onboarding, audits',
     autoMetrics: ['policyCompliancePct', 'riskManagementScore', 'onboardingCompletion', 'actionCompletionRate'],
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
   },
   {
     id: 'WL6', category: 'well-led', name: 'Partnerships & Communities',
-    cqcRef: 'Regulation 17 — Good Governance (QS30)',
+    cqcRef: 'Regulation 17 — Good Governance (QS32)',
     description: 'Partnership working with other providers and local community',
     autoMetrics: [],
     icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
   },
   {
     id: 'WL7', category: 'well-led', name: 'Learning, Improvement & Innovation',
-    cqcRef: 'Regulation 17 — Good Governance (QS31)',
+    cqcRef: 'Regulation 17 — Good Governance (QS33)',
     description: 'Continuous improvement, training trends, corrective actions',
     autoMetrics: ['trainingTrend', 'incidentTrends'],
     icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
   },
   {
     id: 'WL8', category: 'well-led', name: 'Environmental Sustainability',
-    cqcRef: 'Regulation 17 — Good Governance (QS32)',
+    cqcRef: 'Regulation 17 — Good Governance (QS34)',
     description: 'Environmental sustainability strategy, energy efficiency, waste reduction',
     autoMetrics: [],
     icon: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    id: 'WL9', category: 'well-led', name: 'Equity in Experiences & Outcomes',
-    cqcRef: 'Regulation 9 — Person-Centred Care / Regulation 17 — Good Governance (QS33)',
-    description: 'Equitable outcomes regardless of protected characteristics, reducing health inequalities',
-    autoMetrics: ['equalityTrainingCompliance', 'satisfactionScore'],
-    icon: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
-  },
-  {
-    id: 'WL10', category: 'well-led', name: 'Financial Sustainability & Business Continuity',
-    cqcRef: 'Regulation 17 — Good Governance (QS34)',
-    description: 'Financial oversight, viability planning, and business continuity for sustained care delivery',
-    autoMetrics: [],
-    icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z',
   },
 ];
 

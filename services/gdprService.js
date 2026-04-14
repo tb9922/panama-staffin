@@ -43,6 +43,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]
       );
       const staffName = staffRow?.name;
+      const { rows: staffUsernameRows } = await conn.query(
+        `SELECT DISTINCT username
+           FROM user_home_roles
+          WHERE home_id = $1
+            AND staff_id = $2`,
+        [homeId, subjectId]
+      );
+      const staffUsernames = staffUsernameRows.map((row) => row.username);
 
       const [
         staff, overrides, training, trainingAttachments, supervisions, appraisals,
@@ -58,8 +66,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         payrollLineShifts, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
-        // Operational/CQC tables matched by name (no staff FK)
-        agencyShifts, complaintSurveys, cqcNarratives, cqcEvidence, cqcPartnerFeedback, cqcObservations,
+        // Operational/CQC tables matched by name or linked username
+        agencyShifts, complaintSurveys, cqcNarratives, cqcEvidence, cqcPartnerFeedback, cqcObservations, cqcEvidenceLinks,
       ] = await runSequentialQueries([
         () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -234,6 +242,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                  AND (observer = $2 OR evidence_owner = $2)`,
               [homeId, staffName])
           : { rows: [] },
+        () => staffUsernames.length > 0
+          ? conn.query(
+              `SELECT * FROM cqc_evidence_links
+               WHERE home_id = $1
+                 AND linked_by = ANY($2::text[])
+                 AND deleted_at IS NULL`,
+              [homeId, staffUsernames])
+          : { rows: [] },
       ]);
 
       return {
@@ -295,6 +311,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           cqc_evidence: cqcEvidence.rows,
           cqc_partner_feedback: cqcPartnerFeedback.rows,
           cqc_observations: cqcObservations.rows,
+          cqc_evidence_links: cqcEvidenceLinks.rows,
         },
       };
     }
@@ -465,6 +482,14 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
     );
     const originalName = staffRow?.name;
+    const { rows: staffUsernameRows } = await client.query(
+      `SELECT DISTINCT username
+         FROM user_home_roles
+        WHERE home_id = $1
+          AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    const staffUsernames = staffUsernameRows.map((row) => row.username);
 
     // Anonymise staff record (keep id, role, team, skill for operational data)
     await client.query(
@@ -803,6 +828,18 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
         [anon, homeId, originalName]
       );
     }
+    if (staffUsernames.length > 0) {
+      await client.query(
+        `UPDATE cqc_evidence_links
+            SET linked_by = $3,
+                rationale = NULL,
+                updated_at = NOW()
+          WHERE home_id = $1
+            AND linked_by = ANY($2::text[])
+            AND deleted_at IS NULL`,
+        [homeId, staffUsernames, anon]
+      );
+    }
 
     // Clear shift_overrides.reason — can contain health data (e.g. sick reasons)
     await client.query(
@@ -1128,7 +1165,7 @@ const RETENTION_ALLOWED_TABLES = new Set([
   'pension_enrolments', 'incidents', 'complaints', 'dols', 'audit_log',
   'access_log', 'risk_register', 'whistleblowing_concerns', 'maintenance',
   'retention_schedule', 'cqc_statement_narratives', 'cqc_evidence',
-  'cqc_partner_feedback', 'cqc_observations',
+  'cqc_partner_feedback', 'cqc_observations', 'cqc_evidence_links',
   // HR module tables (6-year retention per Limitation Act 1980)
   'hr_disciplinary_cases', 'hr_grievance_cases', 'hr_performance_cases',
   'hr_rtw_interviews', 'hr_oh_referrals', 'hr_contracts', 'hr_family_leave',

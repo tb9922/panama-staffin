@@ -19,6 +19,7 @@ const SLUG_A = 'test-gdpr-home-a';
 const SLUG_B = 'test-gdpr-home-b';
 const STAFF = ['gdpr-S001', 'gdpr-S002', 'gdpr-S003'];
 const STAFF_NAMES = ['Alice GDPR', 'Bob GDPR', 'Charlie GDPR'];
+const LINK_USERNAME = 'gdpr-link-user';
 
 let homeA, homeB;
 const cleanup = {
@@ -64,6 +65,16 @@ beforeAll(async () => {
     `INSERT INTO staff (id, home_id, name, role, team, skill, hourly_rate, active, wtr_opt_out, al_carryover)
      VALUES ('gdpr-S001', $1, 'Alice GDPR HomeB', 'Carer', 'Day A', 1, 13.00, true, false, 0)`,
     [homeB]
+  );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, display_name, active, created_by)
+     VALUES ($1, 'hash-not-used', 'viewer', $2, true, 'test-runner')`,
+    [LINK_USERNAME, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, staff_id, granted_by)
+     VALUES ($1, $2, 'viewer', $3, 'test-runner')`,
+    [LINK_USERNAME, homeA, STAFF[0]]
   );
 
   // ── Training records ───────────────────────────────────────────────────
@@ -214,6 +225,14 @@ beforeAll(async () => {
        'Observed calm support', 'Keep current practice', $2, '2025-09-01', 'test-runner')`,
     [homeA, STAFF_NAMES[0]]
   );
+  await pool.query(
+    `INSERT INTO cqc_evidence_links
+       (home_id, source_module, source_id, quality_statement, evidence_category, rationale,
+        auto_linked, requires_review, linked_by, source_recorded_at)
+     VALUES ($1, 'cqc_evidence', 'cqc-gdpr-001', 'S1', 'peoples_experience', 'Linked by user account',
+       true, true, $2, '2025-08-15T00:00:00Z')`,
+    [homeA, LINK_USERNAME]
+  );
 
   // ── DoLS (resident data for resident SAR) ──────────────────────────────
   await pool.query(
@@ -255,6 +274,7 @@ async function cleanHome(hid) {
   // Reverse FK order cleanup
   const tables = [
     { sql: `DELETE FROM cqc_evidence_files WHERE evidence_id IN (SELECT id FROM cqc_evidence WHERE home_id = $1)` },
+    { sql: `DELETE FROM cqc_evidence_links WHERE home_id = $1` },
     { sql: `DELETE FROM cqc_partner_feedback WHERE home_id = $1` },
     { sql: `DELETE FROM cqc_observations WHERE home_id = $1` },
     { sql: `DELETE FROM cqc_statement_narratives WHERE home_id = $1` },
@@ -289,6 +309,7 @@ async function cleanHome(hid) {
     { sql: `DELETE FROM consent_records WHERE home_id = $1` },
     { sql: `DELETE FROM dp_complaints WHERE home_id = $1` },
     { sql: `DELETE FROM access_log WHERE home_id = $1` },
+    { sql: `DELETE FROM user_home_roles WHERE home_id = $1` },
     { sql: `DELETE FROM shift_overrides WHERE home_id = $1` },
     { sql: `DELETE FROM staff WHERE home_id = $1` },
   ];
@@ -317,6 +338,8 @@ afterAll(async () => {
   // Clean access log entries with staff names
   await pool.query(`DELETE FROM access_log WHERE user_name = ANY($1)`, [STAFF_NAMES]);
   await pool.query(`DELETE FROM access_log WHERE user_name = '[REDACTED]' AND home_id IN ($1, $2)`, [homeA, homeB]);
+  await pool.query('DELETE FROM user_home_roles WHERE username = $1', [LINK_USERNAME]).catch(() => {});
+  await pool.query('DELETE FROM users WHERE username = $1', [LINK_USERNAME]).catch(() => {});
 
   if (homeA) { await cleanHome(homeA); await pool.query('DELETE FROM homes WHERE id = $1', [homeA]); }
   if (homeB) { await cleanHome(homeB); await pool.query('DELETE FROM homes WHERE id = $1', [homeB]); }
@@ -513,6 +536,7 @@ describe('gatherPersonalData: staff', () => {
       'hr_contracts', 'hr_family_leave', 'hr_flexible_working',
       'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
       'hr_case_notes', 'onboarding', 'care_certificates', 'complaints', 'incident_addenda',
+      'cqc_evidence_links',
     ];
     for (const key of required) {
       expect(keys).toContain(key);
@@ -781,6 +805,15 @@ describe('executeErasure', () => {
     expect(observations).toHaveLength(1);
     expect(observations[0].observer).toBe('[REDACTED-gdpr]');
     expect(observations[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: links } = await pool.query(
+      `SELECT linked_by, rationale FROM cqc_evidence_links
+        WHERE home_id = $1 AND source_id = 'cqc-gdpr-001'`,
+      [homeA]
+    );
+    expect(links).toHaveLength(1);
+    expect(links[0].linked_by).toBe('[REDACTED-gdpr]');
+    expect(links[0].rationale).toBeNull();
   });
 
   it('anonymises access log entries', async () => {

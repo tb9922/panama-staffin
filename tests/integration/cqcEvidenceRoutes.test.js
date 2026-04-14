@@ -108,6 +108,28 @@ describe('cqc evidence routes readiness contract', () => {
     expect(res.body.error).toMatch(/Evidence To cannot be before Evidence From/i);
   });
 
+  it('accepts the corrected responsive IDs and rejects retired well-led IDs', async () => {
+    await auth('post', `/api/cqc-evidence?home=${homeSlug}`)
+      .send({
+        quality_statement: 'R7',
+        type: 'qualitative',
+        title: 'Future planning evidence',
+        evidence_category: 'processes',
+      })
+      .expect(201);
+
+    const retired = await auth('post', `/api/cqc-evidence?home=${homeSlug}`)
+      .send({
+        quality_statement: 'WL10',
+        type: 'qualitative',
+        title: 'Retired statement',
+        evidence_category: 'processes',
+      })
+      .expect(400);
+
+    expect(retired.body.error).toMatch(/Invalid/i);
+  });
+
   it('supports narrative upsert and list endpoints with optimistic locking payloads', async () => {
     const putRes = await auth('put', `/api/cqc-evidence/narratives/S1?home=${homeSlug}`)
       .send({
