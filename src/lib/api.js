@@ -41,7 +41,70 @@ function authHeaders(extra = {}) {
   };
 }
 
-const h = (homeSlug) => encodeURIComponent(homeSlug);
+function requireHomeSlug(homeSlug) {
+  if (homeSlug == null || String(homeSlug).trim() === '') {
+    throw new Error('No home selected');
+  }
+  return String(homeSlug);
+}
+
+const h = (homeSlug) => encodeURIComponent(requireHomeSlug(homeSlug));
+
+function homeQueryParams(homeSlug, extra = {}) {
+  const params = new URLSearchParams({ home: requireHomeSlug(homeSlug) });
+  for (const [key, value] of Object.entries(extra)) {
+    if (value == null || value === '') continue;
+    params.set(key, String(value));
+  }
+  return params;
+}
+
+async function readResponseBody(res) {
+  if (res.status === 204) return null;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function readErrorBody(res) {
+  const body = await readResponseBody(res);
+  if (body && typeof body === 'object') return body;
+  if (typeof body === 'string' && body.trim()) return { error: body.trim() };
+  return {};
+}
+
+async function uploadMultipart(url, formData) {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-Token': getCsrfToken(),
+    },
+    body: formData,
+  });
+  if (res.status === 401) {
+    expireClientSession();
+    const err = new Error('Session expired - please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await readErrorBody(res);
+    const err = new Error(body.error || `Upload failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return readResponseBody(res);
+}
 
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...options });
@@ -51,13 +114,12 @@ async function apiFetch(url, options = {}) {
     throw err;
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await readErrorBody(res);
     const err = new Error(body.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;
   }
-  if (res.status === 204) return null;
-  return res.json();
+  return readResponseBody(res);
 }
 
 async function downloadBinary(url, originalName) {
@@ -69,7 +131,6 @@ async function downloadBinary(url, originalName) {
     },
   });
   if (res.status === 401) {
-    expireClientSession();
     const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;
@@ -175,11 +236,7 @@ export async function markAllNotificationsRead(keys) {
 
 export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modules, limit = 50, offset = 0 } = {}) {
   const home = getCurrentHome();
-  const params = new URLSearchParams({
-    home,
-    limit: String(limit),
-    offset: String(offset),
-  });
+  const params = homeQueryParams(home, { limit, offset });
   if (q) params.set('q', q);
   if (uploadedBy) params.set('uploadedBy', uploadedBy);
   if (dateFrom) params.set('dateFrom', dateFrom);
@@ -190,7 +247,7 @@ export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modul
 
 export async function listEvidenceHubUploaders() {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/evidence-hub/uploaders?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/evidence-hub/uploaders?home=${h(home)}`, {
     headers: authHeaders(),
   });
 }
@@ -239,29 +296,29 @@ export async function deleteEvidenceHubAttachment(sourceModule, attachmentId) {
 }
 
 export async function getHandoverEntries(homeSlug, date) {
-  return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}&date=${date}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/handover?home=${h(homeSlug)}&date=${date}`, { headers: authHeaders() });
 }
 
 export async function createHandoverEntry(homeSlug, entry) {
-  return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/handover?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(entry),
   });
 }
 
 export async function updateHandoverEntry(homeSlug, id, updates) {
-  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
     method: 'PUT', headers: authHeaders(), body: JSON.stringify(updates),
   });
 }
 
 export async function deleteHandoverEntry(homeSlug, id) {
-  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
     method: 'DELETE', headers: authHeaders(),
   });
 }
 
 export async function acknowledgeHandoverEntry(homeSlug, id) {
-  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}/acknowledge?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/handover/${encodeURIComponent(id)}/acknowledge?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(),
   });
 }
@@ -612,11 +669,7 @@ export async function deleteCqcObservation(homeSlug, id) {
 }
 
 export async function getCqcEvidenceLinks(homeSlug, { statement, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
-  const params = new URLSearchParams({
-    home: homeSlug,
-    limit: String(limit),
-    offset: String(offset),
-  });
+  const params = homeQueryParams(homeSlug, { limit, offset });
   if (statement) params.set('statement', statement);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
@@ -631,7 +684,7 @@ export async function getCqcEvidenceLinksBySource(homeSlug, sourceModule, source
 }
 
 export async function getCqcEvidenceLinkCounts(homeSlug, { dateFrom, dateTo } = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
   return apiFetch(`${API_BASE}/cqc-evidence-links/counts?${params.toString()}`, { headers: authHeaders() });
@@ -695,26 +748,7 @@ export async function uploadCqcEvidenceFile(_caseType, evidenceId, file, descrip
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    expireClientSession();
-    const err = new Error('Session expired - please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadMultipart(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, formData);
 }
 
 export async function deleteCqcEvidenceFile(id) {
@@ -1023,7 +1057,7 @@ export async function getAccessLog(limit = 100) {
 
 // Disciplinary
 export async function getHrDisciplinary(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1046,7 +1080,7 @@ export async function updateHrDisciplinary(id, data) {
 
 // Grievance
 export async function getHrGrievance(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1082,7 +1116,7 @@ export async function updateGrievanceAction(id, data) {
 
 // Performance
 export async function getHrPerformance(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.type) params.set('type', filters.type);
@@ -1114,7 +1148,7 @@ export async function getStaffAbsence(homeSlug, staffId) {
 
 // RTW Interviews
 export async function getHrRtwInterviews(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
@@ -1133,7 +1167,7 @@ export async function updateHrRtwInterview(id, data) {
 
 // OH Referrals
 export async function getHrOhReferrals(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
@@ -1152,7 +1186,7 @@ export async function updateHrOhReferral(id, data) {
 
 // Contracts
 export async function getHrContracts(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1172,7 +1206,7 @@ export async function updateHrContract(id, data) {
 
 // Family Leave
 export async function getHrFamilyLeave(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.type) params.set('type', filters.type);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1192,7 +1226,7 @@ export async function updateHrFamilyLeave(id, data) {
 
 // Flexible Working
 export async function getHrFlexWorking(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1212,7 +1246,7 @@ export async function updateHrFlexWorking(id, data) {
 
 // EDI
 export async function getHrEdi(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.recordType) params.set('record_type', filters.recordType);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1232,7 +1266,7 @@ export async function updateHrEdi(id, data) {
 
 // TUPE
 export async function getHrTupe(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
   return apiFetch(`${API_BASE}/hr/tupe?${params}`, { headers: authHeaders() });
@@ -1250,7 +1284,7 @@ export async function updateHrTupe(id, data) {
 
 // Renewals
 export async function getHrRenewals(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.staffId) params.set('staff_id', filters.staffId);
   if (filters.checkType) params.set('check_type', filters.checkType);
   if (filters.status) params.set('status', filters.status);
@@ -1288,13 +1322,13 @@ export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
 // ── HR Staff List ───────────────────────────────────────────────────────────
 export async function getHrStaffList(homeSlug, options = {}) {
   const home = homeSlug || getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders(), ...options });
+  return apiFetch(`${API_BASE}/hr/staff?home=${h(home)}`, { headers: authHeaders(), ...options });
 }
 
 // ── HR File Attachments ─────────────────────────────────────────────────────
 export async function getHrAttachments(caseType, caseId) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${h(home)}`, { headers: authHeaders() });
 }
 
 export async function uploadHrAttachment(caseType, caseId, file, description) {
@@ -1302,31 +1336,12 @@ export async function uploadHrAttachment(caseType, caseId, file, description) {
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    expireClientSession();
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadMultipart(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${h(home)}`, formData);
 }
 
 export async function deleteHrAttachment(id) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/attachments/${id}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/hr/attachments/${id}?home=${h(home)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -1334,13 +1349,13 @@ export async function deleteHrAttachment(id) {
 
 export async function downloadHrAttachment(id, originalName) {
   const home = getCurrentHome();
-  return downloadBinary(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, originalName);
+  return downloadBinary(`${API_BASE}/hr/attachments/download/${id}?home=${h(home)}`, originalName);
 }
 
 // ── HR Investigation Meetings ───────────────────────────────────────────────
 export async function getRecordAttachments(moduleId, recordId) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${h(home)}`, {
     headers: authHeaders(),
   });
 }
@@ -1350,31 +1365,12 @@ export async function uploadRecordAttachment(moduleId, recordId, file, descripti
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    expireClientSession();
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadMultipart(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${h(home)}`, formData);
 }
 
 export async function deleteRecordAttachment(id) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(id)}?home=${h(home)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -1382,17 +1378,17 @@ export async function deleteRecordAttachment(id) {
 
 export async function downloadRecordAttachment(id, originalName) {
   const home = getCurrentHome();
-  return downloadBinary(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, originalName);
+  return downloadBinary(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${h(home)}`, originalName);
 }
 
 export async function getHrMeetings(caseType, caseId) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${h(home)}`, { headers: authHeaders() });
 }
 
 export async function createHrMeeting(caseType, caseId, data) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${h(home)}`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -1401,7 +1397,7 @@ export async function createHrMeeting(caseType, caseId, data) {
 
 export async function updateHrMeeting(id, data) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/meetings/${id}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/hr/meetings/${id}?home=${h(home)}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -1412,7 +1408,7 @@ export async function updateHrMeeting(id, data) {
 
 // Residents
 export async function getFinanceResidents(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.status) params.set('status', filters.status);
   if (filters.funding_type) params.set('funding_type', filters.funding_type);
   if (filters.limit) params.set('limit', filters.limit);
@@ -1438,7 +1434,7 @@ export async function getFinanceFeeHistory(homeSlug, residentId) {
 
 // Residents with beds (standalone Residents page)
 export async function getResidentsWithBeds(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.status) params.set('status', filters.status);
   if (filters.funding_type) params.set('funding_type', filters.funding_type);
   if (filters.search) params.set('search', filters.search);
@@ -1452,7 +1448,7 @@ export async function deleteFinanceResident(homeSlug, id) {
 
 // Invoices
 export async function getFinanceInvoices(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.status) params.set('status', filters.status);
   if (filters.payer_type) params.set('payer_type', filters.payer_type);
   if (filters.from) params.set('from', filters.from);
@@ -1482,7 +1478,7 @@ export async function recordFinancePayment(homeSlug, invoiceId, data) {
 
 // Expenses
 export async function getFinanceExpenses(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.category) params.set('category', filters.category);
   if (filters.status) params.set('status', filters.status);
   if (filters.from) params.set('from', filters.from);
@@ -1538,7 +1534,7 @@ export async function getReceivablesDetail(homeSlug) {
 
 // Payment schedules
 export async function getPaymentSchedules(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.on_hold !== undefined) params.set('on_hold', filters.on_hold);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
@@ -1694,7 +1690,7 @@ export async function getOnboardingHistory(homeSlug, staffId, section) {
 export async function getOnboardingFiles(_caseType, staffIdAndSection) {
   const [staffId, section] = String(staffIdAndSection).split('::');
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`, {
     headers: authHeaders(),
   });
 }
@@ -1705,31 +1701,12 @@ export async function uploadOnboardingFile(_caseType, staffIdAndSection, file, d
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${encodeURIComponent(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    expireClientSession();
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadMultipart(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`, formData);
 }
 
 export async function deleteOnboardingFile(id) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}?home=${h(home)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -1737,7 +1714,7 @@ export async function deleteOnboardingFile(id) {
 
 export async function downloadOnboardingFile(id, originalName) {
   const home = getCurrentHome();
-  return downloadBinary(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, originalName);
+  return downloadBinary(`${API_BASE}/onboarding/files/${encodeURIComponent(id)}/download?home=${h(home)}`, originalName);
 }
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────────────
@@ -1745,7 +1722,7 @@ export async function downloadOnboardingFile(id, originalName) {
 export async function getTrainingFiles(_caseType, staffIdAndType) {
   const [staffId, typeId] = String(staffIdAndType).split('::');
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${h(home)}`, {
     headers: authHeaders(),
   });
 }
@@ -1756,31 +1733,12 @@ export async function uploadTrainingFile(_caseType, staffIdAndType, file, descri
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${encodeURIComponent(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    expireClientSession();
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadMultipart(`${API_BASE}/training/${encodeURIComponent(staffId)}/${encodeURIComponent(typeId)}/files?home=${h(home)}`, formData);
 }
 
 export async function deleteTrainingFile(id) {
   const home = getCurrentHome();
-  return apiFetch(`${API_BASE}/training/files/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+  return apiFetch(`${API_BASE}/training/files/${encodeURIComponent(id)}?home=${h(home)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -1788,7 +1746,7 @@ export async function deleteTrainingFile(id) {
 
 export async function downloadTrainingFile(id, originalName) {
   const home = getCurrentHome();
-  return downloadBinary(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${encodeURIComponent(home)}`, originalName);
+  return downloadBinary(`${API_BASE}/training/files/${encodeURIComponent(id)}/download?home=${h(home)}`, originalName);
 }
 
 export async function createStaff(homeSlug, staffData) {
@@ -1825,7 +1783,7 @@ export async function saveConfig(homeSlug, config, { clientUpdatedAt } = {}) {
 // ── Scheduling (Phase 2d) ─────────────────────────────────────────────────────
 
 export async function getSchedulingData(homeSlug, { from, to, ...options } = {}) {
-  let url = `${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`;
+  let url = `${API_BASE}/scheduling?home=${h(homeSlug)}`;
   if (from) url += `&from=${encodeURIComponent(from)}`;
   if (to) url += `&to=${encodeURIComponent(to)}`;
   return apiFetch(url, { headers: authHeaders(), ...options });
@@ -1836,7 +1794,7 @@ function schedulingHeaders(editLockPin) {
 }
 
 export async function upsertOverride(homeSlug, { date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }, { editLockPin } = {}) {
-  return apiFetch(`${API_BASE}/scheduling/overrides?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/scheduling/overrides?home=${h(homeSlug)}`, {
     method: 'PUT',
     headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ date, staffId, shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours }),
@@ -1844,7 +1802,7 @@ export async function upsertOverride(homeSlug, { date, staffId, shift, reason, s
 }
 
 export async function deleteOverride(homeSlug, date, staffId, { editLockPin } = {}) {
-  const params = new URLSearchParams({ home: homeSlug, date, staffId });
+  const params = homeQueryParams(homeSlug, { date, staffId });
   return apiFetch(`${API_BASE}/scheduling/overrides?${params}`, {
     method: 'DELETE',
     headers: schedulingHeaders(editLockPin),
@@ -1852,7 +1810,7 @@ export async function deleteOverride(homeSlug, date, staffId, { editLockPin } = 
 }
 
 export async function bulkUpsertOverrides(homeSlug, overrides, { editLockPin } = {}) {
-  return apiFetch(`${API_BASE}/scheduling/overrides/bulk?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/scheduling/overrides/bulk?home=${h(homeSlug)}`, {
     method: 'POST',
     headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ overrides }),
@@ -1860,7 +1818,7 @@ export async function bulkUpsertOverrides(homeSlug, overrides, { editLockPin } =
 }
 
 export async function revertMonthOverrides(homeSlug, fromDate, toDate, { editLockPin } = {}) {
-  const params = new URLSearchParams({ home: homeSlug, fromDate, toDate });
+  const params = homeQueryParams(homeSlug, { fromDate, toDate });
   return apiFetch(`${API_BASE}/scheduling/overrides/month?${params}`, {
     method: 'DELETE',
     headers: schedulingHeaders(editLockPin),
@@ -1868,7 +1826,7 @@ export async function revertMonthOverrides(homeSlug, fromDate, toDate, { editLoc
 }
 
 export async function upsertDayNote(homeSlug, date, note, { editLockPin } = {}) {
-  return apiFetch(`${API_BASE}/scheduling/day-notes?home=${encodeURIComponent(homeSlug)}`, {
+  return apiFetch(`${API_BASE}/scheduling/day-notes?home=${h(homeSlug)}`, {
     method: 'PUT',
     headers: schedulingHeaders(editLockPin),
     body: JSON.stringify({ date, note }),
@@ -2031,7 +1989,7 @@ export async function deletePlatformHome(id) {
 export function logReportDownload(reportType, dateRange) {
   const home = getCurrentHome();
   if (!home) return;
-  apiFetch(`${API_BASE}/audit/report-download?home=${encodeURIComponent(home)}`, {
+  apiFetch(`${API_BASE}/audit/report-download?home=${h(home)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify({ reportType, dateRange }),
   }).catch(e => console.warn('Audit log failed:', e.message)); // fire-and-forget
 }
@@ -2039,7 +1997,7 @@ export function logReportDownload(reportType, dateRange) {
 // ── ROPA (Record of Processing Activities) ──────────────────────────────────
 
 export async function getRopaActivities(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);
@@ -2067,7 +2025,7 @@ export async function deleteRopaActivity(homeSlug, id) {
 // ── DPIA (Data Protection Impact Assessments) ───────────────────────────────
 
 export async function getDpiaAssessments(homeSlug, filters = {}) {
-  const params = new URLSearchParams({ home: homeSlug });
+  const params = homeQueryParams(homeSlug);
   if (filters.status) params.set('status', filters.status);
   if (filters.limit) params.set('limit', filters.limit);
   if (filters.offset) params.set('offset', filters.offset);

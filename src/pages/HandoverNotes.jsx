@@ -119,6 +119,7 @@ export default function HandoverNotes() {
   }
 
   async function handleSave() {
+    if (saving) return;
     if (!form.content.trim()) return;
     setSaving(true);
     try {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as whistleblowingRepo from '../repositories/whistleblowingRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -78,6 +79,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     }
     const concern = await whistleblowingRepo.upsert(req.home.id, createData);
     await auditService.log('whistleblowing_create', req.home.slug, req.user.username, { id: concern?.id });
+    queueAutoLinkSync(req.home.id, 'whistleblowing', concern, req.user.username);
     const safe = concern.anonymous ? (({ raised_by_role: _raised_by_role, ...rest }) => rest)(concern) : concern;
     res.status(201).json(safe);
   } catch (err) { next(err); }
@@ -108,6 +110,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
       changes = changes.filter(c => c.field !== 'raised_by_role');
     }
     await auditService.log('whistleblowing_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'whistleblowing', concern, req.user.username);
     const safe = concern.anonymous ? (({ raised_by_role: _raised_by_role, ...rest }) => rest)(concern) : concern;
     res.json(safe);
   } catch (err) { next(err); }

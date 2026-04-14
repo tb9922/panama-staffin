@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as policyRepo from '../repositories/policyRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -52,6 +53,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     const policy = await policyRepo.upsert(req.home.id, parsed.data);
     await auditService.log('policy_create', req.home.slug, req.user.username, { id: policy?.id });
+    queueAutoLinkSync(req.home.id, 'policy_review', policy, req.user.username);
     res.status(201).json(policy);
   } catch (err) { next(err); }
 });
@@ -74,6 +76,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, policy);
     await auditService.log('policy_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'policy_review', policy, req.user.username);
     res.json(policy);
   } catch (err) { next(err); }
 });

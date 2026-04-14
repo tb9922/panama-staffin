@@ -176,6 +176,9 @@ router.post('/requests/:id/execute', writeRateLimiter, requireAuth, requireHomeA
     if (request.subject_type === 'resident' && !request.subject_name?.trim()) {
       return res.status(400).json({ error: 'Resident name is required for resident erasure. Update the request with the resident name before executing.' });
     }
+    if (request.status === 'completed' || request.completed_date || request.completed_by) {
+      return res.status(409).json({ error: 'This erasure request has already been completed.' });
+    }
     let result;
     if (request.subject_type === 'staff') {
       result = await gdprService.executeErasure(

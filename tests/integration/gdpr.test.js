@@ -342,6 +342,15 @@ describe('Erasure Execute — /requests/:id/execute', () => {
     expect(res.body.staff_id).toBe('GDPR-S01');
   });
 
+  it('rejects rerunning a completed erasure request', async () => {
+    const res = await request(app)
+      .post(`${BASE}/requests/${erasureRequestId}/execute?home=${homeASlug}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(409);
+
+    expect(res.body.error).toMatch(/already been completed/i);
+  });
+
   it('returns 404 for non-existent request', async () => {
     await request(app)
       .post(`${BASE}/requests/999999/execute?home=${homeASlug}`)

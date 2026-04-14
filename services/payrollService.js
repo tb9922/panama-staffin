@@ -55,6 +55,20 @@ import { NotFoundError, ValidationError } from '../errors.js';
 // Zero-value YTD — used when no approved run exists yet this tax year
 const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0, employer_ni: 0, student_loan: 0, pension_employee: 0, pension_employer: 0 };
 
+function parseHourlyRate(staff) {
+  if (staff?.hourly_rate == null || staff.hourly_rate === '') return null;
+  const value = parseFloat(staff.hourly_rate);
+  return Number.isFinite(value) ? value : null;
+}
+
+function requireHourlyRate(staff) {
+  const hourlyRate = parseHourlyRate(staff);
+  if (hourlyRate == null || hourlyRate <= 0) {
+    throw new ValidationError(`Staff ${staff?.id || 'unknown'} is missing a valid hourly rate. Update Staff Register before running payroll.`);
+  }
+  return hourlyRate;
+}
+
 // ── Default Pay Rate Rules (seeded once per home on first payroll access) ──────
 
 const DEFAULT_RULES = [
@@ -181,6 +195,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     let totalSleepIns = 0;
 
     for (const s of activeStaff) {
+      const hourlyRate = requireHourlyRate(s);
       const line = await payrollRunRepo.createLine(runId, s.id, client);
 
       // Per-staff accumulators (gross pay components)
@@ -283,7 +298,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
           date,
           shift_code:           shift,
           hours:                result.hours,
-          base_rate:            s.hourly_rate != null ? parseFloat(s.hourly_rate) : 0,
+          base_rate:            hourlyRate,
           base_amount:          result.basePay,
           enhancements_json:    result.enhancements,
           total_amount:         result.total,
@@ -741,7 +756,7 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
   if (!staff) return 0;
   const contractHours = parseFloat(staff.contract_hours);
   if (!contractHours || contractHours <= 0) return 0;
-  const hourlyRate = parseFloat(staff.hourly_rate) || 0;
+  const hourlyRate = requireHourlyRate(staff);
   const fallback = round2((contractHours / 5) * hourlyRate);
 
   const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);

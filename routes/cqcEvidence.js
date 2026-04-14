@@ -15,6 +15,7 @@ import * as cqcPartnerFeedbackRepo from '../repositories/cqcPartnerFeedbackRepo.
 import * as cqcObservationRepo from '../repositories/cqcObservationRepo.js';
 import * as auditService from '../services/auditService.js';
 import { computeCqcReadiness } from '../services/assessmentService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -181,6 +182,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     }
     const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
     await auditService.log('cqc_evidence_create', req.home.slug, req.user.username, { id: item?.id });
+    queueAutoLinkSync(req.home.id, 'cqc_evidence', item, req.user.username);
     res.status(201).json(item);
   } catch (err) {
     next(err);
@@ -196,6 +198,7 @@ router.post('/partner-feedback', writeRateLimiter, requireAuth, requireHomeAcces
       added_by: req.user.username,
     });
     await auditService.log('cqc_partner_feedback_create', req.home.slug, req.user.username, { id: item?.id, quality_statement: item?.quality_statement });
+    queueAutoLinkSync(req.home.id, 'cqc_partner_feedback', item, req.user.username);
     res.status(201).json(item);
   } catch (err) {
     next(err);
@@ -211,6 +214,7 @@ router.post('/observations', writeRateLimiter, requireAuth, requireHomeAccess, r
       added_by: req.user.username,
     });
     await auditService.log('cqc_observation_create', req.home.slug, req.user.username, { id: item?.id, quality_statement: item?.quality_statement });
+    queueAutoLinkSync(req.home.id, 'cqc_observation', item, req.user.username);
     res.status(201).json(item);
   } catch (err) {
     next(err);
@@ -258,6 +262,7 @@ router.put('/partner-feedback/:id', writeRateLimiter, requireAuth, requireHomeAc
       id: idParsed.data,
       changes: diffFields(existing, saved),
     });
+    queueAutoLinkSync(req.home.id, 'cqc_partner_feedback', saved, req.user.username);
     res.json(saved);
   } catch (err) {
     next(err);
@@ -281,6 +286,7 @@ router.put('/observations/:id', writeRateLimiter, requireAuth, requireHomeAccess
       id: idParsed.data,
       changes: diffFields(existing, saved),
     });
+    queueAutoLinkSync(req.home.id, 'cqc_observation', saved, req.user.username);
     res.json(saved);
   } catch (err) {
     next(err);
@@ -309,6 +315,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, item);
     await auditService.log('cqc_evidence_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'cqc_evidence', item, req.user.username);
     res.json(item);
   } catch (err) {
     next(err);

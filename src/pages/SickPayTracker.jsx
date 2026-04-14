@@ -124,6 +124,7 @@ export default function SickPayTracker() {
         fit_note_received: updateForm.fit_note_received,
         fit_note_date:     updateForm.fit_note_date || null,
         notes:             updateForm.notes || null,
+        _version:          showUpdate.version,
       });
       showNotice('Sick period updated.');
       showToast({ title: 'Sick period updated', message: showUpdate.staff_id });

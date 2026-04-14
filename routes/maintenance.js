@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -50,6 +51,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     const check = await maintenanceRepo.upsert(req.home.id, parsed.data);
     await auditService.log('maintenance_create', req.home.slug, req.user.username, { id: check?.id });
+    queueAutoLinkSync(req.home.id, 'maintenance', check, req.user.username);
     res.status(201).json(check);
   } catch (err) { next(err); }
 });
@@ -75,6 +77,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, check);
     await auditService.log('maintenance_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'maintenance', check, req.user.username);
     res.json(check);
   } catch (err) { next(err); }
 });

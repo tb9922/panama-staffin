@@ -17,6 +17,7 @@ let token;
 
 beforeAll(async () => {
   await pool.query(`DELETE FROM cqc_evidence_links WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
+  await pool.query(`DELETE FROM cqc_evidence WHERE home_id IN (SELECT id FROM homes WHERE slug IN ($1, $2))`, [HOME_A, HOME_B]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});
@@ -54,6 +55,8 @@ beforeAll(async () => {
 afterAll(async () => {
   if (homeAId) await pool.query('DELETE FROM cqc_evidence_links WHERE home_id = $1', [homeAId]).catch(() => {});
   if (homeBId) await pool.query('DELETE FROM cqc_evidence_links WHERE home_id = $1', [homeBId]).catch(() => {});
+  if (homeAId) await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeAId]).catch(() => {});
+  if (homeBId) await pool.query('DELETE FROM cqc_evidence WHERE home_id = $1', [homeBId]).catch(() => {});
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM token_denylist WHERE username = $1', [USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [USERNAME]).catch(() => {});
@@ -63,6 +66,16 @@ afterAll(async () => {
 
 function auth(method, path) {
   return request(app)[method](path).set('Authorization', `Bearer ${token}`);
+}
+
+async function waitFor(predicate, { timeoutMs = 3000, intervalMs = 50 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await predicate();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return null;
 }
 
 describe('cqc evidence links', () => {
@@ -190,5 +203,32 @@ describe('cqc evidence links', () => {
     await auth('delete', `/api/cqc-evidence-links/${created.id}?home=${HOME_A}`).expect(200);
     const afterDelete = await cqcEvidenceLinksRepo.findById(created.id, homeAId);
     expect(afterDelete).toBeNull();
+  });
+
+  it('auto-links manual CQC evidence created through the route', async () => {
+    const createRes = await auth('post', `/api/cqc-evidence?home=${HOME_A}`)
+      .send({
+        quality_statement: 'S1',
+        type: 'qualitative',
+        title: 'Learning culture walkthrough',
+        description: 'Manual evidence item from the route test',
+        evidence_category: 'processes',
+      })
+      .expect(201);
+
+    const linkedRows = await waitFor(async () => {
+      const response = await auth('get', `/api/cqc-evidence-links/source/cqc_evidence/${createRes.body.id}?home=${HOME_A}`).expect(200);
+      return response.body.length > 0 ? response.body : null;
+    });
+
+    expect(linkedRows).toBeTruthy();
+    expect(linkedRows[0]).toMatchObject({
+      sourceModule: 'cqc_evidence',
+      sourceId: String(createRes.body.id),
+      qualityStatement: 'S1',
+      evidenceCategory: 'processes',
+      autoLinked: true,
+      requiresReview: true,
+    });
   });
 });

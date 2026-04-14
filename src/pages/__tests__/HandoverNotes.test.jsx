@@ -134,4 +134,32 @@ describe('HandoverNotes', () => {
     await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
     await waitFor(() => expect(screen.getByText('Handover Evidence')).toBeInTheDocument());
   });
+
+  it('guards against double submit while a save is in flight', async () => {
+    const user = userEvent.setup();
+    let resolveCreate;
+    api.createHandoverEntry.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; })
+    );
+
+    renderWithProviders(<HandoverNotes />);
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /add entry/i }).length).toBeGreaterThan(0));
+    await user.click(screen.getAllByRole('button', { name: /add entry/i })[0]);
+    await user.type(
+      screen.getByPlaceholderText('Describe the situation, actions taken, or information to hand over'),
+      'Follow up with the district nurse before lunch.'
+    );
+    await user.dblClick(screen.getByRole('button', { name: 'Save' }));
+
+    expect(api.createHandoverEntry).toHaveBeenCalledTimes(1);
+
+    resolveCreate?.({
+      ...MOCK_ENTRIES[0],
+      id: 'h-new',
+      content: 'Follow up with the district nurse before lunch.',
+    });
+
+    await waitFor(() => expect(screen.queryByText('Add Handover Entry')).not.toBeInTheDocument());
+  });
 });

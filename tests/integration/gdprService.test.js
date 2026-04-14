@@ -831,6 +831,12 @@ describe('executeErasure', () => {
     expect(req.completed_date).toBeTruthy();
   });
 
+  it('blocks executing the same erasure request twice', async () => {
+    await expect(
+      gdprService.executeErasure(targetStaff, homeA, erasureRequestId, 'test-admin', SLUG_A)
+    ).rejects.toThrow(/already been completed|already been anonymised/i);
+  });
+
   it('creates audit log entry for erasure', async () => {
     const { rows } = await pool.query(
       `SELECT * FROM audit_log WHERE home_slug = $1 AND action = 'erasure' ORDER BY ts DESC LIMIT 1`, [SLUG_A]

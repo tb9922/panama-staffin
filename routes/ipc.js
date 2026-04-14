@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import * as ipcRepo from '../repositories/ipcRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -80,6 +81,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     const audit = await ipcRepo.upsert(req.home.id, parsed.data);
     await auditService.log('ipc_create', req.home.slug, req.user.username, { id: audit?.id });
+    queueAutoLinkSync(req.home.id, 'ipc_audit', audit, req.user.username);
     res.status(201).json(audit);
   } catch (err) { next(err); }
 });
@@ -107,6 +109,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, audit);
     await auditService.log('ipc_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'ipc_audit', audit, req.user.username);
     res.json(audit);
   } catch (err) { next(err); }
 });

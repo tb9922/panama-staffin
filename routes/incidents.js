@@ -9,6 +9,7 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { dispatchEvent } from '../services/webhookService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
 
@@ -134,6 +135,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       return res.status(409).json({ error: 'Incident is frozen and cannot be modified' });
     }
     await auditService.log('incident_create', req.home.slug, req.user.username, { id: incident.id });
+    queueAutoLinkSync(req.home.id, 'incident', incident, req.user.username);
     dispatchEvent(req.home.id, 'incident.created', { incidentId: incident.id, severity: parsed.data.severity, type: parsed.data.type });
     res.status(201).json(incident);
   } catch (err) { next(err); }
@@ -168,6 +170,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, incident);
     await auditService.log('incident_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'incident', incident, req.user.username);
     res.json(incident);
   } catch (err) { next(err); }
 });

@@ -5,6 +5,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import * as complaintRepo from '../repositories/complaintRepo.js';
 import * as complaintSurveyRepo from '../repositories/complaintSurveyRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -90,6 +91,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const { id: _id, ...complaintBody } = parsed.data;
     const complaint = await complaintRepo.upsert(req.home.id, { ...complaintBody, reported_by: req.user.username });
     await auditService.log('complaint_create', req.home.slug, req.user.username, { id: complaint?.id });
+    queueAutoLinkSync(req.home.id, 'complaint', complaint, req.user.username);
     res.status(201).json(complaint);
   } catch (err) { next(err); }
 });
@@ -117,6 +119,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, complaint);
     await auditService.log('complaint_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'complaint', complaint, req.user.username);
     res.json(complaint);
   } catch (err) { next(err); }
 });

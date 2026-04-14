@@ -17,6 +17,7 @@ import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
+import { queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
 import { getTrainingTypes } from '../shared/training.js';
@@ -308,6 +309,7 @@ router.post('/supervisions', writeRateLimiter, requireAuth, requireHomeAccess, r
     const record = { ...parsed.data, id: `sup-${randomUUID()}` };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_create', req.home.slug, req.user.username, { staffId: parsed.data.staffId });
+    queueAutoLinkSync(req.home.id, 'supervision', { id: session.id, date: session.date }, req.user.username);
     res.status(201).json(session);
   } catch (err) { next(err); }
 });
@@ -322,6 +324,7 @@ router.put('/supervisions/:id', writeRateLimiter, requireAuth, requireHomeAccess
     const record = { ...parsed.data, id: idParsed.data };
     const session = await supervisionRepo.upsertSession(req.home.id, parsed.data.staffId, record);
     await auditService.log('supervision_update', req.home.slug, req.user.username, { staffId: parsed.data.staffId, id: idParsed.data });
+    queueAutoLinkSync(req.home.id, 'supervision', { id: session.id, date: session.date }, req.user.username);
     res.json(session);
   } catch (err) { next(err); }
 });
@@ -384,6 +387,7 @@ router.post('/fire-drills', writeRateLimiter, requireAuth, requireHomeAccess, re
     const record = { ...parsed.data, id: `fd-${randomUUID()}` };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_create', req.home.slug, req.user.username, { id: record.id });
+    queueAutoLinkSync(req.home.id, 'fire_drill', drill, req.user.username);
     res.status(201).json(drill);
   } catch (err) { next(err); }
 });
@@ -398,6 +402,7 @@ router.put('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAccess,
     const record = { ...parsed.data, id: idParsed.data };
     const drill = await fireDrillRepo.upsertDrill(req.home.id, record);
     await auditService.log('fire_drill_update', req.home.slug, req.user.username, { id: idParsed.data });
+    queueAutoLinkSync(req.home.id, 'fire_drill', drill, req.user.username);
     res.json(drill);
   } catch (err) { next(err); }
 });
@@ -426,6 +431,11 @@ router.put('/:staffId/:typeId', writeRateLimiter, requireAuth, requireHomeAccess
     if (!parsed.success) return zodError(res, parsed);
     const record = await trainingRepo.upsertRecord(req.home.id, staffParsed.data, typeParsed.data, parsed.data);
     await auditService.log('training_record_upsert', req.home.slug, req.user.username, { staffId: staffParsed.data, typeId: typeParsed.data });
+    queueAutoLinkSync(req.home.id, 'training_record', {
+      id: `${staffParsed.data}:${typeParsed.data}`,
+      training_type: typeParsed.data,
+      ...record,
+    }, req.user.username);
     res.json(record);
   } catch (err) { next(err); }
 });

@@ -73,6 +73,33 @@ describe('buildAutoLinksForRecord', () => {
     expect(links[0].source_recorded_at).toBe('2026-04-12T00:00:00Z');
   });
 
+  it('maps safeguarding training to S3 processes evidence', () => {
+    const links = buildAutoLinksForRecord(12, 'training_record', {
+      id: 'S001::safeguarding-adults',
+      training_type: 'safeguarding-adults',
+      completed: '2026-04-05',
+    });
+
+    expect(links).toHaveLength(1);
+    expect(links[0].quality_statement).toBe('S3');
+    expect(links[0].evidence_category).toBe('processes');
+    expect(links[0].source_recorded_at).toBe('2026-04-05T00:00:00Z');
+  });
+
+  it('maps partner feedback to its own statement under partner feedback evidence', () => {
+    const links = buildAutoLinksForRecord(12, 'cqc_partner_feedback', {
+      id: 44,
+      quality_statement: 'WL3',
+      summary: 'Partner noted a strong speaking-up culture.',
+      feedback_date: '2026-04-03',
+    });
+
+    expect(links).toHaveLength(1);
+    expect(links[0].quality_statement).toBe('WL3');
+    expect(links[0].evidence_category).toBe('partner_feedback');
+    expect(links[0].source_recorded_at).toBe('2026-04-03T00:00:00Z');
+  });
+
   it('returns no links for an unknown module', () => {
     const links = buildAutoLinksForRecord(12, 'unknown_module', { id: 'x-1' });
     expect(links).toEqual([]);

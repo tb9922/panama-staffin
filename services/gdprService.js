@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
-import { ValidationError } from '../errors.js';
+import { NotFoundError, ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
 import logger from '../logger.js';
 
@@ -476,12 +476,24 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
   return withTransaction(async (client) => {
     const anon = `[REDACTED-${staffId.slice(0, 4)}]`;
 
+    if (requestId) {
+      const request = await gdprRepo.findRequestById(requestId, homeId, client);
+      if (request && (request.status === 'completed' || request.completed_date || request.completed_by)) {
+        throw new ValidationError('This erasure request has already been completed.');
+      }
+    }
+
     // Capture original name BEFORE anonymising — needed for name-keyed tables
     // (hr_case_notes.author, handover_entries.author, access_log.user_name)
     const { rows: [staffRow] } = await client.query(
       `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
     );
-    const originalName = staffRow?.name;
+    const currentName = staffRow?.name;
+    if (!currentName) throw new NotFoundError('Staff record not found');
+    if (currentName === anon) {
+      throw new ValidationError('Staff record has already been anonymised.');
+    }
+    const originalName = currentName;
     const { rows: staffUsernameRows } = await client.query(
       `SELECT DISTINCT username
          FROM user_home_roles
