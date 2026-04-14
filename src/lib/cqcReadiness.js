@@ -1,6 +1,7 @@
-import { calculateComplianceScore, getEvidenceForStatement, QUALITY_STATEMENTS } from './cqc.js';
+import { calculateComplianceScore, QUALITY_STATEMENTS } from './cqc.js';
 import { getExpectedEvidenceCategories } from './cqcStatementExpectations.js';
-import { normalizeEvidenceCategory } from './cqcEvidenceCategories.js';
+import { getAllEvidenceCategories, normalizeEvidenceCategory } from './cqcEvidenceCategories.js';
+import { collectReadinessEvidenceLinks, getEvidenceLinkDate } from './cqcEvidenceLinkHelpers.js';
 
 export const FRESHNESS_THRESHOLDS_DAYS = {
   peoples_experience: 180,
@@ -24,18 +25,15 @@ function daysBetween(a, b) {
   return Math.round((bDate - aDate) / (1000 * 60 * 60 * 24));
 }
 
+function isWithinDateRange(value, dateRange) {
+  if (!value || !dateRange?.from || !dateRange?.to) return true;
+  const date = new Date(`${value}T00:00:00Z`);
+  return date >= dateRange.from && date <= dateRange.to;
+}
+
 function sortBySeverity(a, b) {
   const order = { missing: 0, weak: 1, stale: 2, partial: 3, strong: 4 };
   return (order[a.status] ?? 99) - (order[b.status] ?? 99) || a.statementId.localeCompare(b.statementId);
-}
-
-function getEvidenceDate(entry) {
-  return (
-    asIsoDate(entry.date_to) ||
-    asIsoDate(entry.date_from) ||
-    asIsoDate(entry.added_at) ||
-    asIsoDate(entry.created_at)
-  );
 }
 
 function getFreshnessThreshold(category) {
@@ -47,6 +45,7 @@ function buildReasonParts({
   metricsMissing,
   staleCount,
   reviewOverdue,
+  requiresReviewCount,
   narrativePresent,
 }) {
   const reasons = [];
@@ -54,6 +53,7 @@ function buildReasonParts({
   if (metricsMissing.length) reasons.push(`Missing metrics: ${metricsMissing.join(', ')}`);
   if (staleCount > 0) reasons.push(`${staleCount} stale evidence item${staleCount === 1 ? '' : 's'}`);
   if (reviewOverdue > 0) reasons.push(`${reviewOverdue} review overdue`);
+  if (requiresReviewCount > 0) reasons.push(`${requiresReviewCount} linked item${requiresReviewCount === 1 ? '' : 's'} awaiting review`);
   if (!narrativePresent) reasons.push('No self-assessment narrative');
   return reasons;
 }
@@ -65,12 +65,15 @@ function computeStatus({
   categoriesExpected,
   staleCount,
   reviewOverdue,
+  requiresReviewCount,
 }) {
   if (evidenceCount === 0 && metricCoverageCount === 0) return 'missing';
   if (evidenceCount === 0) return 'weak';
   if (staleCount > 0 && staleCount >= evidenceCount * 0.5) return 'stale';
   if (categoriesCovered < Math.max(1, categoriesExpected * 0.5)) return 'partial';
-  if (categoriesCovered >= Math.ceil(categoriesExpected * 0.75) && staleCount === 0 && reviewOverdue === 0) return 'strong';
+  if (categoriesCovered >= Math.ceil(categoriesExpected * 0.75) && staleCount === 0 && reviewOverdue === 0 && requiresReviewCount === 0) {
+    return 'strong';
+  }
   return 'partial';
 }
 
@@ -80,16 +83,18 @@ function buildSummary({
   categoriesExpected,
   staleCount,
   reviewOverdue,
+  requiresReviewCount,
   categoriesMissing,
   metricsMissing,
   narrativePresent,
 }) {
   const parts = [
-    `${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`,
+    `${evidenceCount} linked evidence item${evidenceCount === 1 ? '' : 's'}`,
     `across ${categoriesCovered} of ${categoriesExpected} expected categor${categoriesExpected === 1 ? 'y' : 'ies'}`,
   ];
   if (staleCount > 0) parts.push(`${staleCount} stale`);
   if (reviewOverdue > 0) parts.push(`${reviewOverdue} review overdue`);
+  if (requiresReviewCount > 0) parts.push(`${requiresReviewCount} awaiting review`);
   if (categoriesMissing.length) parts.push(`Missing: ${categoriesMissing.join(', ')}`);
   if (metricsMissing.length) parts.push(`Metrics missing: ${metricsMissing.join(', ')}`);
   if (!narrativePresent) parts.push('Narrative missing');
@@ -99,33 +104,40 @@ function buildSummary({
 export function buildReadinessMatrix(data, dateRange, asOfDate) {
   const score = calculateComplianceScore(data, dateRange, asOfDate);
   const asOf = asIsoDate(asOfDate) || asIsoDate(new Date());
+  const readinessLinks = collectReadinessEvidenceLinks(data);
   const narratives = new Map(
     (data?.cqc_statement_narratives || []).map((entry) => [entry.quality_statement, entry])
   );
   const matrix = new Map();
+  const allEvidenceCategories = getAllEvidenceCategories().map((entry) => entry.id);
 
   for (const statement of QUALITY_STATEMENTS) {
-    const evidence = getEvidenceForStatement(statement.id, data, dateRange, asOfDate) || { manualEvidence: [], autoEvidence: [] };
-    const manualEvidence = evidence.manualEvidence || [];
+    const statementLinks = readinessLinks.filter((link) => (
+      link.qualityStatement === statement.id && isWithinDateRange(getEvidenceLinkDate(link), dateRange)
+    ));
     const expectedCategories = [...new Set(getExpectedEvidenceCategories(statement.id).map(normalizeEvidenceCategory).filter(Boolean))];
     const expectedCategorySet = new Set(expectedCategories);
-    const evidenceByCategory = Object.fromEntries(expectedCategories.map((category) => [category, 0]));
+    const evidenceByCategory = Object.fromEntries(allEvidenceCategories.map((category) => [category, 0]));
     const coveredCategories = new Set();
     const staleItems = [];
+    let autoLinkedCount = 0;
+    let requiresReviewCount = 0;
     let reviewOverdue = 0;
     let reviewDueSoon = 0;
     let oldestEvidenceDate = null;
     let newestEvidenceDate = null;
 
-    for (const item of manualEvidence) {
-      const category = normalizeEvidenceCategory(item.evidence_category);
+    for (const item of statementLinks) {
+      const category = normalizeEvidenceCategory(item.evidenceCategory);
       const isExpectedCategory = !!(category && expectedCategorySet.has(category));
-      if (isExpectedCategory) {
+      if (category && Object.prototype.hasOwnProperty.call(evidenceByCategory, category)) {
         evidenceByCategory[category] = (evidenceByCategory[category] || 0) + 1;
-        coveredCategories.add(category);
       }
+      if (isExpectedCategory) coveredCategories.add(category);
+      if (item.autoLinked) autoLinkedCount += 1;
+      if (item.requiresReview) requiresReviewCount += 1;
 
-      const evidenceDate = getEvidenceDate(item);
+      const evidenceDate = getEvidenceLinkDate(item);
       if (evidenceDate) {
         if (!oldestEvidenceDate || evidenceDate < oldestEvidenceDate) oldestEvidenceDate = evidenceDate;
         if (!newestEvidenceDate || evidenceDate > newestEvidenceDate) newestEvidenceDate = evidenceDate;
@@ -134,8 +146,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
           const staleDays = getFreshnessThreshold(category);
           if (daysOld > staleDays) {
             staleItems.push({
-              id: item.id,
-              title: item.title,
+              id: item.id || `${item.sourceModule}:${item.sourceId}:${item.qualityStatement}:${item.evidenceCategory}`,
+              title: item.rationale || `${item.sourceModule} ${item.sourceId}`,
               category,
               addedAt: evidenceDate,
               staleDays,
@@ -145,7 +157,7 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
         }
       }
 
-      const reviewDue = asIsoDate(item.review_due);
+      const reviewDue = asIsoDate(item.reviewDue);
       if (reviewDue) {
         const diff = daysBetween(asOf, reviewDue);
         if (diff < 0) reviewOverdue += 1;
@@ -178,7 +190,8 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       statementName: statement.name,
       category: statement.category,
       cqcRef: statement.cqcRef,
-      evidenceCount: manualEvidence.length,
+      evidenceCount: statementLinks.length,
+      linkedEvidenceCount: statementLinks.length,
       evidenceByCategory,
       expectedCategories,
       categoriesCovered: coveredCategories.size,
@@ -186,9 +199,11 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       categoriesMissing,
       staleItems,
       staleCount: staleItems.length,
-      freshCount: Math.max(0, manualEvidence.length - staleItems.length),
+      freshCount: Math.max(0, statementLinks.length - staleItems.length),
       oldestEvidenceDate,
       newestEvidenceDate,
+      autoLinkedCount,
+      requiresReviewCount,
       metricCoverageCount: Object.keys(metricScores).length,
       metricScores,
       metricsMissing,
@@ -204,6 +219,7 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       metricsMissing,
       staleCount: entry.staleCount,
       reviewOverdue,
+      requiresReviewCount,
       narrativePresent,
     });
     entry.summary = buildSummary({
@@ -212,6 +228,7 @@ export function buildReadinessMatrix(data, dateRange, asOfDate) {
       categoriesExpected: entry.categoriesExpected,
       staleCount: entry.staleCount,
       reviewOverdue,
+      requiresReviewCount,
       categoriesMissing,
       metricsMissing,
       narrativePresent,

@@ -22,6 +22,7 @@ import {
   getCqcNarratives, upsertCqcNarrative,
   getCqcPartnerFeedback, createCqcPartnerFeedback, updateCqcPartnerFeedback, deleteCqcPartnerFeedback,
   getCqcObservations, createCqcObservation, updateCqcObservation, deleteCqcObservation,
+  getCqcEvidenceLinks, confirmCqcEvidenceLink, confirmBulkCqcEvidenceLinks,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
@@ -29,6 +30,12 @@ import {
 } from '../lib/cqc.js';
 import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
 import { getAllEvidenceCategories, getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
+import {
+  buildStructuredFallbackEvidenceLinks,
+  filterKnownActiveEvidenceLinks,
+  getEvidenceLinkDate,
+  getEvidenceLinkSourceLabel,
+} from '../lib/cqcEvidenceLinkHelpers.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
@@ -205,6 +212,11 @@ function formatDateTime(value) {
   });
 }
 
+function formatLinkedEvidenceDate(link) {
+  const isoDate = getEvidenceLinkDate(link);
+  return isoDate ? formatDate(new Date(`${isoDate}T00:00:00Z`)) : '-';
+}
+
 function readinessBadgeClass(status) {
   if (status === 'strong') return BADGE.green;
   if (status === 'stale') return BADGE.amber;
@@ -326,8 +338,11 @@ function CQCEvidenceInner({ data }) {
   const [liveReadiness, setLiveReadiness] = useState(null);
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState(null);
+  const [statementLinks, setStatementLinks] = useState({});
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatements, setExpandedStatements] = useState([]);
+  const [confirmingLinkIds, setConfirmingLinkIds] = useState([]);
+  const [confirmingStatements, setConfirmingStatements] = useState([]);
   const [showAllReadinessGaps, setShowAllReadinessGaps] = useState(false);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
@@ -521,6 +536,79 @@ function CQCEvidenceInner({ data }) {
     };
   }, [data, evidence, narratives, partnerFeedback, observations]);
 
+  const loadStatementLinks = useCallback(async (statementId, { force = false } = {}) => {
+    const home = getCurrentHome();
+    if (!home || !statementId || !dataWithEvidence) return;
+    const rangeKey = `${statementId}:${formatDate(dateRange.from)}:${formatDate(dateRange.to)}`;
+    const cached = statementLinks[statementId];
+    if (!force && cached?.rangeKey === rangeKey && (cached.loading || Array.isArray(cached.rows))) return;
+
+    setStatementLinks((prev) => ({
+      ...prev,
+      [statementId]: {
+        rows: prev[statementId]?.rows || [],
+        loading: true,
+        error: null,
+        rangeKey,
+      },
+    }));
+
+    try {
+      const result = await getCqcEvidenceLinks(home, {
+        statement: statementId,
+        dateFrom: formatDate(dateRange.from),
+        dateTo: formatDate(dateRange.to),
+        limit: 500,
+      });
+      if (!isMounted.current) return;
+      const filteredRows = filterKnownActiveEvidenceLinks(result?.rows || [], dataWithEvidence);
+      const fallbackRows = buildStructuredFallbackEvidenceLinks(dataWithEvidence, filteredRows)
+        .filter((entry) => (
+          entry.qualityStatement === statementId &&
+          (!getEvidenceLinkDate(entry) || (
+            getEvidenceLinkDate(entry) >= formatDate(dateRange.from) &&
+            getEvidenceLinkDate(entry) <= formatDate(dateRange.to)
+          ))
+        ));
+      const rows = [...filteredRows, ...fallbackRows].sort((a, b) => {
+        const aDate = getEvidenceLinkDate(a) || '';
+        const bDate = getEvidenceLinkDate(b) || '';
+        return String(bDate).localeCompare(String(aDate));
+      });
+      setStatementLinks((prev) => ({
+        ...prev,
+        [statementId]: {
+          rows,
+          loading: false,
+          error: null,
+          rangeKey,
+          total: rows.length,
+        },
+      }));
+    } catch (err) {
+      if (!isMounted.current) return;
+      setStatementLinks((prev) => ({
+        ...prev,
+        [statementId]: {
+          rows: prev[statementId]?.rows || [],
+          loading: false,
+          error: err.message || 'Failed to load linked evidence',
+          rangeKey,
+        },
+      }));
+    }
+  }, [dataWithEvidence, dateRange, statementLinks]);
+
+  useEffect(() => {
+    setStatementLinks({});
+  }, [dataWithEvidence, dateRangeDays]);
+
+  useEffect(() => {
+    expandedStatements.forEach((statementId) => {
+      loadStatementLinks(statementId).catch(() => {});
+    });
+  }, [expandedStatements, loadStatementLinks]);
+
   const score = useMemo(() => {
     if (!dataWithEvidence?.config) return null;
     return calculateComplianceScore(dataWithEvidence, dateRange, today);
@@ -647,11 +735,62 @@ function CQCEvidenceInner({ data }) {
   }
 
   function toggleExpandedStatement(statementId) {
-    setExpandedStatements((prev) => (
-      prev.includes(statementId)
-        ? prev.filter((entry) => entry !== statementId)
-        : [...prev, statementId]
-    ));
+    setExpandedStatements((prev) => {
+      if (prev.includes(statementId)) return prev.filter((entry) => entry !== statementId);
+      loadStatementLinks(statementId).catch(() => {});
+      return [...prev, statementId];
+    });
+  }
+
+  async function handleConfirmEvidenceLink(statementId, linkId) {
+    if (!linkId || confirmingLinkIds.includes(linkId)) return;
+    const home = getCurrentHome();
+    setConfirmingLinkIds((prev) => [...prev, linkId]);
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      await confirmCqcEvidenceLink(home, linkId);
+      await Promise.all([
+        loadStatementLinks(statementId, { force: true }),
+        loadReadiness(),
+      ]);
+      showToast({
+        title: 'Linked evidence confirmed',
+        message: `${statementId} no longer counts this item as awaiting review.`,
+      });
+    } catch (err) {
+      setStructuredError(`Failed to confirm linked evidence: ${err.message}`);
+    } finally {
+      setConfirmingLinkIds((prev) => prev.filter((entry) => entry !== linkId));
+    }
+  }
+
+  async function handleConfirmAllEvidenceLinks(statementId) {
+    if (confirmingStatements.includes(statementId)) return;
+    const home = getCurrentHome();
+    const pendingIds = (statementLinks[statementId]?.rows || [])
+      .filter((entry) => entry.requiresReview && entry.id)
+      .map((entry) => entry.id);
+    if (pendingIds.length === 0) return;
+
+    setConfirmingStatements((prev) => [...prev, statementId]);
+    setStructuredError(null);
+    setStructuredNotice(null);
+    try {
+      await confirmBulkCqcEvidenceLinks(home, pendingIds);
+      await Promise.all([
+        loadStatementLinks(statementId, { force: true }),
+        loadReadiness(),
+      ]);
+      showToast({
+        title: 'Linked evidence confirmed',
+        message: `${pendingIds.length} pending link${pendingIds.length === 1 ? '' : 's'} were confirmed for ${statementId}.`,
+      });
+    } catch (err) {
+      setStructuredError(`Failed to confirm linked evidence: ${err.message}`);
+    } finally {
+      setConfirmingStatements((prev) => prev.filter((entry) => entry !== statementId));
+    }
   }
 
   async function handleSaveNarrative(statementId) {
@@ -865,7 +1004,7 @@ function CQCEvidenceInner({ data }) {
     try {
       await new Promise(r => setTimeout(r, 100));
       const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
-      generateEvidencePackPDF(dataWithEvidence, dateRangeDays);
+      generateEvidencePackPDF(dataWithEvidence, dateRangeDays, null, readinessPayload);
       logReportDownload('cqc-evidence', `${dateRangeDays} days`);
       showToast({
         title: 'Evidence pack export started',
@@ -1060,7 +1199,16 @@ function CQCEvidenceInner({ data }) {
       )}
 
       <div className="mb-4 flex items-center justify-end gap-2">
-        <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => setExpandedStatements(ALL_STATEMENT_IDS)}>
+        <button
+          type="button"
+          className={`${BTN.ghost} ${BTN.sm}`}
+          onClick={() => {
+            setExpandedStatements(ALL_STATEMENT_IDS);
+            ALL_STATEMENT_IDS.forEach((statementId) => {
+              loadStatementLinks(statementId).catch(() => {});
+            });
+          }}
+        >
           Expand all
         </button>
         <button type="button" className={`${BTN.ghost} ${BTN.sm}`} onClick={() => setExpandedStatements([])}>
@@ -1084,7 +1232,10 @@ function CQCEvidenceInner({ data }) {
               const ev = evidenceByStatement[qs.id];
               const readiness = readinessEntries[qs.id];
               const autoCount = ev?.autoEvidence?.length || 0;
-              const manualCount = ev?.manualEvidence?.length || 0;
+              const directManualEvidence = (ev?.manualEvidence || []).filter((entry) => (entry?.source_kind || 'manual_evidence') === 'manual_evidence');
+              const manualCount = directManualEvidence.length;
+              const statementLinkState = statementLinks[qs.id] || { rows: [], loading: false, error: null, total: 0 };
+              const pendingLinkIds = statementLinkState.rows.filter((entry) => entry.requiresReview && entry.id).map((entry) => entry.id);
               const feedbackItems = partnerFeedbackByStatement[qs.id] || [];
               const observationItems = observationsByStatement[qs.id] || [];
               const narrativeDraft = getNarrativeDraft(qs.id);
@@ -1108,7 +1259,10 @@ function CQCEvidenceInner({ data }) {
                     </button>
                     <div className="flex items-center gap-3">
                       {readiness && <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>}
-                      <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
+                      <span className="text-xs text-gray-500">
+                        {readiness?.linkedEvidenceCount ?? manualCount} linked item{(readiness?.linkedEvidenceCount ?? manualCount) === 1 ? '' : 's'}
+                      </span>
+                      {readiness?.requiresReviewCount > 0 ? <span className={BADGE.amber}>{readiness.requiresReviewCount} to review</span> : null}
                       {ev?.autoEvidence?.map((ae, i) => (
                         <span key={i} className={`text-sm font-bold ${metricColor(ae.value, ae.lowerIsBetter)}`}>
                           {ae.value}{ae.unit}
@@ -1128,15 +1282,99 @@ function CQCEvidenceInner({ data }) {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>
                             <span className="text-xs text-gray-500">
-                              {readiness.evidenceCount} items · {readiness.categoriesCovered}/{readiness.categoriesExpected} expected categories covered
+                              {readiness.linkedEvidenceCount ?? readiness.evidenceCount} linked items | {readiness.categoriesCovered}/{readiness.categoriesExpected} expected categories covered
                             </span>
+                            {readiness.autoLinkedCount > 0 && <span className={BADGE.blue}>{readiness.autoLinkedCount} auto-linked</span>}
+                            {readiness.requiresReviewCount > 0 && <span className={BADGE.amber}>{readiness.requiresReviewCount} awaiting review</span>}
                             {readiness.staleCount > 0 && <span className={BADGE.amber}>{readiness.staleCount} stale</span>}
                             {readiness.reviewOverdue > 0 && <span className={BADGE.red}>{readiness.reviewOverdue} overdue</span>}
                             {!readiness.narrativePresent && <span className={BADGE.gray}>Narrative missing</span>}
                           </div>
                           <p className="mt-2 text-xs text-gray-500">{readiness.summary}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {Object.entries(readiness.evidenceByCategory || {})
+                              .filter(([, count]) => count > 0)
+                              .map(([category, count]) => (
+                                <span key={category} className={BADGE.gray}>
+                                  {getEvidenceCategoryLabel(category)}: {count}
+                                </span>
+                              ))}
+                          </div>
                         </div>
                       )}
+
+                      <div className="mb-3">
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">Linked Evidence</div>
+                            <p className="text-[11px] text-gray-500">This is the evidence the readiness engine is counting for this statement.</p>
+                          </div>
+                          {canEdit && pendingLinkIds.length > 1 ? (
+                            <button
+                              type="button"
+                              className={`${BTN.secondary} ${BTN.xs}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConfirmAllEvidenceLinks(qs.id);
+                              }}
+                              disabled={confirmingStatements.includes(qs.id)}
+                            >
+                              {confirmingStatements.includes(qs.id) ? 'Confirming...' : `Confirm all ${pendingLinkIds.length}`}
+                            </button>
+                          ) : null}
+                        </div>
+                        {statementLinkState.loading ? (
+                          <LoadingState compact message="Loading linked evidence..." />
+                        ) : statementLinkState.error ? (
+                          <InlineNotice variant="warning" role="status">
+                            {statementLinkState.error}
+                          </InlineNotice>
+                        ) : statementLinkState.rows.length === 0 ? (
+                          <EmptyState
+                            compact
+                            title="No linked evidence yet"
+                            description="This statement will grow stronger once operational records or manual evidence are linked into the readiness layer."
+                          />
+                        ) : (
+                          <div className="space-y-1.5">
+                            {statementLinkState.rows.map((entry) => (
+                              <div
+                                key={`${entry.id || 'derived'}-${entry.sourceModule}-${entry.sourceId}-${entry.qualityStatement}-${entry.evidenceCategory}`}
+                                className="rounded bg-gray-50 px-2 py-2"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-800">
+                                      {getEvidenceLinkSourceLabel(entry.sourceModule)} {entry.sourceId}
+                                      <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{getEvidenceCategoryLabel(entry.evidenceCategory)}</span>
+                                      {entry.autoLinked ? <span className={`${BADGE.blue} ml-1.5 text-[10px]`}>Auto-linked</span> : <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>Direct</span>}
+                                      {entry.requiresReview ? <span className={`${BADGE.amber} ml-1.5 text-[10px]`}>Needs review</span> : null}
+                                    </div>
+                                    <div className="mt-0.5 text-[10px] text-gray-400">
+                                      {formatLinkedEvidenceDate(entry)}
+                                      {entry.linkedBy ? ` | linked by ${entry.linkedBy}` : ''}
+                                    </div>
+                                    {entry.rationale ? <div className="mt-1 text-xs text-gray-500">{entry.rationale}</div> : null}
+                                  </div>
+                                  {canEdit && entry.requiresReview && entry.id ? (
+                                    <button
+                                      type="button"
+                                      className={`${BTN.secondary} ${BTN.xs}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConfirmEvidenceLink(qs.id, entry.id);
+                                      }}
+                                      disabled={confirmingLinkIds.includes(entry.id)}
+                                    >
+                                      {confirmingLinkIds.includes(entry.id) ? 'Confirming...' : 'Confirm'}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       {/* Auto-computed metrics */}
                       {autoCount > 0 && (
@@ -1147,7 +1385,7 @@ function CQCEvidenceInner({ data }) {
                               <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded bg-gray-50">
                                 <span className="text-sm text-gray-700">{ae.label}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-sm font-bold ${ae.value >= 90 ? 'text-emerald-600' : ae.value >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                                  <span className={`text-sm font-bold ${metricColor(ae.value, ae.lowerIsBetter)}`}>
                                     {ae.value}{ae.unit}
                                   </span>
                                   {ae.detail && <span className="text-[10px] text-gray-400">{ae.detail}</span>}
@@ -1164,7 +1402,7 @@ function CQCEvidenceInner({ data }) {
                         <div className="mb-3">
                           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Manual Evidence</div>
                           <div className="space-y-1.5">
-                            {ev.manualEvidence.map(me => (
+                            {directManualEvidence.map(me => (
                               <div key={me.id} className="flex items-start justify-between py-1.5 px-2 rounded bg-gray-50">
                                 <div>
                                   <div className="text-sm font-medium text-gray-800">

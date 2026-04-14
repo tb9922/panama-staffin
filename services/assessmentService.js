@@ -20,6 +20,7 @@ import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as cqcEvidenceLinksRepo from '../repositories/cqcEvidenceLinksRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as cqcPartnerFeedbackRepo from '../repositories/cqcPartnerFeedbackRepo.js';
 import * as cqcObservationRepo from '../repositories/cqcObservationRepo.js';
@@ -58,8 +59,8 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     staffResult, overrides, training, supervisions, appraisals,
     fireDrills, incidents, complaints, complaintSurveys,
     maintenance, ipcAudits, risks, policies,
-    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcNarratives,
-    cqcPartnerFeedback, cqcObservations,
+    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcEvidenceLinks,
+    cqcNarratives, cqcPartnerFeedback, cqcObservations,
   ] = await Promise.all([
     staffRepo.findByHome(homeId),
     overrideRepo.findByHome(homeId, from, to),
@@ -80,6 +81,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     careCertRepo.findByHome(homeId),
     onboardingRepo.findByHome(homeId),
     cqcEvidenceRepo.findByHome(homeId, { limit: 500 }),
+    cqcEvidenceLinksRepo.findAllByHome(homeId, { dateFrom: windowFrom, dateTo: windowTo }),
     cqcNarrativeRepo.findByHome(homeId),
     cqcPartnerFeedbackRepo.findByHome(homeId),
     cqcObservationRepo.findByHome(homeId),
@@ -106,6 +108,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     care_certificate: careCert || {},
     onboarding: onboarding || {},
     cqc_evidence: cqcEvidence?.rows || cqcEvidence || [],
+    cqc_evidence_links: cqcEvidenceLinks || [],
     cqc_statement_narratives: cqcNarratives || [],
     cqc_partner_feedback: cqcPartnerFeedback || [],
     cqc_observations: cqcObservations || [],
@@ -204,7 +207,8 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
 }
 
 export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = formatDate(new Date())) {
-  const data = await gatherCqcData(homeId);
+  const dateRange = getDateRange(dateRangeDays);
+  const data = await gatherCqcData(homeId, formatDate(dateRange.from), formatDate(dateRange.to));
   if (!data) return null;
-  return buildReadinessPayload(data, getDateRange(dateRangeDays), asOfDate);
+  return buildReadinessPayload(data, dateRange, asOfDate);
 }

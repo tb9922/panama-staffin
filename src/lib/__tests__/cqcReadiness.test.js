@@ -19,7 +19,10 @@ function buildBaseData() {
     care_certificate: {},
     onboarding: {},
     cqc_evidence: [],
+    cqc_evidence_links: [],
     cqc_statement_narratives: [],
+    cqc_partner_feedback: [],
+    cqc_observations: [],
   };
 }
 
@@ -57,7 +60,7 @@ describe('cqcReadiness', () => {
       },
     ];
 
-    const matrix = buildReadinessMatrix(data, getDateRange(28), '2026-04-12');
+    const matrix = buildReadinessMatrix(data, getDateRange(365), '2026-04-12');
     const s1 = matrix.get('S1');
 
     expect(s1.evidenceByCategory.staff_leader_feedback).toBe(1);
@@ -72,12 +75,47 @@ describe('cqcReadiness', () => {
 
   it('treats a statement with no manual evidence and no working auto-metrics as missing', () => {
     const data = buildBaseData();
-    const matrix = buildReadinessMatrix(data, getDateRange(28), '2026-04-12');
+    const matrix = buildReadinessMatrix(data, getDateRange(365), '2026-04-12');
     const wl6 = matrix.get('WL6');
 
     expect(wl6.evidenceCount).toBe(0);
     expect(wl6.metricCoverageCount).toBe(0);
     expect(wl6.status).toBe('missing');
+  });
+
+  it('prefers stored evidence links and ignores links whose source record is no longer active', () => {
+    const data = buildBaseData();
+    data.incidents = [{ id: 'inc-1', type: 'fall', safeguarding_referral: false }];
+    data.cqc_evidence_links = [
+      {
+        id: 1,
+        sourceModule: 'incident',
+        sourceId: 'inc-1',
+        qualityStatement: 'S4',
+        evidenceCategory: 'processes',
+        autoLinked: true,
+        requiresReview: true,
+        sourceRecordedAt: '2026-04-10T00:00:00Z',
+      },
+      {
+        id: 2,
+        sourceModule: 'incident',
+        sourceId: 'deleted-inc',
+        qualityStatement: 'S4',
+        evidenceCategory: 'processes',
+        autoLinked: true,
+        requiresReview: true,
+        sourceRecordedAt: '2026-04-10T00:00:00Z',
+      },
+    ];
+
+    const matrix = buildReadinessMatrix(data, getDateRange(365), '2026-04-12');
+    const s4 = matrix.get('S4');
+
+    expect(s4.linkedEvidenceCount).toBe(1);
+    expect(s4.autoLinkedCount).toBe(1);
+    expect(s4.requiresReviewCount).toBe(1);
+    expect(s4.evidenceByCategory.processes).toBe(1);
   });
 
   it('summarizes question readiness and sorts gaps by severity', () => {

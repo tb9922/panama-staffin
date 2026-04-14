@@ -6,6 +6,7 @@ import { MOCK_CONFIG } from '../../src/test/fixtures/schedulingData.js';
 let homeId;
 
 beforeAll(async () => {
+  await pool.query(`DELETE FROM cqc_evidence_links WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_partner_feedback WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_observations WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
   await pool.query(`DELETE FROM cqc_statement_narratives WHERE home_id IN (SELECT id FROM homes WHERE slug = 'assess-ready-home')`).catch(() => {});
@@ -51,10 +52,22 @@ beforeAll(async () => {
        'Learning points discussed during handover.','Deputy Manager','2026-07-01','admin')`,
     ['snap-obs-1', homeId]
   );
+
+  await pool.query(
+    `INSERT INTO cqc_evidence_links (
+       home_id, source_module, source_id, quality_statement, evidence_category,
+       rationale, auto_linked, requires_review, linked_by, source_recorded_at
+     ) VALUES
+       ($1,'cqc_evidence','snap-ev-1','S1','processes','Learning review',false,false,'admin','2026-03-01T00:00:00Z'),
+       ($1,'cqc_observation','snap-obs-1','S1','observation','Observed learning handover',true,true,'admin','2026-03-10T08:30:00Z'),
+       ($1,'cqc_partner_feedback','snap-pf-1','WL6','partner_feedback','Family communication review',false,false,'admin','2026-03-15T00:00:00Z')`,
+    [homeId]
+  );
 });
 
 afterAll(async () => {
   if (homeId) {
+    await pool.query('DELETE FROM cqc_evidence_links WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_partner_feedback WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_observations WHERE home_id = $1', [homeId]).catch(() => {});
     await pool.query('DELETE FROM cqc_statement_narratives WHERE home_id = $1', [homeId]).catch(() => {});
@@ -77,6 +90,8 @@ describe('assessmentService readiness snapshots', () => {
     expect(s1).toBeTruthy();
     expect(s1.narrativePresent).toBe(true);
     expect(s1.evidenceByCategory.observation).toBeGreaterThanOrEqual(1);
+    expect(s1.linkedEvidenceCount).toBeGreaterThanOrEqual(2);
+    expect(s1.requiresReviewCount).toBe(1);
     expect(['strong', 'partial', 'stale']).toContain(s1.status);
 
     const wl6 = snapshot.result.readiness.entries.find((entry) => entry.statementId === 'WL6');

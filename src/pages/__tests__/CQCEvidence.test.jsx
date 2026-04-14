@@ -29,6 +29,9 @@ vi.mock('../../lib/api.js', async () => {
     getCqcNarratives: vi.fn(),
     getCqcPartnerFeedback: vi.fn(),
     getCqcObservations: vi.fn(),
+    getCqcEvidenceLinks: vi.fn(),
+    confirmCqcEvidenceLink: vi.fn(),
+    confirmBulkCqcEvidenceLinks: vi.fn(),
     createCqcEvidence: vi.fn(),
     updateCqcEvidence: vi.fn(),
     upsertCqcNarrative: vi.fn(),
@@ -101,11 +104,22 @@ function setupApiMocks() {
         category: 'safe',
         status: 'partial',
         evidenceCount: 1,
+        linkedEvidenceCount: 2,
+        autoLinkedCount: 1,
+        requiresReviewCount: 1,
         categoriesCovered: 1,
         categoriesExpected: 4,
         staleCount: 0,
         reviewOverdue: 0,
         narrativePresent: false,
+        evidenceByCategory: {
+          peoples_experience: 0,
+          staff_leader_feedback: 0,
+          partner_feedback: 0,
+          observation: 1,
+          processes: 1,
+          outcomes: 0,
+        },
         summary: '1 evidence item. Missing: observation, processes, outcomes.',
       },
     ],
@@ -130,6 +144,37 @@ function setupApiMocks() {
   api.getCqcNarratives.mockResolvedValue([]);
   api.getCqcPartnerFeedback.mockResolvedValue([]);
   api.getCqcObservations.mockResolvedValue([]);
+  api.getCqcEvidenceLinks.mockResolvedValue({
+    rows: [
+      {
+        id: 10,
+        sourceModule: 'cqc_observation',
+        sourceId: 'obs-001',
+        qualityStatement: 'S1',
+        evidenceCategory: 'observation',
+        rationale: 'Observed safer handover practice',
+        autoLinked: true,
+        requiresReview: true,
+        linkedBy: 'admin',
+        sourceRecordedAt: '2026-03-08T10:00:00Z',
+      },
+      {
+        id: 11,
+        sourceModule: 'cqc_evidence',
+        sourceId: 'ev-001',
+        qualityStatement: 'S1',
+        evidenceCategory: 'processes',
+        rationale: 'Manual learning review',
+        autoLinked: false,
+        requiresReview: false,
+        linkedBy: 'admin',
+        sourceRecordedAt: '2026-03-08T00:00:00Z',
+      },
+    ],
+    _total: 2,
+  });
+  api.confirmCqcEvidenceLink.mockResolvedValue({});
+  api.confirmBulkCqcEvidenceLinks.mockResolvedValue({});
   api.createCqcEvidence.mockResolvedValue({
     id: 'ev-001',
     version: 0,
@@ -311,6 +356,38 @@ describe('CQCEvidence', () => {
     });
     expect(screen.getByText('Readiness Gaps')).toBeInTheDocument();
     expect(api.getCqcReadiness).toHaveBeenCalled();
+  });
+
+  it('shows linked evidence for an expanded statement and lets managers confirm auto-linked rows', async () => {
+    const user = userEvent.setup();
+    api.getCqcObservations.mockResolvedValue([
+      {
+        id: 'obs-001',
+        quality_statement: 'S1',
+        observed_at: '2026-03-08T10:00:00Z',
+        title: 'Observed handover learning',
+        notes: 'Observed safer handover practice',
+        evidence_owner: 'Deputy Manager',
+      },
+    ]);
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('CQC Compliance Evidence')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: /^Expand$/ })[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Linked Evidence').length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Observed safer handover practice/i).length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.confirmCqcEvidenceLink).toHaveBeenCalledWith('test-home', 10);
+    });
   });
 
   it('displays Training Compliance and Staffing Fill Rate KPI cards', async () => {

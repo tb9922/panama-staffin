@@ -55,6 +55,38 @@ function addDateRange(where, params, dateFrom, dateTo) {
   }
 }
 
+function buildHomeQuery(
+  homeId,
+  { sourceModules, statements, categories, autoLinked, requiresReview, dateFrom, dateTo } = {}
+) {
+  const where = ['home_id = $1', 'deleted_at IS NULL'];
+  const params = [homeId];
+
+  if (sourceModules?.length) {
+    params.push(sourceModules);
+    where.push(`source_module = ANY($${params.length}::text[])`);
+  }
+  if (statements?.length) {
+    params.push(statements);
+    where.push(`quality_statement = ANY($${params.length}::text[])`);
+  }
+  if (categories?.length) {
+    params.push(categories);
+    where.push(`evidence_category = ANY($${params.length}::text[])`);
+  }
+  if (autoLinked !== undefined) {
+    params.push(autoLinked);
+    where.push(`auto_linked = $${params.length}`);
+  }
+  if (requiresReview !== undefined) {
+    params.push(requiresReview);
+    where.push(`requires_review = $${params.length}`);
+  }
+  addDateRange(where, params, dateFrom, dateTo);
+
+  return { where, params };
+}
+
 export async function findById(id, homeId, client = pool) {
   const { rows } = await client.query(
     `SELECT ${COLS}
@@ -103,31 +135,15 @@ export async function findByHome(
   { sourceModules, statements, categories, autoLinked, requiresReview, dateFrom, dateTo, limit = 100, offset = 0 } = {},
   client = pool
 ) {
-  const where = ['home_id = $1', 'deleted_at IS NULL'];
-  const params = [homeId];
-
-  if (sourceModules?.length) {
-    params.push(sourceModules);
-    where.push(`source_module = ANY($${params.length}::text[])`);
-  }
-  if (statements?.length) {
-    params.push(statements);
-    where.push(`quality_statement = ANY($${params.length}::text[])`);
-  }
-  if (categories?.length) {
-    params.push(categories);
-    where.push(`evidence_category = ANY($${params.length}::text[])`);
-  }
-  if (autoLinked !== undefined) {
-    params.push(autoLinked);
-    where.push(`auto_linked = $${params.length}`);
-  }
-  if (requiresReview !== undefined) {
-    params.push(requiresReview);
-    where.push(`requires_review = $${params.length}`);
-  }
-  addDateRange(where, params, dateFrom, dateTo);
-
+  const { where, params } = buildHomeQuery(homeId, {
+    sourceModules,
+    statements,
+    categories,
+    autoLinked,
+    requiresReview,
+    dateFrom,
+    dateTo,
+  });
   params.push(Math.min(limit, 500), Math.max(offset, 0));
   const { rows } = await client.query(
     `SELECT ${COLS}, COUNT(*) OVER() AS _total
@@ -138,6 +154,30 @@ export async function findByHome(
     params
   );
   return paginateResult(rows, shapeRow);
+}
+
+export async function findAllByHome(
+  homeId,
+  { sourceModules, statements, categories, autoLinked, requiresReview, dateFrom, dateTo } = {},
+  client = pool
+) {
+  const { where, params } = buildHomeQuery(homeId, {
+    sourceModules,
+    statements,
+    categories,
+    autoLinked,
+    requiresReview,
+    dateFrom,
+    dateTo,
+  });
+  const { rows } = await client.query(
+    `SELECT ${COLS}
+       FROM cqc_evidence_links
+      WHERE ${where.join(' AND ')}
+      ORDER BY COALESCE(source_recorded_at, created_at) DESC, created_at DESC, id DESC`,
+    params
+  );
+  return rows.map(shapeRow);
 }
 
 export async function countByStatement(homeId, { dateFrom, dateTo } = {}, client = pool) {

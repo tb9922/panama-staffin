@@ -398,13 +398,13 @@ export function generateStaffPDF(data) {
 }
 
 // CQC Compliance Evidence Pack PDF
-export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = null) {
+export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = null, liveReadiness = null) {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const today = formatDate(new Date());
   const dateRange = getDateRange(dateRangeDays);
   // Use snapshot result if provided, otherwise compute live
   const score = snapshot?.result || calculateComplianceScore(data, dateRange, today);
-  const readiness = snapshot?.result?.readiness || (() => {
+  const readiness = snapshot?.result?.readiness || liveReadiness || (() => {
     const matrix = buildReadinessMatrix(data, dateRange, today);
     return {
       entries: serialiseReadinessMatrix(matrix),
