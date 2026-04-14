@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import AppLayout from '../AppLayout.jsx';
 
@@ -153,8 +153,9 @@ describe('AppLayout', () => {
   it('shows username and role in the sidebar footer', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false });
     renderLayout();
-    expect(screen.getByText('Admin User')).toBeInTheDocument();
-    expect(screen.getAllByText(/Home Manager/).length).toBeGreaterThanOrEqual(1);
+    const sidebar = screen.getByRole('complementary', { name: 'Main navigation' });
+    expect(within(sidebar).getByText('Admin User')).toBeInTheDocument();
+    expect(within(sidebar).getByText(/Home Manager/)).toBeInTheDocument();
   });
 
   it('shows username when displayName is absent', () => {
@@ -309,8 +310,9 @@ describe('AppLayout', () => {
       homeRole: 'finance_officer',
     });
     renderLayout({ username: 'finance', role: 'viewer' }, { route: '/handover' });
-    expect(screen.getByText('Scheduling')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Handover Book' })).toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: 'Main navigation' });
+    expect(within(sidebar).getByRole('button', { name: 'Scheduling' })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: 'Handover Book' })).toBeInTheDocument();
   });
 
   // 8. Platform section only visible to platform admin
@@ -381,8 +383,9 @@ describe('AppLayout', () => {
   // 14. Logout and Password buttons present in sidebar
   it('shows Logout and Password buttons in the sidebar footer', () => {
     renderLayout();
-    expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: 'Main navigation' });
+    expect(within(sidebar).getByRole('button', { name: 'Logout' })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: 'Password' })).toBeInTheDocument();
   });
 
   // 15. Top-level nav items (Dashboard)

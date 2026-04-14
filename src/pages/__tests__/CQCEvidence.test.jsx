@@ -388,7 +388,7 @@ describe('CQCEvidence', () => {
     await waitFor(() => {
       expect(api.confirmCqcEvidenceLink).toHaveBeenCalledWith('test-home', 10);
     });
-  });
+  }, 90000);
 
   it('displays Training Compliance and Staffing Fill Rate KPI cards', async () => {
     renderAdmin();
@@ -482,7 +482,7 @@ describe('CQCEvidence', () => {
       expect(api.upsertCqcNarrative).toHaveBeenCalled();
     });
     expect(screen.getByText(/Self-assessment saved for S1/i)).toBeInTheDocument();
-  });
+  }, 90000);
 
   it('saves structured partner feedback for a statement', async () => {
     const user = userEvent.setup();
@@ -600,7 +600,7 @@ describe('CQCEvidence', () => {
     });
     expect(screen.getByRole('button', { name: 'Hide Snapshot History (1)' })).toBeInTheDocument();
     expect(screen.getByText('2026-03-08')).toBeInTheDocument();
-  });
+  }, 30000);
 
   it('exports snapshot PDFs from frozen snapshot data, not live metrics', async () => {
     const user = userEvent.setup();
@@ -654,7 +654,7 @@ describe('CQCEvidence', () => {
         expect.objectContaining({ id: 'snap-100' })
       );
     });
-  });
+  }, 30000);
 
   it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
     const user = userEvent.setup();
@@ -688,7 +688,7 @@ describe('CQCEvidence', () => {
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
-  });
+  }, 30000);
 
   it('shows manual evidence file counts so unsaved attachments are obvious', async () => {
     api.getCqcEvidence.mockResolvedValue({

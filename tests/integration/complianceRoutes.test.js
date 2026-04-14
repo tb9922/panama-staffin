@@ -15,7 +15,7 @@ const PREFIX = 'compliance-route-test';
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'CompliancePass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
-const STAFF_ID = `${PREFIX}-staff-01`;
+const STAFF_ID = 'CRT-STAFF-01';
 
 let token;
 let homeId;
@@ -184,7 +184,7 @@ describe('Compliance route create flows', () => {
         outbreak: {
           suspected: true,
           type: 'Norovirus',
-          status: 'confirmed',
+          status: 'suspected',
         },
       })
       .expect(201);

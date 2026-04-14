@@ -8,7 +8,7 @@ const PREFIX = 'hr-seam-test';
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'HrSeamPass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
-const STAFF_ID = `${PREFIX}-staff-01`;
+const STAFF_ID = 'HRS-STAFF-01';
 
 let token;
 let homeId;
