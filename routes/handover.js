@@ -11,6 +11,12 @@ const router = Router();
 
 const dateSchema = nullableDateInput;
 const uuidSchema = z.string().uuid('Invalid entry ID');
+const rangeQuerySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD'),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD'),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+});
 
 const entryBodySchema = z.object({
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
@@ -33,6 +39,23 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     if (!dateParam.success || !dateParam.data) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
     const result = await handoverRepo.findByHomeAndDate(req.home.id, dateParam.data);
     res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/handover/range?home=X&from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/range', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
+  try {
+    const parsed = rangeQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const result = await handoverRepo.findByHomeAndDateRange(
+      req.home.id,
+      parsed.data.from,
+      parsed.data.to,
+      { limit: parsed.data.limit, offset: parsed.data.offset }
+    );
+    res.json(result);
   } catch (err) {
     next(err);
   }

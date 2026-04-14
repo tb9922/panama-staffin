@@ -27,6 +27,10 @@ const SHIFT_EDIT_OPTIONS = [
   { value: 'AG-N', label: 'AG-N - Agency night' },
 ];
 
+function sortStaffOptions(staff) {
+  return [...staff].sort((a, b) => a.name.localeCompare(b.name, 'en-GB', { sensitivity: 'base' }) || a.id.localeCompare(b.id, 'en-GB', { sensitivity: 'base' }));
+}
+
 function getTitle(modal) {
   if (modal === 'sick') return 'Mark Sick';
   if (modal === 'al') return 'Book AL';
@@ -84,20 +88,21 @@ export default function DailyStatusModal({
     <Modal isOpen={isOpen} onClose={onClose} title={getTitle(modal)} size="sm">
       {modal === 'swap' ? (
         <div className="space-y-3">
+          <p className="text-xs text-gray-500">Choose the two staff members exchanging shifts for this day. The swap keeps both people visible in today’s rota.</p>
           <div>
-            <label className={INPUT.label}>First staff member</label>
+            <label className={INPUT.label}>First staff member <span className="text-red-500">*</span></label>
             <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} className={INPUT.select}>
               <option value="">Select...</option>
-              {staffForDay.filter(staff => isWorkingShift(staff.shift) && isCareRole(staff.role)).map(staff => (
+              {sortStaffOptions(staffForDay.filter(staff => isWorkingShift(staff.shift) && isCareRole(staff.role))).map(staff => (
                 <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
               ))}
             </select>
           </div>
           <div>
-            <label className={INPUT.label}>Second staff member</label>
+            <label className={INPUT.label}>Second staff member <span className="text-red-500">*</span></label>
             <select value={swapTo} onChange={e => setSwapTo(e.target.value)} className={INPUT.select}>
               <option value="">Select...</option>
-              {staffForDay.filter(staff => isCareRole(staff.role) && staff.id !== swapFrom).map(staff => (
+              {sortStaffOptions(staffForDay.filter(staff => isCareRole(staff.role) && staff.id !== swapFrom)).map(staff => (
                 <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
               ))}
             </select>
@@ -172,13 +177,16 @@ export default function DailyStatusModal({
         </div>
       ) : modal === 'agency' ? (
         <div className="space-y-3">
-          <select value={agencyShiftType} onChange={e => setAgencyShiftType(e.target.value)} className={INPUT.select}>
-            <option value="">Select shift type...</option>
-            <option value="AG-E">Agency Early (AG-E)</option>
-            <option value="AG-L">Agency Late (AG-L)</option>
-            <option value="AG-EL">Agency Full Day (AG-EL)</option>
-            <option value="AG-N">Agency Night (AG-N)</option>
-          </select>
+          <label>
+            <span className={INPUT.label}>Agency shift type <span className="text-red-500">*</span></span>
+            <select value={agencyShiftType} onChange={e => setAgencyShiftType(e.target.value)} className={INPUT.select}>
+              <option value="">Select shift type...</option>
+              <option value="AG-E">Agency Early (AG-E)</option>
+              <option value="AG-L">Agency Late (AG-L)</option>
+              <option value="AG-EL">Agency Full Day (AG-EL)</option>
+              <option value="AG-N">Agency Night (AG-N)</option>
+            </select>
+          </label>
           {agencyShiftType && (() => {
             const agencyPeriods = agencyShiftType === 'AG-E'
               ? 'Early'
@@ -222,12 +230,15 @@ export default function DailyStatusModal({
         </div>
       ) : modal === 'training' ? (
         <div className="space-y-3">
-          <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-            <option value="">Select staff...</option>
-            {staffForDay.filter(staff => isCareRole(staff.role)).map(staff => (
-              <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
-            ))}
-          </select>
+          <label>
+            <span className={INPUT.label}>Staff member <span className="text-red-500">*</span></span>
+            <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
+              <option value="">Select staff...</option>
+              {sortStaffOptions(staffForDay.filter(staff => isCareRole(staff.role))).map(staff => (
+                <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
+              ))}
+            </select>
+          </label>
           <div className={MODAL.footer}>
             <button onClick={onClose} className={BTN.ghost}>Cancel</button>
             <button
@@ -242,12 +253,15 @@ export default function DailyStatusModal({
       ) : modal === 'sleepIn' ? (
         <div className="space-y-3">
           <p className="text-xs text-gray-500">Sleep-in is a flat-rate addition to the current shift. Staff remain on their rostered shift.</p>
-          <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-            <option value="">Select staff...</option>
-            {staffForDay.filter(staff => isCareRole(staff.role)).map(staff => (
-              <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift}){staff.sleep_in ? ' - remove SI' : ' - add SI'}</option>
-            ))}
-          </select>
+          <label>
+            <span className={INPUT.label}>Staff member <span className="text-red-500">*</span></span>
+            <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
+              <option value="">Select staff...</option>
+              {sortStaffOptions(staffForDay.filter(staff => isCareRole(staff.role))).map(staff => (
+                <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift}){staff.sleep_in ? ' - remove SI' : ' - add SI'}</option>
+              ))}
+            </select>
+          </label>
           <div className={MODAL.footer}>
             <button onClick={onClose} className={BTN.ghost}>Cancel</button>
             <button
@@ -278,13 +292,16 @@ export default function DailyStatusModal({
                   <div>Current: {staff.shift}</div>
                   <div>Scheduled: {staff.scheduledShift}</div>
                 </div>
-                <select value={manualShiftType} onChange={e => setManualShiftType(e.target.value)} className={INPUT.select}>
-                  {SHIFT_EDIT_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.value === '__scheduled__' ? `${option.label} (${staff.scheduledShift})` : option.label}
-                    </option>
-                  ))}
-                </select>
+                <label>
+                  <span className={INPUT.label}>New status <span className="text-red-500">*</span></span>
+                  <select value={manualShiftType} onChange={e => setManualShiftType(e.target.value)} className={INPUT.select}>
+                    {SHIFT_EDIT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.value === '__scheduled__' ? `${option.label} (${staff.scheduledShift})` : option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {manualShiftType === 'AL' && alCount >= schedData.config.max_al_same_day && (
                   <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
                 )}
@@ -330,19 +347,25 @@ export default function DailyStatusModal({
         </div>
       ) : (
         <div className="space-y-3">
-          <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
-            <option value="">Select staff...</option>
-            {(modal === 'ot' ? availableStaff : staffForDay.filter(staff => isWorkingShift(staff.shift))).map(staff => (
-              <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
-            ))}
-          </select>
-          {modal === 'ot' && selectedStaff && (
-            <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
-              <option value="OC-E">OC-E (Early)</option>
-              <option value="OC-L">OC-L (Late)</option>
-              <option value="OC-EL">OC-EL (Full Day)</option>
-              <option value="OC-N">OC-N (Night)</option>
+          <label>
+            <span className={INPUT.label}>Staff member <span className="text-red-500">*</span></span>
+            <select value={selectedStaff} onChange={e => setSelectedStaff(e.target.value)} className={INPUT.select}>
+              <option value="">Select staff...</option>
+              {sortStaffOptions(modal === 'ot' ? availableStaff : staffForDay.filter(staff => isWorkingShift(staff.shift))).map(staff => (
+                <option key={staff.id} value={staff.id}>{staff.name} ({staff.shift})</option>
+              ))}
             </select>
+          </label>
+          {modal === 'ot' && selectedStaff && (
+            <label>
+              <span className={INPUT.label}>OT shift <span className="text-red-500">*</span></span>
+              <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
+                <option value="OC-E">OC-E (Early)</option>
+                <option value="OC-L">OC-L (Late)</option>
+                <option value="OC-EL">OC-EL (Full Day)</option>
+                <option value="OC-N">OC-N (Night)</option>
+              </select>
+            </label>
           )}
           {modal === 'al' && alCount >= schedData.config.max_al_same_day && (
             <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>

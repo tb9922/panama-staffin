@@ -207,8 +207,17 @@ export async function logout(options = {}) {
   }
 }
 
-export async function loadAuditLog(limit = 100) {
-  return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
+export async function loadAuditLog(options = 100) {
+  const legacyLimit = typeof options === 'number' ? options : null;
+  const params = new URLSearchParams();
+  params.set('limit', String(legacyLimit ?? options.limit ?? 100));
+  params.set('offset', String(options.offset ?? 0));
+  if (options.home) params.set('home', options.home);
+  if (options.action) params.set('action', options.action);
+  if (options.user) params.set('user', options.user);
+  if (options.dateFrom) params.set('dateFrom', options.dateFrom);
+  if (options.dateTo) params.set('dateTo', options.dateTo);
+  return apiFetch(`${API_BASE}/audit?${params.toString()}`, { headers: authHeaders() });
 }
 
 export async function listNotifications() {
@@ -297,6 +306,17 @@ export async function deleteEvidenceHubAttachment(sourceModule, attachmentId) {
 
 export async function getHandoverEntries(homeSlug, date) {
   return apiFetch(`${API_BASE}/handover?home=${h(homeSlug)}&date=${date}`, { headers: authHeaders() });
+}
+
+export async function getHandoverEntriesByRange(homeSlug, { fromDate, toDate, limit = 100, offset = 0 } = {}) {
+  const params = new URLSearchParams({
+    home: h(homeSlug),
+    from: fromDate,
+    to: toDate,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return apiFetch(`${API_BASE}/handover/range?${params.toString()}`, { headers: authHeaders() });
 }
 
 export async function createHandoverEntry(homeSlug, entry) {

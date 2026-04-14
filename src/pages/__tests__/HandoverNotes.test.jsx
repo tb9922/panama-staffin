@@ -11,6 +11,7 @@ vi.mock('../../lib/api.js', async () => {
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getHandoverEntries: vi.fn(),
+    getHandoverEntriesByRange: vi.fn(),
     createHandoverEntry: vi.fn(),
     updateHandoverEntry: vi.fn(),
     deleteHandoverEntry: vi.fn(),
@@ -39,6 +40,7 @@ import * as api from '../../lib/api.js';
 const MOCK_ENTRIES = [
   {
     id: 'h-1',
+    entry_date: '2026-03-08',
     shift: 'E',
     category: 'clinical',
     priority: 'urgent',
@@ -51,6 +53,7 @@ const MOCK_ENTRIES = [
   },
   {
     id: 'h-2',
+    entry_date: '2026-03-08',
     shift: 'L',
     category: 'operational',
     priority: 'info',
@@ -69,6 +72,23 @@ describe('HandoverNotes', () => {
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
     api.getHandoverEntries.mockResolvedValue(MOCK_ENTRIES);
+    api.getHandoverEntriesByRange.mockResolvedValue({
+      rows: [
+        {
+          id: 'h-old',
+          entry_date: '2026-03-06',
+          shift: 'N',
+          category: 'safety',
+          priority: 'action',
+          content: 'Monitor wound dressing stock before weekend handover.',
+          author: 'Dawn Lead',
+          created_at: '2026-03-06T21:00:00Z',
+          acknowledged_by: null,
+          acknowledged_at: null,
+          incident_id: null,
+        },
+      ],
+    });
     api.getIncidents.mockResolvedValue({ incidents: [] });
     api.createHandoverEntry.mockResolvedValue({ ...MOCK_ENTRIES[0], id: 'h-new' });
     api.acknowledgeHandoverEntry.mockResolvedValue({ ...MOCK_ENTRIES[0], acknowledged_by: 'Admin', acknowledged_at: '2026-03-08T09:00:00Z' });
@@ -82,9 +102,9 @@ describe('HandoverNotes', () => {
 
   it('shows three shift sections', async () => {
     renderWithProviders(<HandoverNotes />);
-    await waitFor(() => expect(screen.getByText('Early Shift')).toBeInTheDocument());
-    expect(screen.getByText('Late Shift')).toBeInTheDocument();
-    expect(screen.getByText('Night Shift')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('Early Shift').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('Late Shift').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Night Shift').length).toBeGreaterThan(0);
   });
 
   it('displays handover entry content', async () => {
@@ -112,7 +132,7 @@ describe('HandoverNotes', () => {
   it('hides Add Entry buttons for viewers', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     renderWithProviders(<HandoverNotes />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
-    await waitFor(() => expect(screen.getByText('Early Shift')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText('Early Shift').length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: /add entry/i })).not.toBeInTheDocument();
   });
 
@@ -133,6 +153,25 @@ describe('HandoverNotes', () => {
     await waitFor(() => expect(screen.getByText(/resident in room 5 had a fall/i)).toBeInTheDocument());
     await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
     await waitFor(() => expect(screen.getByText('Handover Evidence')).toBeInTheDocument());
+  });
+
+  it('lets the user filter handover entries by search text', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<HandoverNotes />);
+
+    await waitFor(() => expect(screen.getByText(/resident in room 5 had a fall/i)).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText(/search content, author, incident, or shift/i), 'rota');
+
+    expect(screen.queryByText(/resident in room 5 had a fall/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/staff rota updated for next week/i)).toBeInTheDocument();
+  });
+
+  it('shows the recent open-items carry-forward queue', async () => {
+    renderWithProviders(<HandoverNotes />);
+
+    await waitFor(() => expect(screen.getByText(/recent open items/i)).toBeInTheDocument());
+    expect(screen.getByText(/monitor wound dressing stock before weekend handover/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /bring into this day/i })).toBeInTheDocument();
   });
 
   it('guards against double submit while a save is in flight', async () => {

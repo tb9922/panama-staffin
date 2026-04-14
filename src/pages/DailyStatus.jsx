@@ -72,6 +72,16 @@ function getShiftLabel(shift) {
   return SHIFT_LABELS[shift] || shift;
 }
 
+function sortStaffByName(a, b) {
+  return a.name.localeCompare(b.name, 'en-GB', { sensitivity: 'base' }) || a.id.localeCompare(b.id, 'en-GB', { sensitivity: 'base' });
+}
+
+function matchesStaffSearch(staff, query) {
+  if (!query) return true;
+  const haystack = [staff.name, staff.id, staff.role, staff.team].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes(query);
+}
+
 export default function DailyStatus() {
   const { date: dateParam } = useParams();
   const navigate = useNavigate();
@@ -92,6 +102,7 @@ export default function DailyStatus() {
   const [agencyShiftType, setAgencyShiftType] = useState('');
   const [swapFrom, setSwapFrom] = useState('');
   const [swapTo, setSwapTo] = useState('');
+  const [staffSearch, setStaffSearch] = useState('');
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [gapPanelDate, setGapPanelDate] = useState(null);
   const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
@@ -155,11 +166,17 @@ export default function DailyStatus() {
     return calculateDayCost(staffForDay, schedData.config);
   }, [staffForDay, schedData]);
 
-  const earlyStaff = staffForDay.filter(s => isCareRole(s.role) && isEarlyShift(s.shift));
-  const lateStaff = staffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift));
-  const nightStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift));
-  const sickStaff = staffForDay.filter(s => s.shift === 'SICK');
-  const alStaff = staffForDay.filter(s => s.shift === 'AL');
+  const staffSearchQuery = staffSearch.trim().toLowerCase();
+  const visibleStaffForDay = useMemo(
+    () => staffForDay.filter((staff) => matchesStaffSearch(staff, staffSearchQuery)),
+    [staffForDay, staffSearchQuery],
+  );
+
+  const earlyStaff = visibleStaffForDay.filter(s => isCareRole(s.role) && isEarlyShift(s.shift)).sort(sortStaffByName);
+  const lateStaff = visibleStaffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift)).sort(sortStaffByName);
+  const nightStaff = visibleStaffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift)).sort(sortStaffByName);
+  const sickStaff = visibleStaffForDay.filter(s => s.shift === 'SICK').sort(sortStaffByName);
+  const alStaff = visibleStaffForDay.filter(s => s.shift === 'AL').sort(sortStaffByName);
   const availableStaff = staffForDay.filter(s => (s.shift === 'AVL' || s.shift === 'OFF') && isCareRole(s.role));
 
   const availableCover = useMemo(() => {
@@ -169,6 +186,10 @@ export default function DailyStatus() {
       return { ...s, fatigue };
     });
   }, [availableStaff, schedData, currentDate]);
+  const visibleAvailableCover = useMemo(
+    () => availableCover.filter((staff) => matchesStaffSearch(staff, staffSearchQuery)).sort(sortStaffByName),
+    [availableCover, staffSearchQuery],
+  );
 
   const today = todayLocalISO();
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
@@ -297,6 +318,10 @@ export default function DailyStatus() {
   // Applies a SICK override and shows the cascade gap panel if coverage drops
   async function applySickOverride(staffId) {
     if (!schedData || savingRef.current) return;
+    const absentStaff = staffForDay.find(member => member.id === staffId);
+    if (!window.confirm(`Mark ${absentStaff?.name || staffId} sick for ${dateStr}? This will remove them from today’s coverage and prompt the return-to-work follow-up.`)) {
+      return;
+    }
     savingRef.current = true;
     // Simulate projected coverage before API call so gap panel shows immediately
     const projectedOverrides = JSON.parse(JSON.stringify(schedData.overrides));
@@ -331,7 +356,6 @@ export default function DailyStatus() {
     setSaving(false);
     setModal(null);
     setSelectedStaff('');
-    const absentStaff = staffForDay.find(member => member.id === staffId);
     const handoffPath = `/hr/absence?tab=rtw&staffId=${encodeURIComponent(staffId)}&source=daily-status&date=${encodeURIComponent(dateStr)}`;
     showNotice(
       <div className="space-y-2">
@@ -765,7 +789,10 @@ export default function DailyStatus() {
         {/* Staff Lists */}
         <div className={`lg:col-span-2 ${CARD.padded}`}>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
+              <p className="text-xs text-gray-500 mt-1">Search by name, ID, role, or team to jump straight to the staff member you need.</p>
+            </div>
             {canEdit && <div className="flex flex-wrap gap-1.5 print:hidden">
               <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
               <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
@@ -777,31 +804,61 @@ export default function DailyStatus() {
             </div>}
           </div>
 
-          <StaffTable title="Early" staff={earlyStaff} bgColor="bg-blue-50 text-blue-700" />
-          <StaffTable title="Late" staff={lateStaff} bgColor="bg-indigo-50 text-indigo-700" />
-          <StaffTable title="Night" staff={nightStaff} bgColor="bg-purple-50 text-purple-700" />
-          <StaffTable title="Sick" staff={sickStaff} bgColor="bg-red-50 text-red-700" />
-          <StaffTable title="Annual Leave" staff={alStaff} bgColor="bg-yellow-50 text-yellow-700" />
-
-          {/* Available Cover */}
-          <div className="mt-3 border-t pt-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Available Cover ({availableCover.length})</h3>
-            {availableCover.length === 0 ? (
-              <div className="text-xs text-gray-400">No available staff</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                {availableCover.map(s => (
-                  <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-2 py-1 text-xs">
-                    <span className="font-medium">{s.name} <span className="text-gray-400">({s.role})</span></span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                      s.fatigue.exceeded ? ESC_COLORS.red.badge :
-                      s.fatigue.atRisk ? ESC_COLORS.amber.badge : ESC_COLORS.green.badge
-                    }`} title={`${s.fatigue.consecutive} consecutive working days`} aria-label={`${s.fatigue.consecutive} consecutive working days`}>{s.fatigue.consecutive}d</span>
-                  </div>
-                ))}
-              </div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <label className="min-w-[16rem] flex-1">
+              <span className={INPUT.label}>Search staff</span>
+              <input
+                type="search"
+                value={staffSearch}
+                onChange={(e) => setStaffSearch(e.target.value)}
+                className={INPUT.base}
+                placeholder="Search name, ID, role, or team"
+              />
+            </label>
+            {staffSearch && (
+              <button type="button" onClick={() => setStaffSearch('')} className={`${BTN.ghost} ${BTN.sm}`}>
+                Clear search
+              </button>
             )}
           </div>
+
+          {staffSearch && earlyStaff.length + lateStaff.length + nightStaff.length + sickStaff.length + alStaff.length + visibleAvailableCover.length === 0 ? (
+            <EmptyState
+              compact
+              title="No staff match this search"
+              description="Try a broader search term or clear the search to return to the full daily view."
+              actionLabel="Clear search"
+              onAction={() => setStaffSearch('')}
+            />
+          ) : (
+            <>
+              <StaffTable title="Early" staff={earlyStaff} bgColor="bg-blue-50 text-blue-700" />
+              <StaffTable title="Late" staff={lateStaff} bgColor="bg-indigo-50 text-indigo-700" />
+              <StaffTable title="Night" staff={nightStaff} bgColor="bg-purple-50 text-purple-700" />
+              <StaffTable title="Sick" staff={sickStaff} bgColor="bg-red-50 text-red-700" />
+              <StaffTable title="Annual Leave" staff={alStaff} bgColor="bg-yellow-50 text-yellow-700" />
+
+              {/* Available Cover */}
+              <div className="mt-3 border-t pt-3">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Available Cover ({visibleAvailableCover.length}{staffSearch ? ` of ${availableCover.length}` : ''})</h3>
+                {visibleAvailableCover.length === 0 ? (
+                  <div className="text-xs text-gray-400">{staffSearch ? 'No available staff match this search' : 'No available staff'}</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {visibleAvailableCover.map(s => (
+                      <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-2 py-1 text-xs">
+                        <span className="font-medium">{s.name} <span className="text-gray-400">({s.role})</span></span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          s.fatigue.exceeded ? ESC_COLORS.red.badge :
+                          s.fatigue.atRisk ? ESC_COLORS.amber.badge : ESC_COLORS.green.badge
+                        }`} title={`${s.fatigue.consecutive} consecutive working days`} aria-label={`${s.fatigue.consecutive} consecutive working days`}>{s.fatigue.consecutive}d</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Coverage gap cascade panel — appears after marking sick */}
           {showGapPanel && gapPanelDate === dateStr && (

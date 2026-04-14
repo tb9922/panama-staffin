@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BTN } from '../../lib/design.js';
 import { isWorkingShift, isCareRole } from '../../lib/rotation.js';
 import { checkFatigueRisk } from '../../lib/escalation.js';
@@ -13,12 +14,14 @@ export default function DailyStatusCoverageGapPanel({
   onApplyOverride,
   onOpenAgencyBooking,
 }) {
+  const [showAllOtCandidates, setShowAllOtCandidates] = useState(false);
   if (!schedData) return null;
 
   const floaters = staffForDay.filter(staff => staff.shift === 'AVL' && isCareRole(staff.role));
   const otCandidates = staffForDay.filter(staff =>
     isCareRole(staff.role) && !isWorkingShift(staff.shift) && staff.shift !== 'SICK' && staff.shift !== 'AL'
   );
+  const visibleOtCandidates = showAllOtCandidates ? otCandidates : otCandidates.slice(0, 5);
   const shortPeriods = ['early', 'late', 'night'].filter(period => coverage[period] && coverage[period].escalation.level >= 1);
   const periodShift = { early: 'E', late: 'L', night: 'N' };
   const periodOcShift = { early: 'OC-E', late: 'OC-L', night: 'OC-N' };
@@ -72,11 +75,18 @@ export default function DailyStatusCoverageGapPanel({
         ) : (
           <div className="space-y-1">
             {otCandidates.length > 5 && (
-              <div className="text-xs text-amber-700">
-                Showing the first 5 of {otCandidates.length} overtime candidates.
+              <div className="flex items-center justify-between gap-2 text-xs text-amber-700">
+                <span>{showAllOtCandidates ? `Showing all ${otCandidates.length} overtime candidates.` : `Showing the first 5 of ${otCandidates.length} overtime candidates.`}</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllOtCandidates((value) => !value)}
+                  className={`${BTN.ghost} ${BTN.xs}`}
+                >
+                  {showAllOtCandidates ? 'Show fewer' : 'Show all'}
+                </button>
               </div>
             )}
-            {otCandidates.slice(0, 5).map(staff => {
+            {visibleOtCandidates.map(staff => {
               const fatigue = checkFatigueRisk(staff, currentDate, schedData.overrides, schedData.config);
               return (
                 <div key={staff.id} className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 border border-gray-100">

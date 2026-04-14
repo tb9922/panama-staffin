@@ -47,6 +47,7 @@ function renderAdmin() {
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
   api.upsertOverride.mockResolvedValue({});
   api.deleteOverride.mockResolvedValue({});
@@ -281,6 +282,20 @@ describe('DailyStatus', () => {
     await waitFor(() => {
       expect(screen.getByText(/Available Cover/)).toBeInTheDocument();
     });
+  });
+
+  it('filters the staff view with the search box', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Search name, ID, role, or team/i)).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText(/Search name, ID, role, or team/i), 'Alice');
+
+    expect(screen.getAllByText('Alice Smith').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
   });
 
   it('displays cost breakdown with Total label', async () => {
