@@ -10,6 +10,7 @@ import {
 import { validateClientFileSelection } from '../../lib/uploadValidation.js';
 import { getScanLaunchContext } from '../lib/scanRouting.js';
 import ScanDocumentLink from './ScanDocumentLink.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -42,13 +43,17 @@ export default function FileAttachments({
   const [createdCaseId, setCreatedCaseId] = useState(null);
   const descriptionInputId = useId();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { scanIntakeEnabled = false, isScanTargetEnabled = () => false } = useData();
   const listFiles = getFiles || getHrAttachments;
   const createFile = uploadFile || uploadHrAttachment;
   const removeFile = deleteFile || deleteHrAttachment;
   const fetchFile = downloadFile || downloadHrAttachment;
   const activeCaseId = caseId || createdCaseId;
   const saveMessage = saveFirstText || saveFirstMessage;
-  const scanContext = getScanLaunchContext({ caseType, caseId: activeCaseId });
+  const scanContext = getScanLaunchContext({ caseType, caseId: activeCaseId })
+    || (ensureCaseId && caseType === 'cqc_evidence' ? { target: 'cqc', label: 'CQC evidence' } : null);
+  const showScanButton = Boolean(scanContext?.target && scanIntakeEnabled && isScanTargetEnabled(scanContext.target));
+  const scanDisabled = !activeCaseId && !(ensureCaseId && caseType === 'cqc_evidence');
 
   useEffect(() => {
     if (caseId) setCreatedCaseId(null);
@@ -209,10 +214,10 @@ export default function FileAttachments({
               >
                 Choose file
               </button>
-              {scanContext && (
+              {showScanButton && (
                 <ScanDocumentLink
                   context={scanContext}
-                  disabled={!activeCaseId}
+                  disabled={scanDisabled}
                   disabledReason={saveMessage}
                 />
               )}

@@ -8,7 +8,7 @@ import { useData } from '../contexts/DataContext.jsx';
 
 export default function CqcDocsTracker() {
   const home = getCurrentHome();
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled = () => false } = useData();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,7 +37,7 @@ export default function CqcDocsTracker() {
           <h1 className={PAGE.title}>CQC Docs Center</h1>
           <p className={PAGE.subtitle}>See document coverage by statement, evidence category, owner, and review status.</p>
         </div>
-        {canWrite('compliance') && <ScanDocumentLink context={{ target: 'cqc' }} label="Scan to CQC" />}
+        {canWrite('compliance') && isScanTargetEnabled('cqc') && <ScanDocumentLink context={{ target: 'cqc' }} label="Scan to CQC" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

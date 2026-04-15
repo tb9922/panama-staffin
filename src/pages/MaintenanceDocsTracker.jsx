@@ -12,7 +12,7 @@ function SignalBadge({ value, goodLabel = 'OK', badLabel }) {
 
 export default function MaintenanceDocsTracker() {
   const home = getCurrentHome();
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled = () => false } = useData();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,7 +41,7 @@ export default function MaintenanceDocsTracker() {
           <h1 className={PAGE.title}>Maintenance Docs Center</h1>
           <p className={PAGE.subtitle}>Certificates, service sheets, contractor evidence, and missing-proof gaps.</p>
         </div>
-        {canWrite('compliance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
+        {canWrite('compliance') && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

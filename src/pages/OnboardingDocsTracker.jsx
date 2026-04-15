@@ -8,7 +8,7 @@ import { useData } from '../contexts/DataContext.jsx';
 
 export default function OnboardingDocsTracker() {
   const home = getCurrentHome();
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled = () => false } = useData();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,7 +37,7 @@ export default function OnboardingDocsTracker() {
           <h1 className={PAGE.title}>Onboarding Docs Center</h1>
           <p className={PAGE.subtitle}>Track onboarding document coverage by person, section, and outstanding mandatory gaps.</p>
         </div>
-        {canWrite('compliance') && <ScanDocumentLink context={{ target: 'onboarding' }} label="Scan to Onboarding" />}
+        {canWrite('compliance') && isScanTargetEnabled('onboarding') && <ScanDocumentLink context={{ target: 'onboarding' }} label="Scan to Onboarding" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

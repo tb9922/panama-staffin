@@ -18,7 +18,7 @@ import ToastViewport from './ToastViewport.jsx';
 export default function AppLayout() {
   const location = useLocation();
   const { user, isPlatformAdmin, logout } = useAuth();
-  const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole } = useData();
+  const { loading, error, homes, activeHome, switchHome, clearError, canRead, homeRole, scanIntakeEnabled } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const canUseEvidenceHub = isPlatformAdmin || canAccessEvidenceHub(homeRole);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -31,6 +31,7 @@ export default function AppLayout() {
     if (item.platformAdminOnly && !isPlatformAdmin) return false;
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
+    if (item.requiresScanIntake && !scanIntakeEnabled) return false;
     if (item.requiresAnyModules?.length) {
       const allowed = item.requiresAnyModules.some((moduleId) => canRead(moduleId));
       if (!allowed) return false;

@@ -17,6 +17,7 @@ import {
   getSuppliers,
 } from '../lib/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/scanIntake.js';
@@ -48,6 +49,7 @@ function pickField(fields, ...keys) {
 export default function ScanInbox() {
   const home = getCurrentHome();
   const { showToast } = useToast();
+  const { scanIntakeEnabled = false } = useData();
   const [searchParams] = useSearchParams();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -326,6 +328,16 @@ export default function ScanInbox() {
     }
   }
 
+  if (!scanIntakeEnabled) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Scan intake is disabled"
+          message="Ask a platform admin to enable scan intake for this home before using OCR or scan-to-file workflows."
+        />
+      </div>
+    );
+  }
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading scan inbox..." card /></div>;
   if (error && !list.length) return <div className={PAGE.container}><ErrorState title="Scan inbox needs attention" message={error} onRetry={loadList} /></div>;
 
