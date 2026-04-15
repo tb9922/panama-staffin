@@ -44,7 +44,8 @@ const staffUpdateSchema = staffBodySchema.partial().extend({
 
 // POST /api/staff?home=X — create a new staff member
 // Server generates the ID inside a transaction to prevent concurrent collisions.
-// Client-provided ID is accepted for backwards compatibility but server-generated is preferred.
+// Client-provided IDs are allowed for imports/backfills, but POST must never
+// overwrite an existing staff row. Updates belong on PUT /api/staff/:staffId.
 router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('staff', 'write'), async (req, res, next) => {
   try {
     const parsed = staffBodySchema.safeParse(req.body);
@@ -54,7 +55,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       if (!data.id) {
         data.id = await staffRepo.nextId(req.home.id, client);
       }
-      return staffRepo.upsertOne(req.home.id, data, client);
+      return staffRepo.createOne(req.home.id, data, client);
     });
     await auditService.log('staff_create', req.home.slug, req.user.username, { staff_id: data.id });
     const warnings = [];

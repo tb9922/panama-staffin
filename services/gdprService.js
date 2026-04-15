@@ -21,6 +21,19 @@ async function runSequentialQueries(tasks) {
   return results;
 }
 
+async function deleteFilesQuietly(filePaths) {
+  const uniquePaths = [...new Set((filePaths || []).filter(Boolean))];
+  for (const filePath of uniquePaths) {
+    try {
+      await fs.unlink(filePath);
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn({ filePath, error: err.message }, 'Failed to delete redacted file after GDPR commit');
+      }
+    }
+  }
+}
+
 // ── SAR Data Gathering ───────────────────────────────────────────────────────
 
 /**
@@ -473,7 +486,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
  * Uses transaction — all-or-nothing. Preserves record structure for CQC auditability.
  */
 export async function executeErasure(staffId, homeId, requestId, username, homeSlug) {
-  return withTransaction(async (client) => {
+  const filesToDelete = [];
+  const result = await withTransaction(async (client) => {
     const anon = `[REDACTED-${staffId.slice(0, 4)}]`;
 
     if (requestId) {
@@ -542,7 +556,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     );
     for (const file of trainingFiles) {
       const filePath = path.join(appConfig.upload.dir, String(homeId), 'training', staffId, file.training_type, file.stored_name);
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      filesToDelete.push(filePath);
     }
     await client.query(
       `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
@@ -666,7 +680,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Delete physical files from disk
     for (const att of attachments) {
       const filePath = path.join(appConfig.upload.dir, String(homeId), att.case_type, String(att.case_id), att.stored_name);
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      filesToDelete.push(filePath);
     }
     // Delete attachment metadata
     await client.query(
@@ -763,7 +777,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     );
     for (const file of onboardingFiles) {
       const filePath = path.join(appConfig.upload.dir, String(homeId), 'onboarding', staffId, file.section, file.stored_name);
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      filesToDelete.push(filePath);
     }
     await client.query(
       `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
@@ -974,6 +988,8 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
 
     return { anonymised: true, staff_id: staffId };
   });
+  await deleteFilesQuietly(filesToDelete);
+  return result;
 }
 
 /**

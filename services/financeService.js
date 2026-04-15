@@ -409,13 +409,21 @@ export async function findPaymentScheduleById(id, homeId) {
 }
 
 export async function createPaymentSchedule(homeId, data, username) {
-  const schedule = await financeRepo.createPaymentSchedule(homeId, { ...data, created_by: username });
+  const schedule = await financeRepo.createPaymentSchedule(homeId, {
+    ...data,
+    anchor_day: getDayOfMonth(data.next_due),
+    created_by: username,
+  });
   logger.info({ homeId, scheduleId: schedule.id, supplier: schedule.supplier, amount: schedule.amount }, 'Payment schedule created');
   return schedule;
 }
 
 export async function updatePaymentSchedule(id, homeId, data, version) {
-  const result = await financeRepo.updatePaymentSchedule(id, homeId, data, null, version);
+  const payload = { ...data };
+  if ('next_due' in payload) {
+    payload.anchor_day = getDayOfMonth(payload.next_due);
+  }
+  const result = await financeRepo.updatePaymentSchedule(id, homeId, payload, null, version);
   if (result) logger.info({ homeId, scheduleId: id, fields: Object.keys(data) }, 'Payment schedule updated');
   return result;
 }
@@ -450,7 +458,7 @@ export async function processScheduledPayment(scheduleId, homeId, username, vers
       created_by: username,
     }, client);
 
-    const nextDue = advanceDate(schedule.next_due, schedule.frequency);
+    const nextDue = advanceDate(schedule.next_due, schedule.frequency, schedule.anchor_day);
     const updatedSchedule = await financeRepo.updatePaymentSchedule(scheduleId, homeId, { next_due: nextDue }, client, schedule.version);
     if (!updatedSchedule) {
       throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
@@ -461,7 +469,13 @@ export async function processScheduledPayment(scheduleId, homeId, username, vers
   });
 }
 
-function advanceDate(dateStr, frequency) {
+function getDayOfMonth(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const [, , day] = dateStr.split('-').map(Number);
+  return Number.isInteger(day) ? day : null;
+}
+
+function advanceDate(dateStr, frequency, anchorDay = getDayOfMonth(dateStr)) {
   const [y, m, day] = dateStr.split('-').map(Number);
   switch (frequency) {
     case 'weekly': {
@@ -476,7 +490,7 @@ function advanceDate(dateStr, frequency) {
       let ny = y + Math.floor(nm / 12);
       nm = nm % 12;
       const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
-      const nd = Math.min(day, lastDay);
+      const nd = Math.min(anchorDay || day, lastDay);
       return `${ny}-${String(nm + 1).padStart(2, '0')}-${String(nd).padStart(2, '0')}`;
     }
     default:

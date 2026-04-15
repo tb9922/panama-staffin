@@ -189,7 +189,7 @@ describe('POST /api/staff — create', () => {
       .expect(403);
   });
 
-  it('increments version when POST upserts an existing staff member', async () => {
+  it('rejects duplicate IDs instead of overwriting an existing staff member', async () => {
     const initial = await request(app)
       .post('/api/staff')
       .query({ home: homeASlug })
@@ -197,17 +197,26 @@ describe('POST /api/staff — create', () => {
       .send(makeStaff({ id: 'ST004', name: 'Upsert Target', hourly_rate: 13.25 }))
       .expect(201);
 
-    const updated = await request(app)
+    const duplicate = await request(app)
       .post('/api/staff')
       .query({ home: homeASlug })
       .set('Authorization', `Bearer ${adminToken}`)
       .send(makeStaff({ id: 'ST004', name: 'Upsert Target Updated', hourly_rate: 13.75 }))
-      .expect(201);
+      .expect(409);
 
     expect(initial.body.version).toBe(1);
-    expect(updated.body.version).toBe(2);
-    expect(updated.body.name).toBe('Upsert Target Updated');
-    expect(updated.body.hourly_rate).toBe(13.75);
+    expect(duplicate.body.error).toMatch(/already exists/i);
+
+    const { rows } = await pool.query(
+      `SELECT name, hourly_rate, version
+         FROM staff
+        WHERE home_id = $1 AND id = 'ST004'`,
+      [homeAId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe('Upsert Target');
+    expect(rows[0].hourly_rate).toBe('13.25');
+    expect(rows[0].version).toBe(1);
   });
 
   it('auto-generates the next S-prefixed staff ID after a manually supplied higher ID', async () => {

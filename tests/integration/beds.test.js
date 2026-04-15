@@ -182,6 +182,29 @@ describe('bedRepo: updateStatus', () => {
     expect(updated.booked_from).toBeNull();
     expect(updated.notes).toBeNull();
   });
+
+  it('preserves existing status metadata when callers omit those fields', async () => {
+    await bedRepo.updateStatus(bedId, homeA, {
+      status: 'reserved',
+      reserved_until: '2026-05-01',
+      booked_from: '2026-04-20',
+      booked_until: '2026-05-10',
+      notes: 'Preserve me',
+      updated_by: 'admin',
+    });
+
+    const updated = await bedRepo.updateStatus(bedId, homeA, {
+      status: 'occupied',
+      resident_id: 123,
+      updated_by: 'admin',
+    });
+
+    expect(updated.status).toBe('occupied');
+    expect(updated.reserved_until).toBe('2026-05-01');
+    expect(updated.booked_from).toBe('2026-04-20');
+    expect(updated.booked_until).toBe('2026-05-10');
+    expect(updated.notes).toBe('Preserve me');
+  });
 });
 
 // ── bedTransitionRepo ─────────────────────────────────────────────────────────

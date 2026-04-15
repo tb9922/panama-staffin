@@ -1,3 +1,4 @@
+import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
@@ -221,6 +222,40 @@ export async function upsertOne(homeId, staff, client) {
   );
   await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
   return shapeRow(rows[0]);
+}
+
+export async function createOne(homeId, staff, client) {
+  const conn = client || pool;
+  try {
+    const { rows } = await conn.query(
+      `INSERT INTO staff
+         (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
+          start_date, leaving_date, date_of_birth, ni_number, contract_hours,
+          al_entitlement, al_carryover, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+       RETURNING ${STAFF_COLS}`,
+      [
+        staff.id, homeId, staff.name, staff.role || null, staff.team || null,
+        staff.pref || null,
+        staff.skill ?? 1,
+        staff.hourly_rate != null ? staff.hourly_rate : null,
+        staff.active !== false,
+        staff.wtr_opt_out === true,
+        staff.start_date || null, staff.leaving_date || null,
+        staff.date_of_birth || null, staff.ni_number || null,
+        staff.contract_hours != null ? staff.contract_hours : null,
+        staff.al_entitlement != null ? staff.al_entitlement : null,
+        staff.al_carryover != null ? staff.al_carryover : 0,
+      ]
+    );
+    await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
+    return shapeRow(rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      throw new ConflictError('Staff member ID already exists in this home');
+    }
+    throw err;
+  }
 }
 
 /**

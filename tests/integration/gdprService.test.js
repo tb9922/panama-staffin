@@ -10,7 +10,10 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { pool } from '../../db.js';
+import { config as appConfig } from '../../config.js';
 import * as gdprService from '../../services/gdprService.js';
 
 // ── Test identifiers ─────────────────────────────────────────────────────────
@@ -20,6 +23,7 @@ const SLUG_B = 'test-gdpr-home-b';
 const STAFF = ['gdpr-S001', 'gdpr-S002', 'gdpr-S003'];
 const STAFF_NAMES = ['Alice GDPR', 'Bob GDPR', 'Charlie GDPR'];
 const LINK_USERNAME = 'gdpr-link-user';
+const ERASURE_FILE_PATHS = {};
 
 let homeA, homeB;
 const cleanup = {
@@ -28,6 +32,13 @@ const cleanup = {
   consent: [],
   dpComplaints: [],
 };
+
+async function createUploadFixture(relativePath, content = 'gdpr-fixture') {
+  const fullPath = path.join(appConfig.upload.dir, relativePath);
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, content);
+  return fullPath;
+}
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +98,15 @@ beforeAll(async () => {
     `INSERT INTO training_records (home_id, staff_id, training_type_id, completed, expiry, trainer, method)
      VALUES ($1, $2, 'moving-handling', '2025-07-01', '2026-07-01', 'Bob Trainer', 'practical')`,
     [homeA, STAFF[0]]
+  );
+  await pool.query(
+    `INSERT INTO training_file_attachments
+       (home_id, staff_id, training_type, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, $2, 'fire-safety', 'fire-cert.pdf', 'gdpr-training-cert.pdf', 'application/pdf', 18, 'Training certificate', 'test-runner')`,
+    [homeA, STAFF[0]]
+  );
+  ERASURE_FILE_PATHS.training = await createUploadFixture(
+    path.join(String(homeA), 'training', STAFF[0], 'fire-safety', 'gdpr-training-cert.pdf')
   );
 
   // ── Supervisions ───────────────────────────────────────────────────────
@@ -157,6 +177,15 @@ beforeAll(async () => {
      VALUES ($1, 'disciplinary', $2, 'Staff provided written statement', $3)`,
     [homeA, disc.id, STAFF_NAMES[0]]
   );
+  await pool.query(
+    `INSERT INTO hr_file_attachments
+       (home_id, case_type, case_id, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, 'disciplinary', $2, 'disciplinary-note.pdf', 'gdpr-hr-attachment.pdf', 'application/pdf', 24, 'Disciplinary attachment', 'test-runner')`,
+    [homeA, disc.id]
+  );
+  ERASURE_FILE_PATHS.hr = await createUploadFixture(
+    path.join(String(homeA), 'disciplinary', String(disc.id), 'gdpr-hr-attachment.pdf')
+  );
 
   // ── Incidents (staff_involved JSONB array) ─────────────────────────────
   await pool.query(
@@ -184,6 +213,15 @@ beforeAll(async () => {
   await pool.query(
     `INSERT INTO onboarding (home_id, staff_id, data) VALUES ($1, $2, $3)`,
     [homeA, STAFF[0], JSON.stringify({ dbs_check: { status: 'clear', date: '2025-01-01' } })]
+  );
+  await pool.query(
+    `INSERT INTO onboarding_file_attachments
+       (home_id, staff_id, section, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, $2, 'contract', 'contract.pdf', 'gdpr-onboarding-doc.pdf', 'application/pdf', 22, 'Signed contract', 'test-runner')`,
+    [homeA, STAFF[0]]
+  );
+  ERASURE_FILE_PATHS.onboarding = await createUploadFixture(
+    path.join(String(homeA), 'onboarding', STAFF[0], 'contract', 'gdpr-onboarding-doc.pdf')
   );
 
   // ── Care Certificate ───────────────────────────────────────────────────
@@ -319,6 +357,9 @@ async function cleanHome(hid) {
 }
 
 afterAll(async () => {
+  await Promise.all(
+    Object.values(ERASURE_FILE_PATHS).map((filePath) => fs.rm(filePath, { force: true }).catch(() => {}))
+  );
   // Clean tracked GDPR records
   for (const id of cleanup.dataRequests) {
     await pool.query('DELETE FROM data_requests WHERE id = $1', [id]).catch(() => {});
@@ -661,6 +702,30 @@ describe('executeErasure', () => {
       `SELECT * FROM training_records WHERE home_id = $1 AND staff_id = $2`, [homeA, targetStaff]
     );
     expect(rows).toHaveLength(0);
+  });
+
+  it('deletes attachment metadata and physical files after commit', async () => {
+    const { rows: trainingFiles } = await pool.query(
+      `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(trainingFiles).toHaveLength(0);
+
+    const { rows: onboardingFiles } = await pool.query(
+      `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(onboardingFiles).toHaveLength(0);
+
+    const { rows: hrFiles } = await pool.query(
+      `SELECT * FROM hr_file_attachments WHERE home_id = $1`,
+      [homeA]
+    );
+    expect(hrFiles).toHaveLength(0);
+
+    await expect(fs.access(ERASURE_FILE_PATHS.training)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(ERASURE_FILE_PATHS.onboarding)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(ERASURE_FILE_PATHS.hr)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('anonymises supervisions', async () => {

@@ -625,6 +625,31 @@ describe('Finance: scheduled payment processing', () => {
     await pool.query(`DELETE FROM finance_expenses WHERE home_id = $1 AND schedule_id = $2`, [homeA, created.id]);
     await pool.query(`DELETE FROM finance_payment_schedule WHERE id = $1 AND home_id = $2`, [created.id, homeA]);
   });
+
+  it('preserves the original monthly anchor day after a short month', async () => {
+    const created = await financeRepo.createPaymentSchedule(homeA, {
+      supplier: 'Anchor Supplier',
+      category: 'utilities',
+      description: 'Month end anchor',
+      frequency: 'monthly',
+      amount: 99,
+      next_due: '2026-01-31',
+      auto_approve: false,
+      created_by: 'admin',
+    });
+
+    const first = await financeRepo.findPaymentScheduleById(created.id, homeA);
+    const febRun = await financeService.processScheduledPayment(created.id, homeA, 'admin', first.version);
+    expect(febRun.next_due).toBe('2026-02-28');
+
+    const second = await financeRepo.findPaymentScheduleById(created.id, homeA);
+    expect(second.anchor_day).toBe(31);
+    const marRun = await financeService.processScheduledPayment(created.id, homeA, 'admin', second.version);
+    expect(marRun.next_due).toBe('2026-03-31');
+
+    await pool.query(`DELETE FROM finance_expenses WHERE home_id = $1 AND schedule_id = $2`, [homeA, created.id]);
+    await pool.query(`DELETE FROM finance_payment_schedule WHERE id = $1 AND home_id = $2`, [created.id, homeA]);
+  });
 });
 
 // ── Summary Queries ──────────────────────────────────────────────────────────

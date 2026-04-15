@@ -207,7 +207,6 @@ export async function rescueStuckInProgress() {
   const { rowCount } = await pool.query(
     `UPDATE webhook_deliveries
      SET status = 'pending_retry',
-         retry_count = retry_count + 1,
          next_retry_at = NOW(),
          locked_at = NULL
      WHERE status = 'in_progress'

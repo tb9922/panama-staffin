@@ -51,9 +51,15 @@ const CHASE_COLS = `id, home_id, invoice_id,
 
 const SCHEDULE_COLS = `id, home_id,
   supplier, category, description, frequency, amount,
-  next_due, auto_approve, on_hold, hold_reason,
+  next_due, anchor_day, auto_approve, on_hold, hold_reason,
   notes, version,
   created_by, created_at, updated_at`;
+
+function getDayOfMonth(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const [, , day] = dateStr.split('-').map(Number);
+  return Number.isInteger(day) ? day : null;
+}
 
 // ── Finance Residents ─────────────────────────────────────────────────────────
 
@@ -746,6 +752,7 @@ function shapeSchedule(row) {
     supplier: row.supplier, category: row.category, description: row.description,
     frequency: row.frequency, amount: f(row.amount),
     next_due: d(row.next_due),
+    anchor_day: row.anchor_day != null ? parseInt(row.anchor_day, 10) : null,
     auto_approve: row.auto_approve, on_hold: row.on_hold, hold_reason: row.hold_reason,
     notes: row.notes,
     version: row.version,
@@ -776,13 +783,15 @@ export async function findPaymentScheduleById(id, homeId, client, forUpdate = fa
 
 export async function createPaymentSchedule(homeId, data, client) {
   const conn = client || pool;
+  const anchorDay = data.anchor_day ?? getDayOfMonth(data.next_due);
   const { rows } = await conn.query(
     `INSERT INTO finance_payment_schedule
-       (home_id, supplier, category, description, frequency, amount, next_due,
+       (home_id, supplier, category, description, frequency, amount, next_due, anchor_day,
         auto_approve, on_hold, hold_reason, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${SCHEDULE_COLS}`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING ${SCHEDULE_COLS}`,
     [homeId, data.supplier, data.category, data.description || null,
      data.frequency, data.amount, data.next_due,
+     anchorDay,
      data.auto_approve ?? false, data.on_hold ?? false, data.hold_reason || null,
      data.notes || null, data.created_by]);
   return shapeSchedule(rows[0]);
@@ -792,7 +801,7 @@ export async function updatePaymentSchedule(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
-  const settable = ['supplier', 'category', 'description', 'frequency', 'amount', 'next_due',
+  const settable = ['supplier', 'category', 'description', 'frequency', 'amount', 'next_due', 'anchor_day',
     'auto_approve', 'on_hold', 'hold_reason', 'notes'];
   for (const key of settable) {
     if (key in data) {

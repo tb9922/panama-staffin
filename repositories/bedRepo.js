@@ -189,32 +189,33 @@ export async function updateDetails(bedId, homeId, data, client) {
 export async function updateStatus(bedId, homeId, statusData, client) {
   const conn = client || pool;
   try {
+    const params = [bedId, homeId];
+    const fields = [];
+    const settable = [
+      'status',
+      'resident_id',
+      'status_since',
+      'hold_expires',
+      'reserved_until',
+      'booked_from',
+      'booked_until',
+      'notes',
+      'updated_by',
+    ];
+    for (const key of settable) {
+      if (!Object.prototype.hasOwnProperty.call(statusData, key)) continue;
+      params.push(statusData[key] ?? null);
+      fields.push(`${key} = $${params.length}`);
+    }
+    if (fields.length === 0) return findById(bedId, homeId, conn);
+    fields.push('updated_at = NOW()');
     const { rows } = await conn.query(
       `/* bedRepo – updateStatus */
        UPDATE beds SET
-         status = COALESCE($3, status),
-         resident_id = $4,
-         status_since = COALESCE($5, status_since),
-         hold_expires = $6,
-         reserved_until = $7,
-         booked_from = $8,
-         booked_until = $9,
-         notes = CASE WHEN $12 THEN $10 ELSE notes END,
-         updated_by = $11,
-         updated_at = NOW()
+         ${fields.join(', ')}
        WHERE id = $1 AND home_id = $2
        RETURNING ${BED_COLS}`,
-      [bedId, homeId,
-       statusData.status || null,
-       statusData.resident_id ?? null,
-       statusData.status_since || null,
-       statusData.hold_expires || null,
-       statusData.reserved_until || null,
-       statusData.booked_from || null,
-       statusData.booked_until || null,
-       statusData.notes ?? null,
-       statusData.updated_by || null,
-       Object.prototype.hasOwnProperty.call(statusData, 'notes')]
+      params
     );
     return shapeBed(rows[0]);
   } catch (err) {

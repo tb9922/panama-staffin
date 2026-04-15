@@ -203,4 +203,32 @@ describe('webhookRepo retry functions', () => {
       expect(d.status).toBe('delivered');
     }
   });
+
+  it('rescueStuckInProgress requeues stuck deliveries without charging an extra retry', async () => {
+    const id = await webhookRepo.logDelivery(
+      testWebhookId, 'override.created', '{"stuck":true}', null, 100, 'timeout', 'pending_retry'
+    );
+    await pool.query(
+      `UPDATE webhook_deliveries
+          SET status = 'in_progress',
+              retry_count = 2,
+              locked_at = NOW() - INTERVAL '11 minutes'
+        WHERE id = $1`,
+      [id]
+    );
+
+    const rescued = await webhookRepo.rescueStuckInProgress();
+    expect(rescued).toBeGreaterThanOrEqual(1);
+
+    const { rows } = await pool.query(
+      `SELECT status, retry_count, next_retry_at, locked_at
+         FROM webhook_deliveries
+        WHERE id = $1`,
+      [id]
+    );
+    expect(rows[0].status).toBe('pending_retry');
+    expect(rows[0].retry_count).toBe(2);
+    expect(rows[0].next_retry_at).not.toBeNull();
+    expect(rows[0].locked_at).toBeNull();
+  });
 });
