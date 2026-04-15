@@ -4,9 +4,12 @@ import { formatCurrency } from '../lib/finance.js';
 import { getCurrentHome, getFinanceDocs } from '../lib/api.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 export default function FinanceDocsTracker() {
   const home = getCurrentHome();
+  const { canWrite } = useData();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,6 +38,7 @@ export default function FinanceDocsTracker() {
           <h1 className={PAGE.title}>Finance Docs Center</h1>
           <p className={PAGE.subtitle}>Accounts payable documents grouped by month, supplier, category, and status.</p>
         </div>
+        {canWrite('finance') && <ScanDocumentLink context={{ target: 'finance_ap' }} label="Scan to Finance AP" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

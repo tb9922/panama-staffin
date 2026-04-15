@@ -78,10 +78,11 @@ export default function PayRatesConfig() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.amount) return;
+    const parsedAmount = Number(form.amount);
+    if (!form.name || form.amount === '' || Number.isNaN(parsedAmount) || parsedAmount < 0) return;
     setSaving(true);
     try {
-      const payload = { ...form, amount: parseFloat(form.amount) };
+      const payload = { ...form, amount: parsedAmount };
       if (modal.mode === 'add') {
         await createPayRateRule(homeSlug, payload);
       } else {
@@ -235,15 +236,15 @@ export default function PayRatesConfig() {
       <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal?.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'} size="lg">
         <div className="space-y-4">
           <div>
-            <label className={INPUT.label}>Rule Name</label>
-            <input className={INPUT.base} value={form.name}
+            <label htmlFor="pay-rate-rule-name" className={INPUT.label}>Rule Name</label>
+            <input id="pay-rate-rule-name" className={INPUT.base} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Night Enhancement" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Applies To</label>
-              <select className={INPUT.select} value={form.applies_to}
+              <label htmlFor="pay-rate-rule-applies-to" className={INPUT.label}>Applies To</label>
+              <select id="pay-rate-rule-applies-to" className={INPUT.select} value={form.applies_to}
                 onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
                 {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
@@ -251,8 +252,8 @@ export default function PayRatesConfig() {
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Rate Type</label>
-              <select className={INPUT.select} value={form.rate_type}
+              <label htmlFor="pay-rate-rule-rate-type" className={INPUT.label}>Rate Type</label>
+              <select id="pay-rate-rule-rate-type" className={INPUT.select} value={form.rate_type}
                 onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
                 {Object.entries(RATE_TYPE_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
@@ -261,10 +262,10 @@ export default function PayRatesConfig() {
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>
+            <label htmlFor="pay-rate-rule-amount" className={INPUT.label}>
               Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
             </label>
-            <input className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
+            <input id="pay-rate-rule-amount" className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
               onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
               placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
             {form.rate_type === 'percentage' && form.amount && (

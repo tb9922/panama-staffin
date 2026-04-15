@@ -3,9 +3,23 @@ export const SCAN_INTAKE_TARGETS = [
   { id: 'finance_ap', label: 'Finance AP', permissionModule: 'finance' },
   { id: 'onboarding', label: 'Onboarding', permissionModule: 'compliance' },
   { id: 'cqc', label: 'CQC', permissionModule: 'compliance' },
+  { id: 'record_attachment', label: 'Current Record', permissionModule: null, contextualOnly: true },
+  { id: 'hr_attachment', label: 'HR Case', permissionModule: 'hr', contextualOnly: true },
+  { id: 'training', label: 'Training Record', permissionModule: 'compliance', contextualOnly: true },
 ];
 
 export const SCAN_INTAKE_TARGET_IDS = SCAN_INTAKE_TARGETS.map((entry) => entry.id);
+
+export const SCAN_INTAKE_ACCESS_MODULES = [
+  'finance',
+  'compliance',
+  'hr',
+  'scheduling',
+  'governance',
+  'gdpr',
+  'payroll',
+  'staff',
+];
 
 export const SCAN_INTAKE_STATUSES = [
   'uploaded',

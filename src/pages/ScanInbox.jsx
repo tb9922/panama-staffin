@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PAGE, CARD, TABLE, BTN, INPUT, BADGE } from '../lib/design.js';
 import {
   getCurrentHome,
@@ -19,6 +20,7 @@ import { useToast } from '../contexts/ToastContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/scanIntake.js';
+import { describeScanLaunchContext, parseScanLaunchParams } from '../lib/scanRouting.js';
 
 const ONBOARDING_SECTIONS = [
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
@@ -46,6 +48,7 @@ function pickField(fields, ...keys) {
 export default function ScanInbox() {
   const home = getCurrentHome();
   const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,6 +64,7 @@ export default function ScanInbox() {
   const [suppliers, setSuppliers] = useState([]);
   const [onboardingData, setOnboardingData] = useState({ onboarding: {}, staff: [] });
   const [cqcEvidence, setCqcEvidence] = useState([]);
+  const [recordAttachmentForm, setRecordAttachmentForm] = useState({ module: '', record_id: '', description: '' });
   const [maintenanceForm, setMaintenanceForm] = useState({ record_id: '', description: '' });
   const [financeForm, setFinanceForm] = useState({
     target_type: 'create_expense',
@@ -79,7 +83,9 @@ export default function ScanInbox() {
       notes: '',
     },
   });
+  const [hrForm, setHrForm] = useState({ case_type: '', case_id: '', description: '' });
   const [onboardingForm, setOnboardingForm] = useState({ staff_id: '', section: 'dbs_check', description: '' });
+  const [trainingForm, setTrainingForm] = useState({ staff_id: '', type_id: '', description: '' });
   const [cqcForm, setCqcForm] = useState({
     evidence_id: '',
     description: '',
@@ -93,6 +99,7 @@ export default function ScanInbox() {
       review_due: '',
     },
   });
+  const launchContext = useMemo(() => parseScanLaunchParams(searchParams), [searchParams]);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -115,9 +122,43 @@ export default function ScanInbox() {
     try {
       const item = await getScanIntakeItem(home, selectedId);
       setSelected(item);
-      const defaultTarget = item.classification_target || 'finance_ap';
+      const defaultTarget = launchContext?.target || item.classification_target || 'finance_ap';
       setTarget(defaultTarget);
       const fields = item.summary_fields?.fields || {};
+      if (launchContext?.target === 'record_attachment') {
+        setRecordAttachmentForm((current) => ({
+          ...current,
+          module: launchContext.moduleId || current.module,
+          record_id: launchContext.recordId || current.record_id,
+        }));
+      }
+      if (launchContext?.target === 'hr_attachment') {
+        setHrForm((current) => ({
+          ...current,
+          case_type: launchContext.caseType || current.case_type,
+          case_id: launchContext.caseId || current.case_id,
+        }));
+      }
+      if (launchContext?.target === 'training') {
+        setTrainingForm((current) => ({
+          ...current,
+          staff_id: launchContext.staffId || current.staff_id,
+          type_id: launchContext.typeId || current.type_id,
+        }));
+      }
+      if (launchContext?.target === 'onboarding') {
+        setOnboardingForm((current) => ({
+          ...current,
+          staff_id: launchContext.staffId || current.staff_id,
+          section: launchContext.section || current.section,
+        }));
+      }
+      if (launchContext?.target === 'cqc') {
+        setCqcForm((current) => ({
+          ...current,
+          evidence_id: launchContext.evidenceId || current.evidence_id,
+        }));
+      }
       setFinanceForm((current) => ({
         ...current,
         expense: {
@@ -144,7 +185,7 @@ export default function ScanInbox() {
     } catch (err) {
       setError(err.message || 'Failed to load scan item');
     }
-  }, [home, selectedId]);
+  }, [home, launchContext, selectedId]);
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -170,12 +211,21 @@ export default function ScanInbox() {
   useEffect(() => { loadList(); loadReferenceData(); }, [loadList, loadReferenceData]);
   useEffect(() => { loadSelected(); }, [loadSelected]);
 
+  const availableTargets = useMemo(() => (
+    SCAN_INTAKE_TARGETS.filter((entry) =>
+      !entry.contextualOnly ||
+      launchContext?.target === entry.id ||
+      selected?.classification_target === entry.id
+    )
+  ), [launchContext, selected]);
+
   const selectedFields = selected?.summary_fields?.fields || {};
   const selectedConfidences = selected?.summary_fields?.confidences || {};
   const selectedClassification = selected?.summary_fields?.classification || {};
 
   const canConfirm = useMemo(() => {
     if (!selected) return false;
+    if (target === 'record_attachment') return Boolean(recordAttachmentForm.module && recordAttachmentForm.record_id);
     if (target === 'maintenance') return Boolean(maintenanceForm.record_id);
     if (target === 'finance_ap') {
       if (financeForm.target_type === 'create_expense') {
@@ -183,10 +233,12 @@ export default function ScanInbox() {
       }
       return Boolean(financeForm.record_id);
     }
+    if (target === 'hr_attachment') return Boolean(hrForm.case_type && hrForm.case_id);
     if (target === 'onboarding') return Boolean(onboardingForm.staff_id && onboardingForm.section);
+    if (target === 'training') return Boolean(trainingForm.staff_id && trainingForm.type_id);
     if (target === 'cqc') return Boolean(cqcForm.evidence_id || (cqcForm.create_evidence.quality_statement && cqcForm.create_evidence.title));
     return false;
-  }, [selected, target, maintenanceForm, financeForm, onboardingForm, cqcForm]);
+  }, [selected, target, recordAttachmentForm, maintenanceForm, financeForm, hrForm, onboardingForm, trainingForm, cqcForm]);
 
   async function handleUpload() {
     if (!file) return;
@@ -211,6 +263,7 @@ export default function ScanInbox() {
     setError(null);
     try {
       const payload = { target };
+      if (target === 'record_attachment') payload.record_attachment = { ...recordAttachmentForm };
       if (target === 'maintenance') payload.maintenance = { ...maintenanceForm };
       if (target === 'finance_ap') {
         payload.finance_ap = {
@@ -225,7 +278,14 @@ export default function ScanInbox() {
           },
         };
       }
+      if (target === 'hr_attachment') {
+        payload.hr_attachment = {
+          ...hrForm,
+          case_id: Number(hrForm.case_id),
+        };
+      }
       if (target === 'onboarding') payload.onboarding = { ...onboardingForm };
+      if (target === 'training') payload.training = { ...trainingForm };
       if (target === 'cqc') payload.cqc = {
         ...cqcForm,
         evidence_id: cqcForm.evidence_id || undefined,
@@ -274,11 +334,22 @@ export default function ScanInbox() {
       <div className={PAGE.header}>
         <div>
           <h1 className={PAGE.title}>Scan Inbox</h1>
-          <p className={PAGE.subtitle}>Scan once, review OCR, and file to Maintenance, Finance AP, Onboarding, or CQC.</p>
+          <p className={PAGE.subtitle}>Scan once, review OCR, and file the confirmed document back to the right module record.</p>
         </div>
+        {launchContext?.returnTo && (
+          <Link to={launchContext.returnTo} className={`${BTN.secondary} ${BTN.sm}`}>
+            Back to previous page
+          </Link>
+        )}
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      {launchContext?.target && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Scans from this session will default to <span className="font-semibold">{describeScanLaunchContext(launchContext)}</span>.
+        </div>
+      )}
 
       <div className={`${CARD.padded} flex flex-wrap items-end gap-3`}>
         <div className="min-w-64 flex-1">
@@ -358,12 +429,31 @@ export default function ScanInbox() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className={INPUT.label}>Destination</label>
-                    <select value={target} onChange={(e) => setTarget(e.target.value)} className={INPUT.select}>
-                      {SCAN_INTAKE_TARGETS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                    <label className={INPUT.label} htmlFor="scan-intake-target">Destination</label>
+                    <select id="scan-intake-target" value={target} onChange={(e) => setTarget(e.target.value)} className={INPUT.select}>
+                      {availableTargets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                     </select>
                     <p className="mt-1 text-xs text-gray-500">Suggested: {targetLabel(selectedClassification.target)} ({selectedClassification.confidence ? `${Math.round(selectedClassification.confidence * 100)}%` : '—'})</p>
                   </div>
+
+                  {target === 'record_attachment' && (
+                    <div className="space-y-3">
+                      {launchContext?.target === 'record_attachment' ? (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                          <div className="font-medium text-gray-900">{describeScanLaunchContext(launchContext)}</div>
+                          <div className="mt-1 text-xs text-gray-500">This scan will file into the current record attachments.</div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                          Open Scan Inbox from a record-level scan button to file directly into an existing record.
+                        </div>
+                      )}
+                      <div>
+                        <label className={INPUT.label}>Description</label>
+                        <input className={INPUT.base} value={recordAttachmentForm.description} onChange={(e) => setRecordAttachmentForm((current) => ({ ...current, description: e.target.value }))} />
+                      </div>
+                    </div>
+                  )}
 
                   {target === 'maintenance' && (
                     <div className="space-y-3">
@@ -393,11 +483,49 @@ export default function ScanInbox() {
                     </div>
                   )}
 
+                  {target === 'hr_attachment' && (
+                    <div className="space-y-3">
+                      {launchContext?.target === 'hr_attachment' ? (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                          <div className="font-medium text-gray-900">{describeScanLaunchContext(launchContext)}</div>
+                          <div className="mt-1 text-xs text-gray-500">This scan will file into the current HR case attachments.</div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                          Open Scan Inbox from a case-level scan button to file directly into an HR case.
+                        </div>
+                      )}
+                      <div>
+                        <label className={INPUT.label}>Description</label>
+                        <input className={INPUT.base} value={hrForm.description} onChange={(e) => setHrForm((current) => ({ ...current, description: e.target.value }))} />
+                      </div>
+                    </div>
+                  )}
+
                   {target === 'onboarding' && (
                     <div className="space-y-3">
                       <div><label className={INPUT.label}>Staff member</label><select className={INPUT.select} value={onboardingForm.staff_id} onChange={(e) => setOnboardingForm((current) => ({ ...current, staff_id: e.target.value }))}><option value="">Select staff</option>{(onboardingData.staff || []).map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></div>
                       <div><label className={INPUT.label}>Section</label><select className={INPUT.select} value={onboardingForm.section} onChange={(e) => setOnboardingForm((current) => ({ ...current, section: e.target.value }))}>{ONBOARDING_SECTIONS.map((section) => <option key={section} value={section}>{section}</option>)}</select></div>
                       <div><label className={INPUT.label}>Description</label><input className={INPUT.base} value={onboardingForm.description} onChange={(e) => setOnboardingForm((current) => ({ ...current, description: e.target.value }))} /></div>
+                    </div>
+                  )}
+
+                  {target === 'training' && (
+                    <div className="space-y-3">
+                      {launchContext?.target === 'training' ? (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                          <div className="font-medium text-gray-900">{describeScanLaunchContext(launchContext)}</div>
+                          <div className="mt-1 text-xs text-gray-500">This scan will file into the selected training record.</div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                          Open Scan Inbox from a training record to file directly into that record.
+                        </div>
+                      )}
+                      <div>
+                        <label className={INPUT.label}>Description</label>
+                        <input className={INPUT.base} value={trainingForm.description} onChange={(e) => setTrainingForm((current) => ({ ...current, description: e.target.value }))} />
+                      </div>
                     </div>
                   )}
 

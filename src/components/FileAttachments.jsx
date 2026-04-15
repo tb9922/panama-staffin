@@ -8,6 +8,8 @@ import {
   formatUploadPolicyHelp,
 } from '../../shared/uploadPolicies.js';
 import { validateClientFileSelection } from '../../lib/uploadValidation.js';
+import { getScanLaunchContext } from '../lib/scanRouting.js';
+import ScanDocumentLink from './ScanDocumentLink.jsx';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -46,6 +48,7 @@ export default function FileAttachments({
   const fetchFile = downloadFile || downloadHrAttachment;
   const activeCaseId = caseId || createdCaseId;
   const saveMessage = saveFirstText || saveFirstMessage;
+  const scanContext = getScanLaunchContext({ caseType, caseId: activeCaseId });
 
   useEffect(() => {
     if (caseId) setCreatedCaseId(null);
@@ -172,7 +175,7 @@ export default function FileAttachments({
       )}
 
       {!readOnly && (
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1">
             <label className={INPUT.label} htmlFor={fileInputId}>File</label>
             <input
@@ -206,6 +209,13 @@ export default function FileAttachments({
               >
                 Choose file
               </button>
+              {scanContext && (
+                <ScanDocumentLink
+                  context={scanContext}
+                  disabled={!activeCaseId}
+                  disabledReason={saveMessage}
+                />
+              )}
               <span className="min-w-0 truncate text-sm text-gray-500">
                 {selectedFileName || 'No file selected'}
               </span>

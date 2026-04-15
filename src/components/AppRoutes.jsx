@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import RouteErrorBoundary from './RouteErrorBoundary.jsx';
 import { RequireAnyModule, RequireEvidenceHub, RequireModule, RequirePlatformAdmin, RequireUserManagement } from './RequireRole.jsx';
+import { SCAN_INTAKE_ACCESS_MODULES } from '../../shared/scanIntake.js';
 
 const Dashboard = lazy(() => import('../pages/Dashboard.jsx'));
 const DailyStatus = lazy(() => import('../pages/DailyStatus.jsx'));
@@ -153,7 +154,7 @@ export default function AppRoutes() {
       {/* Reports & System */}
       <Route path="/reports" element={<RouteErrorBoundary><RequireModule module="reports"><Reports /></RequireModule></RouteErrorBoundary>} />
       <Route path="/evidence" element={<RouteErrorBoundary><RequireEvidenceHub><EvidenceHub /></RequireEvidenceHub></RouteErrorBoundary>} />
-      <Route path="/scan-inbox" element={<RouteErrorBoundary><RequireAnyModule modules={['finance', 'compliance']} level="write"><ScanInbox /></RequireAnyModule></RouteErrorBoundary>} />
+      <Route path="/scan-inbox" element={<RouteErrorBoundary><RequireAnyModule modules={SCAN_INTAKE_ACCESS_MODULES} level="write"><ScanInbox /></RequireAnyModule></RouteErrorBoundary>} />
       <Route path="/audit" element={<RouteErrorBoundary><RequirePlatformAdmin><AuditLog /></RequirePlatformAdmin></RouteErrorBoundary>} />
       <Route path="/users" element={<RouteErrorBoundary><RequireModule module="config"><RequireUserManagement><UserManagement /></RequireUserManagement></RequireModule></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><RequireModule module="config"><Config /></RequireModule></RouteErrorBoundary>} />

@@ -3,6 +3,8 @@ import { PAGE, CARD, TABLE, BADGE } from '../lib/design.js';
 import { getCurrentHome, getMaintenanceDocs } from '../lib/api.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 function SignalBadge({ value, goodLabel = 'OK', badLabel }) {
   return value > 0 ? <span className={BADGE.red}>{badLabel || value}</span> : <span className={BADGE.green}>{goodLabel}</span>;
@@ -10,6 +12,7 @@ function SignalBadge({ value, goodLabel = 'OK', badLabel }) {
 
 export default function MaintenanceDocsTracker() {
   const home = getCurrentHome();
+  const { canWrite } = useData();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,6 +41,7 @@ export default function MaintenanceDocsTracker() {
           <h1 className={PAGE.title}>Maintenance Docs Center</h1>
           <p className={PAGE.subtitle}>Certificates, service sheets, contractor evidence, and missing-proof gaps.</p>
         </div>
+        {canWrite('compliance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

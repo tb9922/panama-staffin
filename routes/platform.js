@@ -8,6 +8,7 @@ import * as homeRepo from '../repositories/homeRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as auditService from '../services/auditService.js';
 import * as authService from '../services/authService.js';
+import { SCAN_INTAKE_TARGET_IDS, SCAN_OCR_ENGINES } from '../shared/scanIntake.js';
 import { DEFAULT_TRAINING_TYPES } from '../shared/training.js';
 
 const router = Router();
@@ -27,8 +28,8 @@ const updateHomeSchema = z.object({
   registered_beds: z.coerce.number().int().min(1).max(200).optional(),
   care_type: z.string().max(100).optional(),
   scan_intake_enabled: z.boolean().optional(),
-  scan_intake_targets: z.array(z.enum(['maintenance', 'finance_ap', 'onboarding', 'cqc'])).max(4).optional(),
-  scan_ocr_engine: z.enum(['paddleocr']).optional(),
+  scan_intake_targets: z.array(z.enum(SCAN_INTAKE_TARGET_IDS)).max(SCAN_INTAKE_TARGET_IDS.length).optional(),
+  scan_ocr_engine: z.enum(SCAN_OCR_ENGINES).optional(),
 });
 
 function buildDefaultConfig(name, beds, careType, cycleStartDate) {
@@ -56,7 +57,7 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
     nmw_rate_18_20: 10.00,
     nmw_rate_under_18: 7.55,
     scan_intake_enabled: false,
-    scan_intake_targets: ['maintenance', 'finance_ap', 'onboarding', 'cqc'],
+    scan_intake_targets: SCAN_INTAKE_TARGET_IDS,
     scan_ocr_engine: 'paddleocr',
   };
 }

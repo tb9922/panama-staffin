@@ -7,16 +7,12 @@ import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { SCAN_INTAKE_TARGETS } from '../../shared/scanIntake.js';
 import {
   listPlatformHomes, createPlatformHome, updatePlatformHome, deletePlatformHome,
 } from '../lib/api.js';
 
-const SCAN_TARGET_OPTIONS = [
-  { id: 'maintenance', label: 'Maintenance' },
-  { id: 'finance_ap', label: 'Finance AP' },
-  { id: 'onboarding', label: 'Onboarding' },
-  { id: 'cqc', label: 'CQC' },
-];
+const SCAN_TARGET_OPTIONS = SCAN_INTAKE_TARGETS;
 
 const DEFAULT_SCAN_TARGETS = SCAN_TARGET_OPTIONS.map((option) => option.id);
 

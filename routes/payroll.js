@@ -80,7 +80,7 @@ const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : null;
 const ruleBodySchema = z.object({
   name:           z.string().min(1).max(100),
   rate_type:      z.enum(['percentage', 'fixed_hourly', 'flat_per_shift']),
-  amount:         z.number().positive(),
+  amount:         z.number().nonnegative(),
   applies_to:     z.enum(['night', 'weekend_sat', 'weekend_sun', 'bank_holiday', 'sleep_in', 'overtime', 'on_call']),
   priority:       z.number().int().optional().default(0),
   effective_from: dateSchema.optional(),

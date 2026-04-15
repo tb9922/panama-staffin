@@ -10,12 +10,14 @@ import { requireAuth, requireHomeAccess } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { config } from '../config.js';
 import { hasModuleAccess } from '../shared/roles.js';
-import { SCAN_INTAKE_TARGET_IDS, SCAN_OCR_ENGINES, getScanTarget } from '../shared/scanIntake.js';
+import { SCAN_INTAKE_ACCESS_MODULES, SCAN_INTAKE_TARGET_IDS, getScanTarget } from '../shared/scanIntake.js';
 import { SCAN_INTAKE_UPLOAD_POLICY } from '../shared/uploadPolicies.js';
 import { validateDeclaredUploadType, validateDetectedUploadType } from '../lib/uploadValidation.js';
+import { RECORD_ATTACHMENT_MODULE_IDS, RECORD_ATTACHMENT_PERMISSION_BY_MODULE } from '../shared/recordAttachmentModules.js';
 import * as documentIntakeRepo from '../repositories/documentIntakeRepo.js';
 import * as scanIntakeService from '../services/scanIntakeService.js';
 import * as auditService from '../services/auditService.js';
+import { caseTypeSchema } from './hr/schemas.js';
 
 const router = Router();
 
@@ -41,9 +43,16 @@ const financeExpenseCreateSchema = z.object({
   notes: z.string().max(5000).nullable().optional(),
 });
 
+const recordAttachmentConfirmSchema = z.object({
+  module: z.enum(RECORD_ATTACHMENT_MODULE_IDS),
+  record_id: z.string().min(1).max(50),
+  description: z.string().max(500).nullable().optional(),
+});
+
 const confirmBodySchema = z.object({
   target: z.enum(SCAN_INTAKE_TARGET_IDS),
   description: z.string().max(500).nullable().optional(),
+  record_attachment: recordAttachmentConfirmSchema.optional(),
   maintenance: z.object({
     record_id: z.coerce.number().int().positive(),
     description: z.string().max(500).nullable().optional(),
@@ -54,12 +63,22 @@ const confirmBodySchema = z.object({
     description: z.string().max(500).nullable().optional(),
     expense: financeExpenseCreateSchema.optional(),
   }).optional(),
+  hr_attachment: z.object({
+    case_type: caseTypeSchema,
+    case_id: z.coerce.number().int().positive(),
+    description: z.string().max(500).nullable().optional(),
+  }).optional(),
   onboarding: z.object({
     staff_id: z.string().min(1).max(20),
     section: z.enum([
       'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
       'qualifications', 'contract', 'employment_history', 'day1_induction', 'policy_acknowledgement',
     ]),
+    description: z.string().max(500).nullable().optional(),
+  }).optional(),
+  training: z.object({
+    staff_id: z.string().min(1).max(20),
+    type_id: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
     description: z.string().max(500).nullable().optional(),
   }).optional(),
   cqc: z.object({
@@ -97,7 +116,7 @@ function getConfiguredTargets(req) {
 function requireScanInboxAccess(level = 'read') {
   return (req, res, next) => {
     if (req.user?.is_platform_admin && req.homeRole != null) return next();
-    const allowed = ['finance', 'compliance'].some((moduleId) =>
+    const allowed = SCAN_INTAKE_ACCESS_MODULES.some((moduleId) =>
       hasModuleAccess(req.homeRole, moduleId, level)
     );
     if (!allowed) return res.status(403).json({ error: 'Scan inbox access denied' });
@@ -105,7 +124,25 @@ function requireScanInboxAccess(level = 'read') {
   };
 }
 
-function requireTargetWriteAccess(req, res, target) {
+function requireTargetWriteAccess(req, res, target, payload) {
+  if (target === 'record_attachment') {
+    const moduleId = payload?.record_attachment?.module;
+    if (!moduleId || !RECORD_ATTACHMENT_MODULE_IDS.includes(moduleId)) {
+      res.status(400).json({ error: 'Record attachment target needs a valid module' });
+      return false;
+    }
+    if (!getConfiguredTargets(req).includes(target)) {
+      res.status(403).json({ error: 'That destination is disabled for this home' });
+      return false;
+    }
+    if (req.user?.is_platform_admin && req.homeRole != null) return true;
+    const permissionModule = RECORD_ATTACHMENT_PERMISSION_BY_MODULE[moduleId];
+    if (!permissionModule || !hasModuleAccess(req.homeRole, permissionModule, 'write')) {
+      res.status(403).json({ error: `Insufficient permissions for ${permissionModule || 'record attachments'}` });
+      return false;
+    }
+    return true;
+  }
   const targetDef = getScanTarget(target);
   if (!targetDef) {
     res.status(400).json({ error: 'Unsupported scan target' });
@@ -235,7 +272,7 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
     const parsed = confirmBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid confirm payload' });
-    if (!requireTargetWriteAccess(req, res, parsed.data.target)) return;
+    if (!requireTargetWriteAccess(req, res, parsed.data.target, parsed.data)) return;
     const result = await scanIntakeService.confirmScanIntake(req.home.id, idParsed.data, parsed.data, req.user.username);
     await auditService.log('scan_intake_confirm', req.home.slug, req.user.username, {
       intakeId: idParsed.data,
