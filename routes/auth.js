@@ -74,7 +74,9 @@ router.post('/', loginLimiter, async (req, res, next) => {
     res.json(result);
   } catch (err) {
     // Log failed login attempt for brute-force detection
-    const username = req.body?.username || '(empty)';
+    const username = String(req.body?.username || '(empty)')
+      .replace(/[\r\n\t]/g, ' ')
+      .slice(0, 200);
     await auditService.log('login_failure', '-', username, null).catch(() => {});
     next(err);
   }

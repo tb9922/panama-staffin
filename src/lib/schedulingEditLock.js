@@ -35,6 +35,23 @@ export function saveSchedulingEditLockPin(homeSlug, pin) {
   }
 }
 
+export function clearSchedulingEditLockState() {
+  try {
+    const keysToDelete = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith('sched_unlock_dates_') || key?.startsWith('sched_unlock_pin_')) {
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage failures during logout/session expiry cleanup.
+  }
+}
+
 function getUnlockedDatesKey(homeSlug) {
   return `sched_unlock_dates_${homeSlug || 'default'}`;
 }

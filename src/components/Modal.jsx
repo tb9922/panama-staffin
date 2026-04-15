@@ -77,7 +77,9 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
       // Restore focus to previously focused element
-      if (previousFocus.current?.focus) previousFocus.current.focus();
+      if (previousFocus.current?.focus && document.contains(previousFocus.current)) {
+        previousFocus.current.focus();
+      }
     };
   }, [isOpen]);
 

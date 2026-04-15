@@ -27,6 +27,10 @@ const dbOverrideIdx = args.indexOf('--db');
 const dbOverride = dbOverrideIdx !== -1 ? args[dbOverrideIdx + 1] : null;
 
 const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
+const MIGRATION_ALIASES = new Map([
+  ['153_staff_unique_active_name_start.sql', ['124_staff_unique_active_name_start.sql']],
+  ['154_create_onboarding_history.sql', ['133_create_onboarding_history.sql']],
+]);
 
 // Load .env manually (same logic as config.js — keeps scripts self-contained)
 try {
@@ -81,9 +85,21 @@ async function migrate() {
       .filter(f => f.endsWith('.sql'))
       .sort();
 
+    const seenPrefixes = new Map();
+    for (const file of files) {
+      const match = file.match(/^(\d+)_/);
+      if (!match) continue;
+      const prefix = match[1];
+      if (seenPrefixes.has(prefix)) {
+        throw new Error(`Duplicate migration prefix ${prefix}: ${seenPrefixes.get(prefix)} and ${file}`);
+      }
+      seenPrefixes.set(prefix, file);
+    }
+
     let ran = 0;
     for (const file of files) {
-      if (completedNames.has(file)) continue;
+      const aliases = MIGRATION_ALIASES.get(file) || [];
+      if (completedNames.has(file) || aliases.some(alias => completedNames.has(alias))) continue;
 
       const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
       // Extract everything before "-- DOWN" as the UP section

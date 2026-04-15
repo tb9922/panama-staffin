@@ -142,3 +142,31 @@ export async function exportHrByHome(homeSlug, from, to) {
     ts: r.ts instanceof Date ? r.ts.toISOString() : r.ts,
   }));
 }
+
+export async function exportHrByHomeChunk(homeSlug, from, to, { limit = 1000, cursorTs = null, cursorId = null } = {}) {
+  const params = [homeSlug, from, to];
+  let cursorSql = '';
+  if (cursorTs && cursorId != null) {
+    params.push(cursorTs, cursorId);
+    cursorSql = ` AND (ts, id) < ($4, $5)`;
+  }
+  params.push(limit);
+  const limitParam = `$${params.length}`;
+
+  const { rows } = await pool.query(
+    `SELECT id, ts, action, home_slug, user_name, details
+       FROM audit_log
+      WHERE home_slug = $1
+        AND action LIKE 'hr_%'
+        AND ts >= $2
+        AND ts <= $3${cursorSql}
+      ORDER BY ts DESC, id DESC
+      LIMIT ${limitParam}`,
+    params
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    ts: row.ts instanceof Date ? row.ts.toISOString() : row.ts,
+  }));
+}

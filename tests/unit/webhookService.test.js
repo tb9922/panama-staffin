@@ -72,6 +72,7 @@ describe('webhookService', () => {
     expect(opts.headers['Content-Type']).toBe('application/json');
     expect(opts.headers['X-Webhook-Event']).toBe('incident.created');
     expect(opts.headers['X-Webhook-Signature']).toMatch(/^sha256=[a-f0-9]+$/);
+    expect(opts.headers['X-Webhook-Timestamp']).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('generates correct HMAC-SHA256 signature', async () => {
@@ -83,7 +84,8 @@ describe('webhookService', () => {
 
     const [, opts] = fetchSpy.mock.calls[0];
     const body = opts.body;
-    const expectedSig = crypto.createHmac('sha256', 'my-webhook-secret-key').update(body).digest('hex');
+    const timestamp = opts.headers['X-Webhook-Timestamp'];
+    const expectedSig = crypto.createHmac('sha256', 'my-webhook-secret-key').update(`${timestamp}.${body}`).digest('hex');
     expect(opts.headers['X-Webhook-Signature']).toBe(`sha256=${expectedSig}`);
   });
 

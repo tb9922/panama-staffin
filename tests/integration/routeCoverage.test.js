@@ -287,16 +287,19 @@ describe('dashboard and export routes', () => {
 });
 
 describe('bank holidays route', () => {
-  it('covers auth plus live-fetch and stale-cache fallback behavior', async () => {
+  it('covers auth plus region-aware live-fetch and stale-cache fallback behavior', async () => {
     await request(app).get('/api/bank-holidays').expect(401);
 
     __resetBankHolidayCacheForTests();
 
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         json: async () => ({
           'england-and-wales': {
             events: [{ date: '2026-12-25', title: 'Christmas Day' }],
+          },
+          scotland: {
+            events: [{ date: '2026-11-30', title: "St Andrew's Day" }],
           },
         }),
       });
@@ -307,11 +310,15 @@ describe('bank holidays route', () => {
     expect(freshRes.body).toEqual([{ date: '2026-12-25', name: 'Christmas Day' }]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    __primeBankHolidayCacheForTests(freshRes.body, Date.now() - 1);
+    const scotlandRes = await authGet('/api/bank-holidays?region=scotland', viewerToken).expect(200);
+    expect(scotlandRes.body).toEqual([{ date: '2026-11-30', name: "St Andrew's Day" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    __primeBankHolidayCacheForTests('england-and-wales', freshRes.body, Date.now() - 1);
     fetchMock.mockRejectedValueOnce(new Error('upstream down'));
 
     const staleRes = await authGet('/api/bank-holidays', viewerToken).expect(200);
     expect(staleRes.body).toEqual([{ date: '2026-12-25', name: 'Christmas Day' }]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

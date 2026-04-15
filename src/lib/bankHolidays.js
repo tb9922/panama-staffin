@@ -57,8 +57,8 @@ export function getHardcodedBankHolidays(yearFrom, yearTo) {
 }
 
 // Fetch from GOV.UK API via server proxy
-export async function fetchGovUKBankHolidays() {
-  const res = await fetch('/api/bank-holidays');
+export async function fetchGovUKBankHolidays(region = 'england-and-wales') {
+  const res = await fetch(`/api/bank-holidays?region=${encodeURIComponent(region)}`);
   if (!res.ok) throw new Error('Failed to fetch from GOV.UK');
   return res.json();
 }
@@ -77,16 +77,21 @@ export function mergeBankHolidays(existing, newHolidays) {
 }
 
 // Sync bank holidays: try API first, fall back to hardcoded
-export async function syncBankHolidays(existing) {
+export async function syncBankHolidays(existing, region = 'england-and-wales') {
   let source = 'hardcoded';
   let holidays;
   try {
-    holidays = await fetchGovUKBankHolidays();
+    holidays = await fetchGovUKBankHolidays(region);
     source = 'GOV.UK API';
   } catch {
-    const now = new Date();
-    holidays = getHardcodedBankHolidays(now.getFullYear(), now.getFullYear() + 2);
-    source = 'hardcoded (API unavailable)';
+    if (region === 'england-and-wales') {
+      const now = new Date();
+      holidays = getHardcodedBankHolidays(now.getFullYear(), now.getFullYear() + 2);
+      source = 'hardcoded (API unavailable)';
+    } else {
+      holidays = existing || [];
+      source = 'existing list (region-specific API unavailable)';
+    }
   }
   const merged = mergeBankHolidays(existing, holidays);
   const added = merged.length - (existing || []).length;

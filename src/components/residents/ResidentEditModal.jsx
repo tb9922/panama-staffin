@@ -27,9 +27,17 @@ export default function ResidentEditModal({ home, resident, canEdit, onClose, on
   const feeChanged = form.weekly_fee != resident.weekly_fee;
 
   useEffect(() => {
+    let cancelled = false;
     if (tab === 'history') {
-      getFinanceFeeHistory(home, resident.id).then(r => setFeeHistory(r.rows || r || [])).catch(() => setFeeHistory([]));
+      getFinanceFeeHistory(home, resident.id)
+        .then(r => {
+          if (!cancelled) setFeeHistory(r.rows || r || []);
+        })
+        .catch(() => {
+          if (!cancelled) setFeeHistory([]);
+        });
     }
+    return () => { cancelled = true; };
   }, [tab, home, resident.id]);
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }

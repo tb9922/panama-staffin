@@ -7,6 +7,49 @@ const MAX_RETRIES = 5;
 // Exponential backoff: 30s, 2min, 10min, 1hr, 6hr
 const RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((acc, key) => {
+      acc[key] = canonicalize(value[key]);
+      return acc;
+    }, {});
+  }
+  return value;
+}
+
+function serializeEnvelope(envelope) {
+  return JSON.stringify(canonicalize(envelope));
+}
+
+function buildSignature(secret, timestamp, body) {
+  return crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+}
+
+function normalizeEnvelope(event, payload) {
+  if (typeof payload === 'string') {
+    try {
+      return normalizeEnvelope(event, JSON.parse(payload));
+    } catch {
+      // Fall through and wrap the raw string as payload.
+    }
+  }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    payload.event === event &&
+    typeof payload.timestamp === 'string' &&
+    Object.hasOwn(payload, 'payload')
+  ) {
+    return payload;
+  }
+  return {
+    event,
+    payload: payload ?? null,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 /**
  * Dispatch a webhook event to all active subscribers for a home.
  * Fire-and-forget — never throws, never blocks the caller.
@@ -37,10 +80,9 @@ export function getNextRetryAt(retryCount) {
 }
 
 async function fireWebhook(hook, event, payload) {
-  const body = typeof payload === 'string'
-    ? payload // retries pass the original serialised body
-    : JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
-  const signature = crypto.createHmac('sha256', hook.secret).update(body).digest('hex');
+  const envelope = normalizeEnvelope(event, payload);
+  const body = serializeEnvelope(envelope);
+  const signature = buildSignature(hook.secret, envelope.timestamp, body);
   const requestId = crypto.randomUUID();
   const start = Date.now();
   let statusCode = null;
@@ -63,6 +105,7 @@ async function fireWebhook(hook, event, payload) {
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': `sha256=${signature}`,
+        'X-Webhook-Timestamp': envelope.timestamp,
         'X-Webhook-Event': event,
         'X-Webhook-Request-ID': requestId,
       },
@@ -86,14 +129,14 @@ async function fireWebhook(hook, event, payload) {
   const isSuccess = statusCode !== null && statusCode >= 200 && statusCode < 300;
 
   if (isSuccess) {
-    webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, null, 'delivered')
+    webhookRepo.logDelivery(hook.id, event, envelope, statusCode, responseMs, null, 'delivered')
       .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
   } else {
     // Schedule for retry
     const retryCount = 1;
     const nextRetryAt = getNextRetryAt(0);
     const status = 'pending_retry';
-    const deliveryId = await webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, error, status)
+    const deliveryId = await webhookRepo.logDelivery(hook.id, event, envelope, statusCode, responseMs, error, status)
       .catch(logErr => {
         logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed');
         return null;
@@ -135,10 +178,9 @@ export async function processRetries() {
       let statusCode = null;
       let error = null;
 
-      const body = typeof delivery.payload === 'string'
-        ? delivery.payload
-        : JSON.stringify(delivery.payload);
-      const signature = crypto.createHmac('sha256', delivery.secret).update(body).digest('hex');
+      const envelope = normalizeEnvelope(delivery.event, delivery.payload);
+      const body = serializeEnvelope(envelope);
+      const signature = buildSignature(delivery.secret, envelope.timestamp, body);
       const requestId = crypto.randomUUID();
 
       // Re-validate URL at retry time to prevent DNS rebinding SSRF
@@ -157,6 +199,7 @@ export async function processRetries() {
           headers: {
             'Content-Type': 'application/json',
             'X-Webhook-Signature': `sha256=${signature}`,
+            'X-Webhook-Timestamp': envelope.timestamp,
             'X-Webhook-Event': delivery.event,
             'X-Webhook-Request-ID': requestId,
           },

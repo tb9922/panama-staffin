@@ -1,3 +1,5 @@
+import { clearSchedulingEditLockState } from './schedulingEditLock.js'
+
 const API_BASE = '/api';
 
 let currentHome = null;
@@ -18,6 +20,7 @@ function clearClientSession() {
   } catch {
     /* ignore */
   }
+  clearSchedulingEditLockState();
 }
 
 function expireClientSession() {

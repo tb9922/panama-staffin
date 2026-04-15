@@ -170,12 +170,15 @@ jobs:
             npm ci --omit=dev
             npm run build
             ./scripts/backup-db.sh
+            LATEST_BACKUP=$(ls -1t backups/db/panama_*.sql.gz | head -n 1)
             if ! node scripts/migrate.js; then
               echo "Migration failed — rolling back code to $PREV_COMMIT"
+              pm2 stop panama || true
+              FORCE_RESTORE_DB=true ./scripts/restore-db.sh "$LATEST_BACKUP"
               git checkout "$PREV_COMMIT"
               npm ci --omit=dev
               npm run build
-              pm2 reload panama --update-env
+              pm2 restart panama --update-env
               exit 1
             fi
             pm2 reload panama --update-env

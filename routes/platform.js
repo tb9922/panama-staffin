@@ -47,6 +47,7 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
     supervision_frequency_probation: 30,
     supervision_frequency_standard: 49,
     supervision_probation_months: 6,
+    bank_holiday_region: 'england-and-wales',
     bank_holidays: [],
     nlw_rate: 12.21,
     nmw_rate_18_20: 10.00,

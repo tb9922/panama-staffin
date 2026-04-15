@@ -1,18 +1,14 @@
 import logger from '../logger.js';
 import * as dashboardRepo from '../repositories/dashboardRepo.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 // ── In-memory TTL cache ──────────────────────────────────────────────────────
 // Dashboard data is identical for all users viewing the same home within a short
 // window. Caching for 10s reduces 23 parallel DB queries to 1 cache lookup on
 // cache hit — critical at 24 homes with concurrent managers.
 
-const CACHE_TTL_MS = 10_000;
-const cache = new Map(); // homeId → { data, expiresAt }
-
-/** Invalidate cached dashboard for a home (call after any mutation to that home). */
-export function invalidateDashboardCache(homeId) {
-  cache.delete(homeId);
-}
+/** Legacy no-op kept for compatibility with older imports. */
+export function invalidateDashboardCache() {}
 
 // ── Alert priority ordering ─────────────────────────────────────────────────
 
@@ -150,13 +146,7 @@ const MODULE_KEYS = Object.keys(DEFAULTS);
 // ── Main export ─────────────────────────────────────────────────────────────
 
 export async function getDashboardSummary(homeId) {
-  // Return cached result if still fresh
-  const cached = cache.get(homeId);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.data;
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO(new Date());
 
   const results = await Promise.allSettled([
     dashboardRepo.getIncidentCounts(homeId),
@@ -194,12 +184,5 @@ export async function getDashboardSummary(homeId) {
 
   logger.info({ homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
 
-  const result = { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
-
-  // Only cache successful (non-degraded) results — degraded results should retry on next request
-  if (!result._degraded) {
-    cache.set(homeId, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-  }
-
-  return result;
+  return { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
 }

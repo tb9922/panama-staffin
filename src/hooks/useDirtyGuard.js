@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useBlocker } from 'react-router-dom';
 
 /**
@@ -8,6 +8,8 @@ import { useBlocker } from 'react-router-dom';
  * @param {boolean} isDirty - true when the form has unsaved changes
  */
 export default function useDirtyGuard(isDirty) {
+  const confirmOpenRef = useRef(false);
+
   // Browser close / refresh / external navigation
   useEffect(() => {
     if (!isDirty) return;
@@ -19,17 +21,21 @@ export default function useDirtyGuard(isDirty) {
   // In-app navigation (React Router)
   const blocker = useBlocker(useCallback(({ currentLocation, nextLocation }) => {
     if (!isDirty) return false;
-    return currentLocation.pathname !== nextLocation.pathname;
+    return currentLocation.pathname !== nextLocation.pathname
+      || currentLocation.search !== nextLocation.search
+      || currentLocation.hash !== nextLocation.hash;
   }, [isDirty]));
 
   // Show confirmation when blocker is active
   useEffect(() => {
-    if (blocker.state !== 'blocked') return;
+    if (blocker.state !== 'blocked' || confirmOpenRef.current) return;
+    confirmOpenRef.current = true;
     const leave = window.confirm('You have unsaved changes. Leave this page?');
     if (leave) {
-      setTimeout(blocker.proceed, 0); // defer to match React Router's usePrompt pattern
+      blocker.proceed();
     } else {
       blocker.reset();
     }
+    confirmOpenRef.current = false;
   }, [blocker]);
 }

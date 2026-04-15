@@ -35,6 +35,14 @@ const router = Router();
 async function validateALOverride(homeId, config, date, staffId, batchCtx, client) {
   const conn = client || pool;
 
+  // Serialize same-home same-day AL validation inside the surrounding transaction.
+  if (client) {
+    await conn.query(
+      `SELECT pg_advisory_xact_lock($1::integer, hashtext($2::text))`,
+      [homeId, `al:${date}`]
+    );
+  }
+
   // 1. Check max AL per day (excluding this staff's existing override on this date)
   const maxAL = config?.max_al_same_day ?? 2;
   const { rows: countRows } = await conn.query(

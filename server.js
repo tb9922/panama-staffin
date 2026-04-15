@@ -13,12 +13,14 @@ import { pool } from './db.js';
 import logger from './logger.js';
 import { metricsContentType, recordHttpRequestMetrics, renderMetrics } from './metrics.js';
 import { runWithRequestContext } from './requestContext.js';
+import { scrubSentryEvent } from './shared/sentryScrubber.js';
 
 if (config.sentryDsn) {
   Sentry.init({
     dsn: config.sentryDsn,
     environment: config.nodeEnv,
     tracesSampleRate: config.sentryTracesSampleRate,
+    beforeSend: scrubSentryEvent,
   });
   logger.info('Sentry error tracking enabled');
 }
@@ -253,6 +255,7 @@ const isDirectRun = Boolean(process.argv[1] && import.meta.url.endsWith(process.
 const isPm2Process = process.env.pm_id != null || process.env.NODE_APP_INSTANCE != null;
 const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 const shouldListen = !isTestProcess && (isDirectRun || isPm2Process);
+let webhookRetryLoopInFlight = false;
 const server = shouldListen ? app.listen(config.port, async () => {
   // Request + connection timeouts
   server.setTimeout(30000);        // 30s max request duration
@@ -287,7 +290,13 @@ const server = shouldListen ? app.listen(config.port, async () => {
     ).unref();
     // Process webhook retries every 30 seconds
     setInterval(
-      () => processWebhookRetries().catch(err => logger.warn({ err: err?.message }, 'webhook retry processing failed')),
+      () => {
+        if (webhookRetryLoopInFlight) return;
+        webhookRetryLoopInFlight = true;
+        processWebhookRetries()
+          .catch(err => logger.warn({ err: err?.message }, 'webhook retry processing failed'))
+          .finally(() => { webhookRetryLoopInFlight = false; });
+      },
       30_000
     ).unref();
     logger.info('Background jobs registered (instance 0)');

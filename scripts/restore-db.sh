@@ -40,12 +40,14 @@ echo ""
 
 # Safety check — refuse to restore over production without explicit override
 if [ "${DB_NAME}" = "panama_dev" ] || [ "${DB_NAME}" = "panama_prod" ]; then
-  echo "WARNING: You are about to DROP and recreate '${DB_NAME}'."
-  echo "This will destroy all existing data in that database."
-  read -p "Type the database name to confirm: " CONFIRM
-  if [ "${CONFIRM}" != "${DB_NAME}" ]; then
-    echo "Aborted."
-    exit 1
+  if [ "${FORCE_RESTORE_DB:-false}" != "true" ]; then
+    echo "WARNING: You are about to DROP and recreate '${DB_NAME}'."
+    echo "This will destroy all existing data in that database."
+    read -p "Type the database name to confirm: " CONFIRM
+    if [ "${CONFIRM}" != "${DB_NAME}" ]; then
+      echo "Aborted."
+      exit 1
+    fi
   fi
 fi
 
@@ -59,6 +61,12 @@ trap 'rm -f "$PGPASSFILE"' EXIT
 # ── Drop and recreate ────────────────────────────────────────────────────────
 
 echo "[$(date --iso-8601=seconds)] Dropping ${DB_NAME} (if exists)..."
+psql \
+  -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
+  -d postgres \
+  --quiet \
+  -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" \
+  > /dev/null
 dropdb \
   -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" \
   --if-exists "${DB_NAME}"

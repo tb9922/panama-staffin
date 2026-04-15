@@ -35,10 +35,34 @@ router.get('/admin/audit-export', requireAuth, requireHomeAccess, requireModule(
   try {
     const from = dateParamSchema.safeParse(req.query.from).success ? req.query.from : '1970-01-01';
     const to = dateParamSchema.safeParse(req.query.to).success ? req.query.to : '9999-12-31';
-    const rows = await auditRepo.exportHrByHome(req.home.slug, from, to);
     res.setHeader('Content-Disposition', `attachment; filename="hr-audit-${req.home.slug}-${from}-${to}.json"`);
+    res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json(rows);
+    res.write('[');
+    let first = true;
+    let cursorTs = null;
+    let cursorId = null;
+
+    while (true) {
+      const rows = await auditRepo.exportHrByHomeChunk(req.home.slug, from, to, {
+        limit: 1000,
+        cursorTs,
+        cursorId,
+      });
+      if (rows.length === 0) break;
+
+      for (const row of rows) {
+        if (!first) res.write(',');
+        res.write(JSON.stringify(row));
+        first = false;
+      }
+
+      const last = rows[rows.length - 1];
+      cursorTs = last.ts;
+      cursorId = last.id;
+    }
+
+    res.end(']');
   } catch (err) { next(err); }
 });
 

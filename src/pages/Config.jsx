@@ -15,6 +15,12 @@ function parseOptionalNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const BANK_HOLIDAY_REGIONS = [
+  { id: 'england-and-wales', label: 'England & Wales' },
+  { id: 'scotland', label: 'Scotland' },
+  { id: 'northern-ireland', label: 'Northern Ireland' },
+];
+
 export default function Config() {
   const { canWrite } = useData();
   const canEdit = canWrite('config');
@@ -39,7 +45,10 @@ export default function Config() {
       setLoading(true);
       setLoadError(null);
       const d = await getSchedulingData(homeSlug);
-      setConfig(JSON.parse(JSON.stringify(d.config || {})));
+      setConfig(JSON.parse(JSON.stringify({
+        bank_holiday_region: 'england-and-wales',
+        ...(d.config || {}),
+      })));
       setConfigUpdatedAt(d.configUpdatedAt || null);
       setStaff(d.staff || []);
     } catch (e) {
@@ -375,10 +384,26 @@ export default function Config() {
       <section className={CARD.padded}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Bank Holidays</h2>
+          <div className="flex items-end gap-3">
+            <div>
+              <label className={`${INPUT.label} mb-1`}>Region</label>
+              <select
+                value={config.bank_holiday_region || 'england-and-wales'}
+                onChange={e => handleChange('bank_holiday_region', e.target.value)}
+                className={INPUT.select}
+              >
+                {BANK_HOLIDAY_REGIONS.map((region) => (
+                  <option key={region.id} value={region.id}>{region.label}</option>
+                ))}
+              </select>
+            </div>
           <button onClick={async () => {
             setSyncStatus({ loading: true });
             try {
-              const result = await syncBankHolidays(config.bank_holidays);
+              const result = await syncBankHolidays(
+                config.bank_holidays,
+                config.bank_holiday_region || 'england-and-wales',
+              );
               handleChange('bank_holidays', result.holidays);
               setSyncStatus({ success: true, msg: `Synced via ${result.source} — ${result.added} new holidays added (${result.holidays.length} total)` });
               setTimeout(() => setSyncStatus(null), 5000);
@@ -390,6 +415,7 @@ export default function Config() {
             className={`${BTN.primary} ${BTN.sm} !bg-purple-600 hover:!bg-purple-700 active:!bg-purple-800`}>
             {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
           </button>
+          </div>
         </div>
         {syncStatus && !syncStatus.loading && (
           <div className={`text-sm px-3 py-2 rounded-xl mb-3 ${syncStatus.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
