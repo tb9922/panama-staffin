@@ -78,6 +78,9 @@ function mockData(overrides = {}) {
     canWrite: () => true,
     homeRole: 'home_manager',
     staffId: null,
+    scanIntakeEnabled: false,
+    scanIntakeTargets: [],
+    isScanTargetEnabled: () => false,
     ...overrides,
   });
 }
@@ -295,6 +298,40 @@ describe('AppLayout', () => {
     renderLayout({ username: 'mystery', role: 'viewer' });
     fireEvent.click(screen.getByRole('button', { name: 'System' }));
     expect(screen.queryByRole('link', { name: 'Evidence Hub' })).not.toBeInTheDocument();
+  });
+
+  it('shows Scan Inbox when scan intake is enabled for the home', async () => {
+    mockData({
+      canRead: (mod) => ['reports', 'compliance'].includes(mod),
+      canWrite: () => false,
+      homeRole: 'home_manager',
+      scanIntakeEnabled: true,
+      scanIntakeTargets: ['maintenance'],
+      isScanTargetEnabled: () => true,
+    });
+    renderLayout();
+    const systemButton = screen.getByRole('button', { name: 'System' });
+    if (systemButton.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(systemButton);
+    }
+    expect(await screen.findByRole('link', { name: 'Scan Inbox' })).toBeInTheDocument();
+  });
+
+  it('hides Scan Inbox when scan intake is disabled for the home', () => {
+    mockData({
+      canRead: (mod) => ['reports', 'compliance'].includes(mod),
+      canWrite: () => false,
+      homeRole: 'home_manager',
+      scanIntakeEnabled: false,
+      scanIntakeTargets: [],
+      isScanTargetEnabled: () => false,
+    });
+    renderLayout();
+    const systemButton = screen.getByRole('button', { name: 'System' });
+    if (systemButton.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(systemButton);
+    }
+    expect(screen.queryByRole('link', { name: 'Scan Inbox' })).not.toBeInTheDocument();
   });
 
   it('keeps the current route section expanded when landing on a nested page', () => {
