@@ -445,6 +445,7 @@ export async function processScheduledPayment(scheduleId, homeId, username, vers
       category: schedule.category,
       description: `${schedule.supplier} — ${schedule.description || schedule.category} (scheduled)`,
       supplier: schedule.supplier,
+      supplier_id: schedule.supplier_id || null,
       net_amount: schedule.amount,
       vat_amount: 0,
       gross_amount: schedule.amount,

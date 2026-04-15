@@ -26,6 +26,9 @@ const updateHomeSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   registered_beds: z.coerce.number().int().min(1).max(200).optional(),
   care_type: z.string().max(100).optional(),
+  scan_intake_enabled: z.boolean().optional(),
+  scan_intake_targets: z.array(z.enum(['maintenance', 'finance_ap', 'onboarding', 'cqc'])).max(4).optional(),
+  scan_ocr_engine: z.enum(['paddleocr']).optional(),
 });
 
 function buildDefaultConfig(name, beds, careType, cycleStartDate) {
@@ -52,6 +55,9 @@ function buildDefaultConfig(name, beds, careType, cycleStartDate) {
     nlw_rate: 12.21,
     nmw_rate_18_20: 10.00,
     nmw_rate_under_18: 7.55,
+    scan_intake_enabled: false,
+    scan_intake_targets: ['maintenance', 'finance_ap', 'onboarding', 'cqc'],
+    scan_ocr_engine: 'paddleocr',
   };
 }
 
@@ -110,7 +116,7 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
     const parsed = updateHomeSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
 
-    const { name, registered_beds, care_type } = parsed.data;
+    const { name, registered_beds, care_type, scan_intake_enabled, scan_intake_targets, scan_ocr_engine } = parsed.data;
 
     const result = await withTransaction(async (client) => {
       const home = await homeRepo.findByIdIncludingDeleted(id.data, client);
@@ -124,10 +130,13 @@ router.put('/homes/:id', writeRateLimiter, requireAuth, requirePlatformAdmin, as
       if (name) mergedConfig.home_name = name;
       if (registered_beds !== undefined) mergedConfig.registered_beds = registered_beds;
       if (care_type !== undefined) mergedConfig.care_type = care_type;
+      if (scan_intake_enabled !== undefined) mergedConfig.scan_intake_enabled = scan_intake_enabled;
+      if (scan_intake_targets !== undefined) mergedConfig.scan_intake_targets = scan_intake_targets;
+      if (scan_ocr_engine !== undefined) mergedConfig.scan_ocr_engine = scan_ocr_engine;
 
       await homeRepo.updateConfig(id.data, mergedConfig, client);
       await auditService.log('home_update', home.slug, req.user.username, {
-        changes: { name, registered_beds, care_type },
+        changes: { name, registered_beds, care_type, scan_intake_enabled, scan_intake_targets, scan_ocr_engine },
       }, client);
 
       return { ok: true };

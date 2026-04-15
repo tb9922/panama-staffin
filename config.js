@@ -145,4 +145,9 @@ export const config = {
       'text/plain',
     ],
   },
+
+  ocr: {
+    paddleUrl: process.env.PADDLE_OCR_URL || null,
+    timeoutMs: parseIntEnv(process.env.PADDLE_OCR_TIMEOUT_MS, 30000),
+  },
 };

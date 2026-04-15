@@ -45,6 +45,28 @@ export async function findAttachments(homeId, moduleId, recordId, client) {
   return rows.map(shape);
 }
 
+export async function findByHome(homeId, { moduleId, moduleIds, limit = 5000 } = {}, client) {
+  const conn = client || pool;
+  const params = [homeId];
+  let sql = `
+    SELECT ${COLS}
+      FROM record_file_attachments
+     WHERE home_id = $1
+       AND deleted_at IS NULL
+  `;
+  if (moduleId) {
+    params.push(moduleId);
+    sql += ` AND module = $${params.length}`;
+  } else if (moduleIds?.length) {
+    params.push(moduleIds);
+    sql += ` AND module = ANY($${params.length}::text[])`;
+  }
+  sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+  params.push(Math.min(limit, 10000));
+  const { rows } = await conn.query(sql, params);
+  return rows.map(shape);
+}
+
 export async function findById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

@@ -11,6 +11,15 @@ export function RequireModule({ module, level = 'read', children }) {
   return children;
 }
 
+export function RequireAnyModule({ modules, level = 'read', children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { homeRole } = useData();
+  if (!isPlatformAdmin && !modules.some((moduleId) => hasModuleAccess(homeRole, moduleId, level))) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export function RequireAdmin({ children }) {
   const { isViewer } = useAuth();
   if (isViewer) return <Navigate to="/" replace />;

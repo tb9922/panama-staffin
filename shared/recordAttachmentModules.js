@@ -4,7 +4,7 @@ export const RECORD_ATTACHMENT_MODULES = [
   { id: 'incident', label: 'Incident', permissionModule: 'compliance', pagePath: '/incidents' },
   { id: 'complaint', label: 'Complaint', permissionModule: 'compliance', pagePath: '/complaints' },
   { id: 'ipc_audit', label: 'IPC Audit', permissionModule: 'compliance', pagePath: '/ipc' },
-  { id: 'maintenance', label: 'Maintenance', permissionModule: 'governance', pagePath: '/maintenance' },
+  { id: 'maintenance', label: 'Maintenance', permissionModule: 'compliance', pagePath: '/maintenance' },
   { id: 'bed', label: 'Bed', permissionModule: 'finance', pagePath: '/beds' },
   { id: 'budget_month', label: 'Budget', permissionModule: 'finance', pagePath: '/budget' },
   { id: 'handover_entry', label: 'Handover', permissionModule: 'scheduling', pagePath: '/handover' },

@@ -108,6 +108,7 @@ const expenseBodySchema = z.object({
   subcategory: z.string().max(100).nullable().optional(),
   description: z.string().min(1).max(500),
   supplier: z.string().max(200).nullable().optional(),
+  supplier_id: z.coerce.number().int().positive().nullable().optional(),
   invoice_ref: z.string().max(100).nullable().optional(),
   net_amount: z.coerce.number().min(0),
   vat_amount: z.coerce.number().min(0).default(0),
@@ -141,6 +142,7 @@ const chaseBodySchema = z.object({
 
 const paymentScheduleBodySchema = z.object({
   supplier: z.string().min(1).max(200),
+  supplier_id: z.coerce.number().int().positive().nullable().optional(),
   category: z.enum([
     'staffing', 'agency', 'food', 'utilities', 'maintenance', 'medical_supplies',
     'cleaning', 'insurance', 'rent', 'rates', 'training', 'equipment',

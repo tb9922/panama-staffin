@@ -2,9 +2,12 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
-
-const ACCEPTED_UPLOAD_EXTENSIONS = '.pdf,.doc,.docx,.rtf,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.txt';
-const ACCEPTED_UPLOAD_HELP = 'Accepted: PDF, Word, RTF, Excel, CSV, JPG, PNG, GIF, WebP, HEIC/HEIF, TXT (max 20MB).';
+import {
+  GENERIC_ATTACHMENT_UPLOAD_POLICY,
+  getAcceptString,
+  formatUploadPolicyHelp,
+} from '../../shared/uploadPolicies.js';
+import { validateClientFileSelection } from '../../lib/uploadValidation.js';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -68,8 +71,9 @@ export default function FileAttachments({
 
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
-    if (!file) {
-      setError('Choose a file first.');
+    const validationError = validateClientFileSelection(file, GENERIC_ATTACHMENT_UPLOAD_POLICY);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setUploading(true);
@@ -176,9 +180,17 @@ export default function FileAttachments({
               ref={fileInputRef}
               type="file"
               className="sr-only"
-              accept={ACCEPTED_UPLOAD_EXTENSIONS}
+              accept={getAcceptString(GENERIC_ATTACHMENT_UPLOAD_POLICY)}
               onChange={(e) => {
-                setSelectedFileName(e.target.files?.[0]?.name || '');
+                const nextFile = e.target.files?.[0] || null;
+                const validationError = validateClientFileSelection(nextFile, GENERIC_ATTACHMENT_UPLOAD_POLICY);
+                if (validationError) {
+                  setSelectedFileName('');
+                  setError(validationError);
+                  e.target.value = '';
+                  return;
+                }
+                setSelectedFileName(nextFile?.name || '');
                 setError(null);
               }}
             />
@@ -198,7 +210,7 @@ export default function FileAttachments({
                 {selectedFileName || 'No file selected'}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-gray-400">{ACCEPTED_UPLOAD_HELP}</p>
+            <p className="mt-1 text-[11px] text-gray-400">{formatUploadPolicyHelp(GENERIC_ATTACHMENT_UPLOAD_POLICY)}</p>
             {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
           <div className="flex-1">

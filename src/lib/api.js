@@ -1404,6 +1404,92 @@ export async function downloadRecordAttachment(id, originalName) {
   return downloadBinary(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${h(home)}`, originalName);
 }
 
+export async function getMaintenanceDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/maintenance/docs?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getFinanceDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/finance/docs?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getOnboardingDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/onboarding/docs?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getCqcDocs(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc/docs?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function listScanIntake(homeSlug, { status, target, limit = 50, offset = 0 } = {}) {
+  const params = homeQueryParams(homeSlug, { limit, offset });
+  if (status) params.set('status', status);
+  if (target) params.set('target', target);
+  return apiFetch(`${API_BASE}/scan-intake?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getScanIntakeItem(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function createScanIntake(homeSlug, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return uploadMultipart(`${API_BASE}/scan-intake?home=${h(homeSlug)}`, formData);
+}
+
+export async function confirmScanIntake(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/confirm?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function rejectScanIntake(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/reject?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function retryScanIntake(homeSlug, id) {
+  return apiFetch(`${API_BASE}/scan-intake/${encodeURIComponent(id)}/retry?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function getSuppliers(homeSlug, filters = {}) {
+  const params = homeQueryParams(homeSlug);
+  if (filters.q) params.set('q', filters.q);
+  if (filters.activeOnly != null) params.set('activeOnly', String(filters.activeOnly));
+  return apiFetch(`${API_BASE}/finance/suppliers?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function createSupplier(homeSlug, data) {
+  return apiFetch(`${API_BASE}/finance/suppliers?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateSupplier(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/finance/suppliers/${encodeURIComponent(id)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function mergeSuppliers(homeSlug, sourceId, targetId) {
+  return apiFetch(`${API_BASE}/finance/suppliers/merge?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ sourceId, targetId }),
+  });
+}
+
 export async function getHrMeetings(caseType, caseId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${h(home)}`, { headers: authHeaders() });

@@ -45,6 +45,19 @@ export async function findAttachments(homeId, staffId, section, client) {
   return rows.map(shape);
 }
 
+export async function findByHome(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${COLS}
+       FROM onboarding_file_attachments
+      WHERE home_id = $1
+        AND deleted_at IS NULL
+      ORDER BY created_at DESC`,
+    [homeId]
+  );
+  return rows.map(shape);
+}
+
 export async function findById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

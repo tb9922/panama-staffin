@@ -31,6 +31,10 @@ export default function AppLayout() {
     if (item.platformAdminOnly && !isPlatformAdmin) return false;
     if (item.requiresUserManagement && !canManageUsers) return false;
     if (item.requiresEvidenceHub && !canUseEvidenceHub) return false;
+    if (item.requiresAnyModules?.length) {
+      const allowed = item.requiresAnyModules.some((moduleId) => canRead(moduleId));
+      if (!allowed) return false;
+    }
 
     const effectiveModule = item.module || sectionModule;
     if (effectiveModule && !canRead(effectiveModule)) return false;
