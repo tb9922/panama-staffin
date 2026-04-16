@@ -61,4 +61,29 @@ describe('ScanInbox contextual launch', () => {
     expect(screen.getAllByText('Incident INC-42').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Back to previous page' })).toHaveAttribute('href', '/incidents');
   });
+
+  it('prefills handover launch fields from the scan link context', async () => {
+    renderWithProviders(<ScanInbox />, {
+      route: '/scan-inbox?launchTarget=handover&entryDate=2026-04-16&shift=L&category=operational&priority=action',
+      path: '/scan-inbox',
+    });
+
+    await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByLabelText('Destination')).toHaveValue('handover'));
+    expect(screen.getByDisplayValue('2026-04-16')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Late Shift', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Operational', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Action required', selected: true })).toBeInTheDocument();
+  });
+
+  it('prefills the CQC statement when launched from a statement-level scan CTA', async () => {
+    renderWithProviders(<ScanInbox />, {
+      route: '/scan-inbox?launchTarget=cqc&qualityStatement=S4',
+      path: '/scan-inbox',
+    });
+
+    await waitFor(() => expect(screen.getAllByText('incident-note.pdf').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByLabelText('Destination')).toHaveValue('cqc'));
+    expect(screen.getByDisplayValue('S4')).toBeInTheDocument();
+  });
 });

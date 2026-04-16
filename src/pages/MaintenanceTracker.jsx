@@ -6,6 +6,7 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -36,7 +37,7 @@ function normalizeNullFields(record) {
 }
 
 export default function MaintenanceTracker() {
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const { showToast } = useToast();
@@ -199,6 +200,7 @@ export default function MaintenanceTracker() {
         <h1 className={PAGE.title}>Maintenance & Environment</h1>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan certificate" />}
           {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
@@ -398,18 +400,18 @@ export default function MaintenanceTracker() {
                 ) : null;
               })()}
 
-              {editingId && (
-                <FileAttachments
-                  caseType="maintenance"
-                  caseId={editingId}
-                  readOnly={!canEdit}
-                  getFiles={getRecordAttachments}
-                  uploadFile={uploadRecordAttachment}
-                  deleteFile={deleteRecordAttachment}
-                  downloadFile={downloadRecordAttachment}
-                  title="Maintenance Certificates & Evidence"
-                />
-              )}
+              <FileAttachments
+                caseType="maintenance"
+                caseId={editingId}
+                readOnly={!canEdit}
+                getFiles={getRecordAttachments}
+                uploadFile={uploadRecordAttachment}
+                deleteFile={deleteRecordAttachment}
+                downloadFile={downloadRecordAttachment}
+                title="Maintenance Certificates & Evidence"
+                saveFirstText="Scan now to create a maintenance check from the inbox, or save this check first to upload directly here."
+                scanContextOverride={{ target: 'maintenance' }}
+              />
             </div>
 
             <div className={MODAL.footer}>

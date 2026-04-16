@@ -9,6 +9,7 @@ import {
 } from '../../shared/uploadPolicies.js';
 import { validateClientFileSelection } from '../../lib/uploadValidation.js';
 import { getScanLaunchContext } from '../lib/scanRouting.js';
+import { getScanUiCopy } from '../lib/scanUx.js';
 import ScanDocumentLink from './ScanDocumentLink.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -31,6 +32,10 @@ export default function FileAttachments({
   saveFirstMessage = 'Save the case first to attach documents.',
   saveFirstText,
   ensureCaseId,
+  scanContextOverride,
+  scanLabel,
+  scanHelperText,
+  scanDisabledReason,
 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,10 +55,19 @@ export default function FileAttachments({
   const fetchFile = downloadFile || downloadHrAttachment;
   const activeCaseId = caseId || createdCaseId;
   const saveMessage = saveFirstText || saveFirstMessage;
-  const scanContext = getScanLaunchContext({ caseType, caseId: activeCaseId })
+  const scanContext = scanContextOverride
+    || getScanLaunchContext({ caseType, caseId: activeCaseId })
     || (ensureCaseId && caseType === 'cqc_evidence' ? { target: 'cqc', label: 'CQC evidence' } : null);
+  const isRecordBoundScan = scanContext?.target === 'record_attachment'
+    || scanContext?.target === 'hr_attachment'
+    || scanContext?.target === 'training';
   const showScanButton = Boolean(scanContext?.target && scanIntakeEnabled && isScanTargetEnabled(scanContext.target));
-  const scanDisabled = !activeCaseId && !(ensureCaseId && caseType === 'cqc_evidence');
+  const scanDisabled = isRecordBoundScan && !activeCaseId && !(ensureCaseId && caseType === 'cqc_evidence');
+  const scanCopy = getScanUiCopy({
+    target: scanContext?.target,
+    caseType,
+    saveMessage: scanDisabledReason || saveMessage,
+  });
 
   useEffect(() => {
     if (caseId) setCreatedCaseId(null);
@@ -124,7 +138,7 @@ export default function FileAttachments({
     }
   }
 
-  if (!activeCaseId && !ensureCaseId) {
+  if (!activeCaseId && !ensureCaseId && !showScanButton) {
     return <p className="text-sm text-gray-400 italic">{saveMessage}</p>;
   }
 
@@ -132,7 +146,7 @@ export default function FileAttachments({
     <div className="space-y-3">
       <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
 
-      {!activeCaseId && ensureCaseId && (
+      {!activeCaseId && (ensureCaseId || showScanButton) && (
         <p className="text-sm text-gray-500">{saveMessage}</p>
       )}
 
@@ -217,14 +231,22 @@ export default function FileAttachments({
               {showScanButton && (
                 <ScanDocumentLink
                   context={scanContext}
+                  label={scanLabel || scanCopy.label}
                   disabled={scanDisabled}
-                  disabledReason={saveMessage}
+                  disabledReason={scanDisabledReason || scanCopy.disabledReason}
                 />
               )}
               <span className="min-w-0 truncate text-sm text-gray-500">
                 {selectedFileName || 'No file selected'}
               </span>
             </div>
+            {showScanButton && (
+              <p className={`mt-1 text-[11px] ${scanDisabled ? 'text-amber-700' : 'text-blue-700'}`}>
+                {scanDisabled
+                  ? (scanDisabledReason || scanCopy.disabledReason)
+                  : (scanHelperText || scanCopy.helperText)}
+              </p>
+            )}
             <p className="mt-1 text-[11px] text-gray-400">{formatUploadPolicyHelp(GENERIC_ATTACHMENT_UPLOAD_POLICY)}</p>
             {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
@@ -232,7 +254,7 @@ export default function FileAttachments({
             <label htmlFor={descriptionInputId} className={INPUT.label}>Description (optional)</label>
             <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" />
           </div>
-          <button onClick={handleUpload} disabled={uploading} className={BTN.primary + ' ' + BTN.sm}>
+          <button onClick={handleUpload} disabled={uploading || (!activeCaseId && !ensureCaseId)} className={BTN.primary + ' ' + BTN.sm}>
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>

@@ -6,6 +6,7 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -321,7 +322,7 @@ export default function CQCEvidence() {
 }
 
 function CQCEvidenceInner({ data }) {
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const { showToast } = useToast();
@@ -1053,6 +1054,7 @@ function CQCEvidenceInner({ data }) {
           <p className={PAGE.subtitle}>Single Assessment Framework — staffing compliance scorecard and evidence pack</p>
         </div>
         <div className="flex gap-2">
+          {canEdit && isScanTargetEnabled('cqc') && <ScanDocumentLink context={{ target: 'cqc' }} label="Scan evidence" />}
           <button type="button" onClick={handleExportExcel} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
           {canEdit && <button type="button" onClick={handleCreateSnapshot} disabled={generating} title="Freeze the current evidence, readiness, and score so you can review this exact state later." className={`${BTN.secondary} ${BTN.sm}`}>
             Save Snapshot
@@ -1655,10 +1657,17 @@ function CQCEvidenceInner({ data }) {
                       {evidenceLoading ? (
                         <span className="text-xs text-gray-400">Refreshing evidence…</span>
                       ) : canEdit ? (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
-                          className={`${BTN.secondary} ${BTN.xs}`}>
-                          + Add Evidence
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {isScanTargetEnabled('cqc') && (
+                            <span onClick={(e) => e.stopPropagation()}>
+                              <ScanDocumentLink context={{ target: 'cqc', qualityStatement: qs.id }} label="Scan evidence" className={BTN.xs} />
+                            </span>
+                          )}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
+                            className={`${BTN.secondary} ${BTN.xs}`}>
+                            + Add Evidence
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   )}

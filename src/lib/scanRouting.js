@@ -84,6 +84,11 @@ export function buildScanInboxHref(context = {}, returnTo) {
   if (context.typeId) params.set('typeId', context.typeId);
   if (context.section) params.set('section', context.section);
   if (context.evidenceId) params.set('evidenceId', context.evidenceId);
+  if (context.qualityStatement) params.set('qualityStatement', context.qualityStatement);
+  if (context.entryDate) params.set('entryDate', context.entryDate);
+  if (context.shift) params.set('shift', context.shift);
+  if (context.category) params.set('category', context.category);
+  if (context.priority) params.set('priority', context.priority);
   if (returnTo) params.set('returnTo', returnTo);
   const query = params.toString();
   return query ? `/scan-inbox?${query}` : '/scan-inbox';
@@ -103,6 +108,11 @@ export function parseScanLaunchParams(searchParams) {
     typeId: searchParams.get('typeId') || '',
     section: searchParams.get('section') || '',
     evidenceId: searchParams.get('evidenceId') || '',
+    qualityStatement: searchParams.get('qualityStatement') || '',
+    entryDate: searchParams.get('entryDate') || '',
+    shift: searchParams.get('shift') || '',
+    category: searchParams.get('category') || '',
+    priority: searchParams.get('priority') || '',
     returnTo: searchParams.get('returnTo') || '',
   };
 }
@@ -125,9 +135,12 @@ export function describeScanLaunchContext(context) {
       : 'onboarding';
   }
   if (context.target === 'cqc') {
-    return context.evidenceId ? `CQC evidence ${context.evidenceId}` : 'CQC evidence';
+    if (context.evidenceId) return `CQC evidence ${context.evidenceId}`;
+    if (context.qualityStatement) return `CQC ${context.qualityStatement}`;
+    return 'CQC evidence';
   }
   if (context.target === 'finance_ap') return 'Finance AP';
+  if (context.target === 'handover') return context.entryDate ? `handover ${context.entryDate}` : 'handover';
   if (context.target === 'maintenance') return 'Maintenance';
   return context.target;
 }

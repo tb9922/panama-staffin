@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { Component, Fragment } from 'react';
 
 const REFRESH_ERROR_PATTERNS = [
   'ChunkLoadError',
@@ -18,7 +18,7 @@ function isRefreshRequiredError(error) {
 export default class RouteErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retryKey: 0 };
   }
 
   static getDerivedStateFromError(error) {
@@ -47,7 +47,11 @@ export default class RouteErrorBoundary extends Component {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => this.setState((current) => ({
+                hasError: false,
+                error: null,
+                retryKey: current.retryKey + 1,
+              }))}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Try again
@@ -62,6 +66,6 @@ export default class RouteErrorBoundary extends Component {
         </div>
       );
     }
-    return this.props.children;
+    return <Fragment key={this.state.retryKey}>{this.props.children}</Fragment>;
   }
 }

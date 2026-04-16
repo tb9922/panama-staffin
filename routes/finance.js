@@ -22,6 +22,7 @@ const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 const safeStr = (v, max = 50) => typeof v === 'string' ? v.slice(0, max) : undefined;
 const safeDate = v => (typeof v === 'string' && dateRe.test(v)) ? v : undefined;
 const safeInt = v => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : undefined; };
+const nullableUuidInput = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable().optional());
 
 function handleConstraintError(err, res) {
   if (err.code === '23505') return res.status(409).json({ error: 'Duplicate record — invoice number already exists' });
@@ -108,7 +109,7 @@ const expenseBodySchema = z.object({
   subcategory: z.string().max(100).nullable().optional(),
   description: z.string().min(1).max(500),
   supplier: z.string().max(200).nullable().optional(),
-  supplier_id: z.coerce.number().int().positive().nullable().optional(),
+  supplier_id: nullableUuidInput,
   invoice_ref: z.string().max(100).nullable().optional(),
   net_amount: z.coerce.number().min(0),
   vat_amount: z.coerce.number().min(0).default(0),
@@ -142,7 +143,7 @@ const chaseBodySchema = z.object({
 
 const paymentScheduleBodySchema = z.object({
   supplier: z.string().min(1).max(200),
-  supplier_id: z.coerce.number().int().positive().nullable().optional(),
+  supplier_id: nullableUuidInput,
   category: z.enum([
     'staffing', 'agency', 'food', 'utilities', 'maintenance', 'medical_supplies',
     'cleaning', 'insurance', 'rent', 'rates', 'training', 'equipment',

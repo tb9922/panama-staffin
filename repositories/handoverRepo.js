@@ -78,8 +78,9 @@ export async function findByHomeAndDateRange(homeId, fromDate, toDate, { limit =
  * @param {{ entry_date, shift, category, priority, content, incident_id }} entry
  * @param {string} author  from req.user.username (set server-side)
  */
-export async function createEntry(homeId, entry, author) {
-  const { rows } = await pool.query(
+export async function createEntry(homeId, entry, author, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `INSERT INTO handover_entries (home_id, entry_date, shift, category, priority, content, incident_id, author)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING ${COLS}`,

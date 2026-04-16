@@ -13,6 +13,7 @@ import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -44,7 +45,7 @@ function summarizeHistoryData(data) {
 
 export default function OnboardingTracker() {
   const homeSlug = getCurrentHome();
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('staff');
   const { confirm, ConfirmDialog } = useConfirm();
   const { showToast } = useToast();
@@ -883,7 +884,10 @@ export default function OnboardingTracker() {
           <h1 className="text-2xl font-bold text-gray-900">Staff Onboarding</h1>
           <p className="text-xs text-gray-500 mt-1">CQC Regulation 19 — Pre-employment checks & Day 1 induction</p>
         </div>
-        <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
+        <div className="flex flex-wrap gap-2">
+          {canEdit && isScanTargetEnabled('onboarding') && <ScanDocumentLink context={{ target: 'onboarding' }} label="Scan onboarding document" />}
+          <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
+        </div>
       </div>
 
       {focusedStaffId && (
@@ -998,6 +1002,11 @@ export default function OnboardingTracker() {
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
                               <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
+                              {canEdit && isScanTargetEnabled('onboarding') && (
+                                <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                                  <ScanDocumentLink context={{ target: 'onboarding', staffId: s.id, section: sec.id }} label="Scan onboarding document" className="!px-2 !py-1 text-[11px]" />
+                                </div>
+                              )}
                             </div>
                             <span className={BADGE[display.badgeKey]}>{display.label}</span>
                           </div>
@@ -1020,6 +1029,11 @@ export default function OnboardingTracker() {
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
                               <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
+                              {canEdit && isScanTargetEnabled('onboarding') && (
+                                <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                                  <ScanDocumentLink context={{ target: 'onboarding', staffId: s.id, section: sec.id }} label="Scan onboarding document" className="!px-2 !py-1 text-[11px]" />
+                                </div>
+                              )}
                             </div>
                             <span className={BADGE[display.badgeKey]}>{display.label}</span>
                           </div>

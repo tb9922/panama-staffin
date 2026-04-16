@@ -22,6 +22,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/scanIntake.js';
 import { describeScanLaunchContext, parseScanLaunchParams } from '../lib/scanRouting.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const ONBOARDING_SECTIONS = [
   'dbs_check', 'right_to_work', 'references', 'identity_check', 'health_declaration',
@@ -61,13 +62,30 @@ export default function ScanInbox() {
   const [file, setFile] = useState(null);
   const [target, setTarget] = useState('finance_ap');
   const [maintenanceChecks, setMaintenanceChecks] = useState([]);
+  const [maintenanceCategories, setMaintenanceCategories] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [onboardingData, setOnboardingData] = useState({ onboarding: {}, staff: [] });
   const [cqcEvidence, setCqcEvidence] = useState([]);
   const [recordAttachmentForm, setRecordAttachmentForm] = useState({ module: '', record_id: '', description: '' });
-  const [maintenanceForm, setMaintenanceForm] = useState({ record_id: '', description: '' });
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    target_type: 'existing',
+    record_id: '',
+    description: '',
+    create_check: {
+      category: '',
+      description: '',
+      frequency: 'annual',
+      last_completed: '',
+      next_due: '',
+      completed_by: '',
+      contractor: '',
+      certificate_ref: '',
+      certificate_expiry: '',
+      notes: '',
+    },
+  });
   const [financeForm, setFinanceForm] = useState({
     target_type: 'create_expense',
     record_id: '',
@@ -100,6 +118,15 @@ export default function ScanInbox() {
       evidence_owner: '',
       review_due: '',
     },
+  });
+  const [handoverForm, setHandoverForm] = useState({
+    entry_date: todayLocalISO(),
+    shift: 'E',
+    category: 'operational',
+    priority: 'info',
+    content: '',
+    incident_id: '',
+    description: '',
   });
   const launchContext = useMemo(() => parseScanLaunchParams(searchParams), [searchParams]);
 
@@ -159,6 +186,19 @@ export default function ScanInbox() {
         setCqcForm((current) => ({
           ...current,
           evidence_id: launchContext.evidenceId || current.evidence_id,
+          create_evidence: {
+            ...current.create_evidence,
+            quality_statement: launchContext.qualityStatement || current.create_evidence.quality_statement,
+          },
+        }));
+      }
+      if (launchContext?.target === 'handover') {
+        setHandoverForm((current) => ({
+          ...current,
+          entry_date: launchContext.entryDate || current.entry_date,
+          shift: launchContext.shift || current.shift,
+          category: launchContext.category || current.category,
+          priority: launchContext.priority || current.priority,
         }));
       }
       setFinanceForm((current) => ({
@@ -200,6 +240,7 @@ export default function ScanInbox() {
         getCqcEvidence(home, { limit: 200 }),
       ]);
       setMaintenanceChecks(maintenance.checks || []);
+      setMaintenanceCategories(maintenance.maintenanceCategories || []);
       setExpenses(expenseData.rows || []);
       setSchedules(scheduleData.rows || []);
       setSuppliers(supplierData || []);
@@ -228,7 +269,16 @@ export default function ScanInbox() {
   const canConfirm = useMemo(() => {
     if (!selected) return false;
     if (target === 'record_attachment') return Boolean(recordAttachmentForm.module && recordAttachmentForm.record_id);
-    if (target === 'maintenance') return Boolean(maintenanceForm.record_id);
+    if (target === 'maintenance') {
+      if (maintenanceForm.target_type === 'create_check') {
+        return Boolean(
+          maintenanceForm.create_check.category &&
+          maintenanceForm.create_check.description &&
+          maintenanceForm.create_check.description.trim()
+        );
+      }
+      return Boolean(maintenanceForm.record_id);
+    }
     if (target === 'finance_ap') {
       if (financeForm.target_type === 'create_expense') {
         return Boolean(financeForm.expense.expense_date && financeForm.expense.category && financeForm.expense.description && financeForm.expense.gross_amount);
@@ -239,8 +289,9 @@ export default function ScanInbox() {
     if (target === 'onboarding') return Boolean(onboardingForm.staff_id && onboardingForm.section);
     if (target === 'training') return Boolean(trainingForm.staff_id && trainingForm.type_id);
     if (target === 'cqc') return Boolean(cqcForm.evidence_id || (cqcForm.create_evidence.quality_statement && cqcForm.create_evidence.title));
+    if (target === 'handover') return Boolean(handoverForm.entry_date && handoverForm.shift && handoverForm.category && handoverForm.priority && handoverForm.content.trim());
     return false;
-  }, [selected, target, recordAttachmentForm, maintenanceForm, financeForm, hrForm, onboardingForm, trainingForm, cqcForm]);
+  }, [selected, target, recordAttachmentForm, maintenanceForm, financeForm, hrForm, onboardingForm, trainingForm, cqcForm, handoverForm]);
 
   async function handleUpload() {
     if (!file) return;
@@ -266,14 +317,17 @@ export default function ScanInbox() {
     try {
       const payload = { target };
       if (target === 'record_attachment') payload.record_attachment = { ...recordAttachmentForm };
-      if (target === 'maintenance') payload.maintenance = { ...maintenanceForm };
+      if (target === 'maintenance') payload.maintenance = {
+        ...maintenanceForm,
+        record_id: maintenanceForm.record_id ? Number(maintenanceForm.record_id) : undefined,
+      };
       if (target === 'finance_ap') {
         payload.finance_ap = {
           ...financeForm,
           record_id: financeForm.record_id ? Number(financeForm.record_id) : undefined,
           expense: {
             ...financeForm.expense,
-            supplier_id: financeForm.expense.supplier_id ? Number(financeForm.expense.supplier_id) : null,
+            supplier_id: financeForm.expense.supplier_id || null,
             net_amount: Number(financeForm.expense.net_amount || 0),
             vat_amount: Number(financeForm.expense.vat_amount || 0),
             gross_amount: Number(financeForm.expense.gross_amount || 0),
@@ -292,6 +346,10 @@ export default function ScanInbox() {
         ...cqcForm,
         evidence_id: cqcForm.evidence_id || undefined,
         create_evidence: cqcForm.evidence_id ? undefined : { ...cqcForm.create_evidence },
+      };
+      if (target === 'handover') payload.handover = {
+        ...handoverForm,
+        incident_id: handoverForm.incident_id || null,
       };
       await confirmScanIntake(home, selected.id, payload);
       showToast({ title: 'Document filed', message: selected.original_name });
@@ -469,6 +527,20 @@ export default function ScanInbox() {
 
                   {target === 'maintenance' && (
                     <div className="space-y-3">
+                      <div><label className={INPUT.label}>Maintenance action</label><select className={INPUT.select} value={maintenanceForm.target_type} onChange={(e) => setMaintenanceForm((current) => ({ ...current, target_type: e.target.value, record_id: '' }))}><option value="existing">Attach to existing check</option><option value="create_check">Create maintenance check from scan</option></select><p className="mt-1 text-xs text-gray-500">Create a check when you are scanning a certificate or service report before the maintenance record exists.</p></div>
+                      {maintenanceForm.target_type === 'create_check' && (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div><label className={INPUT.label}>Category</label><select className={INPUT.select} value={maintenanceForm.create_check.category} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, category: e.target.value } }))}><option value="">Select category</option>{maintenanceCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
+                          <div><label className={INPUT.label}>Frequency</label><input className={INPUT.base} value={maintenanceForm.create_check.frequency} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, frequency: e.target.value } }))} /></div>
+                          <div className="md:col-span-2"><label className={INPUT.label}>New check description</label><input className={INPUT.base} value={maintenanceForm.create_check.description} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, description: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Last completed</label><input type="date" className={INPUT.base} value={maintenanceForm.create_check.last_completed} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, last_completed: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Next due</label><input type="date" className={INPUT.base} value={maintenanceForm.create_check.next_due} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, next_due: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Completed by</label><input className={INPUT.base} value={maintenanceForm.create_check.completed_by} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, completed_by: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Contractor</label><input className={INPUT.base} value={maintenanceForm.create_check.contractor} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, contractor: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Certificate ref</label><input className={INPUT.base} value={maintenanceForm.create_check.certificate_ref} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, certificate_ref: e.target.value } }))} /></div>
+                          <div><label className={INPUT.label}>Certificate expiry</label><input type="date" className={INPUT.base} value={maintenanceForm.create_check.certificate_expiry} onChange={(e) => setMaintenanceForm((current) => ({ ...current, create_check: { ...current.create_check, certificate_expiry: e.target.value } }))} /></div>
+                        </div>
+                      )}
                       <div><label className={INPUT.label}>Maintenance check</label><select className={INPUT.select} value={maintenanceForm.record_id} onChange={(e) => setMaintenanceForm((current) => ({ ...current, record_id: e.target.value }))}><option value="">Select check</option>{maintenanceChecks.map((check) => <option key={check.id} value={check.id}>{check.category_name || check.category} — {check.description || 'No description'}</option>)}</select></div>
                       <div><label className={INPUT.label}>Description</label><input className={INPUT.base} value={maintenanceForm.description} onChange={(e) => setMaintenanceForm((current) => ({ ...current, description: e.target.value }))} /></div>
                     </div>
@@ -553,6 +625,18 @@ export default function ScanInbox() {
                           <div><label className={INPUT.label}>Owner</label><input className={INPUT.base} value={cqcForm.create_evidence.evidence_owner} onChange={(e) => setCqcForm((current) => ({ ...current, create_evidence: { ...current.create_evidence, evidence_owner: e.target.value } }))} /></div>
                         </div>
                       )}
+                    </div>
+                  )}
+                  {target === 'handover' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div><label className={INPUT.label}>Entry date</label><input type="date" className={INPUT.base} value={handoverForm.entry_date} onChange={(e) => setHandoverForm((current) => ({ ...current, entry_date: e.target.value }))} /></div>
+                        <div><label className={INPUT.label}>Shift</label><select className={INPUT.select} value={handoverForm.shift} onChange={(e) => setHandoverForm((current) => ({ ...current, shift: e.target.value }))}><option value="E">Early Shift</option><option value="L">Late Shift</option><option value="N">Night Shift</option></select></div>
+                        <div><label className={INPUT.label}>Category</label><select className={INPUT.select} value={handoverForm.category} onChange={(e) => setHandoverForm((current) => ({ ...current, category: e.target.value }))}><option value="clinical">Clinical</option><option value="safety">Safety</option><option value="operational">Operational</option><option value="admin">Admin</option></select></div>
+                        <div><label className={INPUT.label}>Priority</label><select className={INPUT.select} value={handoverForm.priority} onChange={(e) => setHandoverForm((current) => ({ ...current, priority: e.target.value }))}><option value="urgent">Urgent</option><option value="action">Action required</option><option value="info">Info</option></select></div>
+                        <div className="md:col-span-2"><label className={INPUT.label}>Content</label><textarea className={`${INPUT.base} h-28 resize-y`} value={handoverForm.content} onChange={(e) => setHandoverForm((current) => ({ ...current, content: e.target.value }))} /></div>
+                        <div><label className={INPUT.label}>Attachment description</label><input className={INPUT.base} value={handoverForm.description} onChange={(e) => setHandoverForm((current) => ({ ...current, description: e.target.value }))} /></div>
+                      </div>
                     </div>
                   )}
                 </div>

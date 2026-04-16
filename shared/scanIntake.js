@@ -3,6 +3,7 @@ export const SCAN_INTAKE_TARGETS = [
   { id: 'finance_ap', label: 'Finance AP', permissionModule: 'finance' },
   { id: 'onboarding', label: 'Onboarding', permissionModule: 'compliance' },
   { id: 'cqc', label: 'CQC', permissionModule: 'compliance' },
+  { id: 'handover', label: 'Handover', permissionModule: 'scheduling' },
   { id: 'record_attachment', label: 'Current Record', permissionModule: null, contextualOnly: true },
   { id: 'hr_attachment', label: 'HR Case', permissionModule: 'hr', contextualOnly: true },
   { id: 'training', label: 'Training Record', permissionModule: 'compliance', contextualOnly: true },

@@ -95,18 +95,20 @@ export async function sync(homeId, arr, client) {
 
 import { randomUUID } from 'crypto';
 
-export async function findById(id, homeId) {
-  const { rows } = await pool.query(
+export async function findById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${COLS} FROM maintenance WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
     [id, homeId]
   );
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
-export async function upsert(homeId, data) {
+export async function upsert(homeId, data, client) {
+  const conn = client || pool;
   const id = data.id || `mnt-${randomUUID()}`;
   const now = new Date().toISOString();
-  const { rows } = await pool.query(
+  const { rows } = await conn.query(
     `INSERT INTO maintenance (
        id, home_id, category, description, frequency, last_completed, next_due,
        completed_by, contractor, items_checked, items_passed, items_failed,

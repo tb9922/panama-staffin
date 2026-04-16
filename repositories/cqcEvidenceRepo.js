@@ -123,8 +123,9 @@ export async function sync(homeId, arr, client) {
   }
 }
 
-export async function findById(id, homeId) {
-  const { rows } = await pool.query(
+export async function findById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${EVIDENCE_COLS}, ${FILE_COUNT_SQL}
        FROM cqc_evidence e
       WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
@@ -133,10 +134,11 @@ export async function findById(id, homeId) {
   return rows[0] ? shapeRow(rows[0]) : null;
 }
 
-export async function upsert(homeId, data) {
+export async function upsert(homeId, data, client) {
+  const conn = client || pool;
   const id = data.id || `cqc-${randomUUID()}`;
   const now = new Date().toISOString();
-  const { rows } = await pool.query(
+  const { rows } = await conn.query(
     `INSERT INTO cqc_evidence (
        id, home_id, quality_statement, type, title, description,
        date_from, date_to, evidence_category, evidence_owner, review_due, added_by, added_at
@@ -171,7 +173,7 @@ export async function upsert(homeId, data) {
       data.added_at || now,
     ]
   );
-  return rows[0] ? findById(rows[0].id, homeId) : null;
+  return rows[0] ? findById(rows[0].id, homeId, conn) : null;
 }
 
 const ALLOWED_COLUMNS = new Set([

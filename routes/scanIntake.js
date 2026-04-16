@@ -34,12 +34,25 @@ const financeExpenseCreateSchema = z.object({
   category: z.string().min(1).max(50),
   description: z.string().min(1).max(500),
   supplier: z.string().max(200).nullable().optional(),
-  supplier_id: z.coerce.number().int().positive().nullable().optional(),
+  supplier_id: z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable().optional()),
   invoice_ref: z.string().max(100).nullable().optional(),
   net_amount: z.coerce.number().min(0),
   vat_amount: z.coerce.number().min(0).optional(),
   gross_amount: z.coerce.number().min(0),
   subcategory: z.string().max(100).nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
+});
+
+const maintenanceCreateSchema = z.object({
+  category: z.string().min(1).max(200),
+  description: z.string().min(1).max(2000),
+  frequency: z.string().max(100).nullable().optional(),
+  last_completed: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  next_due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  completed_by: z.string().max(200).nullable().optional(),
+  contractor: z.string().max(200).nullable().optional(),
+  certificate_ref: z.string().max(200).nullable().optional(),
+  certificate_expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   notes: z.string().max(5000).nullable().optional(),
 });
 
@@ -54,7 +67,9 @@ const confirmBodySchema = z.object({
   description: z.string().max(500).nullable().optional(),
   record_attachment: recordAttachmentConfirmSchema.optional(),
   maintenance: z.object({
-    record_id: z.coerce.number().int().positive(),
+    target_type: z.enum(['existing', 'create_check']).default('existing'),
+    record_id: z.coerce.number().int().positive().optional(),
+    create_check: maintenanceCreateSchema.optional(),
     description: z.string().max(500).nullable().optional(),
   }).optional(),
   finance_ap: z.object({
@@ -95,6 +110,15 @@ const confirmBodySchema = z.object({
       evidence_owner: z.string().max(200).nullable().optional(),
       review_due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     }).optional(),
+  }).optional(),
+  handover: z.object({
+    entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    shift: z.enum(['E', 'L', 'N']),
+    category: z.enum(['clinical', 'safety', 'operational', 'admin']),
+    priority: z.enum(['urgent', 'action', 'info']),
+    content: z.string().min(1).max(2000),
+    incident_id: z.string().max(50).nullable().optional(),
+    description: z.string().max(500).nullable().optional(),
   }).optional(),
 });
 
@@ -272,6 +296,19 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
     const parsed = confirmBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid confirm payload' });
+    if (parsed.data.target === 'maintenance') {
+      const maintenanceBody = parsed.data.maintenance;
+      if (!maintenanceBody) return res.status(400).json({ error: 'Maintenance confirm data is required' });
+      if (maintenanceBody.target_type === 'existing' && !maintenanceBody.record_id) {
+        return res.status(400).json({ error: 'Select a maintenance check or create a new one' });
+      }
+      if (maintenanceBody.target_type === 'create_check' && !maintenanceBody.create_check) {
+        return res.status(400).json({ error: 'New maintenance check details are required' });
+      }
+    }
+    if (parsed.data.target === 'handover' && !parsed.data.handover) {
+      return res.status(400).json({ error: 'Handover confirm data is required' });
+    }
     if (!requireTargetWriteAccess(req, res, parsed.data.target, parsed.data)) return;
     const result = await scanIntakeService.confirmScanIntake(req.home.id, idParsed.data, parsed.data, req.user.username);
     await auditService.log('scan_intake_confirm', req.home.slug, req.user.username, {

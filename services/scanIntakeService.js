@@ -11,6 +11,7 @@ import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachment
 import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 import * as trainingAttachmentsRepo from '../repositories/trainingAttachments.js';
 import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
+import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as financeRepo from '../repositories/financeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
@@ -236,10 +237,15 @@ async function confirmRecordAttachment(client, homeId, intakeItem, body, usernam
 }
 
 async function confirmMaintenance(client, homeId, intakeItem, body, username) {
-  const check = await maintenanceRepo.findById(body.record_id, homeId);
-  if (!check) throw Object.assign(new Error('Maintenance check not found'), { statusCode: 404 });
-  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: body.record_id });
-  const attachment = await recordAttachmentsRepo.create(homeId, 'maintenance', String(body.record_id), {
+  let check = null;
+  if (body.target_type === 'create_check') {
+    check = await maintenanceRepo.upsert(homeId, body.create_check || {}, client);
+  } else {
+    check = await maintenanceRepo.findById(body.record_id, homeId, client);
+    if (!check) throw Object.assign(new Error('Maintenance check not found'), { statusCode: 404 });
+  }
+  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: check.id });
+  const attachment = await recordAttachmentsRepo.create(homeId, 'maintenance', String(check.id), {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
     mime_type: intakeItem.mime_type,
@@ -249,9 +255,10 @@ async function confirmMaintenance(client, homeId, intakeItem, body, username) {
   }, client);
   return {
     routed_module: 'maintenance',
-    routed_record_id: String(body.record_id),
+    routed_record_id: String(check.id),
     routed_attachment_id: String(attachment.id),
     attachment,
+    created_check: body.target_type === 'create_check' ? check : undefined,
   };
 }
 
@@ -360,7 +367,7 @@ async function confirmFinance(client, homeId, intakeItem, body, username) {
 }
 
 async function confirmOnboarding(client, homeId, intakeItem, body, username) {
-  const staff = await staffRepo.findById(homeId, body.staff_id);
+  const staff = await staffRepo.findById(homeId, body.staff_id, client);
   if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
   const moved = await moveIntoOnboardingStore({ homeId, intakeItem, staffId: body.staff_id, section: body.section });
   const attachment = await onboardingAttachmentsRepo.create(homeId, body.staff_id, body.section, {
@@ -380,7 +387,7 @@ async function confirmOnboarding(client, homeId, intakeItem, body, username) {
 }
 
 async function confirmTraining(client, homeId, intakeItem, body, username) {
-  const staff = await staffRepo.findById(homeId, body.staff_id);
+  const staff = await staffRepo.findById(homeId, body.staff_id, client);
   if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
   const moved = await moveIntoTrainingStore({
     homeId,
@@ -418,10 +425,10 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
       evidence_owner: body.create_evidence.evidence_owner || null,
       review_due: body.create_evidence.review_due || null,
       added_by: username,
-    });
+    }, client);
     evidenceId = created.id;
   } else {
-    const existing = await cqcEvidenceRepo.findById(evidenceId, homeId);
+    const existing = await cqcEvidenceRepo.findById(evidenceId, homeId, client);
     if (!existing) throw Object.assign(new Error('CQC evidence item not found'), { statusCode: 404 });
   }
   const moved = await moveIntoCqcStore({ homeId, intakeItem, evidenceId });
@@ -438,6 +445,26 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
     routed_record_id: String(evidenceId),
     routed_attachment_id: String(attachment.id),
     attachment,
+  };
+}
+
+async function confirmHandover(client, homeId, intakeItem, body, username) {
+  const entry = await handoverRepo.createEntry(homeId, body, username, client);
+  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'handover_entry', recordId: entry.id });
+  const attachment = await recordAttachmentsRepo.create(homeId, 'handover_entry', String(entry.id), {
+    original_name: intakeItem.original_name,
+    stored_name: moved.stored_name,
+    mime_type: intakeItem.mime_type,
+    size_bytes: intakeItem.size_bytes,
+    description: body.description || null,
+    uploaded_by: username,
+  }, client);
+  return {
+    routed_module: 'handover',
+    routed_record_id: String(entry.id),
+    routed_attachment_id: String(attachment.id),
+    attachment,
+    created_entry: entry,
   };
 }
 
@@ -464,6 +491,8 @@ export async function confirmScanIntake(homeId, intakeId, body, username) {
       result = await confirmTraining(client, homeId, intakeItem, body.training, username);
     } else if (body.target === 'cqc') {
       result = await confirmCqc(client, homeId, intakeItem, body.cqc, username);
+    } else if (body.target === 'handover') {
+      result = await confirmHandover(client, homeId, intakeItem, body.handover, username);
     } else {
       throw Object.assign(new Error('Unsupported target'), { statusCode: 400 });
     }

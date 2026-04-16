@@ -3,6 +3,7 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import {
   getCurrentHome,
   getPaymentSchedules,
@@ -21,7 +22,7 @@ import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 
 export default function PayablesManager() {
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('finance');
   const [schedules, setSchedules] = useState([]);
   const [_total, setTotal] = useState(0);
@@ -156,6 +157,7 @@ export default function PayablesManager() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && isScanTargetEnabled('finance_ap') && <ScanDocumentLink context={{ target: 'finance_ap' }} label="Scan supplier document" />}
           {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Schedule</button>}
         </div>
       </div>
@@ -302,11 +304,12 @@ export default function PayablesManager() {
               readOnly={!canEdit}
               title="Schedule Evidence"
               emptyText="No schedule evidence uploaded yet."
-              saveFirstText="Save this payment schedule first, then attach contracts, mandates, and supplier evidence."
+              saveFirstText="Scan now to create a pending expense or save this schedule first to upload contracts, mandates, and supplier evidence directly here."
               getFiles={getRecordAttachments}
               uploadFile={uploadRecordAttachment}
               deleteFile={deleteRecordAttachment}
               downloadFile={downloadRecordAttachment}
+              scanContextOverride={{ target: 'finance_ap' }}
             />
           </div>
         </div>

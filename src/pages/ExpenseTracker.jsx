@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -32,7 +33,7 @@ export default function ExpenseTracker() {
   const [filterStatus, setFilterStatus] = useState('');
   const home = getCurrentHome();
   const user = getLoggedInUser();
-  const { canWrite } = useData();
+  const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('finance');
   const [saving, setSaving] = useState(false);
   useDirtyGuard(!!showModal);
@@ -165,6 +166,7 @@ export default function ExpenseTracker() {
         <span className="text-sm text-gray-500">{total} expense{total !== 1 ? 's' : ''}</span>
         <div className="flex-1" />
         <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+        {canEdit && isScanTargetEnabled('finance_ap') && <ScanDocumentLink context={{ target: 'finance_ap' }} label="Scan receipt or invoice" />}
         {canEdit && <button onClick={openCreate} className={BTN.primary}>Add Expense</button>}
       </div>
 
@@ -285,11 +287,12 @@ export default function ExpenseTracker() {
               readOnly={!canEdit || readOnly}
               title="Expense Evidence"
               emptyText="No supplier invoices or receipts uploaded yet."
-              saveFirstText="Save this expense first, then attach invoices, receipts, and approval evidence."
+              saveFirstText="Scan now to create a pending expense from the inbox, or save this expense first to upload directly here."
               getFiles={getRecordAttachments}
               uploadFile={uploadRecordAttachment}
               deleteFile={deleteRecordAttachment}
               downloadFile={downloadRecordAttachment}
+              scanContextOverride={{ target: 'finance_ap' }}
             />
           </div>
         </div>

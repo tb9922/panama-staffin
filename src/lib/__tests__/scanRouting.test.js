@@ -41,7 +41,40 @@ describe('scanRouting', () => {
       typeId: 'fire_safety',
       section: '',
       evidenceId: '',
+      qualityStatement: '',
+      entryDate: '',
+      shift: '',
+      category: '',
+      priority: '',
       returnTo: '/training',
+    });
+  });
+
+  it('preserves CQC and handover launch context fields', () => {
+    const cqcHref = buildScanInboxHref({
+      target: 'cqc',
+      qualityStatement: 'S4',
+    }, '/cqc');
+    const handoverHref = buildScanInboxHref({
+      target: 'handover',
+      entryDate: '2026-04-16',
+      shift: 'L',
+      category: 'operational',
+      priority: 'action',
+    }, '/handover');
+
+    expect(parseScanLaunchParams(new URLSearchParams(cqcHref.split('?')[1]))).toMatchObject({
+      target: 'cqc',
+      qualityStatement: 'S4',
+      returnTo: '/cqc',
+    });
+    expect(parseScanLaunchParams(new URLSearchParams(handoverHref.split('?')[1]))).toMatchObject({
+      target: 'handover',
+      entryDate: '2026-04-16',
+      shift: 'L',
+      category: 'operational',
+      priority: 'action',
+      returnTo: '/handover',
     });
   });
 });

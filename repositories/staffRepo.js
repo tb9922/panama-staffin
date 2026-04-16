@@ -177,8 +177,9 @@ export async function sync(homeId, staffArr, client) {
  * @param {number} homeId
  * @param {string} staffId
  */
-export async function findById(homeId, staffId) {
-  const { rows } = await pool.query(
+export async function findById(homeId, staffId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${STAFF_COLS} FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
