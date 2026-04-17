@@ -16,6 +16,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 import { todayLocalISO } from '../../lib/localDates.js';
+import { clickableRowProps } from '../../lib/a11y.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -196,21 +197,21 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
           const staffAprs = [...(appraisalsData[s.id] || [])].sort((a, b) => b.date.localeCompare(a.date));
           return (
             <div key={s.id} className={CARD.padded}>
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExpanded ? null : s.id)}>
+              <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
                 <div>
                   <span className="font-medium text-gray-900">{s.name}</span>
-                  <span className="text-xs text-gray-400 ml-2">{s.team} · {s.role}</span>
+                  <span className="ml-2 text-xs text-gray-500">{s.team} · {s.role}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <span className={sb.badge}>{sb.label}</span>
-                    <div className="text-[10px] text-gray-400 mt-0.5">
+                    <div className="mt-0.5 text-xs text-gray-500">
                       {result.nextDue ? `Due: ${result.nextDue}` : 'No appraisals'} · Annual
                     </div>
                   </div>
-                  <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                  <span className="text-xs text-gray-500" aria-hidden="true">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                 </div>
-              </div>
+              </button>
               {isExpanded && (
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <div className="flex justify-end mb-2">
@@ -231,7 +232,11 @@ export default function AppraisalPanel({ appraisals, staff, homeSlug, onReload, 
                       </thead>
                       <tbody>
                         {staffAprs.map(apr => (
-                          <tr key={apr.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openModal(s.id, apr)}>
+                          <tr
+                            key={apr.id}
+                            className={`${TABLE.tr} cursor-pointer`}
+                            {...clickableRowProps(() => openModal(s.id, apr), { label: `Open appraisal from ${apr.date} for ${s.name}` })}
+                          >
                             <td className={TABLE.td}>{apr.date}</td>
                             <td className={TABLE.td}>{apr.appraiser || '-'}</td>
                             <td className={`${TABLE.td} max-w-[200px] truncate`}>{apr.objectives || '-'}</td>

@@ -10,7 +10,7 @@ export const BTN = {
   ghost:     'inline-flex items-center justify-center px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
   success:   'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
   // Size variants — append after base
-  xs: 'px-2 py-1 text-xs rounded-md',
+  xs: 'px-2.5 py-1.5 text-xs rounded-md',
   sm: 'px-3 py-1.5 text-xs rounded-md',
 };
 
@@ -61,7 +61,7 @@ export const TABLE = {
   tr:       'border-b border-gray-100 hover:bg-gray-50/50 transition-colors duration-100',
   td:       'py-2.5 px-3',
   tdMono:   'py-2.5 px-3 font-mono',
-  empty:    'py-8 px-3 text-center text-gray-400',
+  empty:    'py-8 px-3 text-center text-gray-500',
 };
 
 // ── Modals ────────────────────────────────────────────────────────────────────

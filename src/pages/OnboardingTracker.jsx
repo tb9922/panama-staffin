@@ -855,12 +855,12 @@ export default function OnboardingTracker() {
           const isExpanded = expanded === s.id;
           return (
             <div key={s.id} className={CARD.padded}>
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExpanded ? null : s.id)}>
+              <button type="button" className="flex w-full items-center justify-between text-left cursor-pointer" onClick={() => setExpanded(isExpanded ? null : s.id)} aria-expanded={isExpanded}>
                 <div className="flex items-center gap-3">
                   <div>
                     <span className="font-medium text-gray-900">{s.name}</span>
-                    <span className="text-xs text-gray-400 ml-2">{s.team} · {s.role}</span>
-                    {s.start_date && <span className="text-xs text-gray-400 ml-2">Started: {s.start_date}</span>}
+                    <span className="ml-2 text-xs text-gray-500">{s.team} · {s.role}</span>
+                    {s.start_date && <span className="ml-2 text-xs text-gray-500">Started: {s.start_date}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -877,9 +877,9 @@ export default function OnboardingTracker() {
                     ? <span className={BADGE.green}>Complete</span>
                     : <span className={BADGE.amber}>In Progress</span>
                   }
-                  <span className="text-gray-400 text-xs">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                  <span className="text-xs text-gray-500" aria-hidden="true">{isExpanded ? '\u25B2' : '\u25BC'}</span>
                 </div>
-              </div>
+              </button>
 
               {isExpanded && (
                 <div className="mt-3 border-t border-gray-100 pt-3">
@@ -892,15 +892,19 @@ export default function OnboardingTracker() {
                         const status = r?.status || ONBOARDING_STATUS.NOT_STARTED;
                         const display = STATUS_DISPLAY[status];
                         return (
-                          <div key={sec.id}
-                            className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => canEdit && openModal(s.id, sec.id)}>
+                          <button
+                            key={sec.id}
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-left text-xs transition-colors hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-gray-50"
+                            onClick={() => openModal(s.id, sec.id)}
+                            disabled={!canEdit}
+                          >
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
-                              <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
+                              <div className="mt-0.5 text-xs text-gray-500">{sec.legislation}</div>
                             </div>
                             <span className={BADGE[display.badgeKey]}>{display.label}</span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -914,15 +918,19 @@ export default function OnboardingTracker() {
                         const status = r?.status || ONBOARDING_STATUS.NOT_STARTED;
                         const display = STATUS_DISPLAY[status];
                         return (
-                          <div key={sec.id}
-                            className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-gray-100 transition-colors"
-                            onClick={() => canEdit && openModal(s.id, sec.id)}>
+                          <button
+                            key={sec.id}
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-left text-xs transition-colors hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-gray-50"
+                            onClick={() => openModal(s.id, sec.id)}
+                            disabled={!canEdit}
+                          >
                             <div>
                               <div className="font-medium text-gray-800">{sec.name}</div>
-                              <div className="text-[10px] text-gray-400 mt-0.5">{sec.legislation}</div>
+                              <div className="mt-0.5 text-xs text-gray-500">{sec.legislation}</div>
                             </div>
                             <span className={BADGE[display.badgeKey]}>{display.label}</span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>

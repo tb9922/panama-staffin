@@ -170,7 +170,13 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
                   >
                     {MEETING_ATTENDEE_ROLES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
-                  <button onClick={() => removeAttendee(i)} className={BTN.ghost + ' ' + BTN.xs + ' text-red-500'} title="Remove attendee">
+                  <button
+                    type="button"
+                    onClick={() => removeAttendee(i)}
+                    className={BTN.ghost + ' ' + BTN.xs + ' text-red-500'}
+                    title="Remove attendee"
+                    aria-label={`Remove attendee ${att.name || i + 1}`}
+                  >
                     &times;
                   </button>
                 </div>
@@ -239,10 +245,12 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
           : m.summary || '';
 
         return (
-          <div
+          <button
             key={m.id}
-            className={CARD.base + ' p-4 cursor-pointer transition-colors hover:border-gray-300'}
+            type="button"
+            className={CARD.base + ' w-full p-4 text-left transition-colors hover:border-gray-300'}
             onClick={() => setExpandedId(expanded ? null : m.id)}
+            aria-expanded={expanded}
           >
             {/* Header */}
             <div className="flex items-center gap-3 flex-wrap">
@@ -289,7 +297,7 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
             <p className="text-xs text-gray-400 mt-2">
               Recorded by {m.recorded_by || 'unknown'}{m.created_at ? ` \u2014 ${new Date(m.created_at).toLocaleDateString('en-GB')}` : ''}
             </p>
-          </div>
+          </button>
         );
       })}
     </div>

@@ -378,7 +378,7 @@ export default function CareCertificateTracker() {
                 const badgeClass = STATUS_BADGE_MAP[result.status] || BADGE.gray;
                 const statusLabel = CC_STATUSES[result.status]?.label || result.status;
                 return (
-                  <tr key={s.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openDetailModal(s.id))}>
+                  <tr key={s.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openDetailModal(s.id), { disabled: !canEdit, label: `Open care certificate details for ${s.name}` })}>
                     <td className={`${TABLE.td} font-medium`}>{s.name}</td>
                     <td className={TABLE.td}>{s.role}</td>
                     <td className={TABLE.tdMono}>{record?.start_date || '-'}</td>

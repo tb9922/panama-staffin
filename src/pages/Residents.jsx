@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
+import { BADGE, BTN, CARD, INPUT, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
 import {
   getCurrentHome, getResidentsWithBeds, getBeds,
@@ -118,28 +118,30 @@ export default function Residents() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center mb-4">
-        <select className="border rounded px-2 py-1.5 text-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">All Statuses</option>
           {RESIDENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <select className="border rounded px-2 py-1.5 text-sm" value={filterFunding} onChange={e => setFilterFunding(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterFunding} onChange={e => setFilterFunding(e.target.value)}>
           <option value="">All Funding</option>
           {FUNDING_TYPES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
         </select>
         <div className="relative">
           <input
-            type="text" className="border rounded px-2 py-1.5 text-sm pr-8 w-56"
+            type="text" className={`${INPUT.sm} w-56 pr-10`}
             placeholder="Search by name (Enter)"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={handleSearchKeyDown}
           />
           <button
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
             onClick={handleSearchClick}
             title="Search"
+            aria-label="Search residents"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>

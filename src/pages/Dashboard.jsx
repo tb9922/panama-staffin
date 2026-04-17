@@ -491,7 +491,11 @@ function DashboardInner({ schedData }) {
         </div>
       )}
 
-      <div className={`${CARD.padded} mb-6 cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate(`/day/${formatDate(today)}`)}>
+      <button
+        type="button"
+        className={`${CARD.padded} mb-6 w-full text-left transition-shadow hover:shadow-md`}
+        onClick={() => navigate(`/day/${formatDate(today)}`)}
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Today's Coverage — Live Status</h2>
           <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
@@ -511,7 +515,7 @@ function DashboardInner({ schedData }) {
           <CoverageGauge period="late" cov={todayData.coverage.late} />
           <CoverageGauge period="night" cov={todayData.coverage.night} />
         </div>
-      </div>
+      </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={CARD.padded}>
@@ -543,7 +547,11 @@ function DashboardInner({ schedData }) {
         </div>
 
         {canViewFinance ? (
-          <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/costs')}>
+          <button
+            type="button"
+            className={`${CARD.padded} w-full text-left transition-shadow hover:shadow-md`}
+            onClick={() => navigate('/costs')}
+          >
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -569,7 +577,7 @@ function DashboardInner({ schedData }) {
                 </span>
               </div>
             </div>
-          </div>
+          </button>
         ) : (
           <div className={CARD.padded}>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary</h2>
@@ -614,7 +622,11 @@ function DashboardInner({ schedData }) {
           const stats = getComplianceStats(matrix);
           const pctColor = stats.compliancePct >= 90 ? 'text-emerald-600' : stats.compliancePct >= 70 ? 'text-amber-600' : 'text-red-600';
           return (
-            <div className={`${CARD.padded} cursor-pointer hover:shadow-md transition-shadow`} onClick={() => navigate('/training')}>
+            <button
+              type="button"
+              className={`${CARD.padded} w-full text-left transition-shadow hover:shadow-md`}
+              onClick={() => navigate('/training')}
+            >
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Training Compliance</h2>
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-3xl font-bold ${pctColor}`}>{stats.compliancePct}%</span>
@@ -652,7 +664,7 @@ function DashboardInner({ schedData }) {
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           );
         })()}
 

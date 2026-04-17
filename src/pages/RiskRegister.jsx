@@ -406,7 +406,7 @@ export default function RiskRegister() {
                 const _residualBand = getRiskBand(residual);
                 const reviewOverdue = risk.next_review && risk.next_review < today;
                 return (
-                  <tr key={risk.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(risk))}>
+                  <tr key={risk.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(risk), { disabled: !canEdit, label: `Open risk ${risk.title}` })}>
                     <td className={TABLE.td}>
                       <div className="font-medium text-gray-900">{risk.title}</div>
                       {risk.description && <div className="text-xs text-gray-400 truncate max-w-xs">{risk.description}</div>}

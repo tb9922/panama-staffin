@@ -440,7 +440,7 @@ export default function IncidentTracker() {
                 const cqcOverdue = isCqcNotificationOverdue(inc);
                 const riddorOverdue = isRiddorOverdue(inc);
                 return (
-                  <tr key={inc.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(inc))}>
+                  <tr key={inc.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(inc), { disabled: !canEdit, label: `Open incident ${inc.type}` })}>
                     <td className={TABLE.td}>{inc.date}</td>
                     <td className={TABLE.td}>{inc.time || '-'}</td>
                     <td className={TABLE.td}>{typeDef?.name || inc.type}</td>

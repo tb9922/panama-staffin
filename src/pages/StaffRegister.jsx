@@ -294,8 +294,15 @@ export default function StaffRegister() {
   }, [allStaff]);
 
   const SortHeader = ({ col, children, className = '' }) => (
-    <th scope="col" className={`${TABLE.th} cursor-pointer select-none hover:text-blue-600 text-xs ${className}`} onClick={() => toggleSort(col)}>
-      {children} {sortCol === col ? (sortDir === 1 ? '\u25B2' : '\u25BC') : ''}
+    <th
+      scope="col"
+      aria-sort={sortCol === col ? (sortDir === 1 ? 'ascending' : 'descending') : 'none'}
+      className={`${TABLE.th} text-xs ${className}`}
+    >
+      <button type="button" className="flex items-center gap-1 text-left transition-colors hover:text-blue-600" onClick={() => toggleSort(col)}>
+        <span>{children}</span>
+        <span aria-hidden="true">{sortCol === col ? (sortDir === 1 ? '\u25B2' : '\u25BC') : ''}</span>
+      </button>
     </th>
   );
 
@@ -588,8 +595,10 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="text" value={r.name} onChange={e => updateEditingRow('name', e.target.value)}
                           className={INPUT.inline + ' w-32 font-medium'} autoFocus />
+                      ) : canEdit ? (
+                        <button type="button" className="font-medium transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.name}</button>
                       ) : (
-                        <span className={`font-medium transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.name}</span>
+                        <span className="font-medium">{s.name}</span>
                       )}
                     </td>
 
@@ -599,7 +608,7 @@ export default function StaffRegister() {
                         <select value={r.role} onChange={e => updateEditingRow('role', e.target.value)} className={INPUT.inlineSelect + ' w-28'}>
                           {ROLES.map(ro => <option key={ro}>{ro}</option>)}
                         </select>
-                      ) : <span className={`transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.role}</span>}
+                      ) : canEdit ? <button type="button" className="transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.role}</button> : <span>{s.role}</span>}
                     </td>
 
                     {/* Team — editable */}
@@ -608,7 +617,7 @@ export default function StaffRegister() {
                         <select value={r.team} onChange={e => updateEditingRow('team', e.target.value)} className={INPUT.inlineSelect + ' w-20'}>
                           {TEAMS.map(t => <option key={t}>{t}</option>)}
                         </select>
-                      ) : <span className={`transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.team}</span>}
+                      ) : canEdit ? <button type="button" className="transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.team}</button> : <span>{s.team}</span>}
                     </td>
 
                     {/* Pref — editable */}
@@ -617,7 +626,7 @@ export default function StaffRegister() {
                         <select value={r.pref} onChange={e => updateEditingRow('pref', e.target.value)} className={INPUT.inlineSelect + ' w-16'}>
                           {PREFS.map(p => <option key={p}>{p}</option>)}
                         </select>
-                      ) : <span className={`font-mono text-xs transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.pref}</span>}
+                      ) : canEdit ? <button type="button" className="font-mono text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.pref}</button> : <span className="font-mono text-xs">{s.pref}</span>}
                     </td>
 
                     {/* Skill — editable */}
@@ -626,7 +635,7 @@ export default function StaffRegister() {
                         <input type="number" step="0.5" min="0" max="2" value={r.skill}
                           onChange={e => updateEditingRow('skill', parseFloat(e.target.value) || 0)}
                           className={INPUT.inline + ' w-14'} />
-                      ) : <span className={`transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.skill}</span>}
+                      ) : canEdit ? <button type="button" className="transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.skill}</button> : <span>{s.skill}</span>}
                     </td>
 
                     {/* Rate — editable (admin only) */}
@@ -642,9 +651,18 @@ export default function StaffRegister() {
                           </div>
                           {(() => { const mw = getMinimumWageRate(r.date_of_birth, config); return r.hourly_rate < mw.rate ? <p className="text-[10px] text-red-600 mt-0.5">Below {mw.label}</p> : null; })()}
                         </div>
+                      ) : canEdit ? (
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 text-left"
+                          onClick={() => startEditing(s)}
+                        >
+                          <span className="hover:text-blue-600 transition-colors">{`\u00A3${s.hourly_rate?.toFixed(2)}`}</span>
+                          {(() => { const mw = getMinimumWageRate(s.date_of_birth, config); return isCareRole(s.role) && s.hourly_rate < mw.rate ? <span className={BADGE.red}>Below {mw.label}</span> : null; })()}
+                        </button>
                       ) : (
-                        <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => startEditing(s)}>
-                          <span className="hover:text-blue-600 transition-colors">£{s.hourly_rate?.toFixed(2)}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>{`\u00A3${s.hourly_rate?.toFixed(2)}`}</span>
                           {(() => { const mw = getMinimumWageRate(s.date_of_birth, config); return isCareRole(s.role) && s.hourly_rate < mw.rate ? <span className={BADGE.red}>Below {mw.label}</span> : null; })()}
                         </div>
                       )}
@@ -658,10 +676,12 @@ export default function StaffRegister() {
                           placeholder="—"
                           onChange={e => updateEditingRow('contract_hours', e.target.value ? parseFloat(e.target.value) : null)}
                           className={INPUT.inline + ' w-14'} />
-                      ) : (
-                        <span className={`text-xs transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>
+                      ) : canEdit ? (
+                        <button type="button" className="text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>
                           {s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}
-                        </span>
+                        </button>
+                      ) : (
+                        <span className="text-xs">{s.contract_hours != null ? s.contract_hours : <span className="text-gray-300">—</span>}</span>
                       )}
                     </td>
 
@@ -670,7 +690,7 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="date" value={r.start_date || ''} onChange={e => updateEditingRow('start_date', e.target.value)}
                           className={INPUT.inline} />
-                      ) : <span className={`text-xs text-gray-500 transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>{s.start_date || '-'}</span>}
+                      ) : canEdit ? <button type="button" className="text-xs text-gray-500 transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>{s.start_date || '-'}</button> : <span className="text-xs text-gray-500">{s.start_date || '-'}</span>}
                     </td>
 
                     {/* WTR Opt-Out — editable */}
@@ -678,9 +698,10 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="checkbox" checked={!!r.wtr_opt_out}
                           onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
+                      ) : canEdit ? (
+                        <button type="button" className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'} hover:text-blue-600`} onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</button>
                       ) : (
-                        <span className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'} ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`}
-                          onClick={() => canEdit && startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
+                        <span className={`text-xs ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'}`}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
                       )}
                     </td>
 
@@ -689,8 +710,7 @@ export default function StaffRegister() {
                       {isEd(s.id) ? (
                         <input type="text" value={r.notes || ''} onChange={e => updateEditingRow('notes', e.target.value)}
                           className={INPUT.inline + ' w-40'} placeholder="Notes..." />
-                      ) : <span className={`text-xs text-gray-500 max-w-[150px] truncate block transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`}
-                        title={s.notes} onClick={() => canEdit && startEditing(s)}>{s.notes || '-'}</span>}
+                      ) : canEdit ? <button type="button" className="block max-w-[150px] truncate text-xs text-gray-500 transition-colors hover:text-blue-600" title={s.notes} onClick={() => startEditing(s)}>{s.notes || '-'}</button> : <span className="block max-w-[150px] truncate text-xs text-gray-500" title={s.notes}>{s.notes || '-'}</span>}
                     </td>
 
                     {/* AL entitlement / carryover — editable */}
@@ -707,8 +727,17 @@ export default function StaffRegister() {
                             onChange={e => updateEditingRow('al_carryover', parseFloat(e.target.value) || 0)}
                             className={INPUT.inline + ' w-16'} />
                         </div>
+                      ) : canEdit ? (
+                        <button type="button" className="text-xs transition-colors hover:text-blue-600" onClick={() => startEditing(s)}>
+                          {s.al_entitlement != null ? (
+                            <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
+                          ) : (
+                            <span className="text-gray-400">Auto</span>
+                          )}
+                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}h</span>}
+                        </button>
                       ) : (
-                        <span className={`text-xs transition-colors ${canEdit ? 'cursor-pointer hover:text-blue-600' : ''}`} onClick={() => canEdit && startEditing(s)}>
+                        <span className="text-xs">
                           {s.al_entitlement != null ? (
                             <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
                           ) : (

@@ -316,7 +316,7 @@ export default function WhistleblowingTracker() {
                 const outcomeDef = CONCERN_OUTCOMES.find(o => o.id === concern.outcome);
                 const roleDef = REPORTER_ROLES.find(r => r.id === concern.raised_by_role);
                 return (
-                  <tr key={concern.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(concern))}>
+                  <tr key={concern.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(concern), { disabled: !canEdit, label: `Open whistleblowing concern ${concern.id}` })}>
                     <td className={TABLE.td}>{concern.date_raised}</td>
                     <td className={TABLE.td}>{catDef?.name || concern.category}</td>
                     <td className={TABLE.td}>

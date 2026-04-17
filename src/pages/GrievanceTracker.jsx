@@ -304,7 +304,7 @@ export default function GrievanceTracker() {
                 </tr>
               )}
               {cases.map(c => (
-                <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(c))}>
+                <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(c), { disabled: !canEdit, label: `Open grievance case for ${c.staff_name}` })}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
                   <td className={TABLE.td}>{c.date_raised}</td>
                   <td className={TABLE.td}>{GRIEVANCE_CATEGORIES.find(cat => cat.id === c.category)?.name || c.category}</td>

@@ -213,7 +213,7 @@ export default function AppLayout() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="relative rounded-md p-1 text-gray-300 transition hover:bg-gray-800 hover:text-white"
+            className="relative rounded-md p-2.5 text-gray-300 transition hover:bg-gray-800 hover:text-white"
             onClick={toggleNotificationPanel}
             aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ''}`}
           >
@@ -222,7 +222,7 @@ export default function AppLayout() {
             </svg>
             {unreadCount > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{unreadCount}</span>}
           </button>
-          <span className="text-[10px] text-gray-300">{user.username}</span>
+          <span className="text-xs text-gray-300">{user.username}</span>
         </div>
       </div>
 
@@ -256,7 +256,7 @@ export default function AppLayout() {
           </div>
           {sidebarOpen && (
             <div className="mt-3 rounded-2xl border border-slate-800/80 bg-slate-900/70 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Workspace</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Workspace</p>
               <p className="mt-1 truncate text-sm font-semibold text-slate-100">{activeNavContext.item?.label || activeHomeName}</p>
               <p className="mt-1 truncate text-xs text-slate-400">
                 {(activeNavContext.section?.label || 'General')} • {isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role}
@@ -325,7 +325,7 @@ export default function AppLayout() {
                   {sidebarOpen && (
                     <>
                       <span className="ml-2.5 font-semibold flex-1 text-left">{section.label}</span>
-                      <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                      <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
                         {section.visibleItems.length}
                       </span>
                       <svg className={`w-3 h-3 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -366,15 +366,15 @@ export default function AppLayout() {
         {sidebarOpen && (
           <div className="p-3 border-t border-slate-800/80">
             <div className="flex items-center justify-between">
-              <div className="text-[10px] text-slate-500 leading-relaxed">
+              <div className="text-xs text-slate-500 leading-relaxed">
                 <span className="text-slate-200 font-medium">{user.displayName || user.username}</span> ({isPlatformAdmin ? 'Platform Admin' : getRoleLabel(homeRole) || user.role})<br />
                 {homes.find(h => h.id === activeHome)?.name}
               </div>
               <div className="flex flex-col items-end gap-0.5">
                 <button onClick={() => setChangePwOpen(true)}
-                  className="text-[10px] text-slate-300 hover:text-blue-300 transition-colors font-medium">Change password</button>
+                  className="text-xs text-slate-300 hover:text-blue-300 transition-colors font-medium">Change password</button>
                 <button onClick={() => { void logout(); }}
-                  className="text-[10px] text-slate-300 hover:text-red-300 transition-colors font-medium">Logout</button>
+                  className="text-xs text-slate-300 hover:text-red-300 transition-colors font-medium">Logout</button>
               </div>
             </div>
           </div>

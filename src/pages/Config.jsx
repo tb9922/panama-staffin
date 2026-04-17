@@ -134,7 +134,14 @@ export default function Config() {
       {dirty && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
-          <button onClick={handleSave} disabled={saving} className={`${BTN.danger} ${BTN.xs} !bg-amber-600 !hover:bg-amber-700`}>{saving ? 'Saving...' : 'Save Now'}</button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className={`${BTN.secondary} ${BTN.sm} border-amber-300 text-amber-800 hover:bg-amber-100`}
+          >
+            {saving ? 'Saving...' : 'Save Now'}
+          </button>
         </div>
       )}
       {saveError && (

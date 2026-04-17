@@ -1,6 +1,7 @@
 import { BTN, CARD, TABLE, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES, getLabel, getStatusBadge, formatCurrency } from '../../lib/finance.js';
 import { parseLocalDate, todayLocalISO } from '../../lib/localDates.js';
+import { clickableRowProps } from '../../lib/a11y.js';
 import EmptyState from '../EmptyState.jsx';
 
 function renderBedCell(r) {
@@ -82,7 +83,11 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
           </thead>
           <tbody>
             {residents.map(r => (
-              <tr key={r.id} className={TABLE.tr + ' cursor-pointer'} onClick={() => onEdit(r)}>
+              <tr
+                key={r.id}
+                className={TABLE.tr + ' cursor-pointer'}
+                {...clickableRowProps(() => onEdit(r), { label: `Open resident ${r.resident_name}` })}
+              >
                 <td className={TABLE.td + ' font-medium'}>{r.resident_name}</td>
                 <td className={TABLE.td}>{renderBedCell(r)}</td>
                 <td className={TABLE.td}>{getLabel(r.funding_type, FUNDING_TYPES)}</td>

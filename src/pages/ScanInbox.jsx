@@ -20,6 +20,7 @@ import { useToast } from '../contexts/ToastContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
+import { clickableRowProps } from '../lib/a11y.js';
 import { SCAN_INTAKE_TARGETS, SCAN_INTAKE_STATUS_LABELS } from '../../shared/scanIntake.js';
 import { describeScanLaunchContext, parseScanLaunchParams } from '../lib/scanRouting.js';
 import { todayLocalISO } from '../lib/localDates.js';
@@ -438,7 +439,11 @@ export default function ScanInbox() {
               <thead className={TABLE.thead}><tr><th className={TABLE.th}>Document</th><th className={TABLE.th}>Suggested Target</th><th className={TABLE.th}>Status</th></tr></thead>
               <tbody>
                 {list.map((item) => (
-                  <tr key={item.id} className={`${TABLE.tr} cursor-pointer ${selectedId === item.id ? 'bg-blue-50' : ''}`} onClick={() => setSelectedId(item.id)}>
+                  <tr
+                    key={item.id}
+                    className={`${TABLE.tr} cursor-pointer ${selectedId === item.id ? 'bg-blue-50' : ''}`}
+                    {...clickableRowProps(() => setSelectedId(item.id), { label: `Review scan ${item.original_name}` })}
+                  >
                     <td className={TABLE.td}>
                       <div className="font-medium">{item.original_name}</div>
                       <div className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString('en-GB')}</div>

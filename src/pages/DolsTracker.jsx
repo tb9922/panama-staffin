@@ -467,7 +467,7 @@ export default function DolsTracker() {
                     const typeDef = APPLICATION_TYPES.find(t => t.id === dol.application_type);
                     const statusDef = DOLS_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={dol.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEditDols(dol))}>
+                      <tr key={dol.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEditDols(dol), { disabled: !canEdit, label: `Open DoLS record for ${dol.resident_name}` })}>
                         <td className={TABLE.td}>{dol.resident_name}</td>
                         <td className={TABLE.td}><span className={typeBadge(dol.application_type)}>{typeDef?.name || dol.application_type}</span></td>
                         <td className={TABLE.td}>{dol.application_date}</td>
@@ -520,7 +520,7 @@ export default function DolsTracker() {
                     const st = getMcaStatus(mca, today);
                     const statusDef = MCA_STATUSES.find(s => s.id === st.status);
                     return (
-                      <tr key={mca.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEditMca(mca))}>
+                      <tr key={mca.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEditMca(mca), { disabled: !canEdit, label: `Open MCA assessment for ${mca.resident_name}` })}>
                         <td className={TABLE.td}>{mca.resident_name}</td>
                         <td className={TABLE.td}>{mca.assessment_date}</td>
                         <td className={TABLE.td}>{mca.assessor || '-'}</td>

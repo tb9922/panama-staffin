@@ -16,6 +16,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 import { todayLocalISO } from '../../lib/localDates.js';
+import { clickableRowProps } from '../../lib/a11y.js';
 
 export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false }) {
   const [showModal, setShowModal] = useState(false);
@@ -168,7 +169,11 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
             </thead>
             <tbody>
               {[...drillsList].sort((a, b) => b.date.localeCompare(a.date)).map(drill => (
-                <tr key={drill.id} className={`${TABLE.tr} cursor-pointer`} onClick={() => openModal(drill)}>
+                <tr
+                  key={drill.id}
+                  className={`${TABLE.tr} cursor-pointer`}
+                  {...clickableRowProps(() => openModal(drill), { label: `Open fire drill from ${drill.date}` })}
+                >
                   <td className={TABLE.td}>{drill.date}</td>
                   <td className={TABLE.td}>{drill.time || '-'}</td>
                   <td className={`${TABLE.td} max-w-[250px] truncate`}>{drill.scenario || '-'}</td>

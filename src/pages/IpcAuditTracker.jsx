@@ -316,7 +316,7 @@ export default function IpcAuditTracker() {
                 const outbreakStatus = normalizeOutbreakStatus(audit.outbreak?.status);
                 const hasOutbreak = audit.outbreak && (outbreakStatus === 'suspected' || outbreakStatus === 'confirmed');
                 return (
-                  <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(audit))}>
+                  <tr key={audit.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(audit), { disabled: !canEdit, label: `Open IPC audit from ${audit.audit_date}` })}>
                     <td className={TABLE.td}>{audit.audit_date}</td>
                     <td className={TABLE.td}>{typeDef?.name || audit.audit_type}</td>
                     <td className={TABLE.td}>{audit.auditor || '-'}</td>

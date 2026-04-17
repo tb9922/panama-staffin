@@ -372,7 +372,7 @@ export default function PolicyReviewTracker() {
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);
                 return (
-                  <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(policy))}>
+                  <tr key={policy.id} className={`${TABLE.tr} ${canEdit ? 'cursor-pointer' : ''}`} {...clickableRowProps(() => openEdit(policy), { disabled: !canEdit, label: `Open policy review for ${policy.name}` })}>
                     <td className={TABLE.td}>{policy.policy_name}</td>
                     <td className={TABLE.td}>{policy.policy_ref || '-'}</td>
                     <td className={TABLE.td}>{policy.version}</td>

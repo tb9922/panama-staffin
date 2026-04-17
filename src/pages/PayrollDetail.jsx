@@ -372,16 +372,16 @@ export default function PayrollDetail() {
               </button>
               {showExportMenu && !isBusy && (
                 <div className="absolute right-0 z-20 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
-                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('sage')}>
+                  <button type="button" className={`${BTN.ghost} ${BTN.sm} w-full justify-start border-0 px-3 shadow-none`} onClick={() => handleExport('sage')}>
                     Sage CSV
                   </button>
-                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('xero')}>
+                  <button type="button" className={`${BTN.ghost} ${BTN.sm} w-full justify-start border-0 px-3 shadow-none`} onClick={() => handleExport('xero')}>
                     Xero CSV
                   </button>
-                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('generic')}>
+                  <button type="button" className={`${BTN.ghost} ${BTN.sm} w-full justify-start border-0 px-3 shadow-none`} onClick={() => handleExport('generic')}>
                     Generic CSV
                   </button>
-                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setShowExportMenu(false); handleSummaryPdf(); }}>
+                  <button type="button" className={`${BTN.ghost} ${BTN.sm} w-full justify-start border-0 px-3 shadow-none`} onClick={() => { setShowExportMenu(false); handleSummaryPdf(); }}>
                     Summary PDF
                   </button>
                 </div>
