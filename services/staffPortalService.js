@@ -10,6 +10,7 @@ import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
 import { assemblePayslipData } from './payrollService.js';
 import { getTrainingTypes } from '../shared/training.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 import {
   addDays,
   formatDate,
@@ -83,7 +84,7 @@ export async function getStaffAccrualSummary({ homeId, staffId, asOfDate }) {
   ]);
   if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
   if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-  return calculateAccrual(staff, home.config || {}, overrides, asOfDate || formatDate(new Date()));
+  return calculateAccrual(staff, home.config || {}, overrides, asOfDate || todayLocalISO());
 }
 
 export async function getStaffPayslipRuns({ homeId, staffId }) {
@@ -117,7 +118,7 @@ export async function getStaffTrainingStatus({ homeId, staffId }) {
   if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
 
   const recordMap = new Map(records.map((record) => [record.training_type_id, record]));
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
   const items = getTrainingTypes(home.config || {})
     .filter((type) => type.active !== false)
     .filter((type) => !type.roles || type.roles.includes(staff.role))

@@ -5,7 +5,9 @@ import crypto from 'node:crypto';
 
 vi.mock('../../repositories/webhookRepo.js', () => ({
   findActiveByEvent: vi.fn().mockResolvedValue([]),
+  findRecentDuplicateDelivery: vi.fn().mockResolvedValue(null),
   logDelivery: vi.fn().mockResolvedValue(),
+  updateDeliveryForRetry: vi.fn().mockResolvedValue(),
 }));
 
 vi.mock('../../logger.js', () => ({
@@ -43,6 +45,7 @@ describe('webhookService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    webhookRepo.findRecentDuplicateDelivery.mockResolvedValue(null);
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 200 });
   });
 
@@ -193,6 +196,34 @@ describe('webhookService', () => {
 
     const [, opts] = fetchSpy.mock.calls[0];
     expect(opts.redirect).toBe('manual');
+  });
+
+  it('skips duplicate webhook deliveries inside the dedup window', async () => {
+    const hook = makeHook();
+    webhookRepo.findActiveByEvent.mockResolvedValue([hook]);
+    webhookRepo.findRecentDuplicateDelivery.mockResolvedValue({ id: 99, status: 'delivered' });
+
+    await dispatchEvent(42, 'incident.created', { id: 'inc-1' });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(webhookRepo.logDelivery).not.toHaveBeenCalled();
+  });
+
+  it('blocks oversized webhook payloads before sending', async () => {
+    const hook = makeHook();
+    webhookRepo.findActiveByEvent.mockResolvedValue([hook]);
+
+    await dispatchEvent(42, 'incident.created', { blob: 'x'.repeat(70 * 1024) });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(webhookRepo.logDelivery).toHaveBeenCalledOnce();
+    const [, , , statusCode, responseMs, error, status] = webhookRepo.logDelivery.mock.calls[0];
+    expect(statusCode).toBeNull();
+    expect(responseMs).toBe(0);
+    expect(error).toMatch(/exceeds 65536 bytes/i);
+    expect(status).toBe('blocked');
   });
 
   it('logs error but does not throw when one webhook fails', async () => {

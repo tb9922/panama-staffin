@@ -11,6 +11,14 @@ import logger from '../logger.js';
 
 const STAFF_LOCKOUT_MINUTES = 15;
 const DUMMY_BCRYPT_HASH = '$2a$10$7EqJtq98hPqEX7fNZaFWoOHi6V7z8N2N4dAJE1lghYzBL2cJlgKiW';
+const AUTH_FAILURE_FLOOR_MS = 50;
+
+async function applyFailureFloor(startedAt) {
+  const remaining = AUTH_FAILURE_FLOOR_MS - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+}
 
 export function issueToken(payload) {
   const jti = randomUUID();
@@ -60,6 +68,7 @@ export async function loadDenyList() {
 }
 
 export async function login(username, password) {
+  const startedAt = Date.now();
   // Try database-backed users first
   let dbUser = null;
   let usersTableExists = true;
@@ -72,9 +81,13 @@ export async function login(username, password) {
   }
 
   if (dbUser) {
-    if (!dbUser.active) throw new AuthenticationError('Invalid credentials');
+    if (!dbUser.active) {
+      await applyFailureFloor(startedAt);
+      throw new AuthenticationError('Invalid credentials');
+    }
     // Account lockout — reject if locked and lockout hasn't expired
     if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
+      await applyFailureFloor(startedAt);
       const err = new AuthenticationError('Account locked — contact admin');
       err.statusCode = 423;
       throw err;
@@ -82,6 +95,7 @@ export async function login(username, password) {
     const valid = await bcrypt.compare(password, dbUser.password_hash);
     if (!valid) {
       await userRepo.incrementFailedLogin(username);
+      await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }
     // Successful login — reset failed counter and clear user-scoped deny-list
@@ -98,9 +112,11 @@ export async function login(username, password) {
     const creds = await staffAuthRepo.findByUsername(username);
     if (!creds || !creds.staffActive) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+      await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }
     if (creds.lockedUntil && new Date(creds.lockedUntil) > new Date()) {
+      await applyFailureFloor(startedAt);
       const err = new AuthenticationError('Account locked — contact admin');
       err.statusCode = 423;
       throw err;
@@ -111,6 +127,7 @@ export async function login(username, password) {
       if ((creds.failedLoginCount + 1) >= 5) {
         await staffAuthRepo.lockAccount(creds.homeId, creds.staffId, STAFF_LOCKOUT_MINUTES);
       }
+      await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }
 
@@ -131,6 +148,7 @@ export async function login(username, password) {
   }
   if (usersTableExists) {
     await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+    await applyFailureFloor(startedAt);
     throw new AuthenticationError('Invalid credentials');
   }
   logger.error('Database-backed authentication is unavailable because the users table is missing');

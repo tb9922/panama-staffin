@@ -113,7 +113,7 @@ const confirmBodySchema = z.object({
   }).optional(),
   handover: z.object({
     entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    shift: z.enum(['E', 'L', 'N']),
+    shift: z.enum(['E', 'L', 'EL', 'N']),
     category: z.enum(['clinical', 'safety', 'operational', 'admin']),
     priority: z.enum(['urgent', 'action', 'info']),
     content: z.string().min(1).max(2000),

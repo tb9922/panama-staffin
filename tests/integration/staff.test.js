@@ -189,7 +189,7 @@ describe('POST /api/staff — create', () => {
       .expect(403);
   });
 
-  it('increments version when POST upserts an existing staff member', async () => {
+  it('rejects POST create when the staff ID already exists', async () => {
     const initial = await request(app)
       .post('/api/staff')
       .query({ home: homeASlug })
@@ -197,17 +197,15 @@ describe('POST /api/staff — create', () => {
       .send(makeStaff({ id: 'ST004', name: 'Upsert Target', hourly_rate: 13.25 }))
       .expect(201);
 
-    const updated = await request(app)
+    const duplicate = await request(app)
       .post('/api/staff')
       .query({ home: homeASlug })
       .set('Authorization', `Bearer ${adminToken}`)
       .send(makeStaff({ id: 'ST004', name: 'Upsert Target Updated', hourly_rate: 13.75 }))
-      .expect(201);
+      .expect(409);
 
     expect(initial.body.version).toBe(1);
-    expect(updated.body.version).toBe(2);
-    expect(updated.body.name).toBe('Upsert Target Updated');
-    expect(updated.body.hourly_rate).toBe(13.75);
+    expect(duplicate.body.error).toMatch(/already exists/i);
   });
 
   it('rejects request with no home parameter', async () => {

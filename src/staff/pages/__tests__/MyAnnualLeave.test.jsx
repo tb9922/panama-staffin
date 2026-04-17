@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../../test/renderWithProviders.jsx';
 import MyAnnualLeave from '../MyAnnualLeave.jsx';
 
@@ -67,6 +68,7 @@ describe('MyAnnualLeave', () => {
   });
 
   it('cancels a pending request using its optimistic version', async () => {
+    const user = userEvent.setup();
     cancelMyOverrideRequest.mockResolvedValue({ ok: true });
 
     renderWithProviders(<MyAnnualLeave />, {
@@ -74,7 +76,8 @@ describe('MyAnnualLeave', () => {
     });
 
     await screen.findByText('Family event');
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel request' }));
 
     await waitFor(() => {
       expect(cancelMyOverrideRequest).toHaveBeenCalledWith(7, 3);

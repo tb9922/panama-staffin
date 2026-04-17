@@ -100,10 +100,11 @@ describe('HandoverNotes', () => {
     await waitFor(() => expect(screen.getByText('Handover Book')).toBeInTheDocument());
   });
 
-  it('shows three shift sections', async () => {
+  it('shows all handover shift sections including early + late', async () => {
     renderWithProviders(<HandoverNotes />);
     await waitFor(() => expect(screen.getAllByText('Early Shift').length).toBeGreaterThan(0));
     expect(screen.getAllByText('Late Shift').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Early + Late Shift').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Night Shift').length).toBeGreaterThan(0);
   });
 

@@ -107,6 +107,28 @@ export async function logDelivery(webhookId, event, payload, statusCode, respons
   return rows[0]?.id;
 }
 
+export async function findRecentDuplicateDelivery(
+  webhookId,
+  event,
+  payload,
+  statuses = ['delivered', 'pending_retry', 'in_progress'],
+  windowMinutes = 5,
+) {
+  const { rows } = await pool.query(
+    `SELECT id, status, delivered_at
+     FROM webhook_deliveries
+     WHERE webhook_id = $1
+       AND event = $2
+       AND payload = $3::jsonb
+       AND status = ANY($4::text[])
+       AND delivered_at >= NOW() - ($5::int * INTERVAL '1 minute')
+     ORDER BY delivered_at DESC
+     LIMIT 1`,
+    [webhookId, event, payload, statuses, windowMinutes],
+  );
+  return rows[0] || null;
+}
+
 export async function purgeDeliveriesOlderThan(days, client) {
   const conn = client || pool;
   const { rowCount } = await conn.query(
@@ -221,10 +243,15 @@ export async function markDeliverySucceeded(id, statusCode, responseMs) {
   );
 }
 
-export async function markDeliveryFailed(id) {
+export async function markDeliveryFailed(id, error = null) {
   await pool.query(
-    `UPDATE webhook_deliveries SET status = 'failed', next_retry_at = NULL, locked_at = NULL WHERE id = $1`,
-    [id]
+    `UPDATE webhook_deliveries
+     SET status = 'failed',
+         error = COALESCE($2, error),
+         next_retry_at = NULL,
+         locked_at = NULL
+     WHERE id = $1`,
+    [id, error]
   );
 }
 

@@ -1,7 +1,7 @@
 // PDF Report Generation using jsPDF + autoTable
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours } from './rotation.js';
+import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours, parseDate } from './rotation.js';
 import { calculateDayCost, getDayCoverageStatus } from './escalation.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS, calculateComplianceScore,
@@ -50,6 +50,11 @@ function getMonthDates(year, month) {
     d.setUTCDate(d.getUTCDate() + 1);
   }
   return dates;
+}
+
+function formatUkDate(dateStr) {
+  if (!dateStr) return '-';
+  return parseDate(dateStr).toLocaleDateString('en-GB', { timeZone: 'UTC' });
 }
 
 // Weekly Roster PDF
@@ -991,8 +996,10 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
       startY: y,
       head: [['Date', 'Category', 'Title', 'Status', 'Response Days']],
       body: recentComplaints.map(c => {
-        const st = c.resolution_date && c.date ? Math.round((new Date(c.resolution_date) - new Date(c.date)) / (1000 * 60 * 60 * 24)) : '-';
-        return [c.date || '-', c.category || '-', (c.title || '').substring(0, 40), c.status || '-', st];
+        const st = c.resolution_date && c.date
+          ? Math.round((parseDate(c.resolution_date) - parseDate(c.date)) / (1000 * 60 * 60 * 24))
+          : '-';
+        return [formatUkDate(c.date), c.category || '-', (c.title || '').substring(0, 40), c.status || '-', st];
       }),
       styles: { fontSize: 7, cellPadding: 1.5 },
       headStyles: { fillColor: [31, 41, 55], fontSize: 7 },

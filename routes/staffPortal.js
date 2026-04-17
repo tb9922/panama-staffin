@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth, requireHomeAccess, requireStaffSelf } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 import * as overrideRequestService from '../services/overrideRequestService.js';
 import * as staffPortalService from '../services/staffPortalService.js';
 import * as clockInService from '../services/clockInService.js';
@@ -47,13 +48,10 @@ function ensureStaffPortalEnabled(req, res, next) {
 }
 
 function defaultWindow() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 27);
+  const start = todayLocalISO();
   return {
-    from: start.toISOString().slice(0, 10),
-    to: end.toISOString().slice(0, 10),
+    from: start,
+    to: addDaysLocalISO(start, 27),
   };
 }
 
@@ -63,7 +61,7 @@ const staffWriteChain = [writeRateLimiter, requireAuth, ensureStaffPortalEnabled
 router.get('/dashboard', ...staffReadChain, async (req, res, next) => {
   try {
     const { from, to } = defaultWindow();
-    const asOfDate = new Date().toISOString().slice(0, 10);
+    const asOfDate = todayLocalISO();
     const [schedule, accrual, training, payslips, requests, profile, clockState] = await Promise.all([
       staffPortalService.getStaffScheduleWindow({ homeId: req.home.id, staffId: req.staffId, from, to }),
       staffPortalService.getStaffAccrualSummary({ homeId: req.home.id, staffId: req.staffId, asOfDate }),
@@ -103,7 +101,7 @@ router.get('/accrual', ...staffReadChain, async (req, res, next) => {
     const summary = await staffPortalService.getStaffAccrualSummary({
       homeId: req.home.id,
       staffId: req.staffId,
-      asOfDate: parsed.asOfDate || new Date().toISOString().slice(0, 10),
+      asOfDate: parsed.asOfDate || todayLocalISO(),
     });
     res.json(summary);
   } catch (err) {

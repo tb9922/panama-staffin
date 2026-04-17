@@ -4,7 +4,9 @@ import { reportMySick } from '../../lib/api.js';
 import ErrorState from '../../components/ErrorState.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
-const TODAY = new Date().toISOString().slice(0, 10);
+import { todayLocalISO } from '../../lib/localDates.js';
+
+const TODAY = todayLocalISO();
 
 export default function ReportSick() {
   const [form, setForm] = useState({

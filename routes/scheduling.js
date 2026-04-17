@@ -289,7 +289,9 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     let configOut = buildSchedulingConfigOut(req.home.config);
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
-      staffOut = staff.map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
+      staffOut = staff
+        .filter(({ id }) => id === req.staffId)
+        .map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
       overridesOut = {};
       for (const [date, entries] of Object.entries(overrides)) {
         if (entries[req.staffId]) overridesOut[date] = { [req.staffId]: entries[req.staffId] };

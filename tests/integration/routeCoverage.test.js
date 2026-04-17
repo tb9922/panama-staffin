@@ -203,8 +203,8 @@ describe('audit routes', () => {
     await authGet('/api/audit', viewerToken).expect(403);
 
     const recentRes = await authGet(`/api/audit?home=${homeASlug}&limit=5`, adminToken).expect(200);
-    expect(Array.isArray(recentRes.body)).toBe(true);
-    expect(recentRes.body.some((row) => row.action === 'coverage_new')).toBe(true);
+    expect(Array.isArray(recentRes.body.rows)).toBe(true);
+    expect(recentRes.body.rows.some((row) => row.action === 'coverage_new')).toBe(true);
 
     await authGet(`/api/audit?home=${homeBSlug}`, adminToken).expect(403);
 

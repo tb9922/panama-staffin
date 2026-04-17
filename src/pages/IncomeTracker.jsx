@@ -279,6 +279,13 @@ function ResidentsTab({ home, canEdit }) {
               <div className="grid grid-cols-2 gap-3">
                 <div><label className={INPUT.label}>Weekly Fee</label>
                   <input type="number" step="0.01" value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} className={INPUT.base} /></div>
+                {editing && Number(form.weekly_fee ?? editing.weekly_fee ?? 0) > Number(editing.weekly_fee ?? 0) && (
+                  <div className="col-span-2">
+                    <InlineNotice variant="warning">
+                      Fee increases need at least 28 days&apos; notice. Immediate in-app increases are blocked until scheduled fee changes are implemented.
+                    </InlineNotice>
+                  </div>
+                )}
                 <div><label className={INPUT.label}>LA Contribution</label>
                   <input type="number" step="0.01" value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>CHC Contribution</label>

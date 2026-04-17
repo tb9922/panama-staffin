@@ -42,7 +42,7 @@ export async function findByHomeAndDate(homeId, date, { limit = 100, offset = 0 
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date = $2 AND deleted_at IS NULL
      ORDER BY
-       CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
+       CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'EL' THEN 3 WHEN 'N' THEN 4 ELSE 5 END,
        CASE category WHEN 'clinical' THEN 1 WHEN 'safety' THEN 2 WHEN 'operational' THEN 3 WHEN 'admin' THEN 4 ELSE 5 END,
        created_at
      LIMIT $3 OFFSET $4`,
@@ -63,7 +63,7 @@ export async function findByHomeAndDateRange(homeId, fromDate, toDate, { limit =
     `SELECT ${COLS}, COUNT(*) OVER() AS _total FROM handover_entries
      WHERE home_id = $1 AND entry_date BETWEEN $2 AND $3 AND deleted_at IS NULL
      ORDER BY entry_date,
-       CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'N' THEN 3 ELSE 4 END,
+       CASE shift WHEN 'E' THEN 1 WHEN 'L' THEN 2 WHEN 'EL' THEN 3 WHEN 'N' THEN 4 ELSE 5 END,
        created_at
      LIMIT $4 OFFSET $5`,
     [homeId, fromDate, toDate, Math.min(limit, 2000), Math.max(offset, 0)]

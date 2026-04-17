@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
-import { ValidationError } from '../errors.js';
+import { ConflictError, ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
 import logger from '../logger.js';
 
@@ -43,6 +43,20 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]
       );
       const staffName = staffRow?.name;
+      const { rows: linkedUserRows } = staffName
+        ? await conn.query(
+            `SELECT u.username
+               FROM users u
+              WHERE (u.display_name = $1 OR u.username = $1)
+                AND EXISTS (
+                  SELECT 1 FROM user_home_roles uhr
+                   WHERE uhr.username = u.username
+                     AND uhr.home_id = $2
+                )`,
+            [staffName, homeId]
+          )
+        : { rows: [] };
+      const linkedUsernames = linkedUserRows.map((row) => row.username);
 
       const [
         staff, overrides, training, supervisions, appraisals,
@@ -55,11 +69,13 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         hrFlexWorking, hrEdi, hrTupe, hrRenewals, hrCaseNotes, hrCaseNotesOnCases,
         onboarding, careCertificates, complaints, incidentAddenda,
         payrollYtd, hrMeetings, hrAttachments,
+        trainingAttachments, onboardingAttachments,
         payrollLineShifts, userAccount, userHomeRoles,
         // GDPR module own tables — the subject may be the requester or consent giver
         consentRecords, dataRequests, dpComplaints,
         // Operational/CQC tables matched by name (no staff FK)
         agencyShifts, complaintSurveys, webhookDeliveries, cqcNarratives,
+        cqcEvidence, cqcPartnerFeedback, cqcObservations, cqcEvidenceLinks,
       ] = await runSequentialQueries([
         () => conn.query(`SELECT * FROM staff WHERE home_id = $1 AND id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
@@ -115,14 +131,20 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — TUPE: include only rows where the subject is explicitly present
         // in the employees JSON payload by staff ID or resolved name.
-        () => conn.query(
-          `SELECT * FROM hr_tupe_transfers
-           WHERE home_id = $1 AND deleted_at IS NULL
-             AND (
-               employees::text LIKE '%' || $2 || '%'
-               OR ($3 IS NOT NULL AND employees::text LIKE '%' || $3 || '%')
-             )`,
-          [homeId, String(subjectId), staffName || null]),
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM hr_tupe_transfers
+               WHERE home_id = $1 AND deleted_at IS NULL
+                 AND (
+                   employees::text LIKE '%' || $2 || '%'
+                   OR employees::text LIKE '%' || $3 || '%'
+                 )`,
+              [homeId, String(subjectId), staffName])
+          : conn.query(
+              `SELECT * FROM hr_tupe_transfers
+               WHERE home_id = $1 AND deleted_at IS NULL
+                 AND employees::text LIKE '%' || $2 || '%'`,
+              [homeId, String(subjectId)]),
         // HR module — DBS/RTW renewals
         () => conn.query(`SELECT * FROM hr_rtw_dbs_renewals WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         // HR module — case notes authored by this staff member (pre-resolved name)
@@ -171,6 +193,12 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
              OR (a.case_type = 'grievance' AND a.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
              OR (a.case_type = 'performance' AND a.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
            )`, [homeId, subjectId]),
+        () => conn.query(
+          `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+          [homeId, subjectId]),
+        () => conn.query(
+          `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+          [homeId, subjectId]),
         // Payroll shift detail (per-day hours, rates, amounts)
         () => conn.query(
           `SELECT pls.* FROM payroll_line_shifts pls
@@ -222,6 +250,44 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
                WHERE home_id = $1 AND reviewed_by = $2 AND deleted_at IS NULL`,
               [homeId, staffName])
           : { rows: [] },
+        () => (staffName || linkedUsernames.length > 0)
+          ? conn.query(
+              `SELECT * FROM cqc_evidence
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (
+                   ($2::TEXT IS NOT NULL AND evidence_owner = $2)
+                   OR ($3::TEXT[] IS NOT NULL AND added_by = ANY($3))
+                 )`,
+              [homeId, staffName || null, linkedUsernames.length > 0 ? linkedUsernames : null])
+          : { rows: [] },
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_partner_feedback
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (partner_name = $2 OR evidence_owner = $2)`,
+              [homeId, staffName])
+          : { rows: [] },
+        () => staffName
+          ? conn.query(
+              `SELECT * FROM cqc_observations
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (observer = $2 OR evidence_owner = $2)`,
+              [homeId, staffName])
+          : { rows: [] },
+        () => (staffName || linkedUsernames.length > 0)
+          ? conn.query(
+              `SELECT * FROM cqc_evidence_links
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (
+                   ($2::TEXT IS NOT NULL AND linked_by = $2)
+                   OR ($3::TEXT[] IS NOT NULL AND linked_by = ANY($3))
+                 )`,
+              [homeId, staffName || null, linkedUsernames.length > 0 ? linkedUsernames : null])
+          : { rows: [] },
       ]);
 
       return {
@@ -265,6 +331,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           payroll_ytd: payrollYtd.rows,
           hr_investigation_meetings: hrMeetings.rows,
           hr_file_attachments: hrAttachments.rows,
+          training_file_attachments: trainingAttachments.rows,
+          onboarding_file_attachments: onboardingAttachments.rows,
           payroll_line_shifts: payrollLineShifts.rows,
           user_account: userAccount.rows,
           user_home_roles: userHomeRoles.rows,
@@ -277,6 +345,10 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
           complaint_surveys: complaintSurveys.rows,
           webhook_deliveries: webhookDeliveries.rows,
           cqc_statement_narratives: cqcNarratives.rows,
+          cqc_evidence: cqcEvidence.rows,
+          cqc_partner_feedback: cqcPartnerFeedback.rows,
+          cqc_observations: cqcObservations.rows,
+          cqc_evidence_links: cqcEvidenceLinks.rows,
         },
       };
     }
@@ -447,6 +519,14 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
  */
 export async function executeErasure(staffId, homeId, requestId, username, homeSlug) {
   return withTransaction(async (client) => {
+    if (requestId) {
+      const request = await gdprRepo.findRequestById(requestId, homeId, client);
+      if (!request) throw new ValidationError('Data request not found');
+      if (request.status === 'completed') {
+        throw new ConflictError('Erasure request has already been completed');
+      }
+    }
+
     const anon = `[REDACTED-${staffId.slice(0, 4)}]`;
 
     // Capture original name BEFORE anonymising — needed for name-keyed tables
@@ -455,6 +535,21 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `SELECT name FROM staff WHERE home_id = $1 AND id = $2`, [homeId, staffId]
     );
     const originalName = staffRow?.name;
+    if (originalName?.startsWith('[REDACTED-')) {
+      throw new ConflictError('Staff has already been anonymised');
+    }
+    const { rows: linkedUsers } = originalName
+      ? await client.query(
+          `SELECT u.username FROM users u
+           WHERE (u.display_name = $1 OR u.username = $1)
+             AND EXISTS (
+               SELECT 1 FROM user_home_roles uhr
+               WHERE uhr.username = u.username AND uhr.home_id = $2
+             )`,
+          [originalName, homeId]
+        )
+      : { rows: [] };
+    const linkedUsernames = linkedUsers.map((row) => row.username);
 
     // Anonymise staff record (keep id, role, team, skill for operational data)
     await client.query(
@@ -484,6 +579,27 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Remove training records (not legally required to retain after erasure)
     await client.query(
       `DELETE FROM training_records WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
+    const { rows: trainingAttachments } = await client.query(
+      `SELECT stored_name, training_type
+         FROM training_file_attachments
+        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+      [homeId, staffId]
+    );
+    for (const attachment of trainingAttachments) {
+      const filePath = path.join(
+        appConfig.upload.dir,
+        String(homeId),
+        'training',
+        String(staffId),
+        String(attachment.training_type),
+        attachment.stored_name,
+      );
+      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+    }
+    await client.query(
+      `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
 
@@ -692,6 +808,27 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `DELETE FROM onboarding WHERE home_id = $1 AND staff_id = $2`,
       [homeId, staffId]
     );
+    const { rows: onboardingAttachments } = await client.query(
+      `SELECT stored_name, section
+         FROM onboarding_file_attachments
+        WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL`,
+      [homeId, staffId]
+    );
+    for (const attachment of onboardingAttachments) {
+      const filePath = path.join(
+        appConfig.upload.dir,
+        String(homeId),
+        'onboarding',
+        String(staffId),
+        String(attachment.section),
+        attachment.stored_name,
+      );
+      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+    }
+    await client.query(
+      `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeId, staffId]
+    );
     // Clear care certificate progress (supervisor name and assessment notes)
     await client.query(
       `UPDATE care_certificates SET supervisor = $1, standards = '{}'::jsonb
@@ -731,6 +868,46 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
             SET reviewed_by = $1
           WHERE home_id = $2 AND reviewed_by = $3 AND deleted_at IS NULL`,
         [anon, homeId, originalName]
+      );
+      await client.query(
+        `UPDATE cqc_evidence
+            SET evidence_owner = $1
+          WHERE home_id = $2
+            AND deleted_at IS NULL
+            AND evidence_owner = $3`,
+        [anon, homeId, originalName]
+      );
+      await client.query(
+        `UPDATE cqc_partner_feedback
+            SET partner_name = $1,
+                evidence_owner = $1
+          WHERE home_id = $2
+            AND deleted_at IS NULL
+            AND (partner_name = $3 OR evidence_owner = $3)`,
+        [anon, homeId, originalName]
+      );
+      await client.query(
+        `UPDATE cqc_observations
+            SET observer = $1,
+                evidence_owner = $1
+          WHERE home_id = $2
+            AND deleted_at IS NULL
+            AND (observer = $3 OR evidence_owner = $3)`,
+        [anon, homeId, originalName]
+      );
+    }
+    if (linkedUsernames.length > 0 || originalName) {
+      await client.query(
+        `UPDATE cqc_evidence_links
+            SET linked_by = $1,
+                rationale = NULL
+          WHERE home_id = $2
+            AND deleted_at IS NULL
+            AND (
+              ($3::TEXT IS NOT NULL AND linked_by = $3)
+              OR ($4::TEXT[] IS NOT NULL AND linked_by = ANY($4))
+            )`,
+        [anon, homeId, originalName || null, linkedUsernames.length > 0 ? linkedUsernames : null]
       );
     }
 
@@ -822,14 +999,8 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Anonymise linked user account (Article 17 — display_name is personal data).
     // Removes home-level role access and deactivates the account to prevent future logins.
     // username is preserved (it is the login identifier, not the subject's full name).
-    if (originalName) {
-      const { rows: linkedUsers } = await client.query(
-        `SELECT u.username FROM users u
-         WHERE (u.display_name = $1 OR u.username = $1)
-           AND EXISTS (SELECT 1 FROM user_home_roles uhr WHERE uhr.username = u.username AND uhr.home_id = $2)`,
-        [originalName, homeId]
-      );
-      for (const { username: linkedUsername } of linkedUsers) {
+    if (linkedUsernames.length > 0) {
+      for (const linkedUsername of linkedUsernames) {
         await client.query(
           `UPDATE users SET display_name = $1, active = false WHERE username = $2`,
           [anon, linkedUsername]

@@ -1,5 +1,6 @@
 import { withTransaction } from '../db.js';
 import logger from '../logger.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 import * as financeRepo from '../repositories/financeRepo.js';
 import * as bedRepo from '../repositories/bedRepo.js';
 
@@ -34,10 +35,18 @@ export async function updateResident(id, homeId, data, username, version) {
       if (!existing) return null;
       const oldFee = existing.weekly_fee;
       const newFee = parseFloat(data.weekly_fee);
+      if (newFee > oldFee) {
+        const today = todayLocalISO();
+        const earliestAllowed = addDaysLocalISO(today, 28);
+        throw Object.assign(
+          new Error(`Fee increases need at least 28 days' notice. This increase cannot be applied in-app before ${earliestAllowed}.`),
+          { statusCode: 400 },
+        );
+      }
       if (oldFee !== newFee) {
         await financeRepo.createFeeChange(homeId, {
           resident_id: id,
-          effective_date: new Date().toISOString().slice(0, 10),
+          effective_date: todayLocalISO(),
           previous_weekly: oldFee,
           new_weekly: newFee,
           reason: data._fee_change_reason || 'Fee updated',

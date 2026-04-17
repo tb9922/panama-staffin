@@ -1,5 +1,6 @@
 import { BTN, CARD, TABLE, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES, getLabel, getStatusBadge, formatCurrency } from '../../lib/finance.js';
+import { parseLocalDate, todayLocalISO } from '../../lib/localDates.js';
 import EmptyState from '../EmptyState.jsx';
 
 function renderBedCell(r) {
@@ -15,7 +16,11 @@ function renderBedCell(r) {
 
 function renderFeeReview(r) {
   if (!r.next_fee_review) return <span className="text-gray-400">{'\u2014'}</span>;
-  const daysUntil = (new Date(r.next_fee_review) - new Date()) / 86400000;
+  const reviewDate = parseLocalDate(r.next_fee_review);
+  const today = parseLocalDate(todayLocalISO());
+  const daysUntil = reviewDate && today
+    ? Math.floor((reviewDate.getTime() - today.getTime()) / 86400000)
+    : null;
   const color = daysUntil < 0 ? 'text-red-600 font-medium' : daysUntil <= 30 ? 'text-amber-600' : '';
   return <span className={color}>{r.next_fee_review}</span>;
 }

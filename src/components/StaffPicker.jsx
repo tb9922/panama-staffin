@@ -2,11 +2,12 @@ import { useState, useEffect, useId } from 'react';
 import { INPUT } from '../lib/design.js';
 import { getCurrentHome, getHrStaffList, isAbortLikeError } from '../lib/api.js';
 
-export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required }) {
+export default function StaffPicker({ value, onChange, disabled, showAll, showInactive, label, small, required, id }) {
   const [staff, setStaff] = useState([]);
   const [loadedHome, setLoadedHome] = useState(null);
   const home = getCurrentHome();
-  const selectId = useId();
+  const generatedId = useId();
+  const selectId = id || generatedId;
 
   useEffect(() => {
     if (!home) return undefined;

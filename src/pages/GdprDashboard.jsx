@@ -40,6 +40,10 @@ const TABS = [
   { id: 'access',     label: 'Access Log' },
 ];
 
+function focusField(id) {
+  queueMicrotask(() => document.getElementById(id)?.focus());
+}
+
 export default function GdprDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
@@ -166,7 +170,11 @@ export default function GdprDashboard() {
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleCreateRequest() {
-    if (saving || !form.request_type || !form.subject_type || !form.subject_id || !form.date_received) return;
+    if (saving) return;
+    if (!form.request_type) { setError('Request type is required.'); focusField('gdpr-request-type'); return; }
+    if (!form.subject_type) { setError('Subject type is required.'); focusField('gdpr-request-subject-type'); return; }
+    if (!form.subject_id) { setError('Please select a subject.'); focusField(form.subject_type === 'resident' ? 'gdpr-request-resident' : 'gdpr-request-staff'); return; }
+    if (!form.date_received) { setError('Date received is required.'); focusField('gdpr-request-date'); return; }
     setSaving(true);
     try {
       const data = {
@@ -182,7 +190,9 @@ export default function GdprDashboard() {
   }
 
   async function handleCreateBreach() {
-    if (saving || !form.title || !form.discovered_date) return;
+    if (saving) return;
+    if (!form.title) { setError('Breach title is required.'); focusField('gdpr-breach-title'); return; }
+    if (!form.discovered_date) { setError('Discovered date is required.'); focusField('gdpr-breach-date'); return; }
     setSaving(true);
     try {
       const data = { ...form };
@@ -203,7 +213,11 @@ export default function GdprDashboard() {
   }
 
   async function handleCreateConsent() {
-    if (saving || !form.subject_type || !form.subject_id || !form.purpose || !form.legal_basis) return;
+    if (saving) return;
+    if (!form.subject_type) { setError('Subject type is required.'); focusField('gdpr-consent-subject-type'); return; }
+    if (!form.subject_id) { setError('Subject ID is required.'); focusField('gdpr-consent-subject-id'); return; }
+    if (!form.purpose) { setError('Purpose is required.'); focusField('gdpr-consent-purpose'); return; }
+    if (!form.legal_basis) { setError('Legal basis is required.'); focusField('gdpr-consent-legal-basis'); return; }
     setSaving(true);
     try {
       await createConsentRecord(home, form);
@@ -215,7 +229,10 @@ export default function GdprDashboard() {
   }
 
   async function handleCreateComplaint() {
-    if (saving || !form.date_received || !form.category || !form.description) return;
+    if (saving) return;
+    if (!form.date_received) { setError('Date received is required.'); focusField('gdpr-complaint-date'); return; }
+    if (!form.category) { setError('Complaint category is required.'); focusField('gdpr-complaint-category'); return; }
+    if (!form.description) { setError('Complaint description is required.'); focusField('gdpr-complaint-description'); return; }
     setSaving(true);
     try {
       await createDPComplaint(home, form);
@@ -907,24 +924,24 @@ export default function GdprDashboard() {
         <div className="space-y-4">
           <div>
             <label className={INPUT.label}>Request Type</label>
-            <select className={INPUT.select} value={form.request_type || ''} onChange={e => setForm({ ...form, request_type: e.target.value })}>
+            <select id="gdpr-request-type" className={INPUT.select} value={form.request_type || ''} onChange={e => setForm({ ...form, request_type: e.target.value })}>
               {REQUEST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Subject Type</label>
-              <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
+              <select id="gdpr-request-subject-type" className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
                 <option value="staff">Staff</option>
                 <option value="resident">Resident</option>
               </select>
             </div>
             <div>
               {form.subject_type === 'resident' ? (
-                <ResidentPicker label="Resident" required value={form.subject_id}
+                <ResidentPicker id="gdpr-request-resident" label="Resident" required value={form.subject_id}
                   onChange={(id, resident) => setForm({ ...form, subject_id: id ? String(id) : '', subject_name: resident?.resident_name || '' })} />
               ) : (
-                <StaffPicker label="Staff Member" required value={form.subject_id}
+                <StaffPicker id="gdpr-request-staff" label="Staff Member" required value={form.subject_id}
                   onChange={val => {
                     setForm({ ...form, subject_id: val });
                   }} />
@@ -934,7 +951,7 @@ export default function GdprDashboard() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Date Received</label>
-              <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
+              <input id="gdpr-request-date" type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Deadline</label>
@@ -961,7 +978,7 @@ export default function GdprDashboard() {
         <div className="space-y-4">
           <div>
             <label className={INPUT.label}>Title</label>
-            <input className={INPUT.base} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief description of the breach" />
+            <input id="gdpr-breach-title" className={INPUT.base} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief description of the breach" />
           </div>
           <div>
             <label className={INPUT.label}>Description</label>
@@ -970,7 +987,7 @@ export default function GdprDashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <label className={INPUT.label}>Discovered Date</label>
-              <input type="date" className={INPUT.base} value={form.discovered_date || ''} onChange={e => setForm({ ...form, discovered_date: e.target.value })} />
+              <input id="gdpr-breach-date" type="date" className={INPUT.base} value={form.discovered_date || ''} onChange={e => setForm({ ...form, discovered_date: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Time</label>
@@ -1019,14 +1036,14 @@ export default function GdprDashboard() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Subject Type</label>
-              <select className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
+              <select id="gdpr-consent-subject-type" className={INPUT.select} value={form.subject_type || 'staff'} onChange={e => setForm({ ...form, subject_type: e.target.value })}>
                 <option value="staff">Staff</option>
                 <option value="resident">Resident</option>
               </select>
             </div>
             <div>
               <label className={INPUT.label}>Subject ID</label>
-              <input className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} />
+              <input id="gdpr-consent-subject-id" className={INPUT.base} value={form.subject_id || ''} onChange={e => setForm({ ...form, subject_id: e.target.value })} />
             </div>
           </div>
           <div>
@@ -1035,11 +1052,11 @@ export default function GdprDashboard() {
           </div>
           <div>
             <label className={INPUT.label}>Purpose</label>
-            <input className={INPUT.base} value={form.purpose || ''} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Photo consent for marketing" />
+            <input id="gdpr-consent-purpose" className={INPUT.base} value={form.purpose || ''} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Photo consent for marketing" />
           </div>
           <div>
             <label className={INPUT.label}>Legal Basis</label>
-            <select className={INPUT.select} value={form.legal_basis || 'consent'} onChange={e => setForm({ ...form, legal_basis: e.target.value })}>
+            <select id="gdpr-consent-legal-basis" className={INPUT.select} value={form.legal_basis || 'consent'} onChange={e => setForm({ ...form, legal_basis: e.target.value })}>
               {LEGAL_BASES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
             </select>
           </div>
@@ -1063,11 +1080,11 @@ export default function GdprDashboard() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Date Received</label>
-              <input type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
+              <input id="gdpr-complaint-date" type="date" className={INPUT.base} value={form.date_received || ''} onChange={e => setForm({ ...form, date_received: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Category</label>
-              <select className={INPUT.select} value={form.category || 'access'} onChange={e => setForm({ ...form, category: e.target.value })}>
+              <select id="gdpr-complaint-category" className={INPUT.select} value={form.category || 'access'} onChange={e => setForm({ ...form, category: e.target.value })}>
                 {DP_COMPLAINT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
@@ -1078,7 +1095,7 @@ export default function GdprDashboard() {
           </div>
           <div>
             <label className={INPUT.label}>Description</label>
-            <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <textarea id="gdpr-complaint-description" className={INPUT.base} rows={3} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

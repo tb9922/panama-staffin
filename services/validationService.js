@@ -3,6 +3,15 @@
 import { RIDDOR_CATEGORIES, isCqcNotificationOverdue, isDutyOfCandourOverdue } from '../shared/incidents.js';
 import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
 import { getMinimumWageRate } from '../shared/nmw.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
+
+function getTodayString() {
+  return todayLocalISO();
+}
+
+function getTodayUtcMidnight() {
+  return new Date(`${getTodayString()}T00:00:00Z`);
+}
 
 function validateALPerDay(data, warnings) {
   const maxAL = data.config.max_al_same_day || 2;
@@ -153,7 +162,7 @@ function validateOnboarding(data, warnings, todayStr) {
 function validateSupervisions(data, warnings) {
   if (!data.staff || !data.supervisions) return;
   const activeStaff = data.staff.filter(s => s.active !== false);
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let overdue = 0;
   let noRecord = 0;
   for (const s of activeStaff) {
@@ -178,7 +187,7 @@ function validateSupervisions(data, warnings) {
 
 function validateAppraisals(data, warnings) {
   if (!data.staff || !data.appraisals) return;
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let overdue = 0;
   for (const s of data.staff.filter(s => s.active !== false)) {
     const aprs = data.appraisals[s.id] || [];
@@ -199,7 +208,7 @@ function validateFireDrills(data, warnings) {
     warnings.push('Fire drills: no drills recorded — quarterly requirement not met');
     return;
   }
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   const sorted = [...data.fire_drills].sort((a, b) => b.date.localeCompare(a.date));
   const nextDue = new Date(new Date(sorted[0].date + 'T00:00:00Z').getTime() + 91 * 86400000);
   if (now > nextDue) warnings.push(`Fire drills: overdue — last drill was ${sorted[0].date}`);
@@ -211,7 +220,7 @@ function validateFireDrills(data, warnings) {
 
 function validateIncidents(data, warnings, todayStr) {
   if (!data.incidents?.length) return;
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let overdueCqc = 0, overdueRiddor = 0, staleInvestigations = 0, overdueDoc = 0, overdueActions = 0;
 
   const bankHolidays = data.config?.bank_holidays || [];
@@ -243,7 +252,7 @@ function validateIncidents(data, warnings, todayStr) {
 function validateComplaints(data, warnings, todayStr) {
   if (!data.complaints?.length) return;
   const responseDays = data.config?.complaint_response_days || 28;
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let unacknowledged = 0, overdueResponse = 0;
   for (const c of data.complaints) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
@@ -303,7 +312,7 @@ function validatePolicies(data, warnings, todayStr) {
 
 function validateWhistleblowing(data, warnings) {
   if (!data.whistleblowing_concerns?.length) return;
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let unacknowledged = 0, longInvestigations = 0;
   for (const c of data.whistleblowing_concerns) {
     if (c.status === 'resolved' || c.status === 'closed') continue;
@@ -346,7 +355,7 @@ function validateDoLS(data, warnings, todayStr) {
 
 function validateCareCertificate(data, warnings) {
   if (!data.care_certificate || Object.keys(data.care_certificate).length === 0) return;
-  const now = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const now = getTodayUtcMidnight();
   let overdue = 0;
   for (const cc of Object.values(data.care_certificate)) {
     if (cc.status === 'completed') continue;
@@ -377,7 +386,7 @@ export function checkNLWViolation(staff, config) {
 export function validateAll(data) {
   const warnings = [];
   if (!data.overrides || !data.config || !data.staff) return warnings;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayString();
 
   validateALPerDay(data, warnings);
   validateALEntitlement(data, warnings);

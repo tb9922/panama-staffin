@@ -30,6 +30,10 @@ const EMPTY_FORM = {
   certificate_ref: '', certificate_expiry: '', notes: '',
 };
 
+function focusField(id) {
+  queueMicrotask(() => document.getElementById(id)?.focus());
+}
+
 export default function MaintenanceTracker() {
   const { canWrite, isScanTargetEnabled } = useData();
   const canEdit = canWrite('compliance');
@@ -110,7 +114,11 @@ export default function MaintenanceTracker() {
   }
 
   async function handleSave() {
-    if (!form.category) return;
+    if (!form.category) {
+      setSaveError('Category is required.');
+      focusField('maintenance-category');
+      return;
+    }
     const catDef = maintenanceCategories.find(c => c.id === form.category);
     const saveItem = {
       ...form,
@@ -281,7 +289,7 @@ export default function MaintenanceTracker() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={INPUT.label}>Category</label>
-                  <select value={form.category} onChange={e => {
+                  <select id="maintenance-category" value={form.category} onChange={e => {
                     const cat = maintenanceCategories.find(c => c.id === e.target.value);
                     updateFormWithNextDue({
                       category: e.target.value,

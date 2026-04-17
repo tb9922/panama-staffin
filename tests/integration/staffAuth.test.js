@@ -56,6 +56,7 @@ beforeEach(async () => {
   // Reset credentials + invites between tests so each test sees a clean slate.
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`UPDATE staff SET active = true, deleted_at = NULL WHERE home_id = $1`, [homeId]);
 });
 
@@ -149,7 +150,7 @@ describe('staff invite — consume', () => {
   });
 });
 
-describe('staff login (POST /api/auth/login)', () => {
+describe('staff login (POST /api/login)', () => {
   beforeEach(async () => {
     const invite = await staffAuthService.createInvite({ homeId, staffId: STAFF_ID, createdBy: 'admin' });
     await staffAuthService.consumeInvite({
@@ -159,7 +160,7 @@ describe('staff login (POST /api/auth/login)', () => {
 
   it('returns 200 + sets cookie on valid credentials', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ username: PORTAL_USERNAME, password: PORTAL_PASSWORD });
     expect(res.status).toBe(200);
     expect(res.body.username).toBe(PORTAL_USERNAME);
@@ -169,7 +170,7 @@ describe('staff login (POST /api/auth/login)', () => {
 
   it('rejects wrong password with 401', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ username: PORTAL_USERNAME, password: 'wrong-password' });
     expect(res.status).toBe(401);
   });
@@ -177,12 +178,12 @@ describe('staff login (POST /api/auth/login)', () => {
   it('locks account after 5 failed attempts', async () => {
     for (let i = 0; i < 5; i += 1) {
       await request(app)
-        .post('/api/auth/login')
+        .post('/api/login')
         .send({ username: PORTAL_USERNAME, password: 'wrong-password' });
     }
     // 6th attempt — even with correct password — should be locked.
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ username: PORTAL_USERNAME, password: PORTAL_PASSWORD });
     expect([401, 423, 429]).toContain(res.status);
     const creds = await staffAuthRepo.findByStaff(homeId, STAFF_ID);
@@ -193,11 +194,11 @@ describe('staff login (POST /api/auth/login)', () => {
   it('resets failed count on successful login', async () => {
     for (let i = 0; i < 3; i += 1) {
       await request(app)
-        .post('/api/auth/login')
+        .post('/api/login')
         .send({ username: PORTAL_USERNAME, password: 'wrong-password' });
     }
     await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ username: PORTAL_USERNAME, password: PORTAL_PASSWORD });
     const creds = await staffAuthRepo.findByStaff(homeId, STAFF_ID);
     expect(creds.failedLoginCount).toBe(0);
@@ -207,8 +208,8 @@ describe('staff login (POST /api/auth/login)', () => {
   it('login attempt for unknown username takes >= 50ms (timing-safe)', async () => {
     const started = Date.now();
     await request(app)
-      .post('/api/auth/login')
-      .send({ username: 'unknown-staff-user-xyz', password: 'anything' });
+      .post('/api/login')
+      .send({ username: 'unknown-staff-user-xyz', password: 'anything123' });
     expect(Date.now() - started).toBeGreaterThanOrEqual(50);
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { addDays, formatDate, parseDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 import {
@@ -18,7 +19,12 @@ import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 
-const SHIFTS = [{ id: 'E', label: 'Early Shift' }, { id: 'L', label: 'Late Shift' }, { id: 'N', label: 'Night Shift' }];
+const SHIFTS = [
+  { id: 'E', label: 'Early Shift' },
+  { id: 'L', label: 'Late Shift' },
+  { id: 'EL', label: 'Early + Late Shift' },
+  { id: 'N', label: 'Night Shift' },
+];
 const CATEGORIES = [
   { id: 'clinical', label: 'Clinical', border: 'border-l-emerald-400', badge: 'green' },
   { id: 'safety', label: 'Safety', border: 'border-l-red-400', badge: 'red' },
@@ -34,19 +40,19 @@ const EMPTY_FORM = { shift: 'E', category: 'clinical', priority: 'info', content
 
 const shiftLabel = (id) => SHIFTS.find((s) => s.id === id)?.label || id;
 const dayLabel = (dateStr) => parseDate(dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-const sortEntries = (a, b) => ({ E: 1, L: 2, N: 3 }[a.shift] - { E: 1, L: 2, N: 3 }[b.shift]
+const sortEntries = (a, b) => ({ E: 1, L: 2, EL: 3, N: 4 }[a.shift] - { E: 1, L: 2, EL: 3, N: 4 }[b.shift]
   || ({ clinical: 1, safety: 2, operational: 3, admin: 4 }[a.category] - { clinical: 1, safety: 2, operational: 3, admin: 4 }[b.category])
   || (a.created_at || '').localeCompare(b.created_at || ''));
 
 function nextTarget(entry, selectedDate) {
   if (entry.entry_date && entry.entry_date !== selectedDate) return { entry_date: selectedDate, shift: entry.shift };
   if (entry.shift === 'E') return { entry_date: selectedDate, shift: 'L' };
-  if (entry.shift === 'L') return { entry_date: selectedDate, shift: 'N' };
+  if (entry.shift === 'L' || entry.shift === 'EL') return { entry_date: selectedDate, shift: 'N' };
   return { entry_date: formatDate(addDays(parseDate(selectedDate), 1)), shift: 'E' };
 }
 
 export default function HandoverNotes() {
-  const [dateStr, setDateStr] = useState(formatDate(new Date()));
+  const [dateStr, setDateStr] = useState(todayLocalISO());
   const [entries, setEntries] = useState([]);
   const [recentEntries, setRecentEntries] = useState([]);
   const [incidents, setIncidents] = useState([]);

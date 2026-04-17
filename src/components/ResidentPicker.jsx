@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { INPUT } from '../lib/design.js';
 import { getCurrentHome, getFinanceResidents } from '../lib/api.js';
 
@@ -17,10 +17,12 @@ import { getCurrentHome, getFinanceResidents } from '../lib/api.js';
  *   showAll    - show "All Residents" as first option (for filters)
  *   placeholder - custom placeholder text
  */
-export default function ResidentPicker({ value, onChange, disabled, label, small, required, showAll, placeholder }) {
+export default function ResidentPicker({ value, onChange, disabled, label, small, required, showAll, placeholder, id }) {
   const home = getCurrentHome();
   const [residents, setResidents] = useState([]);
   const [loading, setLoading] = useState(!!home);
+  const generatedId = useId();
+  const selectId = id || generatedId;
 
   useEffect(() => {
     if (!home) return;
@@ -47,8 +49,9 @@ export default function ResidentPicker({ value, onChange, disabled, label, small
   if (!loading && residents.length === 0) {
     return (
       <div>
-        {label && <label className={INPUT.label}>{label}{required && ' *'}</label>}
+        {label && <label htmlFor={selectId} className={INPUT.label}>{label}{required && ' *'}</label>}
         <input className={small ? INPUT.sm : INPUT.base} value={typeof value === 'string' ? value : ''}
+          id={selectId}
           onChange={e => onChange(null, { resident_name: e.target.value })}
           disabled={disabled} placeholder={placeholder || 'Type resident name'} />
       </div>
@@ -57,8 +60,8 @@ export default function ResidentPicker({ value, onChange, disabled, label, small
 
   return (
     <div>
-      {label && <label className={INPUT.label}>{label}{required && ' *'}</label>}
-      <select className={small ? INPUT.sm : INPUT.select} value={value || ''} onChange={handleChange} disabled={disabled || loading}>
+      {label && <label htmlFor={selectId} className={INPUT.label}>{label}{required && ' *'}</label>}
+      <select id={selectId} className={small ? INPUT.sm : INPUT.select} value={value || ''} onChange={handleChange} disabled={disabled || loading}>
         {showAll
           ? <option value="">All Residents</option>
           : <option value="">{placeholder || '-- Select resident --'}</option>

@@ -21,7 +21,7 @@ const rangeQuerySchema = z.object({
 
 const entryBodySchema = z.object({
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-  shift:      z.enum(['E', 'L', 'N']),
+  shift:      z.enum(['E', 'L', 'EL', 'N']),
   category:   z.enum(['clinical', 'safety', 'operational', 'admin']),
   priority:   z.enum(['urgent', 'action', 'info']),
   content:    z.string().min(1, 'Content is required').max(2000, 'Content too long'),
@@ -101,7 +101,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
 });
 
 // POST /api/handover/:id/acknowledge?home=X  — mark as read by incoming shift (auth only — viewer can ack)
-router.post('/:id/acknowledge', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+router.post('/:id/acknowledge', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
   try {
     const idParam = uuidSchema.safeParse(req.params.id);
     if (!idParam.success) return res.status(400).json({ error: 'Invalid entry ID' });

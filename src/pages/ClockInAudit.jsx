@@ -6,6 +6,9 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+
+const TODAY = todayLocalISO();
 
 export default function ClockInAudit() {
   const { canWrite } = useData();
@@ -14,12 +17,12 @@ export default function ClockInAudit() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState([]);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(TODAY);
   const [daily, setDaily] = useState([]);
   const [manual, setManual] = useState({
     staffId: '',
     clockType: 'in',
-    shiftDate: new Date().toISOString().slice(0, 10),
+    shiftDate: TODAY,
     note: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -66,7 +69,7 @@ export default function ClockInAudit() {
       setManual({
         staffId: '',
         clockType: 'in',
-        shiftDate: new Date().toISOString().slice(0, 10),
+        shiftDate: todayLocalISO(),
         note: '',
       });
       await load();

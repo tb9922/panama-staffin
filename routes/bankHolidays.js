@@ -40,7 +40,7 @@ router.get('/', requireAuth, async (req, res, next) => {
       const response = await fetch('https://www.gov.uk/bank-holidays.json', {
         signal: AbortSignal.timeout(5000),
       });
-      if (!response.ok) {
+      if (response.ok === false) {
         throw new Error(`GOV.UK bank holiday API returned ${response.status}`);
       }
       data = await response.json();

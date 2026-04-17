@@ -196,7 +196,8 @@ export async function logout(options = {}) {
 }
 
 export async function loadAuditLog(limit = 100) {
-  return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
+  const result = await apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
+  return Array.isArray(result) ? result : (result?.rows || []);
 }
 
 export async function listNotifications() {

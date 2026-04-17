@@ -38,6 +38,10 @@ const EMPTY_FORM = {
   notes: '',
 };
 
+function focusField(id) {
+  queueMicrotask(() => document.getElementById(id)?.focus());
+}
+
 export default function IpcAuditTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
@@ -118,7 +122,16 @@ export default function IpcAuditTracker() {
   }
 
   async function handleSave() {
-    if (!form.audit_date || !form.audit_type) return;
+    if (!form.audit_type) {
+      setSaveError('Audit type is required.');
+      focusField('ipc-audit-type');
+      return;
+    }
+    if (!form.audit_date) {
+      setSaveError('Audit date is required.');
+      focusField('ipc-audit-date');
+      return;
+    }
 
     const record = {
       ...form,
@@ -347,14 +360,14 @@ export default function IpcAuditTracker() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={INPUT.label}>Audit Type *</label>
-                  <select className={INPUT.select} value={form.audit_type} onChange={e => setForm({ ...form, audit_type: e.target.value })}>
+                  <select id="ipc-audit-type" className={INPUT.select} value={form.audit_type} onChange={e => setForm({ ...form, audit_type: e.target.value })}>
                     <option value="">Select...</option>
                     {auditTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={INPUT.label}>Date *</label>
-                  <input type="date" className={INPUT.base} value={form.audit_date} onChange={e => setForm({ ...form, audit_date: e.target.value })} />
+                  <input id="ipc-audit-date" type="date" className={INPUT.base} value={form.audit_date} onChange={e => setForm({ ...form, audit_date: e.target.value })} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Auditor</label>
@@ -520,7 +533,7 @@ export default function IpcAuditTracker() {
           {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
           <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
           {canEdit && (
-            <button onClick={handleSave} disabled={!form.audit_date || !form.audit_type} className={BTN.primary}>
+            <button onClick={handleSave} className={BTN.primary}>
               {editingId ? 'Update' : 'Save'}
             </button>
           )}

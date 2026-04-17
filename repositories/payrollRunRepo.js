@@ -481,12 +481,12 @@ export async function getSSPDaysByRun(runId, homeId, client) {
 }
 
 /**
- * Compute average weekly gross pay for a staff member over the 52 weeks (364 days)
- * prior to referenceDate, across all approved/exported/locked runs.
+ * Compute average weekly gross pay for a staff member over the most recent
+ * 52 PAID weeks prior to referenceDate, skipping unpaid weeks.
  * Only gross_pay is included — holiday_pay and ssp_amount are excluded as they are
  * not "normal remuneration" for the purposes of the reference period.
- * Returns null when no history exists (caller should fall back to contracted rate).
- * Used for holiday pay calculation per Bear Scotland v Fulton / ERA 1996 s.224.
+ * Returns null when no paid history exists (caller should fall back to contracted rate).
+ * Used for holiday pay calculation per ERA 1996 s.224 / Brazel-style paid-week lookback.
  */
 export async function findAverageWeeklyPay(homeId, staffId, referenceDate, client) {
   const conn = client || pool;
@@ -501,7 +501,8 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
        AND pl.staff_id = $2
        AND pr.status IN ('approved', 'exported', 'locked')
        AND pr.period_end < $3
-       AND pr.period_end >= ($3::date - INTERVAL '364 days')`,
+     ORDER BY pr.period_end DESC
+     LIMIT 260`,
     [homeId, staffId, refStr],
   );
   const paidRows = rows
@@ -516,19 +517,20 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   if (paidRows.length < 1) return null;
 
   let totalGross = 0;
-  let usedDays = 0;
+  let usedWeeks = 0;
   for (const row of paidRows) {
-    if (usedDays >= 364) break;
+    if (usedWeeks >= 52) break;
     const start = new Date(`${row.period_start}T00:00:00Z`);
     const end = new Date(`${row.period_end}T00:00:00Z`);
     const runDays = Math.max(1, Math.floor((end - start) / 86400000) + 1);
-    const daysToUse = Math.min(runDays, 364 - usedDays);
-    totalGross += row.gross_pay * (daysToUse / runDays);
-    usedDays += daysToUse;
+    const runWeeks = runDays / 7;
+    const weeksToUse = Math.min(runWeeks, 52 - usedWeeks);
+    totalGross += row.gross_pay * (weeksToUse / runWeeks);
+    usedWeeks += weeksToUse;
   }
 
   return {
     total_gross: totalGross,
-    divisor_weeks: Math.max(1, usedDays / 7),
+    divisor_weeks: Math.max(1, usedWeeks),
   };
 }

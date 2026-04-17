@@ -38,6 +38,10 @@ const EMPTY_MCA_FORM = {
   next_review_date: '', notes: '',
 };
 
+function focusField(id) {
+  queueMicrotask(() => document.getElementById(id)?.focus());
+}
+
 export default function DolsTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('compliance');
@@ -174,7 +178,16 @@ export default function DolsTracker() {
   }
 
   async function handleSaveDols() {
-    if (!form.resident_name || !form.application_date) return;
+    if (!form.resident_name) {
+      setSaveError('Resident is required.');
+      focusField('dols-resident');
+      return;
+    }
+    if (!form.application_date) {
+      setSaveError('Application date is required.');
+      focusField('dols-application-date');
+      return;
+    }
     if (dolsWindowError) {
       setSaveError(dolsWindowError);
       return;
@@ -237,7 +250,16 @@ export default function DolsTracker() {
   }
 
   async function handleSaveMca() {
-    if (!form.resident_name || !form.assessment_date) return;
+    if (!form.resident_name) {
+      setSaveError('Resident is required.');
+      focusField('mca-resident');
+      return;
+    }
+    if (!form.assessment_date) {
+      setSaveError('Assessment date is required.');
+      focusField('mca-assessment-date');
+      return;
+    }
     setSaveError(null);
     try {
       if (editingId) {
@@ -527,7 +549,7 @@ export default function DolsTracker() {
               {/* Resident Info */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <ResidentPicker label="Resident" required value={form.resident_id}
+                  <ResidentPicker id="dols-resident" label="Resident" required value={form.resident_id}
                     onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 {canEdit && <div>
@@ -553,7 +575,7 @@ export default function DolsTracker() {
                 </div>
                 <div>
                   <label className={INPUT.label}>Application Date *</label>
-                  <input type="date" className={INPUT.base} value={form.application_date}
+                  <input id="dols-application-date" type="date" className={INPUT.base} value={form.application_date}
                     onChange={e => setForm({ ...form, application_date: e.target.value })} />
                 </div>
               </div>
@@ -665,7 +687,7 @@ export default function DolsTracker() {
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSaveDols}
-                  disabled={!form.resident_name || !form.application_date || Boolean(dolsWindowError)}
+                  disabled={Boolean(dolsWindowError)}
                   className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>
@@ -679,12 +701,12 @@ export default function DolsTracker() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <ResidentPicker label="Resident" required value={form.resident_id}
+                  <ResidentPicker id="mca-resident" label="Resident" required value={form.resident_id}
                     onChange={(id, resident) => setForm({ ...form, resident_id: id, resident_name: resident?.resident_name || form.resident_name })} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Assessment Date *</label>
-                  <input type="date" className={INPUT.base} value={form.assessment_date}
+                  <input id="mca-assessment-date" type="date" className={INPUT.base} value={form.assessment_date}
                     onChange={e => setForm({ ...form, assessment_date: e.target.value })} />
                 </div>
               </div>
@@ -745,7 +767,6 @@ export default function DolsTracker() {
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSaveMca}
-                  disabled={!form.resident_name || !form.assessment_date}
                   className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

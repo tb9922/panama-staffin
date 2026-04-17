@@ -22,6 +22,7 @@ const SOURCE_QUERIES = {
       AND ($3::TEXT IS NULL OR uploaded_by = $3)
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
+      AND ($6::TEXT[] IS NULL OR TRUE)
   `,
   cqc_evidence: `
     SELECT
@@ -47,6 +48,7 @@ const SOURCE_QUERIES = {
       AND ($3::TEXT IS NULL OR f.uploaded_by = $3)
       AND ($4::DATE IS NULL OR (f.created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (f.created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
+      AND ($6::TEXT[] IS NULL OR TRUE)
   `,
   onboarding: `
     SELECT
@@ -68,6 +70,7 @@ const SOURCE_QUERIES = {
       AND ($3::TEXT IS NULL OR uploaded_by = $3)
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
+      AND ($6::TEXT[] IS NULL OR TRUE)
   `,
   training: `
     SELECT
@@ -89,6 +92,7 @@ const SOURCE_QUERIES = {
       AND ($3::TEXT IS NULL OR uploaded_by = $3)
       AND ($4::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE >= $4::DATE)
       AND ($5::DATE IS NULL OR (created_at AT TIME ZONE 'Europe/London')::DATE <= $5::DATE)
+      AND ($6::TEXT[] IS NULL OR TRUE)
   `,
   record: `
     SELECT

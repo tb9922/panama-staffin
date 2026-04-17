@@ -4,6 +4,9 @@ import * as webhookRepo from '../repositories/webhookRepo.js';
 import { resolvedToPrivateIp } from '../lib/ssrf.js';
 
 const MAX_RETRIES = 5;
+const MAX_WEBHOOK_PAYLOAD_BYTES = 64 * 1024;
+const DELIVERY_DEDUP_WINDOW_MINUTES = 5;
+const DELIVERY_DEDUP_STATUSES = ['delivered', 'pending_retry', 'in_progress'];
 // Exponential backoff: 30s, 2min, 10min, 1hr, 6hr
 const RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 
@@ -36,19 +39,38 @@ export function getNextRetryAt(retryCount) {
   return new Date(Date.now() + delayMs);
 }
 
+function extractTimestamp(body) {
+  try {
+    return JSON.parse(body)?.timestamp || new Date().toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+}
+
 async function fireWebhook(hook, event, payload) {
-  const timestamp = typeof payload === 'string'
-    ? (() => {
-        try {
-          return JSON.parse(payload)?.timestamp || new Date().toISOString();
-        } catch {
-          return new Date().toISOString();
-        }
-      })()
-    : new Date().toISOString();
+  const timestamp = typeof payload === 'string' ? extractTimestamp(payload) : new Date().toISOString();
   const body = typeof payload === 'string'
     ? payload // retries pass the original serialised body
     : JSON.stringify({ event, payload, timestamp });
+  const payloadBytes = Buffer.byteLength(body, 'utf8');
+  if (payloadBytes > MAX_WEBHOOK_PAYLOAD_BYTES) {
+    const error = `Webhook payload exceeds ${MAX_WEBHOOK_PAYLOAD_BYTES} bytes`;
+    logger.warn({ webhookId: hook.id, event, payloadBytes }, error);
+    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+      .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
+    return;
+  }
+  const duplicate = await webhookRepo.findRecentDuplicateDelivery(
+    hook.id,
+    event,
+    body,
+    DELIVERY_DEDUP_STATUSES,
+    DELIVERY_DEDUP_WINDOW_MINUTES,
+  );
+  if (duplicate) {
+    logger.info({ webhookId: hook.id, event, duplicateDeliveryId: duplicate.id }, 'Skipping duplicate webhook delivery');
+    return;
+  }
   const signatureBase = `${timestamp}.${body}`;
   const signature = crypto.createHmac('sha256', hook.secret).update(signatureBase).digest('hex');
   const requestId = crypto.randomUUID();
@@ -145,13 +167,14 @@ export async function processRetries() {
       const body = typeof delivery.payload === 'string'
         ? delivery.payload
         : JSON.stringify(delivery.payload);
-      const timestamp = (() => {
-        try {
-          return JSON.parse(body)?.timestamp || new Date().toISOString();
-        } catch {
-          return new Date().toISOString();
-        }
-      })();
+      const payloadBytes = Buffer.byteLength(body, 'utf8');
+      if (payloadBytes > MAX_WEBHOOK_PAYLOAD_BYTES) {
+        await webhookRepo.markDeliveryFailed(delivery.id, `Webhook payload exceeds ${MAX_WEBHOOK_PAYLOAD_BYTES} bytes`);
+        logger.warn({ deliveryId: delivery.id, payloadBytes }, 'Webhook retry blocked by payload size limit');
+        processed++;
+        continue;
+      }
+      const timestamp = extractTimestamp(body);
       const signatureBase = `${timestamp}.${body}`;
       const signature = crypto.createHmac('sha256', delivery.secret).update(signatureBase).digest('hex');
       const requestId = crypto.randomUUID();

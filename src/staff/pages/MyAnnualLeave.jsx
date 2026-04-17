@@ -5,6 +5,7 @@ import LoadingState from '../../components/LoadingState.jsx';
 import ErrorState from '../../components/ErrorState.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
+import { useConfirm } from '../../hooks/useConfirm.jsx';
 
 export default function MyAnnualLeave() {
   const [summary, setSummary] = useState(null);
@@ -14,6 +15,7 @@ export default function MyAnnualLeave() {
   const [cancellingId, setCancellingId] = useState(null);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ date: '', reason: '' });
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useDirtyGuard(Boolean(form.date || form.reason));
 
@@ -52,6 +54,13 @@ export default function MyAnnualLeave() {
 
   async function handleCancel(item) {
     if (cancellingId) return;     // Prevent double-fire while another cancel is in flight
+    const proceed = await confirm({
+      title: 'Cancel leave request',
+      message: `Cancel the pending leave request for ${item.date}?`,
+      confirmLabel: 'Cancel request',
+      tone: 'danger',
+    });
+    if (!proceed) return;
     setCancellingId(item.id);
     setError('');
     try {
@@ -139,6 +148,7 @@ export default function MyAnnualLeave() {
           </div>
         </div>
       </div>
+      {ConfirmDialog}
     </div>
   );
 }
