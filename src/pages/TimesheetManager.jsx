@@ -20,7 +20,7 @@ import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { useData } from '../contexts/DataContext.jsx';
-import { useToast } from '../contexts/useToast.js';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 
 const STATUS_BADGE = {
@@ -59,6 +59,8 @@ export default function TimesheetManager() {
   const [editModal, setEditModal] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   useDirtyGuard(!!editModal);
 
@@ -139,6 +141,8 @@ export default function TimesheetManager() {
   const stats = useMemo(() => {
     const approved = entries.filter((entry) => entry.status === 'approved').length;
     const pending = entries.filter((entry) => entry.status === 'pending').length;
+    const disputed = entries.filter((entry) => entry.status === 'disputed').length;
+    const missing = rows.filter((row) => !row.entry).length;
     const totalMins = entries.reduce((sum, entry) => sum + (entry.snap_minutes_saved || 0), 0);
     const configuredRate = Number(schedData?.config?.nlw_rate);
     const fallbackRate = getMinimumWageRate(null, schedData?.config, selectedDate).rate;
@@ -146,10 +150,55 @@ export default function TimesheetManager() {
     return {
       approved,
       pending,
+      disputed,
+      missing,
       totalMins,
       snapSavingEst: Math.round((totalMins / 60) * hourly * 100) / 100,
     };
-  }, [entries, schedData, selectedDate]);
+  }, [entries, schedData, selectedDate, rows]);
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const matchesStatus = (row) => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'needs_attention') return !row.entry || row.entry.status === 'pending' || row.entry.status === 'disputed';
+      if (statusFilter === 'missing') return !row.entry;
+      if (statusFilter === 'pending') return row.entry?.status === 'pending';
+      if (statusFilter === 'disputed') return row.entry?.status === 'disputed';
+      if (statusFilter === 'approved') return row.entry?.status === 'approved';
+      return true;
+    };
+
+    return rows
+      .filter((row) => matchesStatus(row))
+      .filter((row) => {
+        if (!query) return true;
+        const haystack = [
+          row.staff.name,
+          row.staff.role,
+          row.staff.shift,
+          row.entry?.status,
+          row.entry?.notes,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(query);
+      })
+      .slice()
+      .sort((a, b) => {
+        const priority = (row) => {
+          if (!row.entry) return 0;
+          if (row.entry.status === 'disputed') return 1;
+          if (row.entry.status === 'pending') return 2;
+          if (row.entry.status === 'approved') return 3;
+          return 4;
+        };
+        return priority(a) - priority(b)
+          || a.staff.name.localeCompare(b.staff.name, 'en-GB', { sensitivity: 'base' });
+      });
+  }, [rows, search, statusFilter]);
+
+  const exceptionRows = useMemo(() => filteredRows
+    .filter((row) => !row.entry || row.entry.status === 'pending' || row.entry.status === 'disputed')
+    .slice(0, 8), [filteredRows]);
 
   function openEdit(row) {
     const { staff, entry, shiftStart, shiftEnd } = row;
@@ -348,6 +397,14 @@ export default function TimesheetManager() {
           <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pending}</p>
         </div>
         <div className={CARD.padded}>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Missing</p>
+          <p className="text-2xl font-bold text-red-600 mt-1">{stats.missing}</p>
+        </div>
+        <div className={CARD.padded}>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Disputed</p>
+          <p className="text-2xl font-bold text-rose-600 mt-1">{stats.disputed}</p>
+        </div>
+        <div className={CARD.padded}>
           <p className="text-xs text-gray-500 uppercase tracking-wider">Snap Savings</p>
           <p className="text-2xl font-bold text-blue-600 mt-1">{stats.totalMins}min</p>
           <p className="text-xs text-gray-400">Approximately GBP {stats.snapSavingEst.toFixed(2)} at the current minimum wage rate.</p>
@@ -384,6 +441,89 @@ export default function TimesheetManager() {
         </div>
       )}
 
+      <div className={`${CARD.padded} mb-4`}>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr),minmax(14rem,1fr)]">
+          <label>
+            <span className={INPUT.label}>Search staff or notes</span>
+            <input
+              type="search"
+              className={INPUT.base}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by staff name, role, shift, or notes"
+            />
+          </label>
+          <label>
+            <span className={INPUT.label}>Show</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={INPUT.select}>
+              <option value="all">All scheduled staff</option>
+              <option value="needs_attention">Needs attention</option>
+              <option value="missing">Missing only</option>
+              <option value="pending">Pending only</option>
+              <option value="disputed">Disputed only</option>
+              <option value="approved">Approved only</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className={`${CARD.padded} mb-4`}>
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Manager exception queue</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Work the missing, pending, and disputed entries first so payroll approval stays focused on exceptions.
+            </p>
+          </div>
+          <span className={BADGE.blue}>{exceptionRows.length} visible issue{exceptionRows.length === 1 ? '' : 's'}</span>
+        </div>
+        {exceptionRows.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-500">
+            No timesheet issues match the current filters.
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {exceptionRows.map((row) => {
+              const stateLabel = !row.entry ? 'Missing entry' : row.entry.status === 'disputed' ? 'Disputed' : 'Pending approval';
+              const stateBadge = !row.entry ? BADGE.red : row.entry.status === 'disputed' ? BADGE.red : BADGE.amber;
+              return (
+                <div key={`queue-${row.staff.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-gray-900">{row.staff.name}</span>
+                      <span className={stateBadge}>{stateLabel}</span>
+                      <span className="text-xs font-mono text-gray-500">{row.staff.shift}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {row.staff.role} · {row.shiftStart || '-'} to {row.shiftEnd || '-'}
+                      {row.entry?.dispute_reason ? ` · ${row.entry.dispute_reason}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!row.entry ? (
+                      <button type="button" className={`${BTN.secondary} ${BTN.xs}`} onClick={() => openEdit(row)} disabled={saving}>
+                        Record actuals
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(row)} disabled={saving}>
+                          Review
+                        </button>
+                        {row.entry.status === 'pending' && (
+                          <button type="button" className={`${BTN.success} ${BTN.xs}`} onClick={() => handleApprove(row.entry)} disabled={saving}>
+                            Approve
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className={CARD.flush}>
         {loading ? (
           <LoadingState message="Loading timesheets..." />
@@ -391,6 +531,12 @@ export default function TimesheetManager() {
           <EmptyState
             title="No staff scheduled for this date"
             description="Pick another day or publish the rota before recording actual attendance."
+          />
+        ) : filteredRows.length === 0 ? (
+          <EmptyState
+            title="No timesheets match these filters"
+            description="Try clearing the search or broadening the status filter."
+            compact
           />
         ) : (
           <div className={TABLE.wrapper}>
@@ -409,7 +555,7 @@ export default function TimesheetManager() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {filteredRows.map((row) => {
                   const { staff, entry } = row;
                   return (
                     <tr key={staff.id} className={TABLE.tr}>

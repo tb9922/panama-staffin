@@ -1,4 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import RiskRegister from '../RiskRegister.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 
@@ -14,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     createRisk: vi.fn(),
     updateRisk: vi.fn(),
     deleteRisk: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -94,6 +99,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getRisks.mockResolvedValue(MOCK_RISKS_RESPONSE);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -201,5 +207,21 @@ describe('RiskRegister', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     });
+  });
+
+  it('shows risk evidence uploader for existing risks', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Insufficient Night Staffing')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Insufficient Night Staffing'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Risk Evidence')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No risk evidence uploaded yet.')).toBeInTheDocument();
   });
 });

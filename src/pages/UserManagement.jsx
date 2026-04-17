@@ -42,6 +42,8 @@ export default function UserManagement() {
   const { homeRole } = useData();
   const canManageUsers = isPlatformAdmin || ROLES[homeRole]?.canManageUsers === true;
   const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
@@ -68,10 +70,26 @@ export default function UserManagement() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const filteredUsers = users.filter((user) => {
+    if (statusFilter === 'active' && !user.active) return false;
+    if (statusFilter === 'inactive' && user.active) return false;
+    if (!search.trim()) return true;
+    const haystack = [
+      user.username,
+      user.display_name,
+      user.staff_id,
+      user.granted_by,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(search.trim().toLowerCase());
+  });
+
   // Group users by role hierarchy
   const grouped = ROLE_GROUPS.map(g => ({
     ...g,
-    users: users.filter(u => g.roles.includes(u.role_id)),
+    users: filteredUsers.filter(u => g.roles.includes(u.role_id)),
   })).filter(g => g.users.length > 0);
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading users and access roles..." /></div>;
@@ -88,6 +106,34 @@ export default function UserManagement() {
       {error && <ErrorState title="Unable to load users" message={error} onRetry={refresh} className="mb-4" />}
       {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
 
+      {users.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className={INPUT.label} htmlFor="user-search">Search</label>
+            <input
+              id="user-search"
+              className={INPUT.base}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Username, display name, staff ID, or granted by"
+            />
+          </div>
+          <div className="sm:w-48">
+            <label className={INPUT.label} htmlFor="user-status-filter">Status</label>
+            <select
+              id="user-status-filter"
+              className={INPUT.select}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All users</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {users.length === 0 ? (
         <div className={CARD.padded}>
           <EmptyState
@@ -100,7 +146,15 @@ export default function UserManagement() {
         </div>
       ) : (
         <div className="space-y-4">
-          {grouped.map(group => (
+          {grouped.length === 0 ? (
+            <div className={CARD.padded}>
+              <EmptyState
+                compact
+                title="No users match the current filters"
+                description="Try a different search or status filter."
+              />
+            </div>
+          ) : grouped.map(group => (
             <div key={group.key} className={CARD.flush}>
               <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                 <h2 className="text-sm font-semibold text-gray-700">

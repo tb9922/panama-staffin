@@ -133,7 +133,7 @@ describe('CSRF double-submit validation', () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it('skips CSRF check when using Authorization header (API clients)', async () => {
+  it('still enforces CSRF when a browser auth cookie is present even with Authorization header', async () => {
     const req = makeReq({
       cookies: { panama_token: 'valid-jwt' }, // no panama_csrf
       headers: { authorization: 'Bearer valid-jwt' }, // no x-csrf-token
@@ -141,7 +141,9 @@ describe('CSRF double-submit validation', () => {
     const res = makeRes();
     const next = vi.fn();
     await requireAuth(req, res, next);
-    expect(next).toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe('CSRF token mismatch');
   });
 
   it('returns 401 when no auth token at all', async () => {

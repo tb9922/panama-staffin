@@ -10,25 +10,49 @@ import { zodError } from '../errors.js';
 const router = Router();
 
 const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100).optional();
+const listQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(10000).optional().default(100),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+  home: homeIdSchema,
+  action: z.string().max(100).optional().default(''),
+  user: z.string().max(100).optional().default(''),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().default(''),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().default(''),
+});
 
 router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const raw = parseInt(req.query.limit, 10);
-    const limit = Number.isFinite(raw) ? Math.min(10000, Math.max(1, raw)) : 100;
-    const homeP = homeIdSchema.safeParse(req.query.home);
-    if (!homeP.success) return res.status(400).json({ error: 'Invalid home parameter' });
-    if (homeP.data) {
-      const home = await homeRepo.findBySlug(homeP.data);
+    const parsed = listQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+    if (parsed.data.home) {
+      const home = await homeRepo.findBySlug(parsed.data.home);
       if (!home) return res.status(404).json({ error: 'Home not found' });
       const allowed = await hasAccess(req.user.username, home.id);
       if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
-      const entries = await auditService.getRecent(limit, homeP.data);
-      return res.json(entries);
+      const result = await auditService.search({
+        homeSlug: parsed.data.home,
+        action: parsed.data.action,
+        userName: parsed.data.user,
+        dateFrom: parsed.data.dateFrom,
+        dateTo: parsed.data.dateTo,
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
+      });
+      return res.json(result);
     }
-    // No home specified — return entries only for homes the user can access
+
     const slugs = await findHomeSlugsForUser(req.user.username);
-    const entries = await auditService.getRecentForSlugs(limit, slugs);
-    res.json(entries);
+    const result = await auditService.search({
+      homeSlugs: slugs,
+      action: parsed.data.action,
+      userName: parsed.data.user,
+      dateFrom: parsed.data.dateFrom,
+      dateTo: parsed.data.dateTo,
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
+    });
+    res.json(result);
   } catch (err) {
     next(err);
   }

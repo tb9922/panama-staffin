@@ -1,4 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import PolicyReviewTracker from '../PolicyReviewTracker.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 
@@ -14,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     createPolicy: vi.fn(),
     updatePolicy: vi.fn(),
     deletePolicy: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -87,6 +92,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getPolicies.mockResolvedValue(MOCK_POLICIES_RESPONSE);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -199,5 +205,21 @@ describe('PolicyReviewTracker', () => {
     await waitFor(() => {
       expect(screen.getByText(/\d+ policies/)).toBeInTheDocument();
     });
+  });
+
+  it('shows policy documents uploader for existing policies', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Safeguarding Adults & Children')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Safeguarding Adults & Children'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Policy Documents')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No policy documents uploaded yet.')).toBeInTheDocument();
   });
 });

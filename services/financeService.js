@@ -409,27 +409,43 @@ export async function findPaymentScheduleById(id, homeId) {
 }
 
 export async function createPaymentSchedule(homeId, data, username) {
-  const schedule = await financeRepo.createPaymentSchedule(homeId, { ...data, created_by: username });
+  const schedule = await financeRepo.createPaymentSchedule(homeId, {
+    ...data,
+    anchor_day: getDayOfMonth(data.next_due),
+    created_by: username,
+  });
   logger.info({ homeId, scheduleId: schedule.id, supplier: schedule.supplier, amount: schedule.amount }, 'Payment schedule created');
   return schedule;
 }
 
 export async function updatePaymentSchedule(id, homeId, data, version) {
-  const result = await financeRepo.updatePaymentSchedule(id, homeId, data, null, version);
+  const payload = { ...data };
+  if ('next_due' in payload) {
+    payload.anchor_day = getDayOfMonth(payload.next_due);
+  }
+  const result = await financeRepo.updatePaymentSchedule(id, homeId, payload, null, version);
   if (result) logger.info({ homeId, scheduleId: id, fields: Object.keys(data) }, 'Payment schedule updated');
   return result;
 }
 
-export async function processScheduledPayment(scheduleId, homeId, username) {
+export async function processScheduledPayment(scheduleId, homeId, username, version) {
   return withTransaction(async (client) => {
     const schedule = await financeRepo.findPaymentScheduleById(scheduleId, homeId, client, true);
     if (!schedule) throw Object.assign(new Error('Payment schedule not found'), { statusCode: 404 });
+    if (version != null && schedule.version !== version) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
     if (schedule.on_hold) throw Object.assign(new Error('Payment schedule is on hold'), { statusCode: 400 });
+    const existingExpense = await financeRepo.findScheduledExpense(homeId, scheduleId, schedule.next_due, client);
+    if (existingExpense) {
+      return { expense: existingExpense, next_due: schedule.next_due, duplicate: true };
+    }
     const expense = await financeRepo.createExpense(homeId, {
       expense_date: schedule.next_due,
       category: schedule.category,
       description: `${schedule.supplier} — ${schedule.description || schedule.category} (scheduled)`,
       supplier: schedule.supplier,
+      supplier_id: schedule.supplier_id || null,
       net_amount: schedule.amount,
       vat_amount: 0,
       gross_amount: schedule.amount,
@@ -438,18 +454,29 @@ export async function processScheduledPayment(scheduleId, homeId, username) {
       approved_date: schedule.auto_approve ? new Date().toISOString().slice(0, 10) : null,
       recurring: true,
       recurrence_frequency: schedule.frequency,
+      schedule_id: scheduleId,
+      scheduled_for_date: schedule.next_due,
       created_by: username,
     }, client);
 
-    const nextDue = advanceDate(schedule.next_due, schedule.frequency);
-    await financeRepo.updatePaymentSchedule(scheduleId, homeId, { next_due: nextDue }, client);
+    const nextDue = advanceDate(schedule.next_due, schedule.frequency, schedule.anchor_day);
+    const updatedSchedule = await financeRepo.updatePaymentSchedule(scheduleId, homeId, { next_due: nextDue }, client, schedule.version);
+    if (!updatedSchedule) {
+      throw Object.assign(new Error('Record was modified by another user. Please refresh and try again.'), { statusCode: 409 });
+    }
 
     logger.info({ homeId, scheduleId, expenseId: expense.id, nextDue }, 'Scheduled payment processed');
     return { expense, next_due: nextDue };
   });
 }
 
-function advanceDate(dateStr, frequency) {
+function getDayOfMonth(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const [, , day] = dateStr.split('-').map(Number);
+  return Number.isInteger(day) ? day : null;
+}
+
+function advanceDate(dateStr, frequency, anchorDay = getDayOfMonth(dateStr)) {
   const [y, m, day] = dateStr.split('-').map(Number);
   switch (frequency) {
     case 'weekly': {
@@ -464,7 +491,7 @@ function advanceDate(dateStr, frequency) {
       let ny = y + Math.floor(nm / 12);
       nm = nm % 12;
       const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
-      const nd = Math.min(day, lastDay);
+      const nd = Math.min(anchorDay || day, lastDay);
       return `${ny}-${String(nm + 1).padStart(2, '0')}-${String(nd).padStart(2, '0')}`;
     }
     default:

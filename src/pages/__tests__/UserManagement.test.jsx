@@ -95,7 +95,7 @@ describe('UserManagement', () => {
   it('shows active/inactive status badges', async () => {
     renderWithProviders(<UserManagement />);
     await waitFor(() => expect(screen.getAllByText('Active').length).toBeGreaterThan(0));
-    expect(screen.getByText('Inactive')).toBeInTheDocument();
+    expect(screen.getAllByText('Inactive').length).toBeGreaterThan(0);
   });
 
   it('shows Add User button', async () => {
@@ -132,5 +132,27 @@ describe('UserManagement', () => {
     api.listUsersForHome.mockRejectedValue(new Error('Auth required'));
     renderWithProviders(<UserManagement />);
     await waitFor(() => expect(screen.getByText('Auth required')).toBeInTheDocument());
+  });
+
+  it('filters users by search text', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<UserManagement />);
+
+    await waitFor(() => expect(screen.getByText('admin')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText(/username, display name, staff id, or granted by/i), 'viewer');
+
+    expect(screen.queryByText('admin')).not.toBeInTheDocument();
+    expect(screen.getByText('viewer1')).toBeInTheDocument();
+  });
+
+  it('filters users by inactive status', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<UserManagement />);
+
+    await waitFor(() => expect(screen.getByText('admin')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Status'), 'inactive');
+
+    expect(screen.getByText('olduser')).toBeInTheDocument();
+    expect(screen.queryByText('viewer1')).not.toBeInTheDocument();
   });
 });

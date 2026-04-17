@@ -129,4 +129,12 @@ describe('TimesheetManager', () => {
     await waitFor(() => expect(screen.getByText('Scheduled')).toBeInTheDocument());
     expect(screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}/)).toBeInTheDocument();
   });
+
+  it('shows the manager exception queue for missing or pending work', async () => {
+    renderWithProviders(<TimesheetManager />, { route: '/?date=2026-03-08' });
+
+    await waitFor(() => expect(screen.getByText(/manager exception queue/i)).toBeInTheDocument());
+    expect(screen.getAllByText(/alice smith/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/pending approval/i)).toBeInTheDocument();
+  });
 });

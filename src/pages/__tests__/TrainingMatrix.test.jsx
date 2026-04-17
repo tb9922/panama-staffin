@@ -25,6 +25,10 @@ vi.mock('../../lib/api.js', async () => {
     createFireDrill: vi.fn(),
     updateFireDrill: vi.fn(),
     deleteFireDrill: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -92,6 +96,7 @@ function renderViewer() {
 beforeEach(() => {
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getTrainingData.mockResolvedValue(MOCK_TRAINING_DATA);
+  api.getRecordAttachments.mockResolvedValue([]);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

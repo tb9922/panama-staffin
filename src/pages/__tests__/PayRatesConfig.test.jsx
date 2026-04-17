@@ -15,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     updatePayRateRule: vi.fn(),
     deletePayRateRule: vi.fn(),
     getNMWRates: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -46,6 +50,7 @@ const MOCK_NMW_RATES = [
 function setupMocks(rules = MOCK_RULES, nmwRates = MOCK_NMW_RATES) {
   api.getPayRateRules.mockResolvedValue(rules);
   api.getNMWRates.mockResolvedValue(nmwRates);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 describe('PayRatesConfig', () => {
@@ -142,5 +147,29 @@ describe('PayRatesConfig', () => {
     expect(screen.getAllByText('Rule Name').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Applies To').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Rate Type').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('lets admins save a rule with amount 0', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    api.createPayRateRule.mockResolvedValue({ id: 'rule-3' });
+    renderWithProviders(<PayRatesConfig />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '+ Add Rule' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: '+ Add Rule' }));
+    await user.type(screen.getByLabelText('Rule Name'), 'Zero uplift');
+    await user.clear(screen.getByLabelText('Amount (%)'));
+    await user.type(screen.getByLabelText('Amount (%)'), '0');
+    await user.click(screen.getByRole('button', { name: 'Add Rule' }));
+
+    await waitFor(() =>
+      expect(api.createPayRateRule).toHaveBeenCalledWith('test-home', expect.objectContaining({
+        name: 'Zero uplift',
+        amount: 0,
+      }))
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { SCAN_INTAKE_TARGET_IDS } from '../../shared/scanIntake.js';
 
 // Default DataContext mock for page tests — provides canRead/canWrite/homeRole.
 // Override per-test via: useData.mockReturnValue({ canWrite: () => false, ... })
@@ -9,6 +10,9 @@ const _defaultDataCtx = {
   canWrite: () => true,
   homeRole: 'home_manager',
   staffId: null,
+  scanIntakeEnabled: true,
+  scanIntakeTargets: SCAN_INTAKE_TARGET_IDS,
+  isScanTargetEnabled: () => true,
 };
 const _useData = vi.fn(() => _defaultDataCtx);
 vi.mock('../contexts/DataContext.jsx', () => ({

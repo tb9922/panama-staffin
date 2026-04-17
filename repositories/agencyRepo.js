@@ -1,8 +1,8 @@
 import { pool } from '../db.js';
 
 // ── Column lists ────────────────────────────────────────────────────────────
-const PROVIDER_COLS = 'id, home_id, name, contact, rate_day, rate_night, active, created_at';
-const SHIFT_COLS = 'id, home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, worker_name, invoice_ref, reconciled, role_covered, created_at';
+const PROVIDER_COLS = 'id, home_id, name, contact, rate_day, rate_night, active, version, created_at';
+const SHIFT_COLS = 'id, home_id, agency_id, date, shift_code, hours, hourly_rate, total_cost, worker_name, invoice_ref, reconciled, role_covered, version, created_at';
 
 // ── agency_providers ──────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ function shapeProvider(row) {
     rate_day: row.rate_day != null ? parseFloat(row.rate_day) : null,
     rate_night: row.rate_night != null ? parseFloat(row.rate_night) : null,
     active: row.active,
+    version: row.version != null ? parseInt(row.version, 10) : 1,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
 }
@@ -46,15 +47,15 @@ export async function createProvider(homeId, provider, client) {
   return shapeProvider(rows[0]);
 }
 
-export async function updateProvider(id, homeId, updates, client) {
+export async function updateProvider(id, homeId, updates, client, version = null) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE agency_providers
-     SET name = $1, contact = $2, rate_day = $3, rate_night = $4, active = $5
-     WHERE id = $6 AND home_id = $7
+     SET name = $1, contact = $2, rate_day = $3, rate_night = $4, active = $5, version = version + 1
+     WHERE id = $6 AND home_id = $7 AND ($8::INT IS NULL OR version = $8)
      RETURNING ${PROVIDER_COLS}`,
     [updates.name, updates.contact || null, updates.rate_day ?? null, updates.rate_night ?? null,
-     updates.active ?? true, id, homeId],
+     updates.active ?? true, id, homeId, version],
   );
   return rows.length > 0 ? shapeProvider(rows[0]) : null;
 }
@@ -77,6 +78,7 @@ function shapeShift(row) {
     invoice_ref: row.invoice_ref,
     reconciled: row.reconciled,
     role_covered: row.role_covered,
+    version: row.version != null ? parseInt(row.version, 10) : 1,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
 }
@@ -86,6 +88,7 @@ export async function findShiftsByHomePeriod(homeId, start, end) {
     `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
             s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
             s.reconciled, s.role_covered, s.created_at,
+            s.version,
             p.name AS agency_name
      FROM agency_shifts s
      JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
@@ -121,6 +124,7 @@ export async function findShiftById(id, homeId, client) {
     `SELECT s.id, s.home_id, s.agency_id, s.date, s.shift_code, s.hours,
             s.hourly_rate, s.total_cost, s.worker_name, s.invoice_ref,
             s.reconciled, s.role_covered, s.created_at,
+            s.version,
             p.name AS agency_name
      FROM agency_shifts s
      JOIN agency_providers p ON p.id = s.agency_id AND p.home_id = s.home_id
@@ -130,20 +134,23 @@ export async function findShiftById(id, homeId, client) {
   return rows.length > 0 ? shapeShift(rows[0]) : null;
 }
 
-export async function updateShift(id, homeId, updates, client) {
+export async function updateShift(id, homeId, updates, client, version = null) {
   const conn = client || pool;
-  await conn.query(
+  const { rows } = await conn.query(
     `UPDATE agency_shifts
      SET agency_id = $1, date = $2, shift_code = $3, hours = $4, hourly_rate = $5,
-         total_cost = $6, worker_name = $7, invoice_ref = $8, reconciled = $9, role_covered = $10
-     WHERE id = $11 AND home_id = $12`,
+         total_cost = $6, worker_name = $7, invoice_ref = $8, reconciled = $9, role_covered = $10,
+         version = version + 1
+     WHERE id = $11 AND home_id = $12 AND ($13::INT IS NULL OR version = $13)
+     RETURNING id`,
     [
       updates.agency_id, updates.date, updates.shift_code, updates.hours,
       updates.hourly_rate, updates.total_cost, updates.worker_name || null,
       updates.invoice_ref || null, updates.reconciled ?? false, updates.role_covered || null,
-      id, homeId,
+      id, homeId, version,
     ],
   );
+  if (rows.length === 0) return null;
   return findShiftById(id, homeId);
 }
 

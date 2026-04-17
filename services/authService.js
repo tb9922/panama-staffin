@@ -23,13 +23,16 @@ export async function loadDenyList() {
 }
 
 export async function login(username, password) {
+  const allowLegacyEnvAuth = process.env.ALLOW_LEGACY_ENV_AUTH === '1';
   // Try database-backed users first
   let dbUser = null;
+  let usersTableExists = true;
   try { dbUser = await userRepo.findByUsername(username); } catch (err) {
     // Only fall through when the users table doesn't exist yet (pre-migration state).
     // Any other error (DB down, timeout, pool exhausted) must propagate so auth is
     // never silently bypassed — env-var users skip lockout and deny-list checks.
     if (err.code !== '42P01') throw err;
+    usersTableExists = false;
   }
 
   if (dbUser) {
@@ -66,6 +69,12 @@ export async function login(username, password) {
     return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };
   }
 
+  if (usersTableExists) throw new AuthenticationError('Invalid credentials');
+  if (!allowLegacyEnvAuth) {
+    logger.error('Legacy env-var authentication is disabled because the users table is unavailable');
+    throw new AuthenticationError('Login unavailable until database migrations are applied');
+  }
+
   // Fallback: env-var users (backward compatibility before migration)
   const envUser = config.users.find(u => u.username === username);
   if (!envUser) throw new AuthenticationError('Invalid credentials');
@@ -73,7 +82,7 @@ export async function login(username, password) {
   if (!valid) throw new AuthenticationError('Invalid credentials');
   const jti = randomUUID();
   const token = jwt.sign(
-    { username: envUser.username, role: envUser.role, jti },
+    { username: envUser.username, role: envUser.role, session_version: 0, jti },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn }
   );

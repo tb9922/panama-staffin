@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastContext } from './toastContextShared.js';
+export { useToast } from './useToast.js';
 
 let nextToastId = 1;
 

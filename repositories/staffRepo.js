@@ -1,3 +1,4 @@
+import { ConflictError } from '../errors.js';
 import { pool, toDateStr } from '../db.js';
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
@@ -28,6 +29,25 @@ function shapeRow(row) {
   };
 }
 
+function parseSequentialStaffId(id) {
+  if (typeof id !== 'string') return null;
+  const match = /^S(\d+)$/i.exec(id.trim());
+  return match ? parseInt(match[1], 10) : null;
+}
+
+async function ensureStaffIdCounterAtLeast(homeId, nextValue, client) {
+  if (!Number.isInteger(nextValue) || nextValue < 1) return;
+  const conn = client || pool;
+  await conn.query(
+    `INSERT INTO staff_id_counters (home_id, next_value)
+     VALUES ($1, $2)
+     ON CONFLICT (home_id) DO UPDATE
+     SET next_value = GREATEST(staff_id_counters.next_value, EXCLUDED.next_value),
+         updated_at = NOW()`,
+    [homeId, nextValue]
+  );
+}
+
 /**
  * Generate the next staff ID for a home (e.g. "S001", "S002").
  * Uses FOR UPDATE to prevent concurrent ID collisions.
@@ -38,15 +58,29 @@ function shapeRow(row) {
 export async function nextId(homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT id FROM staff WHERE home_id = $1 ORDER BY id FOR UPDATE`,
+    `WITH current_max AS (
+       SELECT COALESCE(MAX(substring(id FROM 2)::int), 0) AS max_num
+       FROM staff
+       WHERE home_id = $1 AND id ~ '^S[0-9]+$'
+     ),
+     seed AS (
+       INSERT INTO staff_id_counters (home_id, next_value)
+       SELECT $1, max_num + 1
+       FROM current_max
+       ON CONFLICT (home_id) DO NOTHING
+     ),
+     bump AS (
+       UPDATE staff_id_counters counter
+       SET next_value = GREATEST(counter.next_value, current_max.max_num + 1) + 1,
+           updated_at = NOW()
+       FROM current_max
+       WHERE counter.home_id = $1
+       RETURNING counter.next_value - 1 AS allocated
+     )
+     SELECT allocated FROM bump`,
     [homeId]
   );
-  let maxNum = 0;
-  for (const r of rows) {
-    const num = parseInt(r.id.replace(/^S/i, ''), 10);
-    if (!isNaN(num) && num > maxNum) maxNum = num;
-  }
-  return 'S' + String(maxNum + 1).padStart(3, '0');
+  return 'S' + String(rows[0].allocated).padStart(3, '0');
 }
 
 /**
@@ -75,6 +109,10 @@ export async function findByHome(homeId, { limit = 1000, offset = 0 } = {}, clie
 export async function sync(homeId, staffArr, client) {
   const conn = client || pool;
   if (!staffArr || staffArr.length === 0) return;
+  const highestIncomingId = staffArr.reduce((max, staff) => {
+    const parsed = parseSequentialStaffId(staff.id);
+    return parsed != null && parsed > max ? parsed : max;
+  }, 0);
 
   const incomingIds = staffArr.map(s => s.id);
 
@@ -131,6 +169,7 @@ export async function sync(homeId, staffArr, client) {
      WHERE home_id = $1 AND id != ALL($2::text[]) AND deleted_at IS NULL`,
     [homeId, incomingIds]
   );
+  await ensureStaffIdCounterAtLeast(homeId, highestIncomingId + 1, conn);
 }
 
 /**
@@ -138,8 +177,9 @@ export async function sync(homeId, staffArr, client) {
  * @param {number} homeId
  * @param {string} staffId
  */
-export async function findById(homeId, staffId) {
-  const { rows } = await pool.query(
+export async function findById(homeId, staffId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
     `SELECT ${STAFF_COLS} FROM staff WHERE home_id = $1 AND id = $2 AND deleted_at IS NULL`,
     [homeId, staffId]
   );
@@ -181,7 +221,42 @@ export async function upsertOne(homeId, staff, client) {
       staff.al_carryover != null ? staff.al_carryover : 0,
     ]
   );
+  await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
   return shapeRow(rows[0]);
+}
+
+export async function createOne(homeId, staff, client) {
+  const conn = client || pool;
+  try {
+    const { rows } = await conn.query(
+      `INSERT INTO staff
+         (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out,
+          start_date, leaving_date, date_of_birth, ni_number, contract_hours,
+          al_entitlement, al_carryover, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+       RETURNING ${STAFF_COLS}`,
+      [
+        staff.id, homeId, staff.name, staff.role || null, staff.team || null,
+        staff.pref || null,
+        staff.skill ?? 1,
+        staff.hourly_rate != null ? staff.hourly_rate : null,
+        staff.active !== false,
+        staff.wtr_opt_out === true,
+        staff.start_date || null, staff.leaving_date || null,
+        staff.date_of_birth || null, staff.ni_number || null,
+        staff.contract_hours != null ? staff.contract_hours : null,
+        staff.al_entitlement != null ? staff.al_entitlement : null,
+        staff.al_carryover != null ? staff.al_carryover : 0,
+      ]
+    );
+    await ensureStaffIdCounterAtLeast(homeId, (parseSequentialStaffId(staff.id) || 0) + 1, conn);
+    return shapeRow(rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      throw new ConflictError('Staff member ID already exists in this home');
+    }
+    throw err;
+  }
 }
 
 /**

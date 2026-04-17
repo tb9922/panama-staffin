@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { loadHomes, setCurrentHome } from '../lib/api.js';
 import { useAuth } from './AuthContext.jsx';
 import { hasModuleAccess, canWriteModule } from '../../shared/roles.js';
+import { SCAN_INTAKE_TARGET_IDS } from '../../shared/scanIntake.js';
 
 const DataCtx = createContext(null);
 
@@ -62,6 +63,14 @@ export function DataProvider({ children }) {
   const activeHomeObj = useMemo(() => homes.find(h => h.id === activeHome), [homes, activeHome]);
   const homeRole = activeHomeObj?.roleId || null;
   const staffId = activeHomeObj?.staffId || null;
+  const scanIntakeEnabled = Boolean(activeHomeObj?.scanIntakeEnabled ?? activeHomeObj?.config?.scan_intake_enabled);
+  const scanIntakeTargets = useMemo(() => {
+    const configured = activeHomeObj?.scanIntakeTargets ?? activeHomeObj?.config?.scan_intake_targets;
+    if (Array.isArray(configured) && configured.length > 0) {
+      return configured.filter((target) => SCAN_INTAKE_TARGET_IDS.includes(target));
+    }
+    return SCAN_INTAKE_TARGET_IDS;
+  }, [activeHomeObj]);
 
   // Module access helpers bound to current home's role (platform admins bypass)
   const canRead = useCallback((moduleId) => {
@@ -74,11 +83,18 @@ export function DataProvider({ children }) {
     return canWriteModule(homeRole, moduleId);
   }, [homeRole, isPlatformAdmin]);
 
+  const isScanTargetEnabled = useCallback((targetId) => {
+    if (!scanIntakeEnabled) return false;
+    if (!targetId) return false;
+    return scanIntakeTargets.includes(targetId);
+  }, [scanIntakeEnabled, scanIntakeTargets]);
+
   return (
     <DataCtx.Provider value={{
       loading, error, homes, activeHome,
       switchHome, refreshHomes, setError, clearError,
       homeRole, staffId, canRead, canWrite,
+      activeHomeObj, scanIntakeEnabled, scanIntakeTargets, isScanTargetEnabled,
     }}>
       {children}
     </DataCtx.Provider>

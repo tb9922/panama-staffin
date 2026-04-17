@@ -30,13 +30,13 @@ const INVOICE_LINE_COLS = `id, invoice_id, home_id,
   created_at`;
 
 const EXPENSE_COLS = `id, home_id,
-  expense_date, category, subcategory, description, supplier, invoice_ref,
+  expense_date, category, subcategory, description, supplier, supplier_id, invoice_ref,
   net_amount, vat_amount, gross_amount,
   status, approved_by, approved_date,
   rejected_by, rejected_date, rejection_reason,
   paid_date, payment_method, payment_reference,
   recurring, recurrence_frequency,
-  notes, version,
+  notes, schedule_id, scheduled_for_date, version,
   created_by, created_at, updated_at`;
 
 const FEE_CHANGE_COLS = `id, home_id, resident_id,
@@ -50,10 +50,16 @@ const CHASE_COLS = `id, home_id, invoice_id,
   created_by, created_at`;
 
 const SCHEDULE_COLS = `id, home_id,
-  supplier, category, description, frequency, amount,
-  next_due, auto_approve, on_hold, hold_reason,
+  supplier, supplier_id, category, description, frequency, amount,
+  next_due, anchor_day, auto_approve, on_hold, hold_reason,
   notes, version,
   created_by, created_at, updated_at`;
+
+function getDayOfMonth(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const [, , day] = dateStr.split('-').map(Number);
+  return Number.isInteger(day) ? day : null;
+}
 
 // ── Finance Residents ─────────────────────────────────────────────────────────
 
@@ -425,7 +431,7 @@ function shapeExpense(row) {
   return {
     id: row.id, home_id: row.home_id,
     expense_date: d(row.expense_date), category: row.category, subcategory: row.subcategory,
-    description: row.description, supplier: row.supplier, invoice_ref: row.invoice_ref,
+    description: row.description, supplier: row.supplier, supplier_id: row.supplier_id, invoice_ref: row.invoice_ref,
     net_amount: f(row.net_amount), vat_amount: f(row.vat_amount), gross_amount: f(row.gross_amount),
     status: row.status,
     approved_by: row.approved_by, approved_date: d(row.approved_date),
@@ -433,6 +439,8 @@ function shapeExpense(row) {
     paid_date: d(row.paid_date), payment_method: row.payment_method, payment_reference: row.payment_reference,
     recurring: row.recurring, recurrence_frequency: row.recurrence_frequency,
     notes: row.notes,
+    schedule_id: row.schedule_id != null ? parseInt(row.schedule_id, 10) : null,
+    scheduled_for_date: d(row.scheduled_for_date),
     version: row.version,
     created_by: row.created_by, created_at: ts(row.created_at), updated_at: ts(row.updated_at),
   };
@@ -467,20 +475,34 @@ export async function createExpense(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO finance_expenses
-       (home_id, expense_date, category, subcategory, description, supplier, invoice_ref,
+       (home_id, expense_date, category, subcategory, description, supplier, supplier_id, invoice_ref,
         net_amount, vat_amount, gross_amount, status,
         approved_by, approved_date, paid_date, payment_method, payment_reference,
-        recurring, recurrence_frequency, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        recurring, recurrence_frequency, notes, schedule_id, scheduled_for_date, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      RETURNING ${EXPENSE_COLS}`,
     [homeId, data.expense_date, data.category, data.subcategory || null,
-     data.description, data.supplier || null, data.invoice_ref || null,
+     data.description, data.supplier || null, data.supplier_id || null, data.invoice_ref || null,
      data.net_amount, data.vat_amount ?? 0, data.gross_amount,
      data.status ?? 'pending',
      data.approved_by || null, data.approved_date || null,
      data.paid_date || null, data.payment_method || null, data.payment_reference || null,
      data.recurring ?? false, data.recurrence_frequency || null,
-     data.notes || null, data.created_by]
+     data.notes || null, data.schedule_id || null, data.scheduled_for_date || null, data.created_by]
+  );
+  return shapeExpense(rows[0]);
+}
+
+export async function findScheduledExpense(homeId, scheduleId, scheduledForDate, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${EXPENSE_COLS}
+     FROM finance_expenses
+     WHERE home_id = $1
+       AND schedule_id = $2
+       AND scheduled_for_date = $3
+       AND deleted_at IS NULL`,
+    [homeId, scheduleId, scheduledForDate]
   );
   return shapeExpense(rows[0]);
 }
@@ -490,7 +512,7 @@ export async function updateExpense(id, homeId, data, client, version) {
   const fields = [];
   const params = [id, homeId];
   const settable = [
-    'expense_date', 'category', 'subcategory', 'description', 'supplier', 'invoice_ref',
+    'expense_date', 'category', 'subcategory', 'description', 'supplier', 'supplier_id', 'invoice_ref',
     'net_amount', 'vat_amount', 'gross_amount',
     'status', 'approved_by', 'approved_date', 'rejected_by', 'rejected_date', 'rejection_reason',
     'paid_date', 'payment_method', 'payment_reference',
@@ -727,9 +749,10 @@ function shapeSchedule(row) {
   if (!row) return null;
   return {
     id: row.id, home_id: row.home_id,
-    supplier: row.supplier, category: row.category, description: row.description,
+    supplier: row.supplier, supplier_id: row.supplier_id, category: row.category, description: row.description,
     frequency: row.frequency, amount: f(row.amount),
     next_due: d(row.next_due),
+    anchor_day: row.anchor_day != null ? parseInt(row.anchor_day, 10) : null,
     auto_approve: row.auto_approve, on_hold: row.on_hold, hold_reason: row.hold_reason,
     notes: row.notes,
     version: row.version,
@@ -760,13 +783,15 @@ export async function findPaymentScheduleById(id, homeId, client, forUpdate = fa
 
 export async function createPaymentSchedule(homeId, data, client) {
   const conn = client || pool;
+  const anchorDay = data.anchor_day ?? getDayOfMonth(data.next_due);
   const { rows } = await conn.query(
     `INSERT INTO finance_payment_schedule
-       (home_id, supplier, category, description, frequency, amount, next_due,
+       (home_id, supplier, supplier_id, category, description, frequency, amount, next_due, anchor_day,
         auto_approve, on_hold, hold_reason, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${SCHEDULE_COLS}`,
-    [homeId, data.supplier, data.category, data.description || null,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING ${SCHEDULE_COLS}`,
+    [homeId, data.supplier, data.supplier_id || null, data.category, data.description || null,
      data.frequency, data.amount, data.next_due,
+     anchorDay,
      data.auto_approve ?? false, data.on_hold ?? false, data.hold_reason || null,
      data.notes || null, data.created_by]);
   return shapeSchedule(rows[0]);
@@ -776,7 +801,7 @@ export async function updatePaymentSchedule(id, homeId, data, client, version) {
   const conn = client || pool;
   const fields = [];
   const params = [id, homeId];
-  const settable = ['supplier', 'category', 'description', 'frequency', 'amount', 'next_due',
+  const settable = ['supplier', 'supplier_id', 'category', 'description', 'frequency', 'amount', 'next_due', 'anchor_day',
     'auto_approve', 'on_hold', 'hold_reason', 'notes'];
   for (const key of settable) {
     if (key in data) {

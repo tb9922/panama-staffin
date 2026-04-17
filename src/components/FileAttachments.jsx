@@ -2,9 +2,16 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
-import LoadingState from './LoadingState.jsx';
-import EmptyState from './EmptyState.jsx';
-import InlineNotice from './InlineNotice.jsx';
+import {
+  GENERIC_ATTACHMENT_UPLOAD_POLICY,
+  getAcceptString,
+  formatUploadPolicyHelp,
+} from '../../shared/uploadPolicies.js';
+import { validateClientFileSelection } from '../../lib/uploadValidation.js';
+import { getScanLaunchContext } from '../lib/scanRouting.js';
+import { getScanUiCopy } from '../lib/scanUx.js';
+import ScanDocumentLink from './ScanDocumentLink.jsx';
+import { useData } from '../contexts/DataContext.jsx';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -16,31 +23,51 @@ export default function FileAttachments({
   caseType,
   caseId,
   readOnly = false,
-  getFiles,
-  uploadFile,
-  deleteFile,
-  downloadFile,
+  getFiles = getHrAttachments,
+  uploadFile = uploadHrAttachment,
+  deleteFile = deleteHrAttachment,
+  downloadFile = downloadHrAttachment,
   title = 'Attached Documents',
   emptyText = 'No documents attached.',
   saveFirstMessage = 'Save the case first to attach documents.',
+  saveFirstText,
   ensureCaseId,
+  scanContextOverride,
+  scanLabel,
+  scanHelperText,
+  scanDisabledReason,
 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [description, setDescription] = useState('');
-  const [createdCaseId, setCreatedCaseId] = useState(null);
+  const [selectedFileName, setSelectedFileName] = useState('');
   const fileInputRef = useRef(null);
-  const loadRequestRef = useRef(0);
   const fileInputId = useId();
+  const [createdCaseId, setCreatedCaseId] = useState(null);
   const descriptionInputId = useId();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { scanIntakeEnabled = false, isScanTargetEnabled = () => false } = useData();
   const listFiles = getFiles || getHrAttachments;
   const createFile = uploadFile || uploadHrAttachment;
   const removeFile = deleteFile || deleteHrAttachment;
   const fetchFile = downloadFile || downloadHrAttachment;
   const activeCaseId = caseId || createdCaseId;
+  const saveMessage = saveFirstText || saveFirstMessage;
+  const scanContext = scanContextOverride
+    || getScanLaunchContext({ caseType, caseId: activeCaseId })
+    || (ensureCaseId && caseType === 'cqc_evidence' ? { target: 'cqc', label: 'CQC evidence' } : null);
+  const isRecordBoundScan = scanContext?.target === 'record_attachment'
+    || scanContext?.target === 'hr_attachment'
+    || scanContext?.target === 'training';
+  const showScanButton = Boolean(scanContext?.target && scanIntakeEnabled && isScanTargetEnabled(scanContext.target));
+  const scanDisabled = isRecordBoundScan && !activeCaseId && !(ensureCaseId && caseType === 'cqc_evidence');
+  const scanCopy = getScanUiCopy({
+    target: scanContext?.target,
+    caseType,
+    saveMessage: scanDisabledReason || saveMessage,
+  });
 
   useEffect(() => {
     if (caseId) setCreatedCaseId(null);
@@ -52,28 +79,23 @@ export default function FileAttachments({
 
   async function loadFiles(targetCaseId = activeCaseId) {
     if (!targetCaseId) return;
-    const requestId = ++loadRequestRef.current;
-    let shouldUpdate = true;
     setLoading(true);
     setError(null);
     try {
       const data = await listFiles(caseType, targetCaseId);
-      shouldUpdate = requestId === loadRequestRef.current;
-      if (!shouldUpdate) return;
       setFiles(data);
     } catch (err) {
-      shouldUpdate = requestId === loadRequestRef.current;
-      if (!shouldUpdate) return;
       setError(err.message);
     } finally {
-      if (shouldUpdate && requestId === loadRequestRef.current) setLoading(false);
+      setLoading(false);
     }
   }
 
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
-    if (!file) {
-      setError('Choose a file first.');
+    const validationError = validateClientFileSelection(file, GENERIC_ATTACHMENT_UPLOAD_POLICY);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setUploading(true);
@@ -82,12 +104,13 @@ export default function FileAttachments({
       let targetCaseId = activeCaseId;
       if (!targetCaseId && ensureCaseId) {
         targetCaseId = await ensureCaseId();
-        if (!targetCaseId) throw new Error(saveFirstMessage);
+        if (!targetCaseId) throw new Error(saveMessage);
         setCreatedCaseId(targetCaseId);
       }
-      if (!targetCaseId) throw new Error(saveFirstMessage);
+      if (!targetCaseId) throw new Error(saveMessage);
       await createFile(caseType, targetCaseId, file, description);
       setDescription('');
+      setSelectedFileName('');
       fileInputRef.current.value = '';
       await loadFiles(targetCaseId);
     } catch (err) {
@@ -115,19 +138,19 @@ export default function FileAttachments({
     }
   }
 
-  if (!activeCaseId && !ensureCaseId) {
-    return <p className="text-sm text-gray-400 italic">{saveFirstMessage}</p>;
+  if (!activeCaseId && !ensureCaseId && !showScanButton) {
+    return <p className="text-sm text-gray-400 italic">{saveMessage}</p>;
   }
 
   return (
     <div className="space-y-3">
       <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
 
-      {!activeCaseId && ensureCaseId && (
-        <p className="text-sm text-gray-500">{saveFirstMessage}</p>
+      {!activeCaseId && (ensureCaseId || showScanButton) && (
+        <p className="text-sm text-gray-500">{saveMessage}</p>
       )}
 
-      {error && <InlineNotice variant="error" role="alert">{error}</InlineNotice>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {files.length > 0 && (
         <div className={TABLE.wrapper}>
@@ -166,23 +189,72 @@ export default function FileAttachments({
         </div>
       )}
 
-      {loading && <LoadingState message="Loading attached documents..." compact />}
-
       {files.length === 0 && !loading && (
-        <EmptyState title={emptyText} compact />
+        <p className="text-sm text-gray-400">{emptyText}</p>
       )}
 
       {!readOnly && (
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1">
-            <label htmlFor={fileInputId} className={INPUT.label}>File</label>
-            <input id={fileInputId} ref={fileInputRef} type="file" className="text-sm text-gray-600" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" disabled={uploading} />
+            <label className={INPUT.label} htmlFor={fileInputId}>File</label>
+            <input
+              id={fileInputId}
+              ref={fileInputRef}
+              type="file"
+              className="sr-only"
+              accept={getAcceptString(GENERIC_ATTACHMENT_UPLOAD_POLICY)}
+              onChange={(e) => {
+                const nextFile = e.target.files?.[0] || null;
+                const validationError = validateClientFileSelection(nextFile, GENERIC_ATTACHMENT_UPLOAD_POLICY);
+                if (validationError) {
+                  setSelectedFileName('');
+                  setError(validationError);
+                  e.target.value = '';
+                  return;
+                }
+                setSelectedFileName(nextFile?.name || '');
+                setError(null);
+              }}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  fileInputRef.current?.click();
+                }}
+                disabled={uploading}
+                className={BTN.secondary + ' ' + BTN.sm}
+              >
+                Choose file
+              </button>
+              {showScanButton && (
+                <ScanDocumentLink
+                  context={scanContext}
+                  label={scanLabel || scanCopy.label}
+                  disabled={scanDisabled}
+                  disabledReason={scanDisabledReason || scanCopy.disabledReason}
+                />
+              )}
+              <span className="min-w-0 truncate text-sm text-gray-500">
+                {selectedFileName || 'No file selected'}
+              </span>
+            </div>
+            {showScanButton && (
+              <p className={`mt-1 text-[11px] ${scanDisabled ? 'text-amber-700' : 'text-blue-700'}`}>
+                {scanDisabled
+                  ? (scanDisabledReason || scanCopy.disabledReason)
+                  : (scanHelperText || scanCopy.helperText)}
+              </p>
+            )}
+            <p className="mt-1 text-[11px] text-gray-400">{formatUploadPolicyHelp(GENERIC_ATTACHMENT_UPLOAD_POLICY)}</p>
+            {selectedFileName && <p className="mt-1 text-[11px] text-emerald-700">Selected: {selectedFileName}</p>}
           </div>
           <div className="flex-1">
             <label htmlFor={descriptionInputId} className={INPUT.label}>Description (optional)</label>
-            <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" disabled={uploading} />
+            <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" />
           </div>
-          <button onClick={handleUpload} disabled={uploading} className={BTN.primary + ' ' + BTN.sm}>
+          <button onClick={handleUpload} disabled={uploading || (!activeCaseId && !ensureCaseId)} className={BTN.primary + ' ' + BTN.sm}>
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>

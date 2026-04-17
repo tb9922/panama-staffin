@@ -45,6 +45,15 @@ function authHeaders(extra = {}) {
 
 const h = (homeSlug) => encodeURIComponent(homeSlug);
 
+export function isAbortLikeError(error, signal) {
+  return Boolean(
+    signal?.aborted
+    || error?.name === 'AbortError'
+    || error?.code === 20
+    || /aborted|aborterror/i.test(error?.message || '')
+  );
+}
+
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...options });
   if (res.status === 401) {
@@ -53,14 +62,19 @@ async function apiFetch(url, options = {}) {
     err.status = 401;
     throw err;
   }
+  const contentType = res.headers.get('content-type') || '';
+  const parseBody = async () => {
+    if (res.status === 204) return null;
+    if (contentType.includes('application/json')) return res.json();
+    return res.text();
+  };
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || `Request failed (${res.status})`);
+    const body = await parseBody().catch(() => null);
+    const err = new Error(typeof body === 'string' && body.trim() ? body : body?.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;
   }
-  if (res.status === 204) return null;
-  return res.json();
+  return parseBody();
 }
 
 async function fetchDownloadResponse(url) {
@@ -96,13 +110,19 @@ async function uploadFormData(url, formData, failureLabel = 'Upload failed') {
     err.status = 401;
     throw err;
   }
+  const contentType = res.headers.get('content-type') || '';
+  const parseBody = async () => {
+    if (res.status === 204) return null;
+    if (contentType.includes('application/json')) return res.json();
+    return res.text();
+  };
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || `${failureLabel} (${res.status})`);
+    const body = await parseBody().catch(() => null);
+    const err = new Error(typeof body === 'string' && body.trim() ? body : body?.error || `${failureLabel} (${res.status})`);
     err.status = res.status;
     throw err;
   }
-  return res.json();
+  return parseBody();
 }
 
 async function triggerBrowserDownload(url, originalName) {
@@ -219,6 +239,7 @@ export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modul
 
 export async function listEvidenceHubUploaders() {
   const home = getCurrentHome();
+  if (!home) throw new Error('No home selected');
   return apiFetch(`${API_BASE}/evidence-hub/uploaders?home=${encodeURIComponent(home)}`, {
     headers: authHeaders(),
   });
@@ -269,6 +290,14 @@ export async function deleteEvidenceHubAttachment(sourceModule, attachmentId) {
 
 export async function getHandoverEntries(homeSlug, date) {
   return apiFetch(`${API_BASE}/handover?home=${encodeURIComponent(homeSlug)}&date=${date}`, { headers: authHeaders() });
+}
+
+export async function getHandoverEntriesByRange(homeSlug, { fromDate, toDate, limit } = {}) {
+  const params = new URLSearchParams({ home: homeSlug });
+  if (fromDate) params.set('from', fromDate);
+  if (toDate) params.set('to', toDate);
+  if (limit != null) params.set('limit', String(limit));
+  return apiFetch(`${API_BASE}/handover/range?${params.toString()}`, { headers: authHeaders() });
 }
 
 export async function createHandoverEntry(homeSlug, entry) {
@@ -1180,9 +1209,9 @@ export async function createHrCaseNote(homeSlug, caseType, caseId, data) {
 }
 
 // ── HR Staff List ───────────────────────────────────────────────────────────
-export async function getHrStaffList(homeSlug) {
+export async function getHrStaffList(homeSlug, { signal } = {}) {
   const home = homeSlug || getCurrentHome();
-  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
+  return apiFetch(`${API_BASE}/hr/staff?home=${encodeURIComponent(home)}`, { headers: authHeaders(), signal });
 }
 
 // ── HR File Attachments ─────────────────────────────────────────────────────
@@ -1216,6 +1245,37 @@ export async function downloadHrAttachment(id, originalName) {
 }
 
 // ── HR Investigation Meetings ───────────────────────────────────────────────
+export async function getRecordAttachments(moduleId, recordId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function uploadRecordAttachment(moduleId, recordId, file, description) {
+  const home = getCurrentHome();
+  const formData = new FormData();
+  formData.append('file', file);
+  if (description) formData.append('description', description);
+  return uploadFormData(
+    `${API_BASE}/record-attachments/${encodeURIComponent(moduleId)}/${encodeURIComponent(recordId)}?home=${encodeURIComponent(home)}`,
+    formData
+  );
+}
+
+export async function deleteRecordAttachment(id) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/record-attachments/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+}
+
+export async function downloadRecordAttachment(id, originalName) {
+  const home = getCurrentHome();
+  return triggerBrowserDownload(`${API_BASE}/record-attachments/download/${encodeURIComponent(id)}?home=${encodeURIComponent(home)}`, originalName);
+}
+
 export async function getHrMeetings(caseType, caseId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/hr/meetings/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, { headers: authHeaders() });
@@ -1584,11 +1644,11 @@ export async function saveConfig(homeSlug, config, { clientUpdatedAt } = {}) {
 
 // ── Scheduling (Phase 2d) ─────────────────────────────────────────────────────
 
-export async function getSchedulingData(homeSlug, { from, to } = {}) {
+export async function getSchedulingData(homeSlug, { from, to, signal } = {}) {
   let url = `${API_BASE}/scheduling?home=${encodeURIComponent(homeSlug)}`;
   if (from) url += `&from=${encodeURIComponent(from)}`;
   if (to) url += `&to=${encodeURIComponent(to)}`;
-  return apiFetch(url, { headers: authHeaders() });
+  return apiFetch(url, { headers: authHeaders(), signal });
 }
 
 function schedulingHeaders(editLockPin) {

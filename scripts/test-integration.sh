@@ -19,6 +19,7 @@ export DB_PORT=5433
 export DB_NAME=panama_test
 export DB_USER=panama
 export DB_PASSWORD=test_password
+export DB_SSL=false
 export JWT_SECRET=ci_test_jwt_secret_not_used_in_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export ADMIN_PASSWORD_HASH='$2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx'
 export VIEWER_PASSWORD_HASH='$2b$12$placeholder_not_used_in_unit_tests_xxxxxxxxxxx'

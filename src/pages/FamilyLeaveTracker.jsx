@@ -142,7 +142,7 @@ export default function FamilyLeaveTracker() {
       setShowModal(false);
       setForm(blankForm());
       setEditing(null);
-      showNotice(editing ? 'Family leave record updated.' : 'Family leave record created.');
+      showNotice(editing ? 'Family leave record updated.' : 'Family leave record added.');
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -223,7 +223,7 @@ export default function FamilyLeaveTracker() {
                 <tr>
                   <td colSpan={7} className={TABLE.empty}>
                     <EmptyState
-                      title="No family leave records"
+                      title="No family leave records yet"
                       description={canEdit ? 'Create the first record to track leave periods, return dates, and statutory pay.' : 'Family leave records will appear here once they have been recorded.'}
                       actionLabel={canEdit ? 'New Leave Record' : undefined}
                       onAction={canEdit ? openNew : undefined}
@@ -277,34 +277,34 @@ export default function FamilyLeaveTracker() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Start Date *</label>
-                  <input type="date" className={INPUT.base} value={form.start_date} onChange={e => set('start_date', e.target.value)} />
+                  <label htmlFor="family-leave-start-date" className={INPUT.label}>Start Date *</label>
+                  <input id="family-leave-start-date" type="date" className={INPUT.base} value={form.start_date} onChange={e => set('start_date', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>End Date</label>
-                  <input type="date" className={INPUT.base} value={form.end_date} onChange={e => set('end_date', e.target.value)} />
+                  <label htmlFor="family-leave-end-date" className={INPUT.label}>End Date</label>
+                  <input id="family-leave-end-date" type="date" className={INPUT.base} value={form.end_date} onChange={e => set('end_date', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Status</label>
-                  <select className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
+                  <label htmlFor="family-leave-status" className={INPUT.label}>Status</label>
+                  <select id="family-leave-status" className={INPUT.select} value={form.status} onChange={e => set('status', e.target.value)}>
                     {FAMILY_LEAVE_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Expected Return</label>
-                  <input type="date" className={INPUT.base} value={form.expected_return} onChange={e => set('expected_return', e.target.value)} />
+                  <label htmlFor="family-leave-expected-return" className={INPUT.label}>Expected Return</label>
+                  <input id="family-leave-expected-return" type="date" className={INPUT.base} value={form.expected_return} onChange={e => set('expected_return', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={INPUT.label}>Actual Return</label>
-                  <input type="date" className={INPUT.base} value={form.actual_return} onChange={e => set('actual_return', e.target.value)} />
+                  <label htmlFor="family-leave-actual-return" className={INPUT.label}>Actual Return</label>
+                  <input id="family-leave-actual-return" type="date" className={INPUT.base} value={form.actual_return} onChange={e => set('actual_return', e.target.value)} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>KIT Days Used</label>
-                  <input type="number" min="0" className={INPUT.base} value={form.kit_days_used} onChange={e => set('kit_days_used', e.target.value)} />
+                  <label htmlFor="family-leave-kit-days" className={INPUT.label}>KIT Days Used</label>
+                  <input id="family-leave-kit-days" type="number" min="0" className={INPUT.base} value={form.kit_days_used} onChange={e => set('kit_days_used', e.target.value)} />
                 </div>
               </div>
               <div>
@@ -314,8 +314,8 @@ export default function FamilyLeaveTracker() {
                 </select>
               </div>
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <textarea className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
+                <label htmlFor="family-leave-notes" className={INPUT.label}>Notes</label>
+                <textarea id="family-leave-notes" className={INPUT.base} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} />
               </div>
             </div>
             <FileAttachments caseType="family_leave" caseId={editing?.id} />

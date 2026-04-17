@@ -57,6 +57,8 @@ const revertSchema = z.object({
 const moveSchema = z.object({
   fromBedId: z.number().int().positive(),
   toBedId:   z.number().int().positive(),
+  fromClientUpdatedAt: z.string(),
+  toClientUpdatedAt: z.string(),
 });
 
 const deleteBedSchema = z.object({
@@ -133,7 +135,15 @@ router.put('/move', writeRateLimiter, requireAuth, requireHomeAccess, requireMod
   try {
     const parsed = moveSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
-    const result = await bedService.moveBed(parsed.data.fromBedId, parsed.data.toBedId, req.home.id, req.home.slug, req.user.username);
+    const result = await bedService.moveBed(
+      parsed.data.fromBedId,
+      parsed.data.toBedId,
+      req.home.id,
+      req.home.slug,
+      req.user.username,
+      parsed.data.fromClientUpdatedAt,
+      parsed.data.toClientUpdatedAt,
+    );
     res.json(result);
   } catch (err) { next(err); }
 });

@@ -14,6 +14,10 @@ vi.mock('../../lib/api.js', async () => {
     createFinanceExpense: vi.fn(),
     updateFinanceExpense: vi.fn(),
     approveFinanceExpense: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -54,6 +58,7 @@ describe('ExpenseTracker', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('smoke test - renders without crashing', async () => {

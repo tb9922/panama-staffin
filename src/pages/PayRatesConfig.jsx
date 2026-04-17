@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import {
   getPayRateRules, createPayRateRule, updatePayRateRule, deletePayRateRule, getNMWRates,
-  getCurrentHome, } from '../lib/api.js';
+  getCurrentHome, getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
+} from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -73,10 +78,11 @@ export default function PayRatesConfig() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.amount) return;
+    const parsedAmount = Number(form.amount);
+    if (!form.name || form.amount === '' || Number.isNaN(parsedAmount) || parsedAmount < 0) return;
     setSaving(true);
     try {
-      const payload = { ...form, amount: parseFloat(form.amount) };
+      const payload = { ...form, amount: parsedAmount };
       if (modal.mode === 'add') {
         await createPayRateRule(homeSlug, payload);
       } else {
@@ -137,9 +143,7 @@ export default function PayRatesConfig() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
-      )}
+      {error && <ErrorState title="Pay rate action needs attention" message={error} onRetry={load} className="mb-4" />}
 
       {/* Enhancement Rules */}
       <div className={`${CARD.flush} mb-6`}>
@@ -148,7 +152,7 @@ export default function PayRatesConfig() {
           <p className="text-xs text-gray-500 mt-0.5">Enhancements stack additively — not multiplicatively. A Sunday night shift gets night% + sunday%, not multiplied.</p>
         </div>
         {loading ? (
-          <div className="py-10 text-center text-sm text-gray-400">Loading rules…</div>
+          <LoadingState message="Loading rules…" compact />
         ) : (
           <div className={TABLE.wrapper}>
             <table className={TABLE.table}>
@@ -164,7 +168,15 @@ export default function PayRatesConfig() {
               </thead>
               <tbody>
                 {rules.length === 0 ? (
-                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No active rules. Click + Add Rule to create one.</td></tr>
+                  <tr>
+                    <td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>
+                      <EmptyState
+                        compact
+                        title="No active rules. Click + Add Rule to create one."
+                        description="Create enhancement rules here for nights, weekends, bank holidays, sleep-ins, and overtime."
+                      />
+                    </td>
+                  </tr>
                 ) : rules.map(rule => (
                   <tr key={rule.id} className={TABLE.tr}>
                     <td className={`${TABLE.td} font-medium`}>{rule.name}</td>
@@ -224,15 +236,15 @@ export default function PayRatesConfig() {
       <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal?.mode === 'add' ? 'Add Pay Rate Rule' : 'Edit Pay Rate Rule'} size="lg">
         <div className="space-y-4">
           <div>
-            <label className={INPUT.label}>Rule Name</label>
-            <input className={INPUT.base} value={form.name}
+            <label htmlFor="pay-rate-rule-name" className={INPUT.label}>Rule Name</label>
+            <input id="pay-rate-rule-name" className={INPUT.base} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Night Enhancement" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={INPUT.label}>Applies To</label>
-              <select className={INPUT.select} value={form.applies_to}
+              <label htmlFor="pay-rate-rule-applies-to" className={INPUT.label}>Applies To</label>
+              <select id="pay-rate-rule-applies-to" className={INPUT.select} value={form.applies_to}
                 onChange={e => setForm(f => ({ ...f, applies_to: e.target.value }))}>
                 {Object.entries(APPLIES_TO_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
@@ -240,8 +252,8 @@ export default function PayRatesConfig() {
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Rate Type</label>
-              <select className={INPUT.select} value={form.rate_type}
+              <label htmlFor="pay-rate-rule-rate-type" className={INPUT.label}>Rate Type</label>
+              <select id="pay-rate-rule-rate-type" className={INPUT.select} value={form.rate_type}
                 onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
                 {Object.entries(RATE_TYPE_LABELS).map(([v, l]) => (
                   <option key={v} value={v}>{l}</option>
@@ -250,10 +262,10 @@ export default function PayRatesConfig() {
             </div>
           </div>
           <div>
-            <label className={INPUT.label}>
+            <label htmlFor="pay-rate-rule-amount" className={INPUT.label}>
               Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
             </label>
-            <input className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
+            <input id="pay-rate-rule-amount" className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
               onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
               placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
             {form.rate_type === 'percentage' && form.amount && (
@@ -267,6 +279,18 @@ export default function PayRatesConfig() {
               Editing creates a new version of this rule dated today. The previous version is preserved for historical payroll records.
             </p>
           )}
+          <FileAttachments
+            caseType="payroll_rate_rule"
+            caseId={modal?.mode === 'edit' ? modal?.id : null}
+            readOnly={!canEdit}
+            title="Rate Rule Evidence"
+            emptyText="No rate rule evidence uploaded yet."
+            saveFirstText="Save this pay rate rule first, then attach agreements, approvals, and supporting evidence."
+            getFiles={getRecordAttachments}
+            uploadFile={uploadRecordAttachment}
+            deleteFile={deleteRecordAttachment}
+            downloadFile={downloadRecordAttachment}
+          />
         </div>
         <div className={MODAL.footer}>
           <button className={BTN.secondary} onClick={() => setModal(null)}>Cancel</button>

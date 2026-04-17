@@ -172,12 +172,12 @@ function authGet(path, token) {
 // ── GET /api/scheduling — own-data filtering ─────────────────────────────────
 
 describe('staff_member: GET /api/scheduling', () => {
-  it('returns all staff names but no PII fields', async () => {
+  it('returns only linked staff with no PII fields', async () => {
     const res = await authGet(`/api/scheduling?home=${homeSlug}`, staffToken).expect(200);
     const staff = res.body.staff;
-    expect(staff.length).toBeGreaterThanOrEqual(3);
-    // Should have basic fields
-    const s1 = staff.find(s => s.id === 'S001');
+    expect(staff).toHaveLength(1);
+    const s1 = staff[0];
+    expect(s1.id).toBe('S001');
     expect(s1.name).toBe('Alice Staff');
     expect(s1.role).toBe('Carer');
     expect(s1.team).toBe('Day A');

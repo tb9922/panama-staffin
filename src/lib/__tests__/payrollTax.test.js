@@ -136,6 +136,12 @@ describe('getPayPeriodNumber', () => {
   it('fortnightly: Apr 19 2025 → period 1', () => {
     expect(getPayPeriodNumber('2025-04-19', 'fortnightly')).toBe(1);
   });
+  it('weekly: Apr 5 2026 → period 53', () => {
+    expect(getPayPeriodNumber('2026-04-05', 'weekly')).toBe(53);
+  });
+  it('fortnightly: Apr 5 2026 → period 27', () => {
+    expect(getPayPeriodNumber('2026-04-05', 'fortnightly')).toBe(27);
+  });
 });
 
 // ─── parseTaxCode ─────────────────────────────────────────────────────────────
@@ -267,6 +273,22 @@ describe('calculatePAYE', () => {
     // Should not refund despite large prior tax_deducted (W1M1 ignores YTD)
     expect(r.tax).toBeGreaterThanOrEqual(0);
     expect(r.isRefund).toBe(false);
+  });
+
+  it('extra weekly period uses standalone treatment instead of cumulative YTD', () => {
+    const code = parseTaxCode('1257L');
+    const ytdLarge = { gross_pay: 50000, tax_deducted: 9000 };
+    const r = calculatePAYE(500, code, 53, 52, ytdLarge, englandBands);
+    expect(r.isRefund).toBe(false);
+    expect(r.tax).toBeCloseTo(51.65, 2);
+  });
+
+  it('extra fortnightly period uses standalone treatment instead of cumulative YTD', () => {
+    const code = parseTaxCode('1257L');
+    const ytdLarge = { gross_pay: 50000, tax_deducted: 9000 };
+    const r = calculatePAYE(1000, code, 27, 26, ytdLarge, englandBands);
+    expect(r.isRefund).toBe(false);
+    expect(r.tax).toBeCloseTo(103.31, 2);
   });
 
   it('BR code — flat 20% on full gross', () => {

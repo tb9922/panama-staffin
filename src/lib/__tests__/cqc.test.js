@@ -75,6 +75,15 @@ describe('QUALITY_STATEMENTS', () => {
     expect(safe.map(q => q.id).sort()).toEqual(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8']);
   });
 
+  it('uses the current CQC responsive and well-led distributions', () => {
+    const responsive = QUALITY_STATEMENTS.filter(q => q.category === 'responsive');
+    const wellLed = QUALITY_STATEMENTS.filter(q => q.category === 'well-led');
+    const sortIds = (ids) => [...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    expect(sortIds(responsive.map(q => q.id))).toEqual(['R1', 'R2', 'R3', 'R4', 'R5']);
+    expect(sortIds(wellLed.map(q => q.id))).toEqual(['WL1', 'WL2', 'WL3', 'WL4', 'WL5', 'WL6', 'WL7', 'WL8', 'WL9', 'WL10']);
+  });
+
   it('each has required fields', () => {
     for (const q of QUALITY_STATEMENTS) {
       expect(q).toHaveProperty('id');

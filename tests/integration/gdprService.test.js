@@ -10,7 +10,10 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { pool } from '../../db.js';
+import { config as appConfig } from '../../config.js';
 import * as gdprService from '../../services/gdprService.js';
 
 // ── Test identifiers ─────────────────────────────────────────────────────────
@@ -19,6 +22,8 @@ const SLUG_A = 'test-gdpr-home-a';
 const SLUG_B = 'test-gdpr-home-b';
 const STAFF = ['gdpr-S001', 'gdpr-S002', 'gdpr-S003'];
 const STAFF_NAMES = ['Alice GDPR', 'Bob GDPR', 'Charlie GDPR'];
+const LINK_USERNAME = 'gdpr-link-user';
+const ERASURE_FILE_PATHS = {};
 
 let homeA, homeB;
 const cleanup = {
@@ -27,6 +32,13 @@ const cleanup = {
   consent: [],
   dpComplaints: [],
 };
+
+async function createUploadFixture(relativePath, content = 'gdpr-fixture') {
+  const fullPath = path.join(appConfig.upload.dir, relativePath);
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, content);
+  return fullPath;
+}
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +77,16 @@ beforeAll(async () => {
      VALUES ('gdpr-S001', $1, 'Alice GDPR HomeB', 'Carer', 'Day A', 1, 13.00, true, false, 0)`,
     [homeB]
   );
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, display_name, active, created_by)
+     VALUES ($1, 'hash-not-used', 'viewer', $2, true, 'test-runner')`,
+    [LINK_USERNAME, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO user_home_roles (username, home_id, role_id, staff_id, granted_by)
+     VALUES ($1, $2, 'viewer', $3, 'test-runner')`,
+    [LINK_USERNAME, homeA, STAFF[0]]
+  );
 
   // ── Training records ───────────────────────────────────────────────────
   await pool.query(
@@ -76,6 +98,15 @@ beforeAll(async () => {
     `INSERT INTO training_records (home_id, staff_id, training_type_id, completed, expiry, trainer, method)
      VALUES ($1, $2, 'moving-handling', '2025-07-01', '2026-07-01', 'Bob Trainer', 'practical')`,
     [homeA, STAFF[0]]
+  );
+  await pool.query(
+    `INSERT INTO training_file_attachments
+       (home_id, staff_id, training_type, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, $2, 'fire-safety', 'fire-cert.pdf', 'gdpr-training-cert.pdf', 'application/pdf', 18, 'Training certificate', 'test-runner')`,
+    [homeA, STAFF[0]]
+  );
+  ERASURE_FILE_PATHS.training = await createUploadFixture(
+    path.join(String(homeA), 'training', STAFF[0], 'fire-safety', 'gdpr-training-cert.pdf')
   );
 
   // ── Supervisions ───────────────────────────────────────────────────────
@@ -146,6 +177,15 @@ beforeAll(async () => {
      VALUES ($1, 'disciplinary', $2, 'Staff provided written statement', $3)`,
     [homeA, disc.id, STAFF_NAMES[0]]
   );
+  await pool.query(
+    `INSERT INTO hr_file_attachments
+       (home_id, case_type, case_id, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, 'disciplinary', $2, 'disciplinary-note.pdf', 'gdpr-hr-attachment.pdf', 'application/pdf', 24, 'Disciplinary attachment', 'test-runner')`,
+    [homeA, disc.id]
+  );
+  ERASURE_FILE_PATHS.hr = await createUploadFixture(
+    path.join(String(homeA), 'disciplinary', String(disc.id), 'gdpr-hr-attachment.pdf')
+  );
 
   // ── Incidents (staff_involved JSONB array) ─────────────────────────────
   await pool.query(
@@ -174,6 +214,15 @@ beforeAll(async () => {
     `INSERT INTO onboarding (home_id, staff_id, data) VALUES ($1, $2, $3)`,
     [homeA, STAFF[0], JSON.stringify({ dbs_check: { status: 'clear', date: '2025-01-01' } })]
   );
+  await pool.query(
+    `INSERT INTO onboarding_file_attachments
+       (home_id, staff_id, section, original_name, stored_name, mime_type, size_bytes, description, uploaded_by)
+     VALUES ($1, $2, 'contract', 'contract.pdf', 'gdpr-onboarding-doc.pdf', 'application/pdf', 22, 'Signed contract', 'test-runner')`,
+    [homeA, STAFF[0]]
+  );
+  ERASURE_FILE_PATHS.onboarding = await createUploadFixture(
+    path.join(String(homeA), 'onboarding', STAFF[0], 'contract', 'gdpr-onboarding-doc.pdf')
+  );
 
   // ── Care Certificate ───────────────────────────────────────────────────
   await pool.query(
@@ -187,6 +236,40 @@ beforeAll(async () => {
     `INSERT INTO complaints (id, home_id, date, raised_by, raised_by_name, category, title, description, status)
      VALUES ('cmp-gdpr-001', $1, '2025-08-15', 'staff', $2, 'staffing', 'Understaffing complaint', 'Not enough staff on nights', 'open')`,
     [homeA, STAFF_NAMES[0]]
+  );
+
+  // ── CQC name-keyed records ────────────────────────────────────────────────
+  await pool.query(
+    `INSERT INTO cqc_evidence
+       (id, home_id, quality_statement, type, title, description, date_from, date_to,
+        evidence_category, evidence_owner, review_due, added_by, added_at)
+     VALUES ('cqc-gdpr-001', $1, 'S1', 'qualitative', 'GDPR smoke evidence', 'CQC evidence owner test',
+       '2025-08-01', '2025-08-15', 'peoples_experience', $2, '2025-09-01', 'test-runner', NOW())`,
+    [homeA, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO cqc_partner_feedback
+       (id, home_id, quality_statement, feedback_date, title, partner_name, partner_role, relationship,
+        summary, response_action, evidence_owner, review_due, added_by)
+     VALUES ('cpf-gdpr-001', $1, 'S1', '2025-08-15', 'Family feedback', $2, 'Relative', 'Daughter',
+       'Positive feedback', 'Shared with team', $2, '2025-09-01', 'test-runner')`,
+    [homeA, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO cqc_observations
+       (id, home_id, quality_statement, observed_at, title, area, observer, notes, actions,
+        evidence_owner, review_due, added_by)
+     VALUES ('cqo-gdpr-001', $1, 'S1', '2025-08-15T10:00:00Z', 'Medication round', 'Unit A', $2,
+       'Observed calm support', 'Keep current practice', $2, '2025-09-01', 'test-runner')`,
+    [homeA, STAFF_NAMES[0]]
+  );
+  await pool.query(
+    `INSERT INTO cqc_evidence_links
+       (home_id, source_module, source_id, quality_statement, evidence_category, rationale,
+        auto_linked, requires_review, linked_by, source_recorded_at)
+     VALUES ($1, 'cqc_evidence', 'cqc-gdpr-001', 'S1', 'peoples_experience', 'Linked by user account',
+       true, true, $2, '2025-08-15T00:00:00Z')`,
+    [homeA, LINK_USERNAME]
   );
 
   // ── DoLS (resident data for resident SAR) ──────────────────────────────
@@ -228,6 +311,12 @@ beforeAll(async () => {
 async function cleanHome(hid) {
   // Reverse FK order cleanup
   const tables = [
+    { sql: `DELETE FROM cqc_evidence_files WHERE evidence_id IN (SELECT id FROM cqc_evidence WHERE home_id = $1)` },
+    { sql: `DELETE FROM cqc_evidence_links WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_partner_feedback WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_observations WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_statement_narratives WHERE home_id = $1` },
+    { sql: `DELETE FROM cqc_evidence WHERE home_id = $1` },
     { sql: `DELETE FROM hr_grievance_actions WHERE grievance_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1)` },
     { sql: `DELETE FROM hr_case_notes WHERE home_id = $1` },
     { sql: `DELETE FROM hr_disciplinary_cases WHERE home_id = $1` },
@@ -258,6 +347,7 @@ async function cleanHome(hid) {
     { sql: `DELETE FROM consent_records WHERE home_id = $1` },
     { sql: `DELETE FROM dp_complaints WHERE home_id = $1` },
     { sql: `DELETE FROM access_log WHERE home_id = $1` },
+    { sql: `DELETE FROM user_home_roles WHERE home_id = $1` },
     { sql: `DELETE FROM shift_overrides WHERE home_id = $1` },
     { sql: `DELETE FROM staff WHERE home_id = $1` },
   ];
@@ -267,6 +357,9 @@ async function cleanHome(hid) {
 }
 
 afterAll(async () => {
+  await Promise.all(
+    Object.values(ERASURE_FILE_PATHS).map((filePath) => fs.rm(filePath, { force: true }).catch(() => {}))
+  );
   // Clean tracked GDPR records
   for (const id of cleanup.dataRequests) {
     await pool.query('DELETE FROM data_requests WHERE id = $1', [id]).catch(() => {});
@@ -286,6 +379,8 @@ afterAll(async () => {
   // Clean access log entries with staff names
   await pool.query(`DELETE FROM access_log WHERE user_name = ANY($1)`, [STAFF_NAMES]);
   await pool.query(`DELETE FROM access_log WHERE user_name = '[REDACTED]' AND home_id IN ($1, $2)`, [homeA, homeB]);
+  await pool.query('DELETE FROM user_home_roles WHERE username = $1', [LINK_USERNAME]).catch(() => {});
+  await pool.query('DELETE FROM users WHERE username = $1', [LINK_USERNAME]).catch(() => {});
 
   if (homeA) { await cleanHome(homeA); await pool.query('DELETE FROM homes WHERE id = $1', [homeA]); }
   if (homeB) { await cleanHome(homeB); await pool.query('DELETE FROM homes WHERE id = $1', [homeB]); }
@@ -482,6 +577,7 @@ describe('gatherPersonalData: staff', () => {
       'hr_contracts', 'hr_family_leave', 'hr_flexible_working',
       'hr_edi_records', 'hr_tupe_transfers', 'hr_rtw_dbs_renewals',
       'hr_case_notes', 'onboarding', 'care_certificates', 'complaints', 'incident_addenda',
+      'cqc_evidence_links',
     ];
     for (const key of required) {
       expect(keys).toContain(key);
@@ -608,6 +704,30 @@ describe('executeErasure', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it('deletes attachment metadata and physical files after commit', async () => {
+    const { rows: trainingFiles } = await pool.query(
+      `SELECT * FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(trainingFiles).toHaveLength(0);
+
+    const { rows: onboardingFiles } = await pool.query(
+      `SELECT * FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(onboardingFiles).toHaveLength(0);
+
+    const { rows: hrFiles } = await pool.query(
+      `SELECT * FROM hr_file_attachments WHERE home_id = $1`,
+      [homeA]
+    );
+    expect(hrFiles).toHaveLength(0);
+
+    await expect(fs.access(ERASURE_FILE_PATHS.training)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(ERASURE_FILE_PATHS.onboarding)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(ERASURE_FILE_PATHS.hr)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('anonymises supervisions', async () => {
     const { rows } = await pool.query(
       `SELECT * FROM supervisions WHERE home_id = $1 AND staff_id = $2`, [homeA, targetStaff]
@@ -727,6 +847,40 @@ describe('executeErasure', () => {
     expect(cmp[0].description).toBe('[REDACTED]');
   });
 
+  it('anonymises CQC name-keyed records', async () => {
+    const { rows: evidence } = await pool.query(
+      `SELECT evidence_owner FROM cqc_evidence WHERE home_id = $1 AND id = 'cqc-gdpr-001'`,
+      [homeA]
+    );
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: feedback } = await pool.query(
+      `SELECT partner_name, evidence_owner FROM cqc_partner_feedback WHERE home_id = $1 AND id = 'cpf-gdpr-001'`,
+      [homeA]
+    );
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0].partner_name).toBe('[REDACTED-gdpr]');
+    expect(feedback[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: observations } = await pool.query(
+      `SELECT observer, evidence_owner FROM cqc_observations WHERE home_id = $1 AND id = 'cqo-gdpr-001'`,
+      [homeA]
+    );
+    expect(observations).toHaveLength(1);
+    expect(observations[0].observer).toBe('[REDACTED-gdpr]');
+    expect(observations[0].evidence_owner).toBe('[REDACTED-gdpr]');
+
+    const { rows: links } = await pool.query(
+      `SELECT linked_by, rationale FROM cqc_evidence_links
+        WHERE home_id = $1 AND source_id = 'cqc-gdpr-001'`,
+      [homeA]
+    );
+    expect(links).toHaveLength(1);
+    expect(links[0].linked_by).toBe('[REDACTED-gdpr]');
+    expect(links[0].rationale).toBeNull();
+  });
+
   it('anonymises access log entries', async () => {
     // After erasure, original name entries should be gone or redacted
     const { rows: original } = await pool.query(
@@ -740,6 +894,12 @@ describe('executeErasure', () => {
     expect(req.status).toBe('completed');
     expect(req.completed_by).toBe('test-admin');
     expect(req.completed_date).toBeTruthy();
+  });
+
+  it('blocks executing the same erasure request twice', async () => {
+    await expect(
+      gdprService.executeErasure(targetStaff, homeA, erasureRequestId, 'test-admin', SLUG_A)
+    ).rejects.toThrow(/already been completed|already been anonymised/i);
   });
 
   it('creates audit log entry for erasure', async () => {

@@ -120,6 +120,7 @@ export default function SickPayTracker() {
     setSaving(true);
     try {
       await updateSickPeriod(homeSlug, showUpdate.id, {
+        _version:          showUpdate.version,
         end_date:          updateForm.end_date || null,
         fit_note_received: updateForm.fit_note_received,
         fit_note_date:     updateForm.fit_note_date || null,

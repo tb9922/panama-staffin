@@ -78,6 +78,7 @@ export const config = {
   sentryTracesSampleRate: parseFloatEnv(process.env.SENTRY_TRACES_SAMPLE_RATE, 0),
   allowedOrigin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
   nodeEnv: process.env.NODE_ENV || 'development',
+  trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || 'info',
   metricsToken: process.env.METRICS_TOKEN || null,
 
@@ -130,9 +131,23 @@ export const config = {
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/rtf',
+      'text/rtf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv',
       'image/jpeg',
       'image/png',
+      'image/gif',
+      'image/webp',
+      'image/heic',
+      'image/heif',
       'text/plain',
     ],
+  },
+
+  ocr: {
+    paddleUrl: process.env.PADDLE_OCR_URL || null,
+    timeoutMs: parseIntEnv(process.env.PADDLE_OCR_TIMEOUT_MS, 30000),
   },
 };

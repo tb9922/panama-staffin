@@ -12,6 +12,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
+import { startOfNextLocalDay } from '../lib/localDates.js';
 
 export default function FatigueTracker() {
   const navigate = useNavigate();
@@ -24,8 +25,7 @@ export default function FatigueTracker() {
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
-    const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-    const timer = setTimeout(() => setToday(new Date()), tomorrow - now);
+    const timer = setTimeout(() => setToday(new Date()), startOfNextLocalDay(now).getTime() - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

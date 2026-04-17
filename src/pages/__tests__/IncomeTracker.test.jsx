@@ -19,6 +19,10 @@ vi.mock('../../lib/api.js', async () => {
     updateFinanceInvoice: vi.fn(),
     recordFinancePayment: vi.fn(),
     getFinanceInvoice: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -67,6 +71,7 @@ function setupMocks() {
   api.getFinanceResidents.mockResolvedValue(MOCK_RESIDENTS);
   api.getFinanceInvoices.mockResolvedValue(MOCK_INVOICES);
   api.getFinanceFeeHistory.mockResolvedValue([]);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin() {
@@ -156,5 +161,19 @@ describe('IncomeTracker', () => {
       expect(screen.getByText('INV-001')).toBeInTheDocument()
     );
     expect(screen.getByRole('button', { name: 'New Invoice' })).toBeInTheDocument();
+  });
+
+  it('shows resident detail tabs in the resident edit modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('Mrs Joan Smith')).toBeInTheDocument()
+    );
+    await user.click(screen.getByText('Mrs Joan Smith'));
+    await waitFor(() =>
+      expect(screen.getByText('Edit Resident')).toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: 'Fee History' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument();
   });
 });

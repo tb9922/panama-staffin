@@ -148,7 +148,7 @@ export default function Residents() {
       </div>
 
       {loading ? (
-        <LoadingState message="Loading residents..." />
+        <LoadingState message="Loading resident register..." />
       ) : (
         <ResidentTable
           residents={residents}

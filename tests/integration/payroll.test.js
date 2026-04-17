@@ -922,6 +922,7 @@ describe('SSP — /sick-periods + /ssp-config', () => {
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.staff_id).toBe('PH01');
+    expect(res.body.version).toBe(1);
     periodId = res.body.id;
   });
 
@@ -971,11 +972,31 @@ describe('SSP — /sick-periods + /ssp-config', () => {
   });
 
   it('PUT updates sick period', async () => {
+    const before = await adminGet(`/sick-periods?home=${homeASlug}&staffId=PH01`).expect(200);
+    const current = before.body.find((entry) => entry.id === periodId);
+
     const res = await adminPut(`/sick-periods/${periodId}?home=${homeASlug}`, {
       end_date: '2099-07-10',
       notes: 'Recovery complete',
+      _version: current.version,
     }).expect(200);
     expect(res.body.notes).toBe('Recovery complete');
+    expect(res.body.version).toBe(current.version + 1);
+  });
+
+  it('PUT rejects stale sick-period version', async () => {
+    const current = await adminGet(`/sick-periods?home=${homeASlug}&staffId=PH01`).expect(200);
+    const target = current.body.find((entry) => entry.id === periodId);
+
+    await adminPut(`/sick-periods/${periodId}?home=${homeASlug}`, {
+      notes: 'First concurrent update',
+      _version: target.version,
+    }).expect(200);
+
+    await adminPut(`/sick-periods/${periodId}?home=${homeASlug}`, {
+      notes: 'Stale concurrent update',
+      _version: target.version,
+    }).expect(409);
   });
 
   it('PUT returns 404 for nonexistent', async () => {

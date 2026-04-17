@@ -89,7 +89,7 @@ describe('CQC Evidence: create and read', () => {
 
 describe('CQC Evidence: quality statement codes', () => {
   it('stores all 5 CQC question prefixes', async () => {
-    const codes = ['S1', 'E3', 'C5', 'R2', 'WL10'];
+    const codes = ['S1', 'E3', 'C5', 'R7', 'WL8'];
     for (const code of codes) {
       const created = await cqcEvidenceRepo.upsert(homeA, {
         quality_statement: code,

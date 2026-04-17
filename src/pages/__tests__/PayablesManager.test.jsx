@@ -14,6 +14,10 @@ vi.mock('../../lib/api.js', async () => {
     createPaymentSchedule: vi.fn(),
     updatePaymentSchedule: vi.fn(),
     processPaymentSchedule: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -46,6 +50,7 @@ const MOCK_SCHEDULES = {
 
 function setupMocks(data = MOCK_SCHEDULES) {
   api.getPaymentSchedules.mockResolvedValue(data);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 function renderAdmin(data) {

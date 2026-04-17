@@ -114,6 +114,27 @@ describe('GET /api/homes — roleId per home', () => {
     expect(home.roleId).toBe('finance_officer');
   });
 
+  it('includes scan intake config for home-scoped users', async () => {
+    await pool.query(
+      `UPDATE homes
+       SET config = jsonb_set(
+         jsonb_set(COALESCE(config, '{}'::jsonb), '{scan_intake_enabled}', 'true'::jsonb, true),
+         '{scan_intake_targets}',
+         '["maintenance","finance_ap"]'::jsonb,
+         true
+       )
+       WHERE slug = $1`,
+      [homeSlug]
+    );
+
+    const res = await authGet('/api/homes', managerToken).expect(200);
+    const home = res.body.find(h => h.id === homeSlug);
+    expect(home).toBeDefined();
+    expect(home.scanIntakeEnabled).toBe(true);
+    expect(home.scanIntakeTargets).toEqual(['maintenance', 'finance_ap']);
+    expect(home.scanOcrEngine).toBe('paddleocr');
+  });
+
   it('user without role at home does not see it in homes list', async () => {
     // Create a user with no role at our test home
     const noRoleHash = await bcrypt.hash(PW, 4);

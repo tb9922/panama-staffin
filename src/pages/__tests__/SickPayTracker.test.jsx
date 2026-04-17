@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import SickPayTracker from '../SickPayTracker.jsx';
 
@@ -14,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     createSickPeriod: vi.fn(),
     updateSickPeriod: vi.fn(),
     getSSPConfig: vi.fn(),
+    getRecordAttachments: vi.fn(),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -67,6 +72,7 @@ function setupMocks(periods = MOCK_PERIODS) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
   api.getSickPeriods.mockResolvedValue(periods);
   api.getSSPConfig.mockResolvedValue(MOCK_SSP_CONFIG);
+  api.getRecordAttachments.mockResolvedValue([]);
 }
 
 describe('SickPayTracker', () => {
@@ -74,6 +80,7 @@ describe('SickPayTracker', () => {
     vi.clearAllMocks();
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    api.getRecordAttachments.mockResolvedValue([]);
   });
 
   it('smoke test - renders without crashing', async () => {
@@ -166,5 +173,40 @@ describe('SickPayTracker', () => {
       expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
     );
     expect(screen.getByText(/No sick periods recorded/)).toBeInTheDocument();
+  });
+
+  it('includes the current version when saving an update', async () => {
+    const user = userEvent.setup();
+    setupMocks([
+      {
+        ...MOCK_PERIODS[0],
+        version: 7,
+      },
+    ]);
+    api.updateSickPeriod.mockResolvedValue({});
+
+    renderWithProviders(<SickPayTracker />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Update' }));
+    await user.type(
+      screen.getByPlaceholderText('e.g. Fit note received, return to work interview completed'),
+      'Closed after GP review'
+    );
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() =>
+      expect(api.updateSickPeriod).toHaveBeenCalledWith(
+        'test-home',
+        'sp-1',
+        expect.objectContaining({
+          _version: 7,
+          notes: 'Closed after GP review',
+        })
+      )
+    );
   });
 });

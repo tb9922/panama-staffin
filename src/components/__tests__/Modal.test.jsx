@@ -144,4 +144,26 @@ describe('Modal', () => {
     const panel = screen.getByRole('dialog').firstChild;
     expect(panel).toHaveClass('panel');
   });
+
+  it('does not try to refocus a detached trigger element when closing', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { rerender } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Detached Trigger">
+        <button>Inner Button</button>
+      </Modal>
+    );
+
+    trigger.remove();
+
+    expect(() => {
+      rerender(
+        <Modal isOpen={false} onClose={vi.fn()} title="Detached Trigger">
+          <button>Inner Button</button>
+        </Modal>
+      );
+    }).not.toThrow();
+  });
 });

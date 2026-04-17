@@ -1,7 +1,16 @@
 import { useState, useMemo } from 'react';
 import { parseDate } from '../../lib/rotation.js';
 import { getFireDrillStatus } from '../../lib/training.js';
-import { createFireDrill, updateFireDrill, deleteFireDrill } from '../../lib/api.js';
+import FileAttachments from '../FileAttachments.jsx';
+import {
+  createFireDrill,
+  updateFireDrill,
+  deleteFireDrill,
+  getRecordAttachments,
+  uploadRecordAttachment,
+  deleteRecordAttachment,
+  downloadRecordAttachment,
+} from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
@@ -250,6 +259,20 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
             <input type="text" value={modalData.notes} onChange={e => setModalData({ ...modalData, notes: e.target.value })}
               disabled={readOnly}
               className={INPUT.base} placeholder="Optional notes" />
+          </div>
+          <div className="border-t pt-3">
+            <FileAttachments
+              caseType="fire_drill"
+              caseId={modalData.existing ? modalData.id : null}
+              readOnly={readOnly}
+              title="Fire Drill Evidence"
+              emptyText="No fire drill evidence uploaded yet."
+              saveFirstMessage="Save this fire drill first, then reopen it here to upload supporting evidence."
+              getFiles={getRecordAttachments}
+              uploadFile={uploadRecordAttachment}
+              deleteFile={deleteRecordAttachment}
+              downloadFile={downloadRecordAttachment}
+            />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>

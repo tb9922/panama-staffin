@@ -33,6 +33,7 @@ beforeEach(() => {
 
 describe('StaffPicker', () => {
   it('smoke test — renders a select element without crashing', () => {
+    api.getHrStaffList.mockReturnValue(new Promise(() => {}));
     render(<StaffPicker value="" onChange={vi.fn()} />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
@@ -98,11 +99,13 @@ describe('StaffPicker', () => {
   });
 
   it('renders a label when the label prop is provided', async () => {
+    api.getHrStaffList.mockReturnValue(new Promise(() => {}));
     render(<StaffPicker value="" onChange={vi.fn()} label="Assigned To" />);
     expect(screen.getByText('Assigned To')).toBeInTheDocument();
   });
 
   it('shows required asterisk when required prop is set', async () => {
+    api.getHrStaffList.mockReturnValue(new Promise(() => {}));
     render(<StaffPicker value="" onChange={vi.fn()} label="Staff Member" required />);
     expect(screen.getByText('Staff Member *')).toBeInTheDocument();
   });
@@ -119,5 +122,21 @@ describe('StaffPicker', () => {
       expect(screen.getByText(/Alice Smith/i)).toBeInTheDocument();
     });
     expect(screen.getByRole('combobox')).toBeDisabled();
+  });
+
+  it('does not log an error when the staff request is aborted during teardown', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.getHrStaffList.mockImplementation((_home, options = {}) => new Promise((_, reject) => {
+      options.signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      }, { once: true });
+    }));
+
+    const { unmount } = render(<StaffPicker value="" onChange={vi.fn()} />);
+    unmount();
+    await Promise.resolve();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
