@@ -13,9 +13,10 @@ import {
 } from '../lib/beds.js';
 import { ValidationError, NotFoundError, ConflictError } from '../errors.js';
 import logger from '../logger.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalISO();
 }
 
 function normalizeTransitionNotes(notes) {

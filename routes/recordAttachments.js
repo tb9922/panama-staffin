@@ -10,6 +10,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
 import { config } from '../config.js';
+import { isPathInsideRoot } from '../lib/pathSafety.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
 import * as auditService from '../services/auditService.js';
 import {
@@ -87,7 +88,7 @@ router.get('/download/:id', readRateLimiter, requireAuth, requireHomeAccess, asy
         attachment.record_id,
         attachment.stored_name
       ));
-      if (!filePath.startsWith(uploadDir)) {
+      if (!isPathInsideRoot(uploadDir, filePath)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
       sendStoredDownload(res, next, filePath, {

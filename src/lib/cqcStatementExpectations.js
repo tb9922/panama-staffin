@@ -25,6 +25,8 @@ export const STATEMENT_EXPECTATIONS = {
   R3: ['peoples_experience', 'processes', 'outcomes'],
   R4: ['staff_leader_feedback', 'processes', 'outcomes'],
   R5: ['peoples_experience', 'partner_feedback', 'processes'],
+  R6: ['peoples_experience', 'partner_feedback', 'outcomes'],
+  R7: ['peoples_experience', 'processes', 'outcomes'],
   WL1: ['staff_leader_feedback', 'processes', 'outcomes'],
   WL2: ['staff_leader_feedback', 'processes'],
   WL3: ['staff_leader_feedback', 'outcomes'],
@@ -33,8 +35,6 @@ export const STATEMENT_EXPECTATIONS = {
   WL6: ['partner_feedback', 'peoples_experience', 'outcomes'],
   WL7: ['partner_feedback', 'staff_leader_feedback', 'processes'],
   WL8: ['staff_leader_feedback', 'processes', 'outcomes'],
-  WL9: ['partner_feedback', 'processes', 'outcomes'],
-  WL10: ['partner_feedback', 'staff_leader_feedback', 'outcomes'],
 };
 
 export function getExpectedEvidenceCategories(statementId) {

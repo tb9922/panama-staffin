@@ -5,12 +5,12 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
+import { endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/dateOnly.js';
 
 function getSchedulingWindow(anchorDate = new Date()) {
-  const anchor = anchorDate instanceof Date ? anchorDate : new Date(anchorDate);
   return {
-    from: new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 6, 1)).toISOString().slice(0, 10),
-    to: new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 3, 0)).toISOString().slice(0, 10),
+    from: startOfLocalMonthISO(anchorDate, -6),
+    to: endOfLocalMonthISO(anchorDate, 2),
   };
 }
 

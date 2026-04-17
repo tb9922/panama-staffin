@@ -112,6 +112,40 @@ export function ensureIncidentDefaults(data) {
   return changed ? result : null;
 }
 
+const CQC_DEADLINE_KINDS = new Set(['without_delay', 'immediate', '72h']);
+
+function parseUtcDateTime(dateStr, timeStr, { endOfDayIfMissing = false } = {}) {
+  if (!dateStr) return null;
+  const time = timeStr || (endOfDayIfMissing ? '23:59:59.999' : '00:00');
+  const normalizedTime = time.length === 5 ? `${time}:00` : time;
+  const parsed = new Date(`${dateStr}T${normalizedTime}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getRecordedNotificationDateTime(dateStr, timeStr) {
+  return parseUtcDateTime(dateStr, timeStr, { endOfDayIfMissing: true });
+}
+
+export function getCqcNotificationDeadlineKind(incident) {
+  const configuredType = CQC_NOTIFICATION_TYPES.find((item) => item.id === incident?.cqc_notification_type);
+  if (configuredType?.deadline) return configuredType.deadline;
+
+  const raw = incident?.cqc_notification_deadline;
+  if (CQC_DEADLINE_KINDS.has(raw)) return raw;
+
+  if (raw && incident?.date) {
+    const deadline = new Date(raw);
+    const incidentAt = parseUtcDateTime(incident.date, incident.time);
+    if (!Number.isNaN(deadline.getTime()) && incidentAt) {
+      const hours = Math.round((deadline.getTime() - incidentAt.getTime()) / (1000 * 60 * 60));
+      if (Math.abs(hours - 72) <= 2) return '72h';
+      if (hours <= 6) return 'without_delay';
+    }
+  }
+
+  return incident?.cqc_notifiable ? 'without_delay' : null;
+}
+
 // ── CQC Notification Deadline ─────────────────────────────────────────────
 
 export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
@@ -120,16 +154,23 @@ export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
   // "without_delay" (Reg 18) = same day for deaths, within hours for others.
   // We use 4h as the measurable window for "without delay".
   // Legacy "immediate" and "72h" are kept for backward compatibility with older records.
-  const dl = incident.cqc_notification_deadline;
+  const dl = getCqcNotificationDeadlineKind(incident);
   const hoursAllowed = (dl === 'without_delay' || dl === 'immediate')
     ? 4
     : dl === '72h'
       ? 72
       : 4;
-  const incidentTime = incident.time || '00:00';
-  // Append 'Z' to parse as UTC, avoiding BST/GMT offset in deadline calculation
-  const incidentDate = new Date(incident.date + 'T' + incidentTime + ':00Z');
-  const deadline = new Date(incidentDate.getTime() + hoursAllowed * 60 * 60 * 1000);
+  const incidentDate = parseUtcDateTime(incident.date, incident.time);
+  if (!incidentDate) return { deadline: null, hoursAllowed: null, isOverdue: false };
+
+  let deadline = null;
+  if (incident.cqc_notification_deadline && !CQC_DEADLINE_KINDS.has(incident.cqc_notification_deadline)) {
+    const storedDeadline = new Date(incident.cqc_notification_deadline);
+    if (!Number.isNaN(storedDeadline.getTime())) deadline = storedDeadline;
+  }
+  if (!deadline) {
+    deadline = new Date(incidentDate.getTime() + hoursAllowed * 60 * 60 * 1000);
+  }
 
   if (incident.cqc_notified) return { deadline, hoursAllowed, isOverdue: false };
   return { deadline, hoursAllowed, isOverdue: asOfDate > deadline };
@@ -179,9 +220,9 @@ export function getIncidentStats(incidents, config, fromDate, toDate) {
     }
 
     if (inc.cqc_notifiable && inc.cqc_notified && inc.cqc_notified_date && inc.date) {
-      const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
-      // cqc_notified_date is DATE (no time) — assumes midnight, which is conservative (underreports hours)
-      const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
+      const incTime = parseUtcDateTime(inc.date, inc.time);
+      const notifiedTime = getRecordedNotificationDateTime(inc.cqc_notified_date, inc.cqc_notified_time);
+      if (!incTime || !notifiedTime) continue;
       const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
       totalResponseHours += hours;
       respondedCount++;
@@ -262,9 +303,9 @@ export function calculateIncidentResponseTime(incidents, fromDate, toDate) {
     if (!inc.cqc_notified) continue;
     respondedCount++;
 
-    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
-    // cqc_notified_date is DATE (no time) — assumes midnight, conservative estimate
-    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
+    const incTime = parseUtcDateTime(inc.date, inc.time);
+    const notifiedTime = getRecordedNotificationDateTime(inc.cqc_notified_date, inc.cqc_notified_time);
+    if (!incTime || !notifiedTime) continue;
     const hours = Math.max(0, (notifiedTime - incTime) / (1000 * 60 * 60));
     totalHours += hours;
 
@@ -290,9 +331,9 @@ export function calculateCqcNotificationsPct(incidents, fromDate, toDate) {
   let respondedCount = 0;
   for (const inc of notifiable) {
     if (!inc.cqc_notified || !inc.cqc_notified_date) continue;
-    const incTime = new Date(inc.date + 'T' + (inc.time || '00:00') + ':00Z');
-    // cqc_notified_date is DATE (no time) — assumes midnight, conservative estimate
-    const notifiedTime = new Date(inc.cqc_notified_date + 'T00:00:00Z');
+    const incTime = parseUtcDateTime(inc.date, inc.time);
+    const notifiedTime = getRecordedNotificationDateTime(inc.cqc_notified_date, inc.cqc_notified_time);
+    if (!incTime || !notifiedTime) continue;
     const hours = (notifiedTime - incTime) / (1000 * 60 * 60);
     if (hours < 0) continue; // data entry error: notification before incident — skip entirely
     respondedCount++;

@@ -159,7 +159,7 @@ export async function voidInvoice(id, homeId, username) {
       paid_date: null,
       payment_method: null,
       payment_reference: null,
-      notes: [invoice.notes, `Voided by ${username} on ${new Date().toISOString().slice(0, 10)}`].filter(Boolean).join('\n'),
+      notes: [invoice.notes, `Voided by ${username} on ${todayLocalISO()}`].filter(Boolean).join('\n'),
     }, client);
     if (invoice.resident_id) {
       await financeRepo.recalculateResidentBalance(invoice.resident_id, homeId, client);
@@ -198,7 +198,7 @@ export async function creditInvoice(id, homeId, username) {
       amount_paid: 0,
       balance_due: 0,
       status: 'credited',
-      issue_date: now.toISOString().slice(0, 10),
+      issue_date: todayLocalISO(now),
       due_date: null,
       notes: `Credit note for ${invoice.invoice_number}`,
       created_by: username,
@@ -324,7 +324,7 @@ export async function recordPayment(invoiceId, homeId, paymentData, username) {
       amount_paid: newPaid,
       balance_due: newBalance,
       status: newStatus,
-      paid_date: newBalance <= 0 ? (paymentData.paid_date || new Date().toISOString().slice(0, 10)) : null,
+      paid_date: newBalance <= 0 ? (paymentData.paid_date || todayLocalISO()) : null,
       payment_method: paymentData.payment_method || null,
       payment_reference: paymentData.payment_reference || null,
     }, client);
@@ -332,7 +332,7 @@ export async function recordPayment(invoiceId, homeId, paymentData, username) {
     if (invoice.resident_id) {
       await financeRepo.updateResidentPaymentInfo(
         invoice.resident_id, homeId,
-        paymentData.paid_date || new Date().toISOString().slice(0, 10),
+        paymentData.paid_date || todayLocalISO(),
         paymentAmount, client
       );
     }
@@ -378,7 +378,7 @@ export async function approveExpense(id, homeId, approver) {
     const updated = await financeRepo.updateExpense(id, homeId, {
       status: 'approved',
       approved_by: approver,
-      approved_date: new Date().toISOString().slice(0, 10),
+      approved_date: todayLocalISO(),
     }, client);
     logger.info({ homeId, expenseId: id, approver, gross: expense.gross_amount }, 'Expense approved');
     return updated;
@@ -393,7 +393,7 @@ export async function getFinanceDashboard(homeId, from, to) {
     financeRepo.getExpenseSummary(homeId, from, to),
     financeRepo.getExpensesByCategory(homeId, from, to),
     financeRepo.countActiveResidents(homeId),
-    financeRepo.getReceivablesAgeing(homeId, new Date().toISOString().slice(0, 10)),
+    financeRepo.getReceivablesAgeing(homeId, todayLocalISO()),
     financeRepo.getMonthlyIncomeTrend(homeId, 6),
     financeRepo.getMonthlyExpenseTrend(homeId, 6),
   ]);
@@ -425,8 +425,8 @@ export async function getFinanceDashboard(homeId, from, to) {
 // ── Alerts ────────────────────────────────────────────────────────────────────
 
 export async function getFinanceAlerts(homeId) {
-  const today = new Date().toISOString().slice(0, 10);
-  const thirtyDaysOut = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const today = todayLocalISO();
+  const thirtyDaysOut = addDaysLocalISO(today, 30);
 
   const [overdueCount, pendingCount, feeReviews, ageing, chasesDue, upcoming, outstandingResidents] = await Promise.all([
     financeRepo.getOverdueInvoiceCount(homeId, today),
@@ -557,7 +557,7 @@ export async function processScheduledPayment(scheduleId, homeId, username, vers
       gross_amount: schedule.amount,
       status: schedule.auto_approve ? 'approved' : 'pending',
       approved_by: schedule.auto_approve ? 'auto' : null,
-      approved_date: schedule.auto_approve ? new Date().toISOString().slice(0, 10) : null,
+      approved_date: schedule.auto_approve ? todayLocalISO() : null,
       recurring: true,
       recurrence_frequency: schedule.frequency,
       schedule_id: scheduleId,
@@ -617,7 +617,7 @@ export async function rejectExpense(id, homeId, rejector, reason) {
     const updated = await financeRepo.updateExpense(id, homeId, {
       status: 'rejected',
       rejected_by: rejector,
-      rejected_date: new Date().toISOString().slice(0, 10),
+      rejected_date: todayLocalISO(),
       rejection_reason: reason || null,
     }, client);
     logger.info({ homeId, expenseId: id, rejector }, 'Expense rejected');
@@ -690,7 +690,7 @@ export async function softDeletePaymentSchedule(id, homeId, username) {
 // ── Receivables Detail ───────────────────────────────────────────────────────
 
 export async function getReceivablesDetail(homeId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
   const [ageing, chasesDue, lastChases] = await Promise.all([
     financeRepo.getReceivablesAgeing(homeId, today),
     financeRepo.getChasesDueForAction(homeId, today),

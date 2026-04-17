@@ -80,8 +80,8 @@ describe('QUALITY_STATEMENTS', () => {
     const wellLed = QUALITY_STATEMENTS.filter(q => q.category === 'well-led');
     const sortIds = (ids) => [...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-    expect(sortIds(responsive.map(q => q.id))).toEqual(['R1', 'R2', 'R3', 'R4', 'R5']);
-    expect(sortIds(wellLed.map(q => q.id))).toEqual(['WL1', 'WL2', 'WL3', 'WL4', 'WL5', 'WL6', 'WL7', 'WL8', 'WL9', 'WL10']);
+    expect(sortIds(responsive.map(q => q.id))).toEqual(['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7']);
+    expect(sortIds(wellLed.map(q => q.id))).toEqual(['WL1', 'WL2', 'WL3', 'WL4', 'WL5', 'WL6', 'WL7', 'WL8']);
   });
 
   it('each has required fields', () => {

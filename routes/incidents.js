@@ -9,13 +9,15 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { dispatchEvent } from '../services/webhookService.js';
-import { nullableDateInput } from '../lib/zodHelpers.js';
+import { nullableDateInput, timeStr } from '../lib/zodHelpers.js';
 import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 import { validateIncidentStatusChange } from '../lib/statusTransitions.js';
+import { getCqcNotificationDeadline } from '../shared/incidents.js';
 
 const router = Router();
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
+const nullableTimeInput = z.preprocess((value) => value === '' ? null : value, timeStr).optional();
 // Converts empty strings to null so optional enum fields tolerate unset form values from the frontend.
 const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
 const correctiveActionStatusSchema = z.preprocess(
@@ -28,9 +30,49 @@ const correctiveActionStatusSchema = z.preprocess(
 );
 const addendumSchema = z.object({ content: z.string().min(1).max(5000) });
 
+function computeStoredCqcDeadline(incident) {
+  if (!incident?.cqc_notifiable || !incident?.date) return null;
+  const { deadline } = getCqcNotificationDeadline(incident);
+  return deadline instanceof Date && !Number.isNaN(deadline.getTime()) ? deadline.toISOString() : null;
+}
+
+function normalizeIncidentPayload(payload) {
+  const normalized = { ...payload };
+
+  if (!normalized.cqc_notifiable) {
+    normalized.cqc_notification_type = null;
+    normalized.cqc_notification_deadline = null;
+    normalized.cqc_notified = false;
+    normalized.cqc_notified_date = null;
+    normalized.cqc_notified_time = null;
+    normalized.cqc_reference = null;
+  } else {
+    normalized.cqc_notification_deadline = computeStoredCqcDeadline(normalized);
+    if (!normalized.cqc_notified) {
+      normalized.cqc_notified_date = null;
+      normalized.cqc_notified_time = null;
+      normalized.cqc_reference = null;
+    }
+  }
+
+  if (!normalized.riddor_reportable) {
+    normalized.riddor_category = null;
+    normalized.riddor_reported = false;
+    normalized.riddor_reported_date = null;
+    normalized.riddor_reported_time = null;
+    normalized.riddor_reference = null;
+  } else if (!normalized.riddor_reported) {
+    normalized.riddor_reported_date = null;
+    normalized.riddor_reported_time = null;
+    normalized.riddor_reference = null;
+  }
+
+  return normalized;
+}
+
 const incidentBodySchema = z.object({
   date:                       dateSchema,
-  time:                       z.string().max(10).nullable().optional(),
+  time:                       nullableTimeInput,
   location:                   z.string().max(500).nullable().optional(),
   type:                       z.string().min(1).max(200),
   severity:                   z.enum(['minor', 'moderate', 'serious', 'major', 'catastrophic']),
@@ -46,11 +88,13 @@ const incidentBodySchema = z.object({
   cqc_notification_deadline:  optEnum('without_delay', 'immediate', '72h'),
   cqc_notified:               z.boolean().optional(),
   cqc_notified_date:          dateSchema.optional(),
+  cqc_notified_time:          nullableTimeInput,
   cqc_reference:              z.string().max(200).nullable().optional(),
   riddor_reportable:          z.boolean().optional(),
   riddor_category:            optEnum('death', 'specified_injury', 'over_7_day', 'dangerous_occurrence', 'occupational_disease'),
   riddor_reported:            z.boolean().optional(),
   riddor_reported_date:       dateSchema.optional(),
+  riddor_reported_time:       nullableTimeInput,
   riddor_reference:           z.string().max(200).nullable().optional(),
   safeguarding_referral:      z.boolean().optional(),
   safeguarding_to:            z.string().max(500).nullable().optional(),
@@ -130,7 +174,10 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     if (!parsed.success) return zodError(res, parsed);
     // Strip any client-supplied id — server generates it to prevent undelete of soft-deleted records
     const { id: _id, ...incidentBody } = parsed.data;
-    const incident = await incidentRepo.upsert(req.home.id, { ...incidentBody, reported_by: req.user.username });
+    const incident = await incidentRepo.upsert(
+      req.home.id,
+      normalizeIncidentPayload({ ...incidentBody, reported_by: req.user.username }),
+    );
     if (!incident) {
       return res.status(409).json({ error: 'Incident is frozen and cannot be modified' });
     }
@@ -154,10 +201,25 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!existing) return res.status(404).json({ error: 'Incident not found' });
     const statusError = validateIncidentStatusChange(existing, updates);
     if (statusError) return res.status(400).json({ error: statusError });
+    const merged = normalizeIncidentPayload({ ...existing, ...updates });
+    const normalizedUpdates = {
+      ...updates,
+      cqc_notification_type: merged.cqc_notification_type,
+      cqc_notification_deadline: merged.cqc_notification_deadline,
+      cqc_notified: merged.cqc_notified,
+      cqc_notified_date: merged.cqc_notified_date,
+      cqc_notified_time: merged.cqc_notified_time,
+      cqc_reference: merged.cqc_reference,
+      riddor_category: merged.riddor_category,
+      riddor_reported: merged.riddor_reported,
+      riddor_reported_date: merged.riddor_reported_date,
+      riddor_reported_time: merged.riddor_reported_time,
+      riddor_reference: merged.riddor_reference,
+    };
     const { version } = splitVersion(parsed.data);
     let incident;
     try {
-      incident = await incidentRepo.update(idParsed.data, req.home.id, updates, version);
+      incident = await incidentRepo.update(idParsed.data, req.home.id, normalizedUpdates, version);
     } catch (e) {
       if (e.status === 403) return res.status(403).json({ error: e.message });
       throw e;

@@ -301,7 +301,7 @@ describe('validateIncidents', () => {
     data.incidents = [{
       date: '2025-06-01', time: '08:00',
       cqc_notifiable: true, cqc_notified: false,
-      cqc_notification_deadline: 'immediate', // 24h
+      cqc_notification_deadline: 'immediate', // legacy immediate = 4h
     }];
     const warnings = validateAll(data);
     expect(warnings).toEqual(

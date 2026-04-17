@@ -17,6 +17,7 @@ import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachment
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { isPathInsideRoot } from '../lib/pathSafety.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -131,7 +132,7 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       safePath(att.section),
       att.stored_name
     ));
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    if (!isPathInsideRoot(uploadRoot, filePath)) return res.status(403).json({ error: 'Forbidden' });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,
@@ -174,6 +175,10 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
     const sectionParsed = sectionSchema.safeParse(req.params.section);
     if (!staffIdParsed.success || !sectionParsed.success) {
       return res.status(400).json({ error: 'Invalid staffId or section' });
+    }
+    const staff = await staffRepo.findById(req.home.id, staffIdParsed.data);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found' });
     }
     upload.single('file')(req, res, async (err) => {
       if (err) {

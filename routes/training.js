@@ -22,6 +22,7 @@ import { sendStoredDownload } from '../lib/sendDownload.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { isPathInsideRoot } from '../lib/pathSafety.js';
 
 const router = Router();
 const recordIdSchema = z.string().min(1).max(100);
@@ -334,45 +335,51 @@ router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHom
   const staffParsed = staffIdSchema.safeParse(req.params.staffId);
   const typeParsed = typeIdSchema.safeParse(req.params.typeId);
   if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+  try {
+    const staff = await staffRepo.findById(req.home.id, staffParsed.data);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
 
-  attachmentUpload.single('file')(req, res, async (err) => {
-    if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });
-      return res.status(400).json({ error: err.message });
-    }
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    attachmentUpload.single('file')(req, res, async (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });
+        return res.status(400).json({ error: err.message });
+      }
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const filePath = req.file.path;
-    try {
-      const descriptionParsed = attachmentDescriptionSchema.safeParse(req.body.description || null);
-      if (!descriptionParsed.success) {
+      const filePath = req.file.path;
+      try {
+        const descriptionParsed = attachmentDescriptionSchema.safeParse(req.body.description || null);
+        if (!descriptionParsed.success) {
+          await unlink(filePath).catch(() => {});
+          return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
+        }
+        const detected = await fileTypeFromFile(filePath);
+        if (detected && detected.mime !== req.file.mimetype) {
+          await unlink(filePath).catch(() => {});
+          return res.status(400).json({ error: 'File content does not match declared type' });
+        }
+        const attachment = await trainingAttachmentsRepo.create(req.home.id, staffParsed.data, typeParsed.data, {
+          original_name: req.file.originalname,
+          stored_name: req.file.filename,
+          mime_type: req.file.mimetype,
+          size_bytes: req.file.size,
+          description: descriptionParsed.data || null,
+          uploaded_by: req.user.username,
+        });
+        await auditService.log('training_attachment_upload', req.home.slug, req.user.username, {
+          staffId: staffParsed.data,
+          typeId: typeParsed.data,
+          fileId: attachment.id,
+        });
+        res.status(201).json(attachment);
+      } catch (e) {
         await unlink(filePath).catch(() => {});
-        return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
+        next(e);
       }
-      const detected = await fileTypeFromFile(filePath);
-      if (detected && detected.mime !== req.file.mimetype) {
-        await unlink(filePath).catch(() => {});
-        return res.status(400).json({ error: 'File content does not match declared type' });
-      }
-      const attachment = await trainingAttachmentsRepo.create(req.home.id, staffParsed.data, typeParsed.data, {
-        original_name: req.file.originalname,
-        stored_name: req.file.filename,
-        mime_type: req.file.mimetype,
-        size_bytes: req.file.size,
-        description: descriptionParsed.data || null,
-        uploaded_by: req.user.username,
-      });
-      await auditService.log('training_attachment_upload', req.home.slug, req.user.username, {
-        staffId: staffParsed.data,
-        typeId: typeParsed.data,
-        fileId: attachment.id,
-      });
-      res.status(201).json(attachment);
-    } catch (e) {
-      await unlink(filePath).catch(() => {});
-      next(e);
-    }
-  });
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
@@ -390,7 +397,7 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       safePath(att.training_type),
       att.stored_name
     ));
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    if (!isPathInsideRoot(uploadRoot, filePath)) return res.status(403).json({ error: 'Forbidden' });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,

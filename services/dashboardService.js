@@ -1,5 +1,6 @@
 import logger from '../logger.js';
 import * as dashboardRepo from '../repositories/dashboardRepo.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 export function invalidateDashboardCache(homeId) {
   void homeId;
@@ -125,7 +126,7 @@ const DEFAULTS = {
 const MODULE_KEYS = Object.keys(DEFAULTS);
 
 export async function getDashboardSummary(homeId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
 
   const results = await Promise.allSettled([
     dashboardRepo.getIncidentCounts(homeId),

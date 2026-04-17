@@ -18,13 +18,14 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { sendStoredDownload } from '../lib/sendDownload.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { isPathInsideRoot } from '../lib/pathSafety.js';
 import { config } from '../config.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
-const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-5]|WL([1-9]|10))$/);
+const statementIdSchema = z.string().regex(/^(S[1-8]|E[1-6]|C[1-5]|R[1-7]|WL[1-8])$/);
 const dateSchema = nullableDateInput;
 const blankToNull = (value) => (value === '' ? null : value);
 const nullableShortText = z.preprocess(blankToNull, z.string().max(200).nullable());
@@ -270,7 +271,7 @@ router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAcces
       safePath(att.evidence_id),
       att.stored_name
     ));
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    if (!isPathInsideRoot(uploadRoot, filePath)) return res.status(403).json({ error: 'Forbidden' });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,

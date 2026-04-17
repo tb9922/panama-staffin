@@ -3,7 +3,7 @@
 import { RIDDOR_CATEGORIES, isCqcNotificationOverdue, isDutyOfCandourOverdue } from '../shared/incidents.js';
 import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
 import { getMinimumWageRate } from '../shared/nmw.js';
-import { todayLocalISO } from '../lib/dateOnly.js';
+import { diffLocalISODays, todayLocalISO } from '../lib/dateOnly.js';
 
 function getTodayString() {
   return todayLocalISO();
@@ -105,7 +105,7 @@ function validateOnboarding(data, warnings, todayStr) {
 
     const rtw = staffOnb.right_to_work;
     if (rtw?.expiry_date) {
-      const daysLeft = Math.ceil((new Date(rtw.expiry_date + 'T00:00:00Z') - new Date()) / 86400000);
+      const daysLeft = diffLocalISODays(rtw.expiry_date, todayStr);
       if (daysLeft < 0) warnings.push(`${s.name}: Right to Work EXPIRED`);
       else if (daysLeft <= 60) warnings.push(`${s.name}: Right to Work expires in ${daysLeft} days`);
     }

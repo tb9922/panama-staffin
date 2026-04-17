@@ -10,6 +10,7 @@ import {
   RIDDOR_CATEGORIES,
   PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES,
+  SEVERITY_LEVELS,
   getCqcNotificationDeadline,
 } from '../../lib/incidents.js';
 
@@ -132,10 +133,11 @@ export default function IncidentTrackerModal({
             <div>
               <label htmlFor="incident-severity" className={INPUT.label}>Severity *</label>
               <select id="incident-severity" className={INPUT.select} value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
-                <option value="minor">Minor - no injury / low impact</option>
-                <option value="moderate">Moderate - injury or service impact</option>
-                <option value="major">Major - serious harm / significant risk</option>
-                <option value="critical">Critical - death / severe harm / police</option>
+                {SEVERITY_LEVELS.map((level) => (
+                  <option key={level.id} value={level.id}>
+                    {level.name} - {level.description}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -301,10 +303,14 @@ export default function IncidentTrackerModal({
                   CQC has been notified
                 </label>
                 {form.cqc_notified && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className={INPUT.label}>Date Notified</label>
                       <input type="date" className={INPUT.base} value={form.cqc_notified_date} onChange={e => setForm({ ...form, cqc_notified_date: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={INPUT.label}>Time Notified</label>
+                      <input type="time" className={INPUT.base} value={form.cqc_notified_time} onChange={e => setForm({ ...form, cqc_notified_time: e.target.value })} />
                     </div>
                     <div>
                       <label className={INPUT.label}>CQC Reference</label>
@@ -336,10 +342,14 @@ export default function IncidentTrackerModal({
                   Reported to HSE
                 </label>
                 {form.riddor_reported && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className={INPUT.label}>Date Reported</label>
                       <input type="date" className={INPUT.base} value={form.riddor_reported_date} onChange={e => setForm({ ...form, riddor_reported_date: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={INPUT.label}>Time Reported</label>
+                      <input type="time" className={INPUT.base} value={form.riddor_reported_time} onChange={e => setForm({ ...form, riddor_reported_time: e.target.value })} />
                     </div>
                     <div>
                       <label className={INPUT.label}>HSE F2508 Reference</label>

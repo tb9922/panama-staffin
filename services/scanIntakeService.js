@@ -263,7 +263,7 @@ async function confirmFinance(client, homeId, intakeItem, body, username) {
 }
 
 async function confirmOnboarding(client, homeId, intakeItem, body, username) {
-  const staff = await staffRepo.findById(homeId, body.staff_id);
+  const staff = await staffRepo.findById(homeId, body.staff_id, client);
   if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
   const moved = await moveIntoOnboardingStore({ homeId, intakeItem, staffId: body.staff_id, section: body.section });
   const attachment = await onboardingAttachmentsRepo.create(homeId, body.staff_id, body.section, {
@@ -366,6 +366,8 @@ async function confirmHrAttachment(client, homeId, intakeItem, body, username) {
 }
 
 async function confirmTraining(client, homeId, intakeItem, body, username) {
+  const staff = await staffRepo.findById(homeId, body.staff_id, client);
+  if (!staff) throw Object.assign(new Error('Staff member not found'), { statusCode: 404 });
   const moved = await moveIntoTrainingStore({
     homeId,
     intakeItem,

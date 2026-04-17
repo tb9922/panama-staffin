@@ -39,6 +39,7 @@ import {
 } from '../src/lib/cqcReadiness.js';
 import { calculateGdprControlsScore } from '../src/lib/gdpr.js';
 import { formatDate, parseDate, addDays } from '../shared/rotation.js';
+import { endOfLocalMonthISO, startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
 // ── CQC Data Assembly ───────────────────────────────────────────────────────
 // Gathers the same data shape that CQCEvidence.jsx builds client-side.
@@ -48,9 +49,9 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
   if (!home) return null;
 
   // Use snapshot window for override data if provided; otherwise default to 6 months back / 3 months forward
-  const anchor = windowTo ? new Date(windowTo + 'T00:00:00Z') : new Date();
-  const from = windowFrom || new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-  const to = windowTo || new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+  const anchor = windowTo ? new Date(`${windowTo}T00:00:00Z`) : new Date();
+  const from = windowFrom || startOfLocalMonthISO(anchor, -6);
+  const to = windowTo || endOfLocalMonthISO(anchor, 2);
 
   const [
     staffResult, overrides, training, supervisions, appraisals,
@@ -143,7 +144,7 @@ async function gatherGdprData(homeId) {
 // ── Compute Snapshot ────────────────────────────────────────────────────────
 
 export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
 
   if (engine === 'cqc') {
     const data = await gatherCqcData(homeId, windowFrom, windowTo);
@@ -156,7 +157,7 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
       const days = Math.round((to - from) / (1000 * 60 * 60 * 24)) + 1;
       dateRange = { from, to, days };
     } else {
-      const to = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const to = parseDate(today);
       const from = addDays(to, -27);
       dateRange = { from, to, days: 28 };
     }
@@ -196,7 +197,7 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   return null;
 }
 
-export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = formatDate(new Date())) {
+export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = todayLocalISO()) {
   const data = await gatherCqcData(homeId);
   if (!data) return null;
   return buildReadinessPayload(data, getDateRange(dateRangeDays), asOfDate);

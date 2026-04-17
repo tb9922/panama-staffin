@@ -1,14 +1,15 @@
 import { pool } from '../db.js';
 import { paginateResult } from '../lib/pagination.js';
 import { toIsoOrNull } from '../lib/serverTimestamps.js';
+import { getCqcNotificationDeadline, getCqcNotificationDeadlineKind } from '../shared/incidents.js';
 
 /* Explicit column list — no SELECT * — so future columns don't auto-leak to API consumers. */
 const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, description,
   person_affected, person_affected_name, staff_involved, immediate_action,
   medical_attention, hospital_attendance,
   cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
-  cqc_notified, cqc_notified_date, cqc_reference,
-  riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+  cqc_notified, cqc_notified_date, cqc_notified_time, cqc_reference,
+  riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reported_time, riddor_reference,
   safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
   witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
   police_involved, police_reference, police_contact_date,
@@ -19,6 +20,23 @@ const INCIDENT_COLS = `id, home_id, date, time, location, type, severity, descri
 
 const ADDENDUM_COLS = 'id, incident_id, home_id, author, content, created_at';
 
+const CQC_DEADLINE_KINDS = new Set(['without_delay', 'immediate', '72h']);
+
+function normalizeTimeStr(value) {
+  return typeof value === 'string' ? value.slice(0, 5) : value || null;
+}
+
+function normalizeStoredCqcDeadline(data) {
+  const raw = data?.cqc_notification_deadline;
+  if (raw && !CQC_DEADLINE_KINDS.has(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  if (!data?.cqc_notifiable || !data?.date) return null;
+  const { deadline } = getCqcNotificationDeadline(data);
+  return deadline instanceof Date && !Number.isNaN(deadline.getTime()) ? deadline.toISOString() : null;
+}
+
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
@@ -27,10 +45,10 @@ function shapeRow(row) {
     staff_involved: row.staff_involved, immediate_action: row.immediate_action,
     medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
     cqc_notifiable: row.cqc_notifiable, cqc_notification_type: row.cqc_notification_type,
-    cqc_notification_deadline: toIsoOrNull(row.cqc_notification_deadline),
-    cqc_notified: row.cqc_notified, cqc_notified_date: row.cqc_notified_date, cqc_reference: row.cqc_reference,
+    cqc_notification_deadline: getCqcNotificationDeadlineKind(row),
+    cqc_notified: row.cqc_notified, cqc_notified_date: row.cqc_notified_date, cqc_notified_time: normalizeTimeStr(row.cqc_notified_time), cqc_reference: row.cqc_reference,
     riddor_reportable: row.riddor_reportable, riddor_category: row.riddor_category,
-    riddor_reported: row.riddor_reported, riddor_reported_date: row.riddor_reported_date, riddor_reference: row.riddor_reference,
+    riddor_reported: row.riddor_reported, riddor_reported_date: row.riddor_reported_date, riddor_reported_time: normalizeTimeStr(row.riddor_reported_time), riddor_reference: row.riddor_reference,
     safeguarding_referral: row.safeguarding_referral, safeguarding_to: row.safeguarding_to,
     safeguarding_reference: row.safeguarding_reference, safeguarding_date: row.safeguarding_date,
     witnesses: row.witnesses,
@@ -78,62 +96,78 @@ export async function sync(homeId, incidentsArr, client) {
 
   const incomingIds = incidentsArr.map(i => i.id);
 
-  // Batch upsert — 49 per-row params (id + 47 fields + reported_at; homeId=$1, updated_at=NOW())
-  const COLS_PER_ROW = 49;
-  const CHUNK = 25; // 25 × 49 = 1225 params + 1 homeId = well within PG 65535 limit
+  // Batch upsert — keep well within PG parameter limits while preserving explicit column order.
+  const CHUNK = 25;
   for (let i = 0; i < incidentsArr.length; i += CHUNK) {
     const chunk = incidentsArr.slice(i, i + CHUNK);
-    const placeholders = [];
-    const values = [];
-    chunk.forEach((inc, j) => {
-      const b = j * COLS_PER_ROW + 2; // $1 is homeId
-      placeholders.push(
-        `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
-        `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},` +
-        `$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},$${b+18},` +
-        `$${b+19},$${b+20},$${b+21},$${b+22},$${b+23},` +
-        `$${b+24},$${b+25},$${b+26},$${b+27},` +
-        `$${b+28},$${b+29},$${b+30},$${b+31},$${b+32},` +
-        `$${b+33},$${b+34},$${b+35},` +
-        `$${b+36},$${b+37},$${b+38},` +
-        `$${b+39},$${b+40},$${b+41},` +
-        `$${b+42},$${b+43},$${b+44},$${b+45},` +
-        `$${b+46},$${b+47},$${b+48},NOW())`
-      );
-      values.push(
-        inc.id, inc.date || null, inc.time || null, inc.location || null,
-        inc.type || null, inc.severity || null, inc.description || null,
-        inc.person_affected || null, inc.person_affected_name || null,
-        JSON.stringify(inc.staff_involved || []), inc.immediate_action || null,
-        inc.medical_attention ?? null, inc.hospital_attendance ?? null,
-        inc.cqc_notifiable ?? false, inc.cqc_notification_type || null,
-        inc.cqc_notification_deadline || null,
-        inc.cqc_notified ?? false, inc.cqc_notified_date || null, inc.cqc_reference || null,
-        inc.riddor_reportable ?? false, inc.riddor_category || null,
-        inc.riddor_reported ?? false, inc.riddor_reported_date || null, inc.riddor_reference || null,
-        inc.safeguarding_referral ?? false, inc.safeguarding_to || null,
-        inc.safeguarding_reference || null, inc.safeguarding_date || null,
-        JSON.stringify(inc.witnesses || []), inc.duty_of_candour_applies ?? false,
-        inc.candour_notification_date || null, inc.candour_letter_sent_date || null,
-        inc.candour_recipient || null, inc.police_involved ?? false,
-        inc.police_reference || null, inc.police_contact_date || null,
-        inc.msp_wishes_recorded ?? false, inc.msp_outcome_preferences || null,
-        inc.msp_person_involved ?? null,
-        inc.investigation_status ?? 'open', inc.investigation_start_date || null,
-        inc.investigation_lead || null, inc.investigation_review_date || null,
-        inc.root_cause || null, inc.lessons_learned || null, inc.investigation_closed_date || null,
-        JSON.stringify(inc.corrective_actions || []),
-        inc.reported_by || null, inc.reported_at || null,
-      );
+    const rowValues = chunk.map((inc) => ([
+      inc.id,
+      inc.date || null,
+      inc.time || null,
+      inc.location || null,
+      inc.type || null,
+      inc.severity || null,
+      inc.description || null,
+      inc.person_affected || null,
+      inc.person_affected_name || null,
+      JSON.stringify(inc.staff_involved || []),
+      inc.immediate_action || null,
+      inc.medical_attention ?? null,
+      inc.hospital_attendance ?? null,
+      inc.cqc_notifiable ?? false,
+      inc.cqc_notification_type || null,
+      normalizeStoredCqcDeadline(inc),
+      inc.cqc_notified ?? false,
+      inc.cqc_notified_date || null,
+      normalizeTimeStr(inc.cqc_notified_time),
+      inc.cqc_reference || null,
+      inc.riddor_reportable ?? false,
+      inc.riddor_category || null,
+      inc.riddor_reported ?? false,
+      inc.riddor_reported_date || null,
+      normalizeTimeStr(inc.riddor_reported_time),
+      inc.riddor_reference || null,
+      inc.safeguarding_referral ?? false,
+      inc.safeguarding_to || null,
+      inc.safeguarding_reference || null,
+      inc.safeguarding_date || null,
+      JSON.stringify(inc.witnesses || []),
+      inc.duty_of_candour_applies ?? false,
+      inc.candour_notification_date || null,
+      inc.candour_letter_sent_date || null,
+      inc.candour_recipient || null,
+      inc.police_involved ?? false,
+      inc.police_reference || null,
+      inc.police_contact_date || null,
+      inc.msp_wishes_recorded ?? false,
+      inc.msp_outcome_preferences || null,
+      inc.msp_person_involved ?? null,
+      inc.investigation_status ?? 'open',
+      inc.investigation_start_date || null,
+      inc.investigation_lead || null,
+      inc.investigation_review_date || null,
+      inc.root_cause || null,
+      inc.lessons_learned || null,
+      inc.investigation_closed_date || null,
+      JSON.stringify(inc.corrective_actions || []),
+      inc.reported_by || null,
+      inc.reported_at || null,
+    ]));
+    const colsPerRow = rowValues[0].length;
+    const placeholders = rowValues.map((_, rowIndex) => {
+      const start = rowIndex * colsPerRow + 2; // $1 is homeId
+      const rest = Array.from({ length: colsPerRow - 1 }, (_unused, valueIndex) => `$${start + valueIndex + 1}`);
+      return `($${start},$1,${rest.join(',')},NOW())`;
     });
+    const values = rowValues.flat();
     await conn.query(
       `INSERT INTO incidents (
          id, home_id, date, time, location, type, severity, description,
          person_affected, person_affected_name, staff_involved, immediate_action,
          medical_attention, hospital_attendance,
          cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
-         cqc_notified, cqc_notified_date, cqc_reference,
-         riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+         cqc_notified, cqc_notified_date, cqc_notified_time, cqc_reference,
+         riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reported_time, riddor_reference,
          safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
          witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
          police_involved, police_reference, police_contact_date,
@@ -160,11 +194,13 @@ export async function sync(homeId, incidentsArr, client) {
          cqc_notification_deadline = EXCLUDED.cqc_notification_deadline,
          cqc_notified              = EXCLUDED.cqc_notified,
          cqc_notified_date         = EXCLUDED.cqc_notified_date,
+         cqc_notified_time         = EXCLUDED.cqc_notified_time,
          cqc_reference             = EXCLUDED.cqc_reference,
          riddor_reportable         = EXCLUDED.riddor_reportable,
          riddor_category           = EXCLUDED.riddor_category,
          riddor_reported           = EXCLUDED.riddor_reported,
          riddor_reported_date      = EXCLUDED.riddor_reported_date,
+         riddor_reported_time      = EXCLUDED.riddor_reported_time,
          riddor_reference          = EXCLUDED.riddor_reference,
          safeguarding_referral     = EXCLUDED.safeguarding_referral,
          safeguarding_to           = EXCLUDED.safeguarding_to,
@@ -296,14 +332,70 @@ export async function findById(id, homeId) {
 export async function upsert(homeId, data) {
   const id = data.id || `inc-${randomUUID()}`;
   const now = new Date().toISOString();
+  const rowValues = [
+    id,
+    homeId,
+    data.date || null,
+    data.time || null,
+    data.location || null,
+    data.type || null,
+    data.severity || null,
+    data.description || null,
+    data.person_affected || null,
+    data.person_affected_name || null,
+    JSON.stringify(data.staff_involved || []),
+    data.immediate_action || null,
+    data.medical_attention ?? false,
+    data.hospital_attendance ?? false,
+    data.cqc_notifiable ?? false,
+    data.cqc_notification_type || null,
+    normalizeStoredCqcDeadline(data),
+    data.cqc_notified ?? false,
+    data.cqc_notified_date || null,
+    normalizeTimeStr(data.cqc_notified_time),
+    data.cqc_reference || null,
+    data.riddor_reportable ?? false,
+    data.riddor_category || null,
+    data.riddor_reported ?? false,
+    data.riddor_reported_date || null,
+    normalizeTimeStr(data.riddor_reported_time),
+    data.riddor_reference || null,
+    data.safeguarding_referral ?? false,
+    data.safeguarding_to || null,
+    data.safeguarding_reference || null,
+    data.safeguarding_date || null,
+    JSON.stringify(data.witnesses || []),
+    data.duty_of_candour_applies ?? false,
+    data.candour_notification_date || null,
+    data.candour_letter_sent_date || null,
+    data.candour_recipient || null,
+    data.police_involved ?? false,
+    data.police_reference || null,
+    data.police_contact_date || null,
+    data.msp_wishes_recorded ?? false,
+    data.msp_outcome_preferences || null,
+    data.msp_person_involved ?? null,
+    data.investigation_status ?? 'open',
+    data.investigation_start_date || null,
+    data.investigation_lead || null,
+    data.investigation_review_date || null,
+    data.root_cause || null,
+    data.lessons_learned || null,
+    data.investigation_closed_date || null,
+    JSON.stringify(data.corrective_actions || []),
+    data.resident_id ?? null,
+    data.reported_by || null,
+    data.reported_at || now,
+    now,
+  ];
   const { rows } = await pool.query(
     `INSERT INTO incidents (
        id, home_id, date, time, location, type, severity, description,
        person_affected, person_affected_name, staff_involved, immediate_action,
        medical_attention, hospital_attendance,
        cqc_notifiable, cqc_notification_type, cqc_notification_deadline,
-       cqc_notified, cqc_notified_date, cqc_reference,
-       riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reference,
+       cqc_notified, cqc_notified_date, cqc_notified_time, cqc_reference,
+       riddor_reportable, riddor_category, riddor_reported, riddor_reported_date, riddor_reported_time, riddor_reference,
        safeguarding_referral, safeguarding_to, safeguarding_reference, safeguarding_date,
        witnesses, duty_of_candour_applies, candour_notification_date, candour_letter_sent_date, candour_recipient,
        police_involved, police_reference, police_contact_date,
@@ -312,54 +404,27 @@ export async function upsert(homeId, data) {
        investigation_review_date, root_cause, lessons_learned, investigation_closed_date,
        corrective_actions, resident_id, reported_by, reported_at, updated_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-       $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-       $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
+       ${rowValues.map((_unused, index) => `$${index + 1}`).join(',')}
      )
       ON CONFLICT (home_id, id) DO UPDATE SET
         date=$3,time=$4,location=$5,type=$6,severity=$7,description=$8,
         person_affected=$9,person_affected_name=$10,staff_involved=$11,immediate_action=$12,
        medical_attention=$13,hospital_attendance=$14,
        cqc_notifiable=$15,cqc_notification_type=$16,cqc_notification_deadline=$17,
-       cqc_notified=$18,cqc_notified_date=$19,cqc_reference=$20,
-       riddor_reportable=$21,riddor_category=$22,riddor_reported=$23,riddor_reported_date=$24,riddor_reference=$25,
-       safeguarding_referral=$26,safeguarding_to=$27,safeguarding_reference=$28,safeguarding_date=$29,
-       witnesses=$30,duty_of_candour_applies=$31,candour_notification_date=$32,candour_letter_sent_date=$33,candour_recipient=$34,
-       police_involved=$35,police_reference=$36,police_contact_date=$37,
-        msp_wishes_recorded=$38,msp_outcome_preferences=$39,msp_person_involved=$40,
-        investigation_status=$41,investigation_start_date=$42,investigation_lead=$43,
-        investigation_review_date=$44,root_cause=$45,lessons_learned=$46,investigation_closed_date=$47,
-        corrective_actions=$48,resident_id=$49,reported_by=$50,reported_at=$51,updated_at=$52,
+       cqc_notified=$18,cqc_notified_date=$19,cqc_notified_time=$20,cqc_reference=$21,
+       riddor_reportable=$22,riddor_category=$23,riddor_reported=$24,riddor_reported_date=$25,riddor_reported_time=$26,riddor_reference=$27,
+       safeguarding_referral=$28,safeguarding_to=$29,safeguarding_reference=$30,safeguarding_date=$31,
+       witnesses=$32,duty_of_candour_applies=$33,candour_notification_date=$34,candour_letter_sent_date=$35,candour_recipient=$36,
+       police_involved=$37,police_reference=$38,police_contact_date=$39,
+        msp_wishes_recorded=$40,msp_outcome_preferences=$41,msp_person_involved=$42,
+        investigation_status=$43,investigation_start_date=$44,investigation_lead=$45,
+        investigation_review_date=$46,root_cause=$47,lessons_learned=$48,investigation_closed_date=$49,
+        corrective_actions=$50,resident_id=$51,reported_by=$52,reported_at=$53,updated_at=$54,
         version = incidents.version + 1,
         deleted_at=NULL
       WHERE incidents.frozen_at IS NULL
       RETURNING ${INCIDENT_COLS}`,
-    [
-      id, homeId, data.date || null, data.time || null, data.location || null,
-      data.type || null, data.severity || null, data.description || null,
-      data.person_affected || null, data.person_affected_name || null,
-      JSON.stringify(data.staff_involved || []), data.immediate_action || null,
-      data.medical_attention ?? false, data.hospital_attendance ?? false,
-      data.cqc_notifiable ?? false, data.cqc_notification_type || null,
-      data.cqc_notification_deadline || null,
-      data.cqc_notified ?? false, data.cqc_notified_date || null, data.cqc_reference || null,
-      data.riddor_reportable ?? false, data.riddor_category || null,
-      data.riddor_reported ?? false, data.riddor_reported_date || null, data.riddor_reference || null,
-      data.safeguarding_referral ?? false, data.safeguarding_to || null,
-      data.safeguarding_reference || null, data.safeguarding_date || null,
-      JSON.stringify(data.witnesses || []), data.duty_of_candour_applies ?? false,
-      data.candour_notification_date || null, data.candour_letter_sent_date || null,
-      data.candour_recipient || null, data.police_involved ?? false,
-      data.police_reference || null, data.police_contact_date || null,
-      data.msp_wishes_recorded ?? false, data.msp_outcome_preferences || null,
-      data.msp_person_involved ?? null,
-      data.investigation_status ?? 'open', data.investigation_start_date || null,
-      data.investigation_lead || null, data.investigation_review_date || null,
-      data.root_cause || null, data.lessons_learned || null, data.investigation_closed_date || null,
-      JSON.stringify(data.corrective_actions || []),
-      data.resident_id ?? null,
-      data.reported_by || null, data.reported_at || now, now,
-    ]
+    rowValues
   );
   // Auto-resolve resident_id for resident-type incidents
   if (rows[0] && data.person_affected === 'resident' && data.person_affected_name && !data.resident_id) {
@@ -380,8 +445,8 @@ const ALLOWED_COLUMNS = new Set([
   'person_affected', 'person_affected_name', 'staff_involved', 'immediate_action',
   'medical_attention', 'hospital_attendance',
   'cqc_notifiable', 'cqc_notification_type', 'cqc_notification_deadline',
-  'cqc_notified', 'cqc_notified_date', 'cqc_reference',
-  'riddor_reportable', 'riddor_category', 'riddor_reported', 'riddor_reported_date', 'riddor_reference',
+  'cqc_notified', 'cqc_notified_date', 'cqc_notified_time', 'cqc_reference',
+  'riddor_reportable', 'riddor_category', 'riddor_reported', 'riddor_reported_date', 'riddor_reported_time', 'riddor_reference',
   'safeguarding_referral', 'safeguarding_to', 'safeguarding_reference', 'safeguarding_date',
   'witnesses', 'duty_of_candour_applies', 'candour_notification_date', 'candour_letter_sent_date', 'candour_recipient',
   'police_involved', 'police_reference', 'police_contact_date',
