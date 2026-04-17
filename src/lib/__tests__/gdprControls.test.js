@@ -151,7 +151,7 @@ describe('calculateGdprControlsScore', () => {
 
   it('includes provenance per domain', () => {
     const result = calculateGdprControlsScore({ requests: [], breaches: [], complaints: [], retentionScan: [], consent: [] });
-    for (const [id, d] of Object.entries(result.domains)) {
+    for (const [, d] of Object.entries(result.domains)) {
       expect(d.provenance).toBeDefined();
       expect(d.provenance.source_modules).toBeDefined();
     }

@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 import { encrypt, decrypt } from '../services/encryptionService.js';
 
 const SAFE_COLS = 'id, home_id, url, events, active, created_at, updated_at';
@@ -157,6 +157,43 @@ export async function findPendingRetries(limit = 20) {
   }));
 }
 
+export async function claimPendingRetries(limit = 20) {
+  return withTransaction(async (client) => {
+    const { rows: pending } = await client.query(
+      `SELECT wd.id
+       FROM webhook_deliveries wd
+       WHERE wd.status = 'pending_retry' AND wd.next_retry_at <= NOW()
+       ORDER BY wd.next_retry_at ASC
+       LIMIT $1
+       FOR UPDATE OF wd SKIP LOCKED`,
+      [limit]
+    );
+
+    if (pending.length === 0) {
+      return [];
+    }
+
+    const ids = pending.map(row => row.id);
+    const { rows } = await client.query(
+      `UPDATE webhook_deliveries wd
+       SET status = 'in_progress',
+           locked_at = NOW()
+       FROM webhooks w
+       WHERE wd.id = ANY($1::int[])
+         AND w.id = wd.webhook_id
+       RETURNING wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+                 w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
+                 w.home_id, w.active`,
+      [ids]
+    );
+
+    return rows.map(row => ({
+      ...row,
+      secret: resolveSecret(row),
+    }));
+  });
+}
+
 export async function countRetryQueueSize() {
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS count
@@ -207,7 +244,6 @@ export async function rescueStuckInProgress() {
   const { rowCount } = await pool.query(
     `UPDATE webhook_deliveries
      SET status = 'pending_retry',
-         retry_count = retry_count + 1,
          next_retry_at = NOW(),
          locked_at = NULL
      WHERE status = 'in_progress'

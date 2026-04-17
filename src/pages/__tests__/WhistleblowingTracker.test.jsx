@@ -123,15 +123,16 @@ describe('WhistleblowingTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getWhistleblowingConcerns.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading whistleblowing concerns...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
     api.getWhistleblowingConcerns.mockRejectedValue(new Error('Server error'));
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText(/Error: Server error/i)).toBeInTheDocument();
+      expect(screen.getByText(/Server error/i)).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
   });
 
   it('displays page heading after successful load', async () => {
@@ -193,8 +194,9 @@ describe('WhistleblowingTracker', () => {
     api.getWhistleblowingConcerns.mockResolvedValue(EMPTY_RESPONSE);
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No concerns recorded')).toBeInTheDocument();
+      expect(screen.getByText('No concerns recorded yet')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: 'New Concern' })).toBeInTheDocument();
   });
 
   it('admin sees + New Concern button', async () => {

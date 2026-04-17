@@ -3,9 +3,14 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { getCurrentHome, getRopaActivities, createRopaActivity, updateRopaActivity, deleteRopaActivity } from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const EMPTY_FORM = {
   purpose: '', legal_basis: 'legal_obligation', categories_of_individuals: '', categories_of_data: '',
@@ -33,6 +38,7 @@ export default function RopaManager() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal);
 
   const [filterStatus, setFilterStatus] = useState('');
@@ -65,6 +71,7 @@ export default function RopaManager() {
     try {
       if (editing) await updateRopaActivity(home, editing.id, { ...form, _version: editing.version });
       else await createRopaActivity(home, form);
+      showNotice(editing ? 'Processing activity updated.' : 'Processing activity added.');
       closeModal(); load();
     } catch (e) { setFormError(e.message || 'Save failed'); }
     finally { setSaving(false); }
@@ -82,7 +89,7 @@ export default function RopaManager() {
     review: items.filter(i => i.status === 'under_review').length,
   }), [items, total]);
 
-  if (!home) return <div className={PAGE.container}><p>Select a home</p></div>;
+  if (!home) return <div className={PAGE.container}><EmptyState title="Select a home" description="Choose a home to review processing activities." compact /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -94,7 +101,8 @@ export default function RopaManager() {
         {canEdit && <button className={BTN.primary} onClick={openNew}>+ Add Activity</button>}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
+      {error && <ErrorState title="Unable to load processing activities" message={error} onRetry={load} className="mb-4" />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className={CARD.padded}><p className="text-xs text-gray-500">Total Activities</p><p className="text-2xl font-bold">{stats.total}</p></div>
@@ -127,9 +135,9 @@ export default function RopaManager() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty} role="status">Loading…</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}><LoadingState message="Loading processing activities..." compact /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No processing activities recorded</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}><EmptyState title="No processing activities recorded" description={canEdit ? 'Add the first activity to keep your Article 30 record up to date.' : 'Processing activities will appear here once they are recorded.'} compact /></td></tr>
               ) : items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
@@ -158,7 +166,7 @@ export default function RopaManager() {
 
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Processing Activity' : 'Add Processing Activity'} size="xl">
         <div className="space-y-4">
-          {formError && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{formError}</div>}
+          {formError && <InlineNotice variant="error">{formError}</InlineNotice>}
           <div>
             <label className={INPUT.label}>Purpose of Processing *</label>
             <input className={INPUT.base} value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} placeholder="e.g. Staff payroll processing" />

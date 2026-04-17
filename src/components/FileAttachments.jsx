@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { getHrAttachments, uploadHrAttachment, deleteHrAttachment, downloadHrAttachment } from '../lib/api.js';
 import { BTN, INPUT, TABLE } from '../lib/design.js';
+import LoadingState from './LoadingState.jsx';
+import EmptyState from './EmptyState.jsx';
+import InlineNotice from './InlineNotice.jsx';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -29,6 +32,7 @@ export default function FileAttachments({
   const [description, setDescription] = useState('');
   const [createdCaseId, setCreatedCaseId] = useState(null);
   const fileInputRef = useRef(null);
+  const loadRequestRef = useRef(0);
   const fileInputId = useId();
   const descriptionInputId = useId();
   const { confirm, ConfirmDialog } = useConfirm();
@@ -48,15 +52,21 @@ export default function FileAttachments({
 
   async function loadFiles(targetCaseId = activeCaseId) {
     if (!targetCaseId) return;
+    const requestId = ++loadRequestRef.current;
+    let shouldUpdate = true;
     setLoading(true);
     setError(null);
     try {
       const data = await listFiles(caseType, targetCaseId);
+      shouldUpdate = requestId === loadRequestRef.current;
+      if (!shouldUpdate) return;
       setFiles(data);
     } catch (err) {
+      shouldUpdate = requestId === loadRequestRef.current;
+      if (!shouldUpdate) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (shouldUpdate && requestId === loadRequestRef.current) setLoading(false);
     }
   }
 
@@ -117,7 +127,7 @@ export default function FileAttachments({
         <p className="text-sm text-gray-500">{saveFirstMessage}</p>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <InlineNotice variant="error" role="alert">{error}</InlineNotice>}
 
       {files.length > 0 && (
         <div className={TABLE.wrapper}>
@@ -156,19 +166,21 @@ export default function FileAttachments({
         </div>
       )}
 
+      {loading && <LoadingState message="Loading attached documents..." compact />}
+
       {files.length === 0 && !loading && (
-        <p className="text-sm text-gray-400">{emptyText}</p>
+        <EmptyState title={emptyText} compact />
       )}
 
       {!readOnly && (
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label htmlFor={fileInputId} className={INPUT.label}>File</label>
-            <input id={fileInputId} ref={fileInputRef} type="file" className="text-sm text-gray-600" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" />
+            <input id={fileInputId} ref={fileInputRef} type="file" className="text-sm text-gray-600" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" disabled={uploading} />
           </div>
           <div className="flex-1">
             <label htmlFor={descriptionInputId} className={INPUT.label}>Description (optional)</label>
-            <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" />
+            <input id={descriptionInputId} className={INPUT.sm} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Witness statement" disabled={uploading} />
           </div>
           <button onClick={handleUpload} disabled={uploading} className={BTN.primary + ' ' + BTN.sm}>
             {uploading ? 'Uploading...' : 'Upload'}

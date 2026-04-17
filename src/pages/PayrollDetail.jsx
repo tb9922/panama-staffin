@@ -1,12 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
-  getSchedulingData, } from '../lib/api.js';
+  getSchedulingData, downloadAuthenticatedFile, getPayrollRuns, markPayrollRunExported, } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import StickyTable from '../components/StickyTable.jsx';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -34,28 +40,28 @@ function fmtHrs(n) {
   return `${parseFloat(n).toFixed(2)}h`;
 }
 
-// Fetch blob with cookie auth + CSRF headers, trigger download
-function getCsrfToken() {
-  return document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/)?.[1] || '';
+function buildRunSnapshot(result) {
+  const lines = result?.lines || [];
+  return {
+    ...result?.run,
+    total_hours: lines.reduce((sum, line) => sum + parseFloat(line.total_hours || 0), 0),
+    total_gross: result?.run?.total_gross != null
+      ? parseFloat(result.run.total_gross)
+      : lines.reduce((sum, line) => sum + parseFloat(line.gross_pay || 0), 0),
+    total_enhancements: result?.run?.total_enhancements != null
+      ? parseFloat(result.run.total_enhancements)
+      : lines.reduce((sum, line) => sum + parseFloat(line.total_enhancements || 0), 0),
+    staff_count: result?.run?.staff_count ?? lines.length,
+  };
 }
-async function downloadWithAuth(url, filename) {
-  const res = await fetch(url, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: 'Invalid response' }));
-    throw new Error(body.error || `Export failed (${res.status})`);
-  }
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(href);
+
+function formatDelta(value, { prefix = '', suffix = '' } = {}) {
+  if (value == null) return null;
+  const sign = value > 0 ? '+' : '';
+  const amount = prefix
+    ? `${prefix}${Math.abs(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `${Math.abs(value).toLocaleString('en-GB', { maximumFractionDigits: 1 })}${suffix}`;
+  return `${sign}${value < 0 ? '-' : ''}${amount}`;
 }
 
 export default function PayrollDetail() {
@@ -74,6 +80,21 @@ export default function PayrollDetail() {
   const [action, setAction]               = useState(null); // 'calculating' | 'approving' | 'exporting'
   const [expanded, setExpanded]           = useState({});   // staffId → bool
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [previousRunSnapshot, setPreviousRunSnapshot] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showExportMenu) return undefined;
+    function handlePointerDown(event) {
+      if (!exportMenuRef.current?.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [showExportMenu]);
 
   useEffect(() => {
     const h = getCurrentHome();
@@ -100,6 +121,23 @@ export default function PayrollDetail() {
       const result = await getPayrollRun(homeSlug, runId);
       setRun(result.run);
       setLines(result.lines || []);
+      try {
+        const runsResult = await getPayrollRuns(homeSlug);
+        const allRuns = Array.isArray(runsResult) ? runsResult : (runsResult.rows || []);
+        const sortedRuns = [...allRuns].sort((a, b) => (b.period_end || '').localeCompare(a.period_end || ''));
+        const currentIndex = sortedRuns.findIndex(candidate => String(candidate.id) === String(result.run?.id));
+        const previousRun = currentIndex >= 0
+          ? sortedRuns[currentIndex + 1]
+          : sortedRuns.find(candidate => String(candidate.id) !== String(result.run?.id) && (candidate.period_end || '') < (result.run?.period_end || ''));
+        if (previousRun) {
+          const previousDetail = await getPayrollRun(homeSlug, previousRun.id);
+          setPreviousRunSnapshot(buildRunSnapshot(previousDetail));
+        } else {
+          setPreviousRunSnapshot(null);
+        }
+      } catch {
+        setPreviousRunSnapshot(null);
+      }
       // Load shift breakdowns if calculated or beyond
       if (['calculated', 'approved', 'exported', 'locked'].includes(result.run?.status)) {
         const slips = await getPayslips(homeSlug, runId);
@@ -137,6 +175,20 @@ export default function PayrollDetail() {
       const slipMap = {};
       (slips || []).forEach(s => { slipMap[s.staff_id] = s; });
       setPayslips(slipMap);
+      showNotice(
+        <div className="space-y-2">
+          <p>Payroll calculated. Review timesheets and pay rate rules before approval.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(result.run?.period_end || '')}`)} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Timesheets
+            </button>
+            <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Pay Rates
+            </button>
+          </div>
+        </div>,
+        { variant: 'success', duration: 8000 },
+      );
     } catch (e) {
       setError(e.message);
     } finally {
@@ -153,6 +205,7 @@ export default function PayrollDetail() {
       setRun(updated);
       setShowApproveConfirm(false);
       await load();
+      showNotice('Payroll run approved. Export files when you are ready to send them on.');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -163,9 +216,10 @@ export default function PayrollDetail() {
   async function handleSummaryPdf() {
     setAction('exporting');
     setError(null);
+    setShowExportMenu(false);
     try {
       const period = run ? `${run.period_start}_${run.period_end}` : runId;
-      await downloadWithAuth(getPayrollSummaryPdfUrl(homeSlug, runId), `payroll_summary_${period}.pdf`);
+      await downloadAuthenticatedFile(getPayrollSummaryPdfUrl(homeSlug, runId), `payroll_summary_${period}.pdf`);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -176,10 +230,14 @@ export default function PayrollDetail() {
   async function handleExport(format) {
     setAction('exporting');
     setError(null);
+    setShowExportMenu(false);
     try {
+      if (run?.status === 'approved') {
+        await markPayrollRunExported(homeSlug, runId, format);
+      }
       const url = getPayrollExportUrl(homeSlug, runId, format);
       const period = run ? `${run.period_start}_${run.period_end}` : runId;
-      await downloadWithAuth(url, `payroll_${format}_${period}.csv`);
+      await downloadAuthenticatedFile(url, `payroll_${format}_${period}.csv`);
       // Reload to pick up exported_at timestamp update
       await load();
     } catch (e) {
@@ -192,28 +250,6 @@ export default function PayrollDetail() {
   function toggleExpand(staffId) {
     setExpanded(prev => ({ ...prev, [staffId]: !prev[staffId] }));
   }
-
-  if (loading) {
-    return (
-      <div className={PAGE.container}>
-        <div className="py-10 text-center text-sm text-gray-400">Loading payroll run…</div>
-      </div>
-    );
-  }
-
-  if (!run) {
-    return (
-      <div className={PAGE.container}>
-        <div className="py-10 text-center text-sm text-gray-500">Payroll run not found.</div>
-      </div>
-    );
-  }
-
-  const nmwViolations = lines.filter(l => !l.nmw_compliant);
-  const canCalculate  = canEdit && ['draft', 'calculated'].includes(run.status);
-  const canApprove    = canEdit && run.status === 'calculated' && nmwViolations.length === 0;
-  const canExport     = canEdit && ['approved', 'exported', 'locked'].includes(run.status);
-  const isBusy        = action !== null;
 
   // Grand totals
   const totals = lines.reduce((acc, l) => ({
@@ -242,11 +278,61 @@ export default function PayrollDetail() {
     holiday_pay: 0, ssp_amount: 0, tax_deducted: 0, employee_ni: 0,
     employer_ni: 0, pension_employee: 0, student_loan: 0, net_pay: 0,
   });
+  const nmwViolations = lines.filter(l => !l.nmw_compliant);
+  const currentSnapshot = useMemo(() => ({
+    total_hours: totals.total_hours,
+    total_gross: run?.total_gross != null ? parseFloat(run.total_gross) : totals.gross_pay,
+    total_enhancements: run?.total_enhancements != null
+      ? parseFloat(run.total_enhancements)
+      : totals.night_enhancement + totals.weekend_enhancement + totals.bank_holiday_enhancement + totals.overtime_enhancement + totals.sleep_in_pay + totals.on_call_enhancement,
+    staff_count: run?.staff_count ?? lines.length,
+  }), [lines.length, run?.staff_count, run?.total_enhancements, run?.total_gross, totals]);
+  const previousDeltas = useMemo(() => {
+    if (!previousRunSnapshot) return null;
+    return {
+      staff: currentSnapshot.staff_count - (previousRunSnapshot.staff_count ?? 0),
+      hours: currentSnapshot.total_hours - (previousRunSnapshot.total_hours ?? 0),
+      gross: currentSnapshot.total_gross - (previousRunSnapshot.total_gross ?? 0),
+      enhancements: currentSnapshot.total_enhancements - (previousRunSnapshot.total_enhancements ?? 0),
+    };
+  }, [currentSnapshot, previousRunSnapshot]);
+
+  if (loading) {
+    return (
+      <div className={PAGE.container}>
+        <LoadingState message="Loading payroll run..." card />
+      </div>
+    );
+  }
+
+  if (!run) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="Payroll run not found"
+          description="This payroll run may have been removed or you may have opened an old link."
+          actionLabel="Back to Payroll Runs"
+          onAction={() => navigate('/payroll')}
+        />
+      </div>
+    );
+  }
+
+  const canCalculate  = canEdit && ['draft', 'calculated'].includes(run.status);
+  const canApprove    = canEdit && run.status === 'calculated' && nmwViolations.length === 0;
+  const canExport     = canEdit && ['approved', 'exported', 'locked'].includes(run.status);
+  const isBusy        = action !== null;
 
   const hasDeductions = totals.net_pay > 0;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div className="flex items-center gap-3">
@@ -275,32 +361,63 @@ export default function PayrollDetail() {
             </button>
           )}
           {canExport && (
-            <>
-              <button className={BTN.secondary} onClick={() => handleExport('sage')} disabled={isBusy}>
-                {action === 'exporting' ? 'Exporting…' : 'Sage CSV'}
-              </button>
-              <button className={BTN.secondary} onClick={() => handleExport('xero')} disabled={isBusy}>
-                Xero CSV
-              </button>
-              <button className={BTN.secondary} onClick={() => handleExport('generic')} disabled={isBusy}>
-                Generic CSV
-              </button>
+            <div className="relative" ref={exportMenuRef}>
               <button
                 className={BTN.secondary}
-                onClick={handleSummaryPdf}
+                onClick={() => setShowExportMenu(open => !open)}
                 disabled={isBusy}
+                aria-expanded={showExportMenu}
               >
-                Summary PDF
+                {action === 'exporting' ? 'Exporting…' : 'Export ▾'}
               </button>
-            </>
+              {showExportMenu && !isBusy && (
+                <div className="absolute right-0 z-20 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('sage')}>
+                    Sage CSV
+                  </button>
+                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('xero')}>
+                    Xero CSV
+                  </button>
+                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport('generic')}>
+                    Generic CSV
+                  </button>
+                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setShowExportMenu(false); handleSummaryPdf(); }}>
+                    Summary PDF
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
+      {error && <ErrorState title="Payroll action needs attention" message={error} className="mb-4" />}
+
+      {(run.status === 'draft' || run.status === 'calculated') && (
+        <div className={`${CARD.padded} mb-4`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Payroll Pre-flight</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Check actual hours in Timesheets and confirm pay rate rules before approval.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(run.period_end)}`)} className={`${BTN.secondary} ${BTN.sm}`}>
+                Review Timesheets
+              </button>
+              <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.sm}`}>
+                Review Pay Rates
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Mid-period pay-rate and tax-code changes are still applied across the whole payroll period. Review staff with in-period changes manually before approval or export.
+      </div>
 
       {/* NMW Alert Banner */}
       {nmwViolations.length > 0 && (
@@ -312,11 +429,14 @@ export default function PayrollDetail() {
             Approval is blocked until all violations are resolved. Check base pay rates and hours for:{' '}
             {nmwViolations.map(l => staffMap[l.staff_id]?.name || l.staff_id).join(', ')}.
           </p>
-          {run.status === 'calculated' && (
-            <p className="text-xs text-red-600 mt-1">
-              Tip: update pay rate rules then recalculate to resolve.
-            </p>
-          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => navigate('/payroll/rates')} className={`${BTN.secondary} ${BTN.xs}`}>
+              Open Pay Rates
+            </button>
+            <button type="button" onClick={() => navigate(`/payroll/timesheets?date=${encodeURIComponent(run.period_end)}`)} className={`${BTN.secondary} ${BTN.xs}`}>
+              Review Timesheets
+            </button>
+          </div>
         </div>
       )}
 
@@ -326,18 +446,22 @@ export default function PayrollDetail() {
           <div className={CARD.padded}>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Staff</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{run.staff_count ?? lines.length}</p>
+            {previousDeltas && <p className="mt-1 text-xs text-gray-500">vs previous run: {formatDelta(previousDeltas.staff)}</p>}
           </div>
           <div className={CARD.padded}>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Total Hours</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{totals.total_hours.toFixed(1)}h</p>
+            {previousDeltas && <p className="mt-1 text-xs text-gray-500">vs previous run: {formatDelta(previousDeltas.hours, { suffix: 'h' })}</p>}
           </div>
           <div className={CARD.padded}>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Total Gross</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(run.total_gross ?? totals.gross_pay)}</p>
+            {previousDeltas && <p className="mt-1 text-xs text-gray-500">vs previous run: {formatDelta(previousDeltas.gross, { prefix: '£' })}</p>}
           </div>
           <div className={CARD.padded}>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Enhancements</p>
             <p className="text-2xl font-bold text-blue-600 mt-1">{fmt(run.total_enhancements ?? totals.night_enhancement + totals.weekend_enhancement + totals.bank_holiday_enhancement)}</p>
+            {previousDeltas && <p className="mt-1 text-xs text-gray-500">vs previous run: {formatDelta(previousDeltas.enhancements, { prefix: '£' })}</p>}
           </div>
           {hasDeductions && (
             <div className={CARD.padded}>
@@ -363,7 +487,7 @@ export default function PayrollDetail() {
       {/* Lines Table */}
       {lines.length > 0 && (
         <div className={CARD.flush}>
-          <div className={TABLE.wrapper} style={{ overflowX: 'auto' }}>
+          <StickyTable className={TABLE.wrapper}>
             <table className={TABLE.table} style={{ minWidth: '1100px' }}>
               <thead className={TABLE.thead}>
                 <tr>
@@ -516,7 +640,7 @@ export default function PayrollDetail() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </StickyTable>
         </div>
       )}
 
@@ -551,6 +675,16 @@ export default function PayrollDetail() {
                   : '—'}
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Enhancements</span>
+              <span className="font-medium">{fmt(currentSnapshot.total_enhancements)}</span>
+            </div>
+            {previousRunSnapshot && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Staff vs previous run</span>
+                <span className="font-medium">{formatDelta(previousDeltas?.staff)}</span>
+              </div>
+            )}
           </div>
         </div>
         <div className={MODAL.footer}>

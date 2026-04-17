@@ -137,7 +137,7 @@ describe('AnnualLeave', () => {
     });
   });
 
-  it('shows a restricted state for staff self-service accounts', async () => {
+  it('shows the self-service leave view for staff self-service accounts', async () => {
     useData.mockReturnValue({
       canRead: () => true,
       canWrite: () => false,
@@ -147,8 +147,9 @@ describe('AnnualLeave', () => {
     renderWithProviders(<AnnualLeave />, {
       user: { username: 'staff', role: 'viewer' },
     });
-    await waitFor(() => expect(screen.getByText('Annual leave planning is not available for staff self-service accounts.')).toBeInTheDocument());
-    expect(getSchedulingData).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('My Leave')).toBeInTheDocument());
+    expect(screen.getByText('Leave year')).toBeInTheDocument();
+    expect(getSchedulingData).toHaveBeenCalled();
   });
 
   it('displays accrual table with staff data after load', async () => {

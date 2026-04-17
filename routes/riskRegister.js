@@ -8,6 +8,8 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import { validateRiskStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -72,14 +74,16 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await riskRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const likelihood = parsed.data.likelihood ?? existing.likelihood ?? 0;
-    const impact = parsed.data.impact ?? existing.impact ?? 0;
-    const residualLikelihood = parsed.data.residual_likelihood ?? existing.residual_likelihood ?? 0;
-    const residualImpact = parsed.data.residual_impact ?? existing.residual_impact ?? 0;
-    parsed.data.inherent_risk = likelihood * impact;
-    parsed.data.residual_risk = residualLikelihood * residualImpact;
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const risk = await riskRepo.update(idParsed.data, req.home.id, parsed.data, version);
+    const statusError = validateRiskStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
+    const { version, payload } = splitVersion(parsed.data);
+    const likelihood = payload.likelihood ?? existing.likelihood ?? 0;
+    const impact = payload.impact ?? existing.impact ?? 0;
+    const residualLikelihood = payload.residual_likelihood ?? existing.residual_likelihood ?? 0;
+    const residualImpact = payload.residual_impact ?? existing.residual_impact ?? 0;
+    payload.inherent_risk = likelihood * impact;
+    payload.residual_risk = residualLikelihood * residualImpact;
+    const risk = await riskRepo.update(idParsed.data, req.home.id, payload, version);
     if (risk === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

@@ -3,6 +3,9 @@ import { getStaffForDay, formatDate, isWorkingShift } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 
@@ -64,8 +67,14 @@ export default function CostTracker() {
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading cost data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) return <LoadingState message="Loading cost data..." className="px-6 py-6" />;
+  if (error || !schedData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Unable to load cost data" message={error || 'Failed to load scheduling data'} />
+      </div>
+    );
+  }
 
   return <CostTrackerInner schedData={schedData} monthOffset={monthOffset} setMonthOffset={setMonthOffset} today={today} />;
 }
@@ -108,6 +117,17 @@ function CostTrackerInner({ schedData, monthOffset, setMonthOffset, today }) {
   const annualProj = totals.total / days * 365;
   const maxCost = Math.max(...dayData.map(d => d.cost.total));
   const agencyPct = totals.total > 0 ? (totals.agency / totals.total) * 100 : 0;
+
+  if (dayData.length === 0) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <EmptyState
+          title="No cost data available"
+          description="Publish staffing data or load a month with rota information to see daily costs and agency impact."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

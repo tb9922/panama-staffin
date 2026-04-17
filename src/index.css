@@ -37,6 +37,31 @@ button, a, input, select, textarea {
   animation: modal-in 200ms ease-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-modal-in,
+  .sidebar-mobile,
+  .sidebar-mobile.sidebar-closed {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .sidebar-mobile.sidebar-closed {
+    transform: translateX(-100%) !important;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
@@ -104,15 +129,22 @@ button, a, input, select, textarea {
   .max-w-lg { max-width: calc(100vw - 2rem) !important; }
 }
 
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar-mobile.sidebar-closed {
+    transform: translateX(-100%);
+  }
+}
+
 /* ── Print styles ─────────────────────────────────────────────────────────── */
 @media print {
   aside, .print\:hidden, select, input {
     display: none !important;
   }
-  button:not(td button) {
+  button:not([aria-expanded]) {
     display: none !important;
   }
   td button {
+    display: inline-flex !important;
     cursor: default !important;
     border: none !important;
     box-shadow: none !important;

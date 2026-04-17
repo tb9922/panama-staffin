@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import TabBar from '../components/TabBar.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getCurrentHome, getHrDisciplinary, createHrDisciplinary, updateHrDisciplinary,
   getHrCaseNotes, createHrCaseNote,
@@ -20,6 +23,9 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import RepeatableRowsEditor from '../components/RepeatableRowsEditor.jsx';
 
 const MODAL_TABS = [
   { id: 'details', label: 'Details' },
@@ -30,6 +36,39 @@ const MODAL_TABS = [
   { id: 'appeal', label: 'Appeal' },
   { id: 'notes', label: 'Notes' },
 ];
+
+const WITNESS_FIELDS = [
+  { key: 'name', label: 'Name', placeholder: 'Witness name' },
+  { key: 'role', label: 'Role', placeholder: 'Role or relationship' },
+  { key: 'statement_summary', label: 'Statement Summary', placeholder: 'Key points from their account', type: 'textarea', rows: 3, span: 2 },
+];
+
+const EVIDENCE_ITEM_FIELDS = [
+  { key: 'description', label: 'Description', placeholder: 'What evidence was reviewed?', type: 'textarea', rows: 3, span: 2 },
+  { key: 'type', label: 'Type', placeholder: 'e.g. rota, note, CCTV, email' },
+  { key: 'date', label: 'Date', type: 'date' },
+];
+
+function normalizeStructuredList(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeForm(source = {}) {
+  return {
+    ...source,
+    witnesses: normalizeStructuredList(source.witnesses),
+    evidence_items: normalizeStructuredList(source.evidence_items),
+  };
+}
 
 export default function DisciplinaryTracker() {
   const [cases, setCases] = useState([]);
@@ -47,12 +86,13 @@ export default function DisciplinaryTracker() {
   const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [jsonErrors, setJsonErrors] = useState({});
+  const [modalNotice, setModalNotice] = useState(null);
   useDirtyGuard(showModal);
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
   const editReqRef = useRef(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useEffect(() => setOffset(0), [filterStaff, filterStatus]);
 
   const LIMIT = 50;
@@ -76,20 +116,22 @@ export default function DisciplinaryTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'misconduct', status: 'open', source: 'other' });
+    setForm(normalizeForm({ date_raised: todayLocalISO(), category: 'misconduct', status: 'open', source: 'other' }));
     setModalTab('details');
     setCaseNotes([]);
     setNoteText('');
+    setModalNotice(null);
     setShowModal(true);
   }
 
   async function openEdit(c) {
     const reqId = ++editReqRef.current;
     setEditing(c);
-    setForm({ ...c });
+    setForm(normalizeForm(c));
     setModalTab('details');
     setNoteText('');
     setCaseNotes([]);
+    setModalNotice(null);
     setShowModal(true);
     if (c.id) {
       try {
@@ -106,13 +148,7 @@ export default function DisciplinaryTracker() {
     setCaseNotes([]);
     setNoteText('');
     setError(null);
-    setJsonErrors({});
-  }
-
-  function validateJsonField(field, value) {
-    if (!value || !value.trim()) { setJsonErrors(prev => ({ ...prev, [field]: null })); return true; }
-    try { JSON.parse(value); setJsonErrors(prev => ({ ...prev, [field]: null })); return true; }
-    catch { setJsonErrors(prev => ({ ...prev, [field]: 'Invalid JSON' })); return false; }
+    setModalNotice(null);
   }
 
   async function handleSave() {
@@ -123,17 +159,25 @@ export default function DisciplinaryTracker() {
     if (!form.category) missing.push('Category');
     if (!form.raised_by?.trim()) missing.push('Raised by');
     if (missing.length) { setError(`Required fields missing: ${missing.join(', ')}`); return; }
-    const w = typeof form.witnesses === 'string' ? validateJsonField('witnesses', form.witnesses) : true;
-    const e = typeof form.evidence_items === 'string' ? validateJsonField('evidence_items', form.evidence_items) : true;
-    if (!w || !e) return;
     setSaving(true);
     try {
       if (editing?.id) {
         await updateHrDisciplinary(editing.id, { ...form, _version: editing.version });
+        closeModal();
+        showNotice('Disciplinary case updated.');
       } else {
-        await createHrDisciplinary(home, form);
+        const created = await createHrDisciplinary(home, form);
+        setEditing(created);
+        setForm(normalizeForm(created));
+        setModalTab('investigation');
+        setCaseNotes([]);
+        setNoteText('');
+        setModalNotice({
+          variant: 'success',
+          content: 'Case created. Continue with investigation details, witnesses, meetings, and files.',
+        });
+        showNotice('Disciplinary case created.');
       }
-      closeModal();
       setRefreshKey(k => k + 1);
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -177,7 +221,7 @@ export default function DisciplinaryTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading disciplinary cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading disciplinary cases..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -191,6 +235,12 @@ export default function DisciplinaryTracker() {
           {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -221,7 +271,19 @@ export default function DisciplinaryTracker() {
               </tr>
             </thead>
             <tbody>
-              {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No disciplinary cases</td></tr>}
+              {cases.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={TABLE.empty}>
+                    <EmptyState
+                      title="No disciplinary cases"
+                      description={canEdit ? 'Create the first case to track investigation, hearing, and appeal stages.' : 'Disciplinary cases will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Case' : undefined}
+                      onAction={canEdit ? openCreate : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {cases.map(c => (
                 <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(c))}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
@@ -251,12 +313,18 @@ export default function DisciplinaryTracker() {
   );
 
   function renderModal() {
+    const availableTabs = editing ? MODAL_TABS : [MODAL_TABS[0]];
     return (
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Disciplinary Case' : 'New Disciplinary Case'} size="xl">
           {/* Modal tabs */}
-          <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes')} activeTab={modalTab} onTabChange={setModalTab} />
+          <TabBar tabs={availableTabs} activeTab={modalTab} onTabChange={setModalTab} />
 
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+          {modalNotice && (
+            <InlineNotice variant={modalNotice.variant} onDismiss={() => setModalNotice(null)} className="mb-4">
+              {modalNotice.content}
+            </InlineNotice>
+          )}
 
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'investigation' && renderInvestigationTab()}
@@ -278,16 +346,16 @@ export default function DisciplinaryTracker() {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <StaffPicker value={form.staff_id || ''} onChange={val => f('staff_id', val)} label="Staff Member" />
+          <StaffPicker value={form.staff_id || ''} onChange={val => f('staff_id', val)} label="Staff Member" required />
           <div>
-            <label className={INPUT.label}>Date Raised</label>
-            <input type="date" className={INPUT.base} value={form.date_raised || ''} onChange={e => f('date_raised', e.target.value)} />
+            <label htmlFor="disciplinary-date-raised" className={INPUT.label}>Date Raised *</label>
+            <input id="disciplinary-date-raised" type="date" className={INPUT.base} value={form.date_raised || ''} onChange={e => f('date_raised', e.target.value)} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={INPUT.label}>Category</label>
-            <select className={INPUT.select} value={form.category || ''} onChange={e => f('category', e.target.value)}>
+            <label htmlFor="disciplinary-category" className={INPUT.label}>Category *</label>
+            <select id="disciplinary-category" className={INPUT.select} value={form.category || ''} onChange={e => f('category', e.target.value)}>
               <option value="">Select...</option>
               {DISCIPLINARY_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -300,17 +368,17 @@ export default function DisciplinaryTracker() {
           </div>
         </div>
         <div>
-          <label className={INPUT.label}>Allegation Summary</label>
-          <textarea className={INPUT.base} rows={3} value={form.allegation_summary || ''} onChange={e => f('allegation_summary', e.target.value)} />
+          <label htmlFor="disciplinary-allegation-summary" className={INPUT.label}>Allegation Summary *</label>
+          <textarea id="disciplinary-allegation-summary" className={INPUT.base} rows={3} value={form.allegation_summary || ''} onChange={e => f('allegation_summary', e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={INPUT.label}>Raised By *</label>
-            <input className={INPUT.base} value={form.raised_by || ''} onChange={e => f('raised_by', e.target.value)} />
+            <label htmlFor="disciplinary-raised-by" className={INPUT.label}>Raised By *</label>
+            <input id="disciplinary-raised-by" className={INPUT.base} value={form.raised_by || ''} onChange={e => f('raised_by', e.target.value)} />
           </div>
           <div>
-            <label className={INPUT.label}>Source</label>
-            <select className={INPUT.select} value={form.source || 'other'} onChange={e => f('source', e.target.value)}>
+            <label htmlFor="disciplinary-source" className={INPUT.label}>Source</label>
+            <select id="disciplinary-source" className={INPUT.select} value={form.source || 'other'} onChange={e => f('source', e.target.value)}>
               {DISCIPLINARY_SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
@@ -360,22 +428,26 @@ export default function DisciplinaryTracker() {
           </select>
         </div>
         <div>
-          <label className={INPUT.label}>Witnesses (JSON)</label>
-          <textarea className={INPUT.base + ' font-mono text-xs' + (jsonErrors.witnesses ? ' border-red-400' : '')} rows={3}
-            value={form.witnesses ? (typeof form.witnesses === 'string' ? form.witnesses : JSON.stringify(form.witnesses, null, 2)) : '[]'}
-            onChange={e => f('witnesses', e.target.value)}
-            onBlur={e => validateJsonField('witnesses', e.target.value)}
-            placeholder='[{"name":"...","role":"..."}]' />
-          {jsonErrors.witnesses && <p className="text-red-600 text-xs mt-1">{jsonErrors.witnesses}</p>}
+          <RepeatableRowsEditor
+            label="Witness"
+            hint="Capture witnesses one by one instead of typing JSON."
+            items={form.witnesses || []}
+            onChange={rows => f('witnesses', rows)}
+            fields={WITNESS_FIELDS}
+            addLabel="Add witness"
+            emptyText="No witnesses recorded yet."
+          />
         </div>
         <div>
-          <label className={INPUT.label}>Evidence Items (JSON)</label>
-          <textarea className={INPUT.base + ' font-mono text-xs' + (jsonErrors.evidence_items ? ' border-red-400' : '')} rows={3}
-            value={form.evidence_items ? (typeof form.evidence_items === 'string' ? form.evidence_items : JSON.stringify(form.evidence_items, null, 2)) : '[]'}
-            onChange={e => f('evidence_items', e.target.value)}
-            onBlur={e => validateJsonField('evidence_items', e.target.value)}
-            placeholder='[{"description":"...","type":"..."}]' />
-          {jsonErrors.evidence_items && <p className="text-red-600 text-xs mt-1">{jsonErrors.evidence_items}</p>}
+          <RepeatableRowsEditor
+            label="Evidence Item"
+            hint="Record the evidence reviewed during the investigation."
+            items={form.evidence_items || []}
+            onChange={rows => f('evidence_items', rows)}
+            fields={EVIDENCE_ITEM_FIELDS}
+            addLabel="Add evidence item"
+            emptyText="No evidence items recorded yet."
+          />
         </div>
         <InvestigationMeetings caseType="disciplinary" caseId={editing?.id} />
         <FileAttachments caseType="disciplinary" caseId={editing?.id} />

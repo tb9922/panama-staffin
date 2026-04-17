@@ -101,7 +101,7 @@ describe('TrainingMatrix', () => {
     renderAdmin();
     await waitFor(() => {
       expect(
-        screen.queryByText('Loading...') ||
+        screen.queryByText('Loading training data...') ||
         screen.queryByText('Training Matrix')
       ).not.toBeNull();
     });
@@ -110,7 +110,7 @@ describe('TrainingMatrix', () => {
   it('shows loading state while data is fetching', () => {
     api.getTrainingData.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading training data...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {

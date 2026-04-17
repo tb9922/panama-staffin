@@ -15,6 +15,11 @@ import {
 } from '../lib/policyReview.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const STATUS_ORDER = { overdue: 0, due: 1, current: 2 };
 
@@ -45,6 +50,7 @@ export default function PolicyReviewTracker() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal);
 
@@ -127,6 +133,7 @@ export default function PolicyReviewTracker() {
 
   async function handleSave() {
     if (!form.policy_name) return;
+    setSaveError(null);
 
     // Auto-calculate next_review_due from last_reviewed + frequency
     const nextDue = form.last_reviewed
@@ -143,11 +150,13 @@ export default function PolicyReviewTracker() {
     try {
       if (editingId) {
         await updatePolicy(home, editingId, record);
+        showNotice('Policy updated.');
       } else {
         await createPolicy(home, {
           ...record,
           status: form.last_reviewed ? 'current' : 'not_reviewed',
         });
+        showNotice('Policy added.');
       }
       setShowModal(false);
       await load();
@@ -160,6 +169,7 @@ export default function PolicyReviewTracker() {
     if (!editingId) return;
     const policy = policies.find(p => p.id === editingId);
     if (!policy) return;
+    setSaveError(null);
 
     const oldVersion = policy.doc_version || '1.0';
 
@@ -189,6 +199,7 @@ export default function PolicyReviewTracker() {
     try {
       await updatePolicy(home, editingId, record);
       setShowModal(false);
+      showNotice('Policy marked as reviewed.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to save');
@@ -198,9 +209,11 @@ export default function PolicyReviewTracker() {
   async function handleDelete() {
     if (!editingId) return;
     if (!await confirm('Delete this policy record?')) return;
+    setSaveError(null);
     try {
       await deletePolicy(home, editingId);
       setShowModal(false);
+      showNotice('Policy deleted.');
       await load();
     } catch (e) {
       setSaveError(e.message || 'Failed to delete');
@@ -257,7 +270,7 @@ export default function PolicyReviewTracker() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-gray-500 py-12 text-center">Loading policy reviews...</div>
+        <LoadingState message="Loading policy reviews..." card />
       </div>
     );
   }
@@ -265,13 +278,19 @@ export default function PolicyReviewTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-red-600 py-12 text-center" role="alert">{error}</div>
+        <ErrorState title="Unable to load policy reviews" message={error} onRetry={load} />
       </div>
     );
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -336,7 +355,17 @@ export default function PolicyReviewTracker() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No policies recorded</td></tr>
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No policies recorded yet"
+                      description={canEdit ? 'Use "New Policy" to add the first policy review entry for this home.' : 'No policy review records have been added for this home yet.'}
+                      actionLabel={canEdit ? 'New Policy' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(policy => {
                 const s = getPolicyStatus(policy, today);

@@ -217,6 +217,41 @@ describe('BedManager', () => {
     await waitFor(() => expect(screen.getByText('Database error')).toBeInTheDocument());
   });
 
+  it('sends both release reasons and transition notes when releasing a reservation', async () => {
+    const user = userEvent.setup();
+    api.transitionBedStatus.mockResolvedValue({
+      ...MOCK_BEDS[1],
+      status: 'available',
+      updated_at: '2026-03-02T00:00:00Z',
+    });
+    api.getBeds.mockResolvedValue({
+      beds: [
+        {
+          ...MOCK_BEDS[1],
+          status: 'reserved',
+          updated_at: '2026-03-01T00:00:00Z',
+        },
+      ],
+    });
+
+    renderWithProviders(<BedManager />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /release reservation/i })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /release reservation/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /release reservation - room 102/i });
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'other');
+    await user.type(within(dialog).getByRole('textbox'), 'Family chose another room');
+    await user.click(within(dialog).getByRole('button', { name: /confirm/i }));
+
+    await waitFor(() => expect(api.transitionBedStatus).toHaveBeenCalledWith('test-home', 'bed-2', {
+      status: 'available',
+      clientUpdatedAt: '2026-03-01T00:00:00Z',
+      releaseReason: 'other',
+      notes: 'Family chose another room',
+    }));
+  });
+
   it('keeps resident handoff context from the Residents page', async () => {
     const user = userEvent.setup();
     api.getFinanceResidents.mockResolvedValue({

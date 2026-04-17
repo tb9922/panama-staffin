@@ -65,16 +65,18 @@ export const ROLE_IDS = Object.keys(ROLES);
  * @param {string} roleId — key from ROLES
  * @param {string} moduleId — key from MODULES
  * @param {string} level — 'read' | 'write' | 'own'
+ * @param {{ includeOwn?: boolean }} options
  * @returns {boolean}
  */
-export function hasModuleAccess(roleId, moduleId, level = 'read') {
+export function hasModuleAccess(roleId, moduleId, level = 'read', options = {}) {
+  const { includeOwn = true } = options;
   const role = ROLES[roleId];
   if (!role) return false;
   const access = role.modules[moduleId];
   if (!access || access === 'none') return false;
 
-  if (level === 'own') return access === 'own' || access === 'read' || access === 'write';
-  if (level === 'read') return access === 'read' || access === 'write' || access === 'own';
+  if (level === 'own') return access === 'own';
+  if (level === 'read') return access === 'read' || access === 'write' || (includeOwn && access === 'own');
   if (level === 'write') return access === 'write';
   return false;
 }

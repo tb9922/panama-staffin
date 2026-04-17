@@ -114,6 +114,7 @@ describe('PolicyReviewTracker', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to load policies')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
   });
 
   it('displays the page heading and subtitle after load', async () => {
@@ -181,8 +182,9 @@ describe('PolicyReviewTracker', () => {
     api.getPolicies.mockResolvedValue({ policies: [] });
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No policies recorded')).toBeInTheDocument();
+      expect(screen.getByText('No policies recorded yet')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: 'New Policy' })).toBeInTheDocument();
   });
 
   it('Export Excel button is present for all users', async () => {

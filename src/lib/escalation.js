@@ -6,6 +6,7 @@ import {
   getActualShift, addDays, formatDate, parseDate, AGENCY_SHIFTS,
 } from './rotation.js';
 import { BLOCKING_TRAINING_TYPES } from './training.js';
+import { getConfiguredNlwRate } from '../../shared/nmw.js';
 
 // Coverage counting matching Excel DAILY_STATUS formulas
 export function countEarlyCoverage(staffForDay) {
@@ -253,7 +254,7 @@ export function calculateScenario(sickPerDay, alPerDay, config) {
   const floatStaff = config.staff ? config.staff.filter(s => s.team === 'Float' && s.active !== false) : [];
   const avgFloatRate = floatStaff.length > 0
     ? floatStaff.reduce((sum, s) => sum + (s.hourly_rate || 0), 0) / floatStaff.length
-    : (config.nlw_rate || 12.21);
+    : getConfiguredNlwRate(config);
   const floatCost = floatFills * elHours * avgFloatRate * days;
   const otCost = otFills * elHours * (avgFloatRate + config.ot_premium) * days;
   const agDayCost = agDayFills * elHours * config.agency_rate_day * days;

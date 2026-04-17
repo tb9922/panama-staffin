@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import StickyTable from '../components/StickyTable.jsx';
 import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
@@ -11,6 +16,8 @@ import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -53,6 +60,9 @@ export default function MonthlyTimesheet() {
   const canEdit = canWrite('payroll');
 
   const [schedData, setSchedData] = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const activeStaff = useMemo(
     () => (schedData?.staff || []).filter(s => s.active),
@@ -60,12 +70,13 @@ export default function MonthlyTimesheet() {
   );
 
   const [selectedStaffId, setSelectedStaffId] = useState(urlStaffId || '');
-  const [year, setYear] = useState(() => new Date().getUTCFullYear());
-  const [month, setMonth] = useState(() => new Date().getUTCMonth() + 1);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   // Edit modal state
   const [editModal, setEditModal] = useState(null); // { row }
@@ -106,8 +117,26 @@ export default function MonthlyTimesheet() {
 
   useEffect(() => {
     if (!homeSlug) return;
-    getSchedulingData(homeSlug, { from: monthStart, to: monthEnd }).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
-  }, [homeSlug, monthStart, monthEnd]);
+    let cancelled = false;
+    setScheduleLoading(true);
+    setScheduleError(null);
+    getSchedulingData(homeSlug, { from: monthStart, to: monthEnd })
+      .then((data) => {
+        if (!cancelled) setSchedData(data);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setSchedData(null);
+          setScheduleError(e.message || 'Failed to load scheduling data');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setScheduleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [homeSlug, monthStart, monthEnd, refreshKey]);
 
   // Fetch timesheet entries for staff + month
   const fetchEntries = useCallback(async () => {
@@ -149,8 +178,8 @@ export default function MonthlyTimesheet() {
       // Classify the row
       let rowType;
       if (WORKING_SHIFTS.includes(rosterShift) && !entry) {
-        const nowUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        rowType = dateObj < nowUtc ? 'missing' : 'future';
+        const todayDate = parseDate(todayLocalISO());
+        rowType = dateObj < todayDate ? 'missing' : 'future';
       } else if (WORKING_SHIFTS.includes(rosterShift) && entry) {
         rowType = 'working';
       } else if (isAbsence(rosterShift)) {
@@ -246,6 +275,7 @@ export default function MonthlyTimesheet() {
       });
       setEditModal(null);
       await fetchEntries();
+      showNotice('Timesheet entry saved.');
     } catch (e) {
       setError(e.message || 'Failed to save entry');
     } finally {
@@ -260,6 +290,7 @@ export default function MonthlyTimesheet() {
     try {
       await approveTimesheet(homeSlug, entry.id);
       await fetchEntries();
+      showNotice('Timesheet entry approved.');
     } catch (e) {
       setError(e.message || 'Failed to approve entry');
     } finally {
@@ -280,6 +311,7 @@ export default function MonthlyTimesheet() {
       await disputeTimesheet(homeSlug, disputeModal.entry.id, disputeReason.trim());
       setDisputeModal(null);
       await fetchEntries();
+      showNotice('Timesheet entry disputed.');
     } catch (e) {
       setError(e.message || 'Failed to dispute entry');
     } finally {
@@ -309,6 +341,7 @@ export default function MonthlyTimesheet() {
         status: 'pending',
       });
       await fetchEntries();
+      showNotice('Missing timesheet entry recorded.');
     } catch (e) {
       setError(e.message || 'Failed to record entry');
     } finally {
@@ -351,6 +384,7 @@ export default function MonthlyTimesheet() {
       }
       await batchUpsertTimesheets(homeSlug, entriesToCreate);
       await fetchEntries();
+      showNotice('Missing timesheet entries confirmed.');
     } catch (e) {
       setError(e.message || 'Failed to confirm entries');
     } finally {
@@ -368,6 +402,7 @@ export default function MonthlyTimesheet() {
         setError('No pending entries to approve');
       }
       await fetchEntries();
+      if (result.approved > 0) showNotice('Pending timesheet entries approved.');
     } catch (e) {
       setError(e.message || 'Failed to approve entries');
     } finally {
@@ -483,9 +518,31 @@ export default function MonthlyTimesheet() {
     return calculatePayableHours(snapStart.snapped, snapEnd.snapped, editForm.break_minutes, editForm.date);
   }, [editForm.actual_start, editForm.actual_end, editForm.break_minutes, editForm.date, editForm.scheduled_start, editForm.scheduled_end, snapConfig]);
 
-  if (!schedData) return <div className={PAGE.container}><p>Loading data...</p></div>;
+  function retryLoad() {
+    setError(null);
+    setRefreshKey((value) => value + 1);
+  }
 
-  const monthName = new Date(Date.UTC(year, month - 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  if (scheduleLoading && !schedData) {
+    return <div className={PAGE.container}><LoadingState message="Loading monthly timesheet data..." /></div>;
+  }
+
+  if (scheduleError && !schedData) {
+    return <div className={PAGE.container}><ErrorState title="Unable to load monthly timesheets" message={scheduleError} onRetry={retryLoad} /></div>;
+  }
+
+  if (!schedData || activeStaff.length === 0) {
+    return (
+      <div className={PAGE.container}>
+        <EmptyState
+          title="No active staff available"
+          description="Add or reactivate a staff record before reviewing monthly timesheets."
+        />
+      </div>
+    );
+  }
+
+  const monthName = new Date(year, month - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
   return (
     <div className={PAGE.container}>
@@ -556,7 +613,9 @@ export default function MonthlyTimesheet() {
         </div>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-4" role="alert">{error}</p>}
+      {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
+      {scheduleError && <InlineNotice variant="error" className="mb-4" onDismiss={() => setScheduleError(null)} role="alert">{scheduleError}</InlineNotice>}
+      {error && <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice>}
 
       {/* Action buttons */}
       {canEdit && (
@@ -580,9 +639,9 @@ export default function MonthlyTimesheet() {
 
       {/* Monthly grid */}
       {loading ? (
-        <p className="text-gray-400 py-8 text-center">Loading...</p>
+        <LoadingState message="Loading monthly entries..." />
       ) : (
-        <div className={CARD.flush + ' overflow-x-auto'}>
+        <StickyTable className={CARD.flush}>
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>
               <tr>
@@ -652,7 +711,7 @@ export default function MonthlyTimesheet() {
               </tr>
             </tbody>
           </table>
-        </div>
+        </StickyTable>
       )}
 
       {/* Approval signature line (print only) */}

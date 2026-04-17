@@ -6,6 +6,8 @@ import * as financeService from '../services/financeService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import { startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 
@@ -211,8 +213,8 @@ router.put('/residents/:id', writeRateLimiter, requireAuth, requireHomeAccess, r
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findResidentById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Resident not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await financeService.updateResident(idP.data, req.home.id, parsed.data, req.user.username, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await financeService.updateResident(idP.data, req.home.id, payload, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
@@ -289,8 +291,8 @@ router.put('/invoices/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findInvoiceById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Invoice not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, parsed.data, req.user.username, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await financeService.updateInvoiceWithLines(idP.data, req.home.id, payload, req.user.username, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
@@ -373,8 +375,8 @@ router.put('/expenses/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findExpenseById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await financeService.updateExpense(idP.data, req.home.id, parsed.data, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await financeService.updateExpense(idP.data, req.home.id, payload, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
@@ -486,8 +488,8 @@ router.put('/payment-schedules/:id', writeRateLimiter, requireAuth, requireHomeA
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await financeService.findPaymentScheduleById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Payment schedule not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, parsed.data, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await financeService.updatePaymentSchedule(idP.data, req.home.id, payload, version);
     if (result === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
@@ -525,8 +527,8 @@ router.delete('/payment-schedules/:id', writeRateLimiter, requireAuth, requireHo
 router.get('/dashboard', readRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'read'), async (req, res, next) => {
   try {
     const now = new Date();
-    const from = safeDate(req.query.from) || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
-    const to = safeDate(req.query.to) || now.toISOString().slice(0, 10);
+    const from = safeDate(req.query.from) || startOfLocalMonthISO(now);
+    const to = safeDate(req.query.to) || todayLocalISO(now);
     if (from > to) return res.status(400).json({ error: '"from" date must not be after "to" date' });
     res.json(await financeService.getFinanceDashboard(req.home.id, from, to));
   } catch (err) { next(err); }

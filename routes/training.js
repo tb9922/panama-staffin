@@ -1,16 +1,24 @@
 import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { mkdirSync } from 'fs';
+import { unlink } from 'fs/promises';
+import multer from 'multer';
+import path from 'path';
 import { z } from 'zod';
+import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
+import { config } from '../config.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
+import * as trainingAttachmentsRepo from '../repositories/trainingAttachments.js';
 import * as supervisionRepo from '../repositories/supervisionRepo.js';
 import * as appraisalRepo from '../repositories/appraisalRepo.js';
 import * as fireDrillRepo from '../repositories/fireDrillRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { paginationSchema } from '../lib/pagination.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { updateTrainingTypesConfig } from '../repositories/homeRepo.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
@@ -20,6 +28,7 @@ const recordIdSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
 const staffIdSchema = z.string().min(1).max(20);
 const typeIdSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
+const attachmentDescriptionSchema = z.string().max(5000).nullable().optional();
 
 const trainingTypeSchema = z.object({
   id: z.string().min(1).max(100),
@@ -106,6 +115,39 @@ const fireDrillBaseSchema = z.object({
 const fireDrillCreateSchema = fireDrillBaseSchema;
 const fireDrillUpdateSchema = fireDrillBaseSchema.extend({
   _clientUpdatedAt: z.string().max(50),
+});
+
+function safePath(segment) {
+  return String(segment).replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+const attachmentStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    const staffId = safePath(req.params.staffId);
+    const typeId = safePath(req.params.typeId);
+    if (!staffId || !typeId) return cb(new Error('Invalid path parameters'));
+    const dir = path.join(config.upload.dir, String(req.home.id), 'training', staffId, typeId);
+    mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname).replace(/[^a-zA-Z0-9.]/g, '');
+    cb(null, `${randomUUID()}${ext}`);
+  },
+});
+
+function attachmentFileFilter(req, file, cb) {
+  if (config.upload.allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type ${file.mimetype} not allowed`));
+  }
+}
+
+const attachmentUpload = multer({
+  storage: attachmentStorage,
+  fileFilter: attachmentFileFilter,
+  limits: { fileSize: config.upload.maxFileSize },
 });
 
 // GET /api/training?home=X — one-shot load for TrainingMatrix
@@ -278,6 +320,99 @@ router.delete('/fire-drills/:id', writeRateLimiter, requireAuth, requireHomeAcce
 // PUT /api/training/:staffId/:typeId?home=X — upsert single training record
 // NOTE: Must be registered AFTER all named routes (config/*, supervisions/*, appraisals/*, fire-drills/*)
 // to avoid the greedy /:staffId/:typeId pattern shadowing them.
+router.get('/:staffId/:typeId/files', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const staffParsed = staffIdSchema.safeParse(req.params.staffId);
+    const typeParsed = typeIdSchema.safeParse(req.params.typeId);
+    if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+    const files = await trainingAttachmentsRepo.findAttachments(req.home.id, staffParsed.data, typeParsed.data);
+    res.json(files);
+  } catch (err) { next(err); }
+});
+
+router.post('/:staffId/:typeId/files', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  const staffParsed = staffIdSchema.safeParse(req.params.staffId);
+  const typeParsed = typeIdSchema.safeParse(req.params.typeId);
+  if (!staffParsed.success || !typeParsed.success) return res.status(400).json({ error: 'Invalid staffId or typeId' });
+
+  attachmentUpload.single('file')(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 20MB)' });
+      return res.status(400).json({ error: err.message });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const filePath = req.file.path;
+    try {
+      const descriptionParsed = attachmentDescriptionSchema.safeParse(req.body.description || null);
+      if (!descriptionParsed.success) {
+        await unlink(filePath).catch(() => {});
+        return res.status(400).json({ error: descriptionParsed.error.issues[0]?.message || 'Invalid description' });
+      }
+      const detected = await fileTypeFromFile(filePath);
+      if (detected && detected.mime !== req.file.mimetype) {
+        await unlink(filePath).catch(() => {});
+        return res.status(400).json({ error: 'File content does not match declared type' });
+      }
+      const attachment = await trainingAttachmentsRepo.create(req.home.id, staffParsed.data, typeParsed.data, {
+        original_name: req.file.originalname,
+        stored_name: req.file.filename,
+        mime_type: req.file.mimetype,
+        size_bytes: req.file.size,
+        description: descriptionParsed.data || null,
+        uploaded_by: req.user.username,
+      });
+      await auditService.log('training_attachment_upload', req.home.slug, req.user.username, {
+        staffId: staffParsed.data,
+        typeId: typeParsed.data,
+        fileId: attachment.id,
+      });
+      res.status(201).json(attachment);
+    } catch (e) {
+      await unlink(filePath).catch(() => {});
+      next(e);
+    }
+  });
+});
+
+router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const att = await trainingAttachmentsRepo.findById(id, req.home.id);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    const uploadRoot = path.resolve(config.upload.dir);
+    const filePath = path.resolve(path.join(
+      config.upload.dir,
+      String(req.home.id),
+      'training',
+      safePath(att.staff_id),
+      safePath(att.training_type),
+      att.stored_name
+    ));
+    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    sendStoredDownload(res, next, filePath, {
+      originalName: att.original_name,
+      mimeType: att.mime_type,
+    });
+  } catch (err) { next(err); }
+});
+
+router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const deleted = await trainingAttachmentsRepo.softDelete(id, req.home.id);
+    if (!deleted) return res.status(404).json({ error: 'Attachment not found' });
+    await auditService.log('training_attachment_delete', req.home.slug, req.user.username, {
+      fileId: id,
+      staffId: deleted.staff_id,
+      typeId: deleted.training_type,
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.put('/:staffId/:typeId', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
   try {
     const staffParsed = staffIdSchema.safeParse(req.params.staffId);

@@ -1,13 +1,20 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
-import { isCareRole, calculateStaffPeriodHours, getCycleDates, formatDate } from '../lib/rotation.js';
+import { Link } from 'react-router-dom';
+import { isCareRole, calculateStaffPeriodHours, getCycleDates } from '../lib/rotation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
-import { getMinimumWageRate } from '../../shared/nmw.js';
+import { DEFAULT_NLW_RATE, getConfiguredNlwRate, getMinimumWageRate } from '../../shared/nmw.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import StickyTable from '../components/StickyTable.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const ROLES = ['Senior Carer', 'Carer', 'Team Lead', 'Night Senior', 'Night Carer', 'Float Senior', 'Float Carer'];
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
@@ -26,7 +33,7 @@ function downloadCSV(filename, headers, rows) {
 
 const EMPTY_STAFF = {
   name: '', role: 'Carer', team: 'Day A', pref: 'EL', skill: 0.5,
-  hourly_rate: 12.21, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
+  hourly_rate: DEFAULT_NLW_RATE, active: true, start_date: '', leaving_date: '', notes: '', wtr_opt_out: false,
   contract_hours: null, al_entitlement: null, al_carryover: 0, date_of_birth: null,
 };
 
@@ -54,6 +61,7 @@ export default function StaffRegister() {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(!!editing || showAdd);
 
@@ -71,7 +79,7 @@ export default function StaffRegister() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  const nlwRate = config?.nlw_rate || 12.21;
+  const nlwRate = getConfiguredNlwRate(config);
 
   const staff = useMemo(() => {
     let list = [...allStaff];
@@ -123,7 +131,7 @@ export default function StaffRegister() {
       const updated = { ...prev, [field]: value };
       // Auto-set leaving_date when deactivating
       if (field === 'active' && value === false && !prev.leaving_date) {
-        updated.leaving_date = formatDate(new Date());
+        updated.leaving_date = todayLocalISO();
       }
       // Clear leaving_date when reactivating
       if (field === 'active' && value === true) {
@@ -178,6 +186,17 @@ export default function StaffRegister() {
       setNewStaff({ ...EMPTY_STAFF });
       setShowAdd(false);
       setRefreshKey(k => k + 1);
+      showNotice(
+        <>
+          Staff member added.{' '}
+          {result?.id && (
+            <Link to={`/onboarding?staffId=${encodeURIComponent(result.id)}`} className="underline font-medium">
+              Continue in Onboarding {'->'}
+            </Link>
+          )}
+        </>,
+        { duration: 10000 },
+      );
       // Use the DB-assigned staff ID so the warning banner appears under the new row in the table.
       if (result?.warnings?.length) setRowWarning({ id: result.id, msgs: result.warnings });
     } catch (e) {
@@ -226,7 +245,7 @@ export default function StaffRegister() {
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <p className="text-gray-500 text-sm">Loading staff...</p>
+        <LoadingState message="Loading staff..." card />
       </div>
     );
   }
@@ -234,10 +253,7 @@ export default function StaffRegister() {
   if (error) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-          {error}
-          <button onClick={() => setRefreshKey(k => k + 1)} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
-        </div>
+        <ErrorState title="Unable to load staff" message={error} onRetry={() => setRefreshKey(k => k + 1)} />
       </div>
     );
   }
@@ -293,6 +309,12 @@ export default function StaffRegister() {
         </div>
       </div>
 
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap print:hidden">
         <input type="text" placeholder="Search name or ID..." value={search} onChange={e => setSearch(e.target.value)}
@@ -323,8 +345,8 @@ export default function StaffRegister() {
             )}
             <div className="space-y-3">
               <div>
-                <label className={INPUT.label}>Name</label>
-                <input type="text" value={newStaff.name} onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
+                <label htmlFor="staff-register-new-name" className={INPUT.label}>Name</label>
+                <input id="staff-register-new-name" type="text" value={newStaff.name} onChange={e => setNewStaff({ ...newStaff, name: e.target.value })}
                   className={INPUT.base} aria-describedby={rowError?.id === 'add' ? 'add-staff-error' : undefined} aria-invalid={rowError?.id === 'add'} />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -426,7 +448,7 @@ export default function StaffRegister() {
       </Modal>
 
       {/* Table */}
-      <div className={CARD.flush + ' overflow-x-auto'}>
+      <StickyTable className={CARD.flush}>
         <table className={TABLE.table + ' min-w-[1100px]'}>
           <thead className={TABLE.thead}>
             <tr>
@@ -670,7 +692,7 @@ export default function StaffRegister() {
             })}
           </tbody>
         </table>
-      </div>
+      </StickyTable>
 
       {/* Financial impact note */}
       <div className="mt-3 text-xs text-gray-400 print:hidden">

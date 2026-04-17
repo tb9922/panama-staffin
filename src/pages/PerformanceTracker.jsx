@@ -2,14 +2,19 @@ import { useState, useEffect } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import ModalWrapper from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import TabBar from '../components/TabBar.jsx';
-import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance } from '../lib/api.js';
-import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, getStatusBadge } from '../lib/hr.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import { getCurrentHome, getHrPerformance, createHrPerformance, updateHrPerformance, getLoggedInUser } from '../lib/api.js';
+import { PERFORMANCE_TYPES, PERFORMANCE_STATUSES, PERFORMANCE_AREAS, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const MODAL_TABS = [
   { id: 'concern', label: 'Concern' },
@@ -21,8 +26,14 @@ const MODAL_TABS = [
   { id: 'notes', label: 'Notes' },
 ];
 
+const APPEAL_OUTCOME_OPTIONS = [
+  { value: 'upheld', label: 'Upheld' },
+  { value: 'partially_upheld', label: 'Partially Upheld' },
+  { value: 'overturned', label: 'Overturned' },
+];
+
 const emptyForm = () => ({
-  staff_id: '', date_raised: new Date().toISOString().slice(0, 10), type: 'capability',
+  staff_id: '', date_raised: todayLocalISO(), type: 'capability', performance_area: 'other',
   description: '', status: 'open',
   informal_notes: '', informal_targets: '',
   pip_objectives: '', pip_start_date: '', pip_end_date: '',
@@ -42,6 +53,7 @@ export default function PerformanceTracker() {
   const [saving, setSaving] = useState(false);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
+  const [modalNotice, setModalNotice] = useState(null);
   useDirtyGuard(showModal);
 
   // Filters
@@ -53,6 +65,7 @@ export default function PerformanceTracker() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const LIMIT = 50;
 
@@ -80,6 +93,7 @@ export default function PerformanceTracker() {
     setEditing(null);
     setForm(emptyForm());
     setModalTab('concern');
+    setModalNotice(null);
     setShowModal(true);
   }
 
@@ -89,6 +103,7 @@ export default function PerformanceTracker() {
       staff_id: item.staff_id || '',
       date_raised: item.date_raised || '',
       type: item.type || 'capability',
+      performance_area: item.performance_area || 'other',
       description: item.description || '',
       status: item.status || 'open',
       informal_notes: item.informal_notes || '',
@@ -105,6 +120,7 @@ export default function PerformanceTracker() {
       appeal_outcome: item.appeal_outcome || '',
     });
     setModalTab('concern');
+    setModalNotice(null);
     setShowModal(true);
   }
 
@@ -113,17 +129,38 @@ export default function PerformanceTracker() {
     const missing = [];
     if (!form.staff_id) missing.push('Staff member');
     if (!form.date_raised) missing.push('Date raised');
+    if (!form.performance_area) missing.push('Performance area');
     if (missing.length) { setError(`Required fields missing: ${missing.join(', ')}`); return; }
     setSaving(true);
     try {
+      const payload = { ...form };
       if (editing) {
-        await updateHrPerformance(editing.id, { ...form, _version: editing.version });
+        await updateHrPerformance(editing.id, { ...payload, _version: editing.version });
+        setShowModal(false);
+        setForm(emptyForm());
+        setEditing(null);
+        setModalNotice(null);
+        showNotice('Performance case updated.');
       } else {
-        await createHrPerformance(home, form);
+        const created = await createHrPerformance(home, {
+          ...payload,
+          raised_by: getLoggedInUser()?.username || 'system',
+        });
+        setEditing(created);
+        setForm({
+          ...emptyForm(),
+          ...created,
+          performance_area: created.performance_area || 'other',
+          type: created.type || 'capability',
+          status: created.status || 'open',
+        });
+        setModalTab('informal');
+        setModalNotice({
+          variant: 'success',
+          content: 'Case created. Continue with the informal stage, PIP milestones, and supporting files.',
+        });
+        showNotice('Performance case created.');
       }
-      setShowModal(false);
-      setForm(emptyForm());
-      setEditing(null);
       setRefreshKey(k => k + 1);
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -150,7 +187,7 @@ export default function PerformanceTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading performance cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading performance cases..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -164,6 +201,12 @@ export default function PerformanceTracker() {
           {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openNew}>New Case</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
@@ -192,7 +235,19 @@ export default function PerformanceTracker() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No performance cases</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={TABLE.empty}>
+                    <EmptyState
+                      title="No performance cases"
+                      description={canEdit ? 'Create the first case to track informal support, PIPs, and hearings.' : 'Performance cases will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Case' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>
@@ -220,24 +275,35 @@ export default function PerformanceTracker() {
 
       {/* Modal */}
       {showModal && (
-        <ModalWrapper isOpen={showModal} onClose={() => { setShowModal(false); setForm(emptyForm()); setEditing(null); setError(null); }} title={editing ? 'Edit Performance Case' : 'New Performance Case'} size="xl">
+        <ModalWrapper isOpen={showModal} onClose={() => { setShowModal(false); setForm(emptyForm()); setEditing(null); setError(null); setModalNotice(null); }} title={editing ? 'Edit Performance Case' : 'New Performance Case'} size="xl">
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+            {modalNotice && (
+              <InlineNotice variant={modalNotice.variant} onDismiss={() => setModalNotice(null)} className="mb-4">
+                {modalNotice.content}
+              </InlineNotice>
+            )}
             {/* Modal tab bar */}
-            <TabBar tabs={MODAL_TABS} activeTab={modalTab} onTabChange={setModalTab} />
+            <TabBar tabs={editing ? MODAL_TABS : [MODAL_TABS[0]]} activeTab={modalTab} onTabChange={setModalTab} />
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               {modalTab === 'concern' && <>
                 <div className="grid grid-cols-2 gap-4">
-                  <StaffPicker value={form.staff_id} onChange={val => f('staff_id', val)} label="Staff Member" />
+                  <StaffPicker value={form.staff_id} onChange={val => f('staff_id', val)} label="Staff Member" required />
                   <div>
-                    <label className={INPUT.label}>Date Raised</label>
-                    <input type="date" className={INPUT.base} value={form.date_raised} onChange={e => f('date_raised', e.target.value)} />
+                    <label htmlFor="performance-date-raised" className={INPUT.label}>Date Raised *</label>
+                    <input id="performance-date-raised" type="date" className={INPUT.base} value={form.date_raised} onChange={e => f('date_raised', e.target.value)} />
                   </div>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Type</label>
-                  <select className={INPUT.select} value={form.type} onChange={e => f('type', e.target.value)}>
+                  <label htmlFor="performance-type" className={INPUT.label}>Type *</label>
+                  <select id="performance-type" className={INPUT.select} value={form.type} onChange={e => f('type', e.target.value)}>
                     {PERFORMANCE_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="performance-area" className={INPUT.label}>Performance Area *</label>
+                  <select id="performance-area" className={INPUT.select} value={form.performance_area} onChange={e => f('performance_area', e.target.value)}>
+                    {PERFORMANCE_AREAS.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
                   </select>
                 </div>
                 {editing && (
@@ -321,7 +387,12 @@ export default function PerformanceTracker() {
                   </div>
                   <div>
                     <label className={INPUT.label}>Appeal Outcome</label>
-                    <input className={INPUT.base} value={form.appeal_outcome} onChange={e => f('appeal_outcome', e.target.value)} placeholder="e.g. Upheld, Overturned" />
+                    <select className={INPUT.select} value={form.appeal_outcome} onChange={e => f('appeal_outcome', e.target.value)}>
+                      <option value="">Select outcome...</option>
+                      {APPEAL_OUTCOME_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </>}
@@ -332,7 +403,7 @@ export default function PerformanceTracker() {
             </div>
 
             <div className={MODAL.footer}>
-              <button className={BTN.secondary} onClick={() => { setShowModal(false); setError(null); }} disabled={saving}>Cancel</button>
+              <button className={BTN.secondary} onClick={() => { setShowModal(false); setError(null); setModalNotice(null); }} disabled={saving}>Cancel</button>
               <button className={BTN.primary} onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
             </div>
         </ModalWrapper>

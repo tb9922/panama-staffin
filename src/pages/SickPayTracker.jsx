@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getSickPeriods, createSickPeriod, updateSickPeriod, getSSPConfig, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
@@ -33,6 +39,8 @@ export default function SickPayTracker() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
 
   const [schedData, setSchedData] = useState(null);
   const [periods, setPeriods]     = useState([]);
@@ -95,6 +103,8 @@ export default function SickPayTracker() {
         linked_to_period_id: createForm.linked_to_period_id || null,
         end_date: createForm.end_date || null,
       });
+      showNotice('Sick period recorded.');
+      showToast({ title: 'Sick period recorded', message: createForm.staff_id });
       setShowCreate(false);
       setCreateForm(EMPTY_CREATE);
       await load();
@@ -115,6 +125,8 @@ export default function SickPayTracker() {
         fit_note_date:     updateForm.fit_note_date || null,
         notes:             updateForm.notes || null,
       });
+      showNotice('Sick period updated.');
+      showToast({ title: 'Sick period updated', message: showUpdate.staff_id });
       setShowUpdate(null);
       await load();
     } catch (e) {
@@ -134,10 +146,15 @@ export default function SickPayTracker() {
     setShowUpdate(period);
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading sick pay records..." /></div>;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -155,7 +172,7 @@ export default function SickPayTracker() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" role="alert">{error}</div>
+        <ErrorState title="Sick pay action needs attention" message={error} onRetry={() => void load()} className="mb-4" />
       )}
 
       {/* Fit note alerts */}
@@ -227,8 +244,14 @@ export default function SickPayTracker() {
           <tbody>
             {displayedPeriods.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No sick periods recorded{staffFilter ? ' for this staff member' : ''}.
+                <td colSpan={canEdit ? 10 : 9} className={TABLE.empty}>
+                  <EmptyState
+                    compact
+                    title="No sick periods recorded yet"
+                    description={staffFilter ? 'No sick periods match the selected staff member.' : 'Record the first sick period to track SSP eligibility and fit note requirements.'}
+                    actionLabel={!staffFilter && canEdit ? 'Record Sick Period' : undefined}
+                    onAction={!staffFilter && canEdit ? () => { setCreateForm(EMPTY_CREATE); setShowCreate(true); } : undefined}
+                  />
                 </td>
               </tr>
             )}

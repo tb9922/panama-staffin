@@ -4,6 +4,8 @@ import { calculateDayCost, calculateScenario } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN } from '../lib/design.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 const PRESET_SCENARIOS = [
   { name: 'CLEAN (Zero disruption)', sick: 0, al: 0 },
@@ -25,27 +27,38 @@ const WINTER_SCENARIOS = [
 export default function ScenarioModel() {
   const { homeRole } = useData();
   const homeSlug = getCurrentHome();
+  const isOwnDataScenario = homeRole === 'staff_member';
   const [schedData, setSchedData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const shouldLoad = Boolean(homeSlug) && !isOwnDataScenario;
+  const [loading, setLoading] = useState(() => shouldLoad);
   const [customSick, setCustomSick] = useState(2);
   const [customAL, setCustomAL] = useState(1);
   const [customName, setCustomName] = useState('Custom Scenario');
 
   const [error, setError] = useState(null);
-  const isOwnDataScenario = homeRole === 'staff_member';
 
   useEffect(() => {
-    if (!homeSlug || isOwnDataScenario) {
-      setLoading(false);
-      return;
-    }
-    getSchedulingData(homeSlug)
-      .then(setSchedData)
-      .catch(e => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
-  }, [homeSlug, isOwnDataScenario]);
+    if (!shouldLoad) return;
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading scenario data...</div>;
+    let cancelled = false;
+    async function loadScenarioData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getSchedulingData(homeSlug);
+        if (!cancelled) setSchedData(data);
+      } catch (e) {
+        if (!cancelled) setError(e.message || 'Failed to load');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadScenarioData();
+    return () => { cancelled = true; };
+  }, [homeSlug, refreshKey, shouldLoad]);
+
   if (isOwnDataScenario) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
@@ -56,7 +69,32 @@ export default function ScenarioModel() {
       </div>
     );
   }
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (!homeSlug) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className={CARD.padded}>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Staffing Cost Scenarios</h1>
+          <p className="text-sm text-gray-500">Select a home to view staffing cost scenarios.</p>
+        </div>
+      </div>
+    );
+  }
+  if (loading) return <LoadingState message="Loading scenario data..." className="p-6 max-w-4xl mx-auto" card />;
+  if (error || !schedData) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <ErrorState
+          title="Unable to load scenario data"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => {
+            setError(null);
+            setSchedData(null);
+            setRefreshKey((current) => current + 1);
+          }}
+        />
+      </div>
+    );
+  }
 
   return <ScenarioModelInner schedData={schedData} customSick={customSick} setCustomSick={setCustomSick} customAL={customAL} setCustomAL={setCustomAL} customName={customName} setCustomName={setCustomName} />;
 }

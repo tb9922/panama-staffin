@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyLimitingJudgement, SCORE_BANDS, KEY_QUESTIONS, METRIC_DEFINITIONS,
-  getScoreBand, ENGINE_VERSION,
+  ENGINE_VERSION,
 } from '../cqc.js';
 
 describe('ENGINE_VERSION', () => {

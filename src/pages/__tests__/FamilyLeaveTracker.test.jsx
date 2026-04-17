@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import FamilyLeaveTracker from '../FamilyLeaveTracker.jsx';
 
@@ -137,5 +138,19 @@ describe('FamilyLeaveTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /New Leave Record/i })).toBeInTheDocument();
     });
+  });
+
+  it('uses a select for pay type in the modal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FamilyLeaveTracker />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Leave Record/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Leave Record/i }));
+
+    expect(screen.getByLabelText('Pay Type')).toHaveDisplayValue('None');
+    expect(screen.getByRole('option', { name: 'SMP' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'ShPP' })).toBeInTheDocument();
   });
 });

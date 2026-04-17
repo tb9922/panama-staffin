@@ -20,6 +20,7 @@ import * as dolsRepo from '../repositories/dolsRepo.js';
 import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as ropaRepo from '../repositories/ropaRepo.js';
 import * as dpiaRepo from '../repositories/dpiaRepo.js';
@@ -28,7 +29,14 @@ import { scanRetention } from './gdprService.js';
 // Scoring engines — pure functions, no browser APIs.
 // CONSTRAINT: these files (and their transitive imports) must remain browser-API-free.
 // If any file in the chain imports window/document/fetch, server-side scoring will crash.
-import { calculateComplianceScore } from '../src/lib/cqc.js';
+import { calculateComplianceScore, getDateRange } from '../src/lib/cqc.js';
+import {
+  buildReadinessMatrix,
+  getQuestionReadiness,
+  getOverallReadiness,
+  getReadinessGaps,
+  serialiseReadinessMatrix,
+} from '../src/lib/cqcReadiness.js';
 import { calculateGdprControlsScore } from '../src/lib/gdpr.js';
 import { formatDate, parseDate, addDays } from '../shared/rotation.js';
 
@@ -48,7 +56,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     staffResult, overrides, training, supervisions, appraisals,
     fireDrills, incidents, complaints, complaintSurveys,
     maintenance, ipcAudits, risks, policies,
-    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence,
+    whistleblowing, dols, mcaAssessments, careCert, onboarding, cqcEvidence, cqcNarratives,
   ] = await Promise.all([
     staffRepo.findByHome(homeId),
     overrideRepo.findByHome(homeId, from, to),
@@ -69,6 +77,7 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     careCertRepo.findByHome(homeId),
     onboardingRepo.findByHome(homeId),
     cqcEvidenceRepo.findByHome(homeId, { limit: 500 }),
+    cqcNarrativeRepo.findByHome(homeId),
   ]);
 
   return {
@@ -92,6 +101,18 @@ async function gatherCqcData(homeId, windowFrom, windowTo) {
     care_certificate: careCert || {},
     onboarding: onboarding || {},
     cqc_evidence: cqcEvidence?.rows || cqcEvidence || [],
+    cqc_statement_narratives: cqcNarratives || [],
+  };
+}
+
+function buildReadinessPayload(data, dateRange, asOfDate) {
+  const readinessMatrix = buildReadinessMatrix(data, dateRange, asOfDate);
+  return {
+    entries: serialiseReadinessMatrix(readinessMatrix),
+    questionSummary: getQuestionReadiness(readinessMatrix),
+    overall: getOverallReadiness(readinessMatrix),
+    gaps: getReadinessGaps(readinessMatrix),
+    computedAt: asOfDate,
   };
 }
 
@@ -142,11 +163,22 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
     // asOfDate = window end date (for historical snapshots) or today (for current snapshots)
     const asOfDate = windowTo || today;
     const result = calculateComplianceScore(data, dateRange, asOfDate);
+    const readiness = buildReadinessPayload(data, dateRange, asOfDate);
     return {
       engine_version: result.engine_version,
       overall_score: result.overallScore,
       band: result.band.label,
-      result,
+      result: {
+        ...result,
+        evidencePackData: data,
+        evidencePackMeta: {
+          window_from: formatDate(dateRange.from),
+          window_to: formatDate(dateRange.to),
+          date_range_days: dateRange.days,
+          as_of_date: asOfDate,
+        },
+        readiness,
+      },
     };
   }
 
@@ -162,4 +194,10 @@ export async function computeSnapshot(homeId, engine, windowFrom, windowTo) {
   }
 
   return null;
+}
+
+export async function computeCqcReadiness(homeId, dateRangeDays = 28, asOfDate = formatDate(new Date())) {
+  const data = await gatherCqcData(homeId);
+  if (!data) return null;
+  return buildReadinessPayload(data, getDateRange(dateRangeDays), asOfDate);
 }

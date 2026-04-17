@@ -3,9 +3,14 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { getCurrentHome, getDpiaAssessments, createDpiaAssessment, updateDpiaAssessment, deleteDpiaAssessment } from '../lib/api.js';
 import { LEGAL_BASES } from '../lib/gdpr.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const EMPTY_FORM = {
   title: '', processing_description: '', purpose: '', scope: '',
@@ -34,6 +39,7 @@ export default function DpiaManager() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal);
 
   const load = useCallback(async () => {
@@ -64,6 +70,7 @@ export default function DpiaManager() {
     try {
       if (editing) await updateDpiaAssessment(home, editing.id, { ...form, _version: editing.version });
       else await createDpiaAssessment(home, form);
+      showNotice(editing ? 'DPIA updated.' : 'DPIA created.');
       closeModal(); load();
     } catch (e) { setFormError(e.message || 'Save failed'); }
     finally { setSaving(false); }
@@ -90,7 +97,7 @@ export default function DpiaManager() {
     highRisk: items.filter(i => i.risk_level === 'high' || i.risk_level === 'very_high').length,
   }), [items, total]);
 
-  if (!home) return <div className={PAGE.container}><p>Select a home</p></div>;
+  if (!home) return <div className={PAGE.container}><EmptyState title="Select a home" description="Choose a home to review impact assessments." compact /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -102,7 +109,8 @@ export default function DpiaManager() {
         {canEdit && <button className={BTN.primary} onClick={openNew}>+ New DPIA</button>}
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
+      {error && <ErrorState title="Unable to load DPIAs" message={error} onRetry={load} className="mb-4" />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className={CARD.padded}><p className="text-xs text-gray-500">Total DPIAs</p><p className="text-2xl font-bold">{stats.total}</p></div>
@@ -125,9 +133,9 @@ export default function DpiaManager() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty} role="status">Loading…</td></tr>
+                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty}><LoadingState message="Loading DPIAs..." compact /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty}>No DPIAs recorded</td></tr>
+                <tr><td colSpan={canEdit ? 5 : 4} className={TABLE.empty}><EmptyState title="No DPIAs recorded" description={canEdit ? 'Add the first impact assessment to document higher-risk processing.' : 'Impact assessments will appear here once they are recorded.'} compact /></td></tr>
               ) : items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>
@@ -157,7 +165,7 @@ export default function DpiaManager() {
 
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit DPIA' : 'New DPIA'} size="xl">
         <div className="space-y-4">
-          {formError && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{formError}</div>}
+          {formError && <InlineNotice variant="error">{formError}</InlineNotice>}
           <div>
             <label className={INPUT.label} htmlFor="dpia-title">Title *</label>
             <input id="dpia-title" className={INPUT.base} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. New biometric clock-in system" />

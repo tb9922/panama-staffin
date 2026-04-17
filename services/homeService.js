@@ -63,7 +63,7 @@ export async function assembleData(homeSlug, userRole) {
 // SELECT ... FOR UPDATE on the homes row ensures concurrent saves are serialised:
 // the second save blocks until the first commits, then sees the new updated_at
 // and correctly 409s via optimistic locking. No partial saves on any failure.
-export async function saveData(homeSlug, body, username, clientUpdatedAt) {
+export async function saveData(homeSlug, body, username, clientUpdatedAt, auditDetails = null) {
   // await (not return) so the code below runs after the transaction commits
   await withTransaction(async (client) => {
     // Lock the home row — concurrent saves block here until this transaction commits
@@ -89,7 +89,7 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt) {
     if (body.overrides) await overrideRepo.replace(home.id, body.overrides, client, from, to);
     if (body.day_notes) await dayNoteRepo.replace(home.id, body.day_notes, client, from, to);
     if (body.annual_leave != null) await homeRepo.updateAnnualLeave(home.id, body.annual_leave, client);
-    await auditRepo.log('save', homeSlug, username, null, client);
+    await auditRepo.log('save', homeSlug, username, auditDetails, client);
   });
 
   // Return the new updated_at so the client keeps serverUpdatedAt.current in sync.

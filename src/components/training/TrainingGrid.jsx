@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { formatDate, parseDate } from '../../lib/rotation.js';
+import { parseDate } from '../../lib/rotation.js';
 import {
   buildComplianceMatrix, getComplianceStats,
   calculateExpiry, TRAINING_METHODS, TRAINING_STATUS, STATUS_DISPLAY,
@@ -9,6 +9,7 @@ import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import TrainingRecordModal from './TrainingRecordModal.jsx';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -41,7 +42,7 @@ export default function TrainingGrid({ training, trainingTypes, staff, homeSlug,
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState(null);
 
-  const todayStr = formatDate(new Date());
+  const todayStr = todayLocalISO();
   const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
   const activeTypes = useMemo(() => trainingTypes.filter(t => t.active), [trainingTypes]);

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   getCycleDates, formatDate, getActualShift,
   isWorkingShift, isCareRole, SHIFT_COLORS,
@@ -6,9 +7,14 @@ import {
 import { checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, BTN } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
+import { clickableRowProps } from '../lib/a11y.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 
 export default function FatigueTracker() {
+  const navigate = useNavigate();
   const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,13 +37,13 @@ export default function FatigueTracker() {
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading fatigue data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) return <LoadingState message="Loading fatigue data..." className="px-6 py-6" />;
+  if (error || !schedData) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load fatigue data" message={error || 'Failed to load scheduling data'} /></div>;
 
-  return <FatigueTrackerInner schedData={schedData} today={today} />;
+  return <FatigueTrackerInner schedData={schedData} today={today} navigate={navigate} />;
 }
 
-function FatigueTrackerInner({ schedData, today }) {
+function FatigueTrackerInner({ schedData, today, navigate }) {
   const config = schedData.config;
   const cycleDates = useMemo(() => getCycleDates(config.cycle_start_date, today, 28), [config.cycle_start_date, today]);
 
@@ -89,6 +95,17 @@ function FatigueTrackerInner({ schedData, today }) {
     const todayStr = formatDate(today);
     return cycleDates.findIndex(d => formatDate(d) === todayStr);
   }, [cycleDates, today]);
+
+  if (activeStaff.length === 0) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <EmptyState
+          title="No active care staff"
+          description="Add active care-role staff to the rota to start monitoring fatigue and consecutive-day risks."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -156,7 +173,11 @@ function FatigueTrackerInner({ schedData, today }) {
             </thead>
             <tbody>
               {fatigueData.map(s => (
-                <tr key={s.id} className={`${TABLE.tr} ${s.fatigue.exceeded ? 'bg-red-50' : s.fatigue.atRisk ? 'bg-amber-50' : ''}`}>
+                <tr
+                  key={s.id}
+                  className={`${TABLE.tr} ${s.fatigue.exceeded ? 'bg-red-50' : s.fatigue.atRisk ? 'bg-amber-50' : ''} cursor-pointer`}
+                  {...clickableRowProps(() => navigate(`/day/${formatDate(today)}`))}
+                >
                   <td className="py-1 px-2 sticky left-0 bg-white z-10 border-r">
                     <div className="font-medium truncate max-w-[120px]">{s.name}</div>
                     <div className="text-[9px] text-gray-400">{s.team}</div>

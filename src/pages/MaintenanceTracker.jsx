@@ -6,6 +6,10 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getMaintenanceStats,
   getMaintenanceStatus, MAINTENANCE_STATUSES, FREQUENCY_OPTIONS, DEFAULT_MAINTENANCE_CATEGORIES,
@@ -14,6 +18,7 @@ import {
   getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const EMPTY_FORM = {
   category: '', category_name: '', description: '', frequency: 'annual',
@@ -36,6 +41,7 @@ export default function MaintenanceTracker() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal);
 
@@ -89,6 +95,17 @@ export default function MaintenanceTracker() {
     setShowModal(true);
   }
 
+  function updateFormWithNextDue(patch) {
+    setForm(current => {
+      const next = { ...current, ...patch };
+      if (next.last_completed && next.frequency) {
+        const freqDays = FREQUENCY_OPTIONS.find(f => f.id === next.frequency)?.days || 365;
+        next.next_due = formatDate(addDays(parseDate(next.last_completed), freqDays));
+      }
+      return next;
+    });
+  }
+
   async function handleSave() {
     if (!form.category) return;
     const catDef = maintenanceCategories.find(c => c.id === form.category);
@@ -108,6 +125,7 @@ export default function MaintenanceTracker() {
       } else {
         await createMaintenanceCheck(home, saveItem);
       }
+      showNotice(editingId ? 'Maintenance record updated.' : 'Maintenance record added.');
       setShowModal(false);
       await load();
     } catch (err) {
@@ -156,24 +174,8 @@ export default function MaintenanceTracker() {
     return s ? <span className={BADGE[s.badgeKey]}>{s.name}</span> : status;
   };
 
-  if (loading) {
-    return (
-      <div className={PAGE.container}>
-        <div className="text-center py-12 text-gray-400">Loading maintenance checks...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={PAGE.container}>
-        <div className="text-center py-12 text-red-500">{error}</div>
-        <div className="text-center">
-          <button onClick={load} className={BTN.primary}>Retry</button>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading maintenance checks..." /></div>;
+  if (error) return <div className={PAGE.container}><ErrorState title="Unable to load maintenance checks" message={error} onRetry={load} /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -184,6 +186,8 @@ export default function MaintenanceTracker() {
           {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
+
+      {notice && <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">{notice.content}</InlineNotice>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -240,7 +244,7 @@ export default function MaintenanceTracker() {
             </thead>
             <tbody>
               {items.length === 0 && (
-                <tr><td colSpan="7" className={`${TABLE.td} text-center text-gray-400`}>No maintenance checks recorded</td></tr>
+                <tr><td colSpan="7" className={TABLE.empty}><EmptyState title="No maintenance checks recorded" description={canEdit ? 'Add the first compliance or servicing check to start tracking due dates.' : 'Maintenance checks will appear here once they are recorded.'} compact /></td></tr>
               )}
               {items.map(m => (
                 <tr key={m.id} className={TABLE.tr}>
@@ -275,7 +279,11 @@ export default function MaintenanceTracker() {
                   <label className={INPUT.label}>Category</label>
                   <select value={form.category} onChange={e => {
                     const cat = maintenanceCategories.find(c => c.id === e.target.value);
-                    setForm({ ...form, category: e.target.value, category_name: cat?.name || '', frequency: cat?.frequency || form.frequency });
+                    updateFormWithNextDue({
+                      category: e.target.value,
+                      category_name: cat?.name || '',
+                      frequency: cat?.frequency || form.frequency,
+                    });
                   }} className={INPUT.select}>
                     <option value="">Select...</option>
                     {maintenanceCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -283,7 +291,7 @@ export default function MaintenanceTracker() {
                 </div>
                 <div>
                   <label className={INPUT.label}>Frequency</label>
-                  <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })}
+                  <select value={form.frequency} onChange={e => updateFormWithNextDue({ frequency: e.target.value })}
                     className={INPUT.select}>
                     {FREQUENCY_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
@@ -300,7 +308,7 @@ export default function MaintenanceTracker() {
                 <div>
                   <label className={INPUT.label}>Last Completed</label>
                   <input type="date" value={form.last_completed}
-                    onChange={e => setForm({ ...form, last_completed: e.target.value })} className={INPUT.base} />
+                    onChange={e => updateFormWithNextDue({ last_completed: e.target.value })} className={INPUT.base} />
                 </div>
                 <div>
                   <label className={INPUT.label}>Next Due (auto-calculated)</label>
@@ -372,7 +380,7 @@ export default function MaintenanceTracker() {
 
             <div className={MODAL.footer}>
               {canEdit && editingId && <button onClick={handleDelete} className={BTN.danger}>Delete</button>}
-              {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
+            {saveError && <InlineNotice variant="error" className="mr-auto">{saveError}</InlineNotice>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
               {canEdit && <button onClick={handleSave} className={BTN.primary}>Save</button>}

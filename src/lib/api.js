@@ -20,6 +20,15 @@ function clearClientSession() {
   }
 }
 
+function expireClientSession() {
+  clearClientSession();
+  try {
+    window.dispatchEvent(new Event('panama:session-expired'));
+  } catch {
+    /* ignore */
+  }
+}
+
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)panama_csrf=([^;]+)/);
   return match ? match[1] : '';
@@ -39,6 +48,7 @@ const h = (homeSlug) => encodeURIComponent(homeSlug);
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...options });
   if (res.status === 401) {
+    expireClientSession();
     const err = new Error('Session expired — please log in again');
     err.status = 401;
     throw err;
@@ -53,6 +63,65 @@ async function apiFetch(url, options = {}) {
   return res.json();
 }
 
+async function fetchDownloadResponse(url) {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+  });
+  if (res.status === 401) {
+    expireClientSession();
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `Download failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return res;
+}
+
+async function uploadFormData(url, formData, failureLabel = 'Upload failed') {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
+    body: formData,
+  });
+  if (res.status === 401) {
+    expireClientSession();
+    const err = new Error('Session expired — please log in again');
+    err.status = 401;
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `${failureLabel} (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+async function triggerBrowserDownload(url, originalName) {
+  const res = await fetchDownloadResponse(url);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = originalName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function downloadAuthenticatedFile(url, originalName) {
+  return triggerBrowserDownload(url, originalName);
+}
+
 export async function loadHomes() {
   return apiFetch(`${API_BASE}/homes`, { headers: authHeaders() });
 }
@@ -64,7 +133,12 @@ export async function login(username, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error('Invalid credentials');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `Login failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   const user = await res.json();
   // JWT is now in HttpOnly cookie (set by server) — only store display info
   localStorage.setItem('user', JSON.stringify({ username: user.username, role: user.role, displayName: user.displayName || '', isPlatformAdmin: user.isPlatformAdmin || false }));
@@ -103,6 +177,94 @@ export async function logout(options = {}) {
 
 export async function loadAuditLog(limit = 100) {
   return apiFetch(`${API_BASE}/audit?limit=${limit}`, { headers: authHeaders() });
+}
+
+export async function listNotifications() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function markNotificationsRead(keys) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications/read?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ keys }),
+  });
+}
+
+export async function markAllNotificationsRead(keys) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/notifications/read-all?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ keys }),
+  });
+}
+
+export async function searchEvidenceHub({ q, uploadedBy, dateFrom, dateTo, modules, limit = 50, offset = 0 } = {}) {
+  const home = getCurrentHome();
+  const params = new URLSearchParams({
+    home,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (q) params.set('q', q);
+  if (uploadedBy) params.set('uploadedBy', uploadedBy);
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  if (modules?.length) params.set('modules', modules.join(','));
+  return apiFetch(`${API_BASE}/evidence-hub/search?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function listEvidenceHubUploaders() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/evidence-hub/uploaders?home=${encodeURIComponent(home)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export function getEvidenceHubDownloadUrl(sourceModule, attachmentId) {
+  const home = getCurrentHome();
+  switch (sourceModule) {
+    case 'hr':
+      return `${API_BASE}/hr/attachments/download/${attachmentId}?home=${h(home)}`;
+    case 'cqc_evidence':
+      return `${API_BASE}/cqc-evidence/files/${attachmentId}/download?home=${h(home)}`;
+    case 'onboarding':
+      return `${API_BASE}/onboarding/files/${attachmentId}/download?home=${h(home)}`;
+    case 'training':
+      return `${API_BASE}/training/files/${attachmentId}/download?home=${h(home)}`;
+    case 'record':
+      return `${API_BASE}/record-attachments/download/${attachmentId}?home=${h(home)}`;
+    default:
+      throw new Error(`Unsupported evidence source: ${sourceModule}`);
+  }
+}
+
+function getEvidenceHubDeleteUrl(sourceModule, attachmentId) {
+  const home = getCurrentHome();
+  switch (sourceModule) {
+    case 'hr':
+      return `${API_BASE}/hr/attachments/${attachmentId}?home=${h(home)}`;
+    case 'cqc_evidence':
+      return `${API_BASE}/cqc-evidence/files/${attachmentId}?home=${h(home)}`;
+    case 'onboarding':
+      return `${API_BASE}/onboarding/files/${attachmentId}?home=${h(home)}`;
+    case 'training':
+      return `${API_BASE}/training/files/${attachmentId}?home=${h(home)}`;
+    case 'record':
+      return `${API_BASE}/record-attachments/${attachmentId}?home=${h(home)}`;
+    default:
+      throw new Error(`Unsupported evidence source: ${sourceModule}`);
+  }
+}
+
+export async function deleteEvidenceHubAttachment(sourceModule, attachmentId) {
+  return apiFetch(getEvidenceHubDeleteUrl(sourceModule, attachmentId), {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
 }
 
 export async function getHandoverEntries(homeSlug, date) {
@@ -403,6 +565,25 @@ export async function deleteCqcEvidence(homeSlug, id) {
   });
 }
 
+export async function getCqcNarratives(homeSlug) {
+  return apiFetch(`${API_BASE}/cqc-evidence/narratives?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getCqcReadiness(homeSlug, dateRange = 28, signal) {
+  return apiFetch(`${API_BASE}/cqc-evidence/readiness?home=${h(homeSlug)}&dateRange=${encodeURIComponent(dateRange)}`, {
+    headers: authHeaders(),
+    signal,
+  });
+}
+
+export async function upsertCqcNarrative(homeSlug, statementId, data) {
+  return apiFetch(`${API_BASE}/cqc-evidence/narratives/${encodeURIComponent(statementId)}?home=${h(homeSlug)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
 export async function getCqcEvidenceFiles(_caseType, evidenceId) {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {
@@ -415,17 +596,10 @@ export async function uploadCqcEvidenceFile(_caseType, evidenceId, file, descrip
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-    body: formData,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadFormData(
+    `${API_BASE}/cqc-evidence/${encodeURIComponent(evidenceId)}/files?home=${h(home)}`,
+    formData
+  );
 }
 
 export async function deleteCqcEvidenceFile(id) {
@@ -438,20 +612,7 @@ export async function deleteCqcEvidenceFile(id) {
 
 export async function downloadCqcEvidenceFile(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/cqc-evidence/files/${id}/download?home=${h(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return triggerBrowserDownload(`${API_BASE}/cqc-evidence/files/${id}/download?home=${h(home)}`, originalName);
 }
 
 // ── Token Revocation ────────────────────────────────────────────────────────
@@ -556,6 +717,13 @@ export async function voidPayrollRun(homeSlug, runId) {
 }
 export function getPayrollExportUrl(homeSlug, runId, format) {
   return `${API_BASE}/payroll/runs/${runId}/export?home=${h(homeSlug)}&format=${format}`;
+}
+export async function markPayrollRunExported(homeSlug, runId, format) {
+  return apiFetch(`${API_BASE}/payroll/runs/${runId}/export?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ format }),
+  });
 }
 export function getPayrollSummaryPdfUrl(homeSlug, runId) {
   return `${API_BASE}/payroll/runs/${runId}/summary-pdf?home=${h(homeSlug)}`;
@@ -1028,25 +1196,10 @@ export async function uploadHrAttachment(caseType, caseId, file, description) {
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-CSRF-Token': getCsrfToken(),
-    },
-    body: formData,
-  });
-  if (res.status === 401) {
-    const err = new Error('Session expired — please log in again');
-    err.status = 401;
-    throw err;
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadFormData(
+    `${API_BASE}/hr/attachments/${caseType}/${caseId}?home=${encodeURIComponent(home)}`,
+    formData
+  );
 }
 
 export async function deleteHrAttachment(id) {
@@ -1059,20 +1212,7 @@ export async function deleteHrAttachment(id) {
 
 export async function downloadHrAttachment(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return triggerBrowserDownload(`${API_BASE}/hr/attachments/download/${id}?home=${encodeURIComponent(home)}`, originalName);
 }
 
 // ── HR Investigation Meetings ───────────────────────────────────────────────
@@ -1390,17 +1530,10 @@ export async function uploadOnboardingFile(_caseType, staffIdAndSection, file, d
   const formData = new FormData();
   formData.append('file', file);
   if (description) formData.append('description', description);
-  const res = await fetch(`${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-    body: formData,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Upload failed (${res.status})`);
-  }
-  return res.json();
+  return uploadFormData(
+    `${API_BASE}/onboarding/${encodeURIComponent(staffId)}/${encodeURIComponent(section)}/files?home=${h(home)}`,
+    formData
+  );
 }
 
 export async function deleteOnboardingFile(id) {
@@ -1413,20 +1546,7 @@ export async function deleteOnboardingFile(id) {
 
 export async function downloadOnboardingFile(id, originalName) {
   const home = getCurrentHome();
-  const res = await fetch(`${API_BASE}/onboarding/files/${id}/download?home=${h(home)}`, {
-    credentials: 'same-origin',
-    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': getCsrfToken() },
-  });
-  if (!res.ok) throw new Error('Download failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = originalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return triggerBrowserDownload(`${API_BASE}/onboarding/files/${id}/download?home=${h(home)}`, originalName);
 }
 
 // ─── Staff CRUD ───────────────────────────────────────────────────────────────

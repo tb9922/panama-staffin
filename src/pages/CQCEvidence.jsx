@@ -6,6 +6,10 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   getCurrentHome, getSchedulingData, getTrainingData,
@@ -15,12 +19,16 @@ import {
   getCqcEvidenceFiles, uploadCqcEvidenceFile, deleteCqcEvidenceFile, downloadCqcEvidenceFile,
   deleteCqcEvidence, getLoggedInUser, logReportDownload,
   createSnapshot, getSnapshots, getSnapshot, signOffSnapshot,
+  getCqcNarratives, getCqcReadiness, upsertCqcNarrative,
 } from '../lib/api.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS,
   calculateComplianceScore, getDateRange, getEvidenceForStatement,
 } from '../lib/cqc.js';
+import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps } from '../lib/cqcReadiness.js';
+import { getAllEvidenceCategories, getEvidenceCategoryLabel } from '../lib/cqcEvidenceCategories.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const CATEGORY_LABELS = { safe: 'Safe', effective: 'Effective', caring: 'Caring', responsive: 'Responsive', 'well-led': 'Well-Led' };
 const CATEGORY_COLORS = {
@@ -31,10 +39,7 @@ const CATEGORY_COLORS = {
   'well-led': 'text-purple-700 bg-purple-50 border-purple-200',
 };
 
-const EVIDENCE_CATEGORY_LABELS = {
-  peoples_experience: "People's Experience", feedback: 'Feedback', observation: 'Observation',
-  processes: 'Processes', outcomes: 'Outcomes', management_info: 'Management Info',
-};
+const EVIDENCE_CATEGORY_OPTIONS = getAllEvidenceCategories();
 
 const RANGE_OPTIONS = [
   { days: 28, label: '28 Days' },
@@ -59,6 +64,8 @@ function blankEvidenceForm(statementId = '') {
     date_from: '',
     date_to: '',
     evidence_category: '',
+    evidence_owner: '',
+    review_due: '',
   };
 }
 
@@ -73,6 +80,8 @@ function toEvidenceForm(evidence) {
     date_from: evidence?.date_from || '',
     date_to: evidence?.date_to || '',
     evidence_category: evidence?.evidence_category || '',
+    evidence_owner: evidence?.evidence_owner || '',
+    review_due: evidence?.review_due || '',
   };
 }
 
@@ -85,6 +94,32 @@ function buildEvidencePayload(form) {
     date_from: form.date_from || null,
     date_to: form.date_to || null,
     evidence_category: form.evidence_category || null,
+    evidence_owner: form.evidence_owner.trim() || null,
+    review_due: form.review_due || null,
+  };
+}
+
+function getEvidenceDateRangeError(form) {
+  if (form?.date_from && form?.date_to && form.date_to < form.date_from) {
+    return 'Evidence To cannot be before Evidence From.';
+  }
+  return null;
+}
+
+function formatFileCount(count) {
+  return `${count} file${count === 1 ? '' : 's'}`;
+}
+
+function blankNarrativeForm(statementId = '', existing = null) {
+  return {
+    quality_statement: statementId || existing?.quality_statement || '',
+    narrative: existing?.narrative || '',
+    risks: existing?.risks || '',
+    actions: existing?.actions || '',
+    reviewed_by: existing?.reviewed_by || '',
+    reviewed_at: existing?.reviewed_at ? String(existing.reviewed_at).slice(0, 16) : '',
+    review_due: existing?.review_due || '',
+    version: existing?.version,
   };
 }
 
@@ -93,21 +128,38 @@ function metricColor(value, lowerIsBetter) {
   return value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-red-600';
 }
 
+function readinessBadgeClass(status) {
+  if (status === 'strong') return BADGE.green;
+  if (status === 'stale') return BADGE.amber;
+  if (status === 'partial') return BADGE.amber;
+  if (status === 'weak') return BADGE.red;
+  return BADGE.red;
+}
+
+function readinessStatusLabel(status) {
+  if (status === 'strong') return 'Strong';
+  if (status === 'stale') return 'Stale';
+  if (status === 'partial') return 'Partial';
+  if (status === 'weak') return 'Weak';
+  return 'Missing';
+}
+
 export default function CQCEvidence() {
   const homeSlug = getCurrentHome();
   const [moduleData, setModuleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!homeSlug) return;
     let cancelled = false;
     // CQC scoring needs up to 365 days of overrides for the 1-year view
     const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()))
-      .toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7))
-      .toISOString().slice(0, 10);
+    const fromDate = new Date(now);
+    fromDate.setFullYear(fromDate.getFullYear() - 1);
+    const from = todayLocalISO(fromDate);
+    const to = addDaysLocalISO(todayLocalISO(now), 7);
 
     Promise.all([
       getSchedulingData(homeSlug, { from, to }),
@@ -147,10 +199,20 @@ export default function CQCEvidence() {
     }).catch(e => { if (!cancelled) setError(e.message || 'Failed to load CQC data'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [homeSlug]);
+  }, [homeSlug, refreshKey]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading CQC data...</div>;
-  if (error || !moduleData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load CQC data'}</div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading CQC data..." /></div>;
+  if (error || !moduleData) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState
+          title="Unable to load the CQC workspace"
+          message={error || 'Failed to load CQC data'}
+          onRetry={() => setRefreshKey((value) => value + 1)}
+        />
+      </div>
+    );
+  }
 
   return <CQCEvidenceInner data={moduleData} />;
 }
@@ -162,15 +224,24 @@ function CQCEvidenceInner({ data }) {
   const isMounted = useRef(true);
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
   const [evidence, setEvidence] = useState([]);
+  const [narratives, setNarratives] = useState([]);
+  const [narrativeDrafts, setNarrativeDrafts] = useState({});
   const [evidenceLoading, setEvidenceLoading] = useState(true);
+  const [narrativesLoading, setNarrativesLoading] = useState(true);
+  const [liveReadiness, setLiveReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState(null);
   const [dateRangeDays, setDateRangeDays] = useState(28);
   const [expandedStatement, setExpandedStatement] = useState(null);
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [evidenceForm, setEvidenceForm] = useState(blankEvidenceForm());
   const [generating, setGenerating] = useState(false);
   const [savingEvidence, setSavingEvidence] = useState(false);
+  const [savingNarrativeId, setSavingNarrativeId] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saveNotice, setSaveNotice] = useState(null);
+  const [narrativeError, setNarrativeError] = useState(null);
+  const [narrativeNotice, setNarrativeNotice] = useState(null);
   const [snapshotError, setSnapshotError] = useState(null);
   const [snapshotNotice, setSnapshotNotice] = useState(null);
   const [pdfError, setPdfError] = useState(null);
@@ -198,13 +269,55 @@ function CQCEvidenceInner({ data }) {
 
   useEffect(() => { loadEvidence(); }, [loadEvidence]);
 
+  const loadNarratives = useCallback(async () => {
+    try {
+      const home = getCurrentHome();
+      const rows = await getCqcNarratives(home);
+      if (isMounted.current) setNarratives(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      if (isMounted.current) console.error('Failed to load CQC narratives:', err);
+    } finally {
+      if (isMounted.current) setNarrativesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadNarratives(); }, [loadNarratives]);
+
+  const loadReadiness = useCallback(async (signal) => {
+    const home = getCurrentHome();
+    if (!home) return;
+    if (isMounted.current) {
+      setReadinessLoading(true);
+      setReadinessError(null);
+    }
+    try {
+      const result = await getCqcReadiness(home, dateRangeDays, signal);
+      if (isMounted.current && !signal?.aborted) setLiveReadiness(result || null);
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      if (isMounted.current) {
+        console.warn('Failed to load authoritative readiness:', err);
+        setReadinessError(err.message || 'Failed to load readiness');
+        setLiveReadiness(null);
+      }
+    } finally {
+      if (isMounted.current && !signal?.aborted) setReadinessLoading(false);
+    }
+  }, [dateRangeDays]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadReadiness(controller.signal);
+    return () => controller.abort();
+  }, [loadReadiness, evidence, narratives]);
+
   const loadSnapshots = useCallback(async () => {
     const home = getCurrentHome();
     if (!home) return;
     if (isMounted.current) setSnapshotLoading(true);
     try {
       const result = await getSnapshots(home, 'cqc');
-      if (isMounted.current) setSnapshots(Array.isArray(result) ? result : []);
+      if (isMounted.current && Array.isArray(result)) setSnapshots(result);
     } catch (e) {
       if (isMounted.current) { console.warn('Failed to load snapshots:', e.message); setSnapshots([]); }
     } finally {
@@ -259,17 +372,46 @@ function CQCEvidenceInner({ data }) {
 
   const today = useLiveDate();
   const dateRange = useMemo(() => getDateRange(dateRangeDays), [dateRangeDays]);
+  const narrativeByStatement = useMemo(
+    () => Object.fromEntries((narratives || []).map((entry) => [entry.quality_statement, entry])),
+    [narratives]
+  );
 
   // Merge live evidence state into data for score computation and evidence-for-statement calls
   const dataWithEvidence = useMemo(() => {
     if (!data) return null;
-    return { ...data, cqc_evidence: evidence };
-  }, [data, evidence]);
+    return {
+      ...data,
+      cqc_evidence: evidence,
+      cqc_statement_narratives: narratives,
+    };
+  }, [data, evidence, narratives]);
 
   const score = useMemo(() => {
     if (!dataWithEvidence?.config) return null;
     return calculateComplianceScore(dataWithEvidence, dateRange, today);
   }, [dataWithEvidence, dateRange, today]);
+
+  const fallbackReadinessMatrix = useMemo(() => {
+    if (!dataWithEvidence?.config) return new Map();
+    return buildReadinessMatrix(dataWithEvidence, dateRange, today);
+  }, [dataWithEvidence, dateRange, today]);
+
+  const fallbackReadiness = useMemo(() => ({
+    entries: [...fallbackReadinessMatrix.values()],
+    questionSummary: getQuestionReadiness(fallbackReadinessMatrix),
+    overall: getOverallReadiness(fallbackReadinessMatrix),
+    gaps: getReadinessGaps(fallbackReadinessMatrix),
+    computedAt: today,
+  }), [fallbackReadinessMatrix, today]);
+
+  const readinessPayload = liveReadiness || fallbackReadiness;
+  const questionReadiness = readinessPayload?.questionSummary || fallbackReadiness.questionSummary;
+  const readinessGaps = readinessPayload?.gaps || fallbackReadiness.gaps;
+  const readinessEntries = useMemo(
+    () => Object.fromEntries((readinessPayload?.entries || []).map((entry) => [entry.statementId, entry])),
+    [readinessPayload]
+  );
 
   const evidenceByStatement = useMemo(() => {
     if (!dataWithEvidence?.config) return {};
@@ -281,7 +423,7 @@ function CQCEvidenceInner({ data }) {
   }, [dataWithEvidence, dateRange, today]);
 
   if (!data?.config || !score) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return <div className={PAGE.container}><LoadingState message="Preparing the CQC readiness view..." /></div>;
   }
 
   const bandColorMap = { green: 'emerald', amber: 'amber', red: 'red' };
@@ -301,14 +443,68 @@ function CQCEvidenceInner({ data }) {
     setShowAddEvidence(true);
   }
 
+  function getNarrativeDraft(statementId) {
+    return narrativeDrafts[statementId] || blankNarrativeForm(statementId, narrativeByStatement[statementId]);
+  }
+
+  function updateNarrativeDraft(statementId, patch) {
+    setNarrativeDrafts((prev) => ({
+      ...prev,
+      [statementId]: {
+        ...blankNarrativeForm(statementId, narrativeByStatement[statementId]),
+        ...prev[statementId],
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSaveNarrative(statementId) {
+    if (savingNarrativeId) return;
+    const home = getCurrentHome();
+    const draft = getNarrativeDraft(statementId);
+    setSavingNarrativeId(statementId);
+    setNarrativeError(null);
+    setNarrativeNotice(null);
+    try {
+      const saved = await upsertCqcNarrative(home, statementId, {
+        narrative: draft.narrative || null,
+        risks: draft.risks || null,
+        actions: draft.actions || null,
+        reviewed_by: draft.reviewed_by || null,
+        reviewed_at: draft.reviewed_at ? new Date(draft.reviewed_at).toISOString() : null,
+        review_due: draft.review_due || null,
+        _version: draft.version,
+      });
+      setNarratives((prev) => {
+        const next = prev.filter((entry) => entry.quality_statement !== statementId);
+        next.push(saved);
+        return next.sort((a, b) => a.quality_statement.localeCompare(b.quality_statement));
+      });
+      setNarrativeDrafts((prev) => ({
+        ...prev,
+        [statementId]: blankNarrativeForm(statementId, saved),
+      }));
+      setNarrativeNotice(`Self-assessment saved for ${statementId}.`);
+    } catch (err) {
+      setNarrativeError(`Failed to save self-assessment: ${err.message}`);
+    } finally {
+      setSavingNarrativeId(null);
+    }
+  }
+
   async function handleSaveEvidence() {
     if (savingEvidence) return;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) return;
+    const dateError = getEvidenceDateRangeError(evidenceForm);
+    if (dateError) {
+      setSaveError(dateError);
+      return;
+    }
     setSavingEvidence(true);
     setSaveError(null);
     try {
       const saved = await persistEvidenceDraft();
-      setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved.');
+      setSaveNotice(evidenceForm.id ? 'Evidence updated.' : 'Evidence saved. Supporting files are uploaded separately below.');
       setEvidenceForm(toEvidenceForm(saved));
       await loadEvidence();
     } catch (err) {
@@ -337,6 +533,11 @@ function CQCEvidenceInner({ data }) {
     if (evidenceForm.id) return evidenceForm.id;
     if (!evidenceForm.quality_statement || !evidenceForm.title.trim()) {
       throw new Error('Add a quality statement and title before uploading supporting files.');
+    }
+    const dateError = getEvidenceDateRangeError(evidenceForm);
+    if (dateError) {
+      setSaveError(dateError);
+      throw new Error(dateError);
     }
     if (savingEvidence) {
       throw new Error('Evidence is already being saved. Please wait a moment and try again.');
@@ -409,6 +610,7 @@ function CQCEvidenceInner({ data }) {
   }
 
   const categories = ['safe', 'effective', 'caring', 'responsive', 'well-led'];
+  const snapshotPdfAvailable = Boolean(viewingSnapshot?.result?.evidencePackData);
 
   return (
     <div className={PAGE.container}>
@@ -429,9 +631,16 @@ function CQCEvidenceInner({ data }) {
         </div>
       </div>
 
-      {pdfError && <p className="mb-3 text-sm text-red-600">{pdfError}</p>}
-      {snapshotNotice && <p className="mb-3 text-sm text-amber-700">{snapshotNotice}</p>}
-      {snapshotError && <p className="mb-3 text-sm text-red-600">{snapshotError}</p>}
+      {pdfError && <InlineNotice variant="error" className="mb-3" role="alert">{pdfError}</InlineNotice>}
+      {snapshotNotice && <InlineNotice variant="warning" className="mb-3">{snapshotNotice}</InlineNotice>}
+      {snapshotError && <InlineNotice variant="error" className="mb-3" role="alert">{snapshotError}</InlineNotice>}
+      {narrativeNotice && <InlineNotice variant="success" className="mb-3">{narrativeNotice}</InlineNotice>}
+      {narrativeError && <InlineNotice variant="error" className="mb-3" role="alert">{narrativeError}</InlineNotice>}
+      {readinessError && !liveReadiness ? (
+        <InlineNotice variant="warning" className="mb-3">
+          Live readiness could not be loaded. Showing fallback readiness from the current page data.
+        </InlineNotice>
+      ) : null}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -467,6 +676,50 @@ function CQCEvidenceInner({ data }) {
         </div>
       </div>
 
+      <div className="mb-5">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Readiness</div>
+            <p className="mt-1 text-xs text-gray-500">
+              Server-authored gap analysis with per-category freshness thresholds. Raw counts stay visible so the team can judge the shape, not just the badge.
+            </p>
+          </div>
+          {readinessLoading ? <span className={BADGE.gray}>Refreshing…</span> : null}
+        </div>
+        {readinessError ? (
+          <p className="mb-3 text-xs text-amber-700">
+            Live readiness could not be refreshed from the server, so this view is temporarily using the local fallback calculation.
+          </p>
+        ) : null}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          {categories.map((question) => {
+            const summary = questionReadiness.find((entry) => entry.question === question) || {
+              total: QUALITY_STATEMENTS.filter((entry) => entry.category === question).length,
+              strong: 0,
+              partial: 0,
+              stale: 0,
+              weak: 0,
+              missing: 0,
+            };
+            return (
+              <div key={question} className={CARD.padded}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{CATEGORY_LABELS[question]}</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{summary.strong}/{summary.total} strong</p>
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                  {summary.missing > 0 ? <span className={BADGE.red}>{summary.missing} missing</span> : null}
+                  {summary.weak > 0 ? <span className={BADGE.red}>{summary.weak} weak</span> : null}
+                  {summary.stale > 0 ? <span className={BADGE.amber}>{summary.stale} stale</span> : null}
+                  {summary.partial > 0 ? <span className={BADGE.amber}>{summary.partial} partial</span> : null}
+                  {summary.missing === 0 && summary.weak === 0 && summary.stale === 0 && summary.partial === 0 ? (
+                    <span className={BADGE.green}>No open gaps</span>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Date Range Toggle */}
       <div className="flex gap-1 mb-5 print:hidden">
         {RANGE_OPTIONS.map(opt => (
@@ -479,6 +732,29 @@ function CQCEvidenceInner({ data }) {
           {formatDate(dateRange.from)} to {formatDate(dateRange.to)}
         </span>
       </div>
+
+      {readinessGaps.length > 0 && (
+        <div className={`${CARD.padded} mb-5`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Readiness Gaps</h2>
+              <p className="text-xs text-gray-500">Statements that still need fresher, broader, or better-owned evidence.</p>
+            </div>
+            <span className={BADGE.amber}>{readinessGaps.length} open</span>
+          </div>
+          <div className="space-y-2">
+            {readinessGaps.slice(0, 10).map((gap) => (
+              <div key={gap.statementId} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={readinessBadgeClass(gap.status)}>{readinessStatusLabel(gap.status)}</span>
+                  <span className="text-sm font-medium text-gray-900">{gap.statementId} - {gap.statementName}</span>
+                </div>
+                <p className="text-xs text-gray-500 md:text-right">{gap.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quality Statements by Category */}
       {categories.map(cat => (
@@ -494,8 +770,10 @@ function CQCEvidenceInner({ data }) {
             {QUALITY_STATEMENTS.filter(q => q.category === cat).map(qs => {
               const isExpanded = expandedStatement === qs.id;
               const ev = evidenceByStatement[qs.id];
+              const readiness = readinessEntries[qs.id];
               const autoCount = ev?.autoEvidence?.length || 0;
               const manualCount = ev?.manualEvidence?.length || 0;
+              const narrativeDraft = getNarrativeDraft(qs.id);
 
               return (
                 <div key={qs.id} className={CARD.padded}>
@@ -507,10 +785,14 @@ function CQCEvidenceInner({ data }) {
                       </svg>
                       <div>
                         <span className="font-medium text-gray-900">{qs.name}</span>
+                        {autoCount + manualCount === 0 && (
+                          <span className="ml-2 inline-flex h-2.5 w-2.5 rounded-full bg-red-500 align-middle" aria-label="No evidence attached" />
+                        )}
                         <span className="text-xs text-gray-400 ml-2">{qs.cqcRef}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
+                      {readiness && <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>}
                       <span className="text-xs text-gray-500">{autoCount + manualCount} evidence items</span>
                       {ev?.autoEvidence?.map((ae, i) => (
                         <span key={i} className={`text-sm font-bold ${metricColor(ae.value, ae.lowerIsBetter)}`}>
@@ -524,6 +806,20 @@ function CQCEvidenceInner({ data }) {
                   {isExpanded && (
                     <div className="mt-3 border-t border-gray-100 pt-3">
                       <p className="text-xs text-gray-500 mb-3">{qs.description}</p>
+                      {readiness && (
+                        <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={readinessBadgeClass(readiness.status)}>{readinessStatusLabel(readiness.status)}</span>
+                            <span className="text-xs text-gray-500">
+                              {readiness.evidenceCount} items · {readiness.categoriesCovered}/{readiness.categoriesExpected} expected categories covered
+                            </span>
+                            {readiness.staleCount > 0 && <span className={BADGE.amber}>{readiness.staleCount} stale</span>}
+                            {readiness.reviewOverdue > 0 && <span className={BADGE.red}>{readiness.reviewOverdue} overdue</span>}
+                            {!readiness.narrativePresent && <span className={BADGE.gray}>Narrative missing</span>}
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500">{readiness.summary}</p>
+                        </div>
+                      )}
 
                       {/* Auto-computed metrics */}
                       {autoCount > 0 && (
@@ -556,12 +852,17 @@ function CQCEvidenceInner({ data }) {
                                 <div>
                                   <div className="text-sm font-medium text-gray-800">
                                     {me.title}
-                                    {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{EVIDENCE_CATEGORY_LABELS[me.evidence_category] || me.evidence_category}</span>}
+                                    {me.evidence_category && <span className={`${BADGE.gray} ml-1.5 text-[10px]`}>{getEvidenceCategoryLabel(me.evidence_category)}</span>}
+                                    <span className={`${me.file_count > 0 ? BADGE.blue : BADGE.gray} ml-1.5 text-[10px]`}>
+                                      {formatFileCount(me.file_count || 0)}
+                                    </span>
                                   </div>
                                   {me.description && <div className="text-xs text-gray-500 mt-0.5">{me.description}</div>}
                                   <div className="text-[10px] text-gray-400 mt-0.5">
                                     {me.date_from}{me.date_to ? ` to ${me.date_to}` : ' — ongoing'}
                                     {me.added_by && ` | by ${me.added_by}`}
+                                    {me.evidence_owner && ` | owner ${me.evidence_owner}`}
+                                    {me.review_due && ` | review due ${me.review_due}`}
                                   </div>
                                 </div>
                                 {canEdit && (
@@ -584,8 +885,95 @@ function CQCEvidenceInner({ data }) {
                         </div>
                       )}
 
+                      <div className="mb-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Self-Assessment</div>
+                        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+                          <div>
+                            <label className={INPUT.label}>What the evidence shows</label>
+                            <textarea
+                              aria-label="What the evidence shows"
+                              className={`${INPUT.base} h-20`}
+                              value={narrativeDraft.narrative}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { narrative: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div>
+                            <label className={INPUT.label}>Current risks</label>
+                            <textarea
+                              aria-label="Current risks"
+                              className={`${INPUT.base} h-16`}
+                              value={narrativeDraft.risks}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { risks: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div>
+                            <label className={INPUT.label}>Improvement actions</label>
+                            <textarea
+                              aria-label="Improvement actions"
+                              className={`${INPUT.base} h-16`}
+                              value={narrativeDraft.actions}
+                              onChange={(e) => updateNarrativeDraft(qs.id, { actions: e.target.value })}
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <label className={INPUT.label}>Reviewed by</label>
+                              <input
+                                aria-label="Reviewed by"
+                                type="text"
+                                className={INPUT.base}
+                                value={narrativeDraft.reviewed_by}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { reviewed_by: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <label className={INPUT.label}>Reviewed at</label>
+                              <input
+                                aria-label="Reviewed at"
+                                type="datetime-local"
+                                className={INPUT.base}
+                                value={narrativeDraft.reviewed_at}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { reviewed_at: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                            <div>
+                              <label className={INPUT.label}>Review due</label>
+                              <input
+                                aria-label="Review due"
+                                type="date"
+                                className={INPUT.base}
+                                value={narrativeDraft.review_due}
+                                onChange={(e) => updateNarrativeDraft(qs.id, { review_due: e.target.value })}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                          </div>
+                          {canEdit ? (
+                            <div className="flex justify-end">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSaveNarrative(qs.id);
+                                }}
+                                disabled={savingNarrativeId === qs.id || narrativesLoading}
+                                className={`${BTN.secondary} ${BTN.xs}`}
+                              >
+                                {savingNarrativeId === qs.id ? 'Saving...' : 'Save Self-Assessment'}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
                       {evidenceLoading ? (
-                        <span className="text-xs text-gray-400">Loading evidence...</span>
+                        <div className="min-w-[9rem]">
+                          <LoadingState message="Loading evidence..." compact />
+                        </div>
                       ) : canEdit ? (
                         <button onClick={(e) => { e.stopPropagation(); openAddEvidence(qs.id); }}
                           className={`${BTN.secondary} ${BTN.xs}`}>
@@ -627,7 +1015,15 @@ function CQCEvidenceInner({ data }) {
         {showSnapshots && (
           <div className={CARD.flush}>
             {snapshots.length === 0 ? (
-              <div className="p-4 text-sm text-gray-400">No snapshots saved yet. Click "Save Snapshot" to create one.</div>
+              <div className="p-4">
+                <EmptyState
+                  title="No snapshots saved yet"
+                  description="Save a snapshot to freeze the current score, readiness summary, and evidence pack data."
+                  actionLabel={canEdit ? 'Save Snapshot' : undefined}
+                  onAction={canEdit ? handleCreateSnapshot : undefined}
+                  compact
+                />
+              </div>
             ) : (
               <table className={TABLE.table}>
                 <thead className={TABLE.thead}>
@@ -709,6 +1105,31 @@ function CQCEvidenceInner({ data }) {
                 </div>
               </div>
             )}
+            {viewingSnapshot.result?.readiness && (
+              <div>
+                <div className="text-sm font-semibold text-gray-600 mb-2">Frozen Readiness</div>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                  {(viewingSnapshot.result.readiness.questionSummary || []).map((entry) => (
+                    <div key={entry.question} className={CARD.padded}>
+                      <div className="text-xs text-gray-500">{CATEGORY_LABELS[entry.question]}</div>
+                      <div className="text-lg font-bold">{entry.strong}/{entry.total}</div>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                        {entry.missing > 0 ? <span className={BADGE.red}>{entry.missing} missing</span> : null}
+                        {entry.weak > 0 ? <span className={BADGE.red}>{entry.weak} weak</span> : null}
+                        {entry.stale > 0 ? <span className={BADGE.amber}>{entry.stale} stale</span> : null}
+                        {entry.partial > 0 ? <span className={BADGE.amber}>{entry.partial} partial</span> : null}
+                        {entry.missing === 0 && entry.weak === 0 && entry.stale === 0 && entry.partial === 0 ? (
+                          <span className={BADGE.green}>Strong</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  {viewingSnapshot.result.readiness.gaps?.length || 0} open readiness gaps at snapshot time.
+                </p>
+              </div>
+            )}
             {viewingSnapshot.sign_off_notes && (
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Sign-off notes:</span> {viewingSnapshot.sign_off_notes}
@@ -722,11 +1143,19 @@ function CQCEvidenceInner({ data }) {
               setGenerating(true);
               setSnapshotError(null);
               try {
+                const frozenData = viewingSnapshot?.result?.evidencePackData;
+                if (!frozenData) {
+                  throw new Error('This snapshot was created before frozen PDF exports were added. Create a new snapshot to export a signed-off evidence pack.');
+                }
                 const { generateEvidencePackPDF } = await import('../lib/pdfReports.js');
-                generateEvidencePackPDF(dataWithEvidence || {}, dateRangeDays, viewingSnapshot);
+                generateEvidencePackPDF(
+                  frozenData,
+                  viewingSnapshot?.result?.evidencePackMeta?.date_range_days || dateRangeDays,
+                  viewingSnapshot
+                );
               } catch (e) { setSnapshotError(e.message); }
               finally { setGenerating(false); }
-            }} disabled={generating}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
+            }} disabled={generating || !snapshotPdfAvailable}>{generating ? 'Generating...' : 'Export PDF from Snapshot'}</button>
           </div>
         </Modal>
       )}
@@ -770,12 +1199,9 @@ function CQCEvidenceInner({ data }) {
                   <select className={INPUT.select} value={evidenceForm.evidence_category}
                     onChange={e => setEvidenceForm({ ...evidenceForm, evidence_category: e.target.value })}>
                     <option value="">— None —</option>
-                    <option value="peoples_experience">People's Experience</option>
-                    <option value="feedback">Feedback</option>
-                    <option value="observation">Observation</option>
-                    <option value="processes">Processes</option>
-                    <option value="outcomes">Outcomes</option>
-                    <option value="management_info">Management Information</option>
+                    {EVIDENCE_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -799,6 +1225,30 @@ function CQCEvidenceInner({ data }) {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={INPUT.label}>Evidence Owner</label>
+                  <input
+                    aria-label="Evidence Owner"
+                    type="text"
+                    className={INPUT.base}
+                    placeholder="Who is responsible for keeping this current?"
+                    value={evidenceForm.evidence_owner}
+                    onChange={e => setEvidenceForm({ ...evidenceForm, evidence_owner: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Review Due</label>
+                  <input
+                    aria-label="Review Due"
+                    type="date"
+                    className={INPUT.base}
+                    value={evidenceForm.review_due}
+                    onChange={e => setEvidenceForm({ ...evidenceForm, review_due: e.target.value })}
+                  />
+                </div>
+              </div>
+
               <FileAttachments
                 caseType="cqc_evidence"
                 caseId={evidenceForm.id}
@@ -809,7 +1259,7 @@ function CQCEvidenceInner({ data }) {
                 downloadFile={downloadCqcEvidenceFile}
                 title="Supporting Files"
                 emptyText="No supporting files uploaded yet."
-                saveFirstMessage="You can upload on the first pass. We will save the evidence item automatically before the first file upload."
+                saveFirstMessage="You can upload on the first pass. We will save the evidence item automatically before the first file upload. Saving the evidence item alone does not attach the selected file — click Upload."
                 ensureCaseId={canEdit ? ensureEvidenceForUploads : undefined}
               />
             </div>

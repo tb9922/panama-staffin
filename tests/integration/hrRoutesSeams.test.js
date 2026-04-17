@@ -8,7 +8,7 @@ const PREFIX = 'hr-seam-test';
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'HrSeamPass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
-const STAFF_ID = `${PREFIX}-staff-01`;
+const STAFF_ID = 'HRS001';
 
 let token;
 let homeId;
@@ -102,21 +102,21 @@ describe('HR route save seams', () => {
       date_recorded: '2026-03-02',
       category: 'Physical',
       condition_description: 'Back injury requiring adapted workstation',
-      adjustments: 'Height-adjustable desk',
+      adjustments: ['Height-adjustable desk'],
       status: 'open',
     }).expect(201);
 
     expect(createRes.body.category).toBe('Physical');
-    expect(createRes.body.adjustments).toBe('Height-adjustable desk');
+    expect(createRes.body.adjustments).toEqual(['Height-adjustable desk']);
 
     const updateRes = await authed('put', `/api/hr/edi/${createRes.body.id}`).send({
       _version: createRes.body.version,
       category: 'Sensory',
-      adjustments: 'Screen reader software',
+      adjustments: ['Screen reader software'],
     }).expect(200);
 
     expect(updateRes.body.category).toBe('Sensory');
-    expect(updateRes.body.adjustments).toBe('Screen reader software');
+    expect(updateRes.body.adjustments).toEqual(['Screen reader software']);
   });
 
   it('persists TUPE consultation, ELI, and measures fields on create and update', async () => {

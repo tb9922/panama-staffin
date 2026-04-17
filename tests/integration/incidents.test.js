@@ -378,3 +378,28 @@ describe('Incidents: soft delete', () => {
     expect(byId).toBeNull();
   });
 });
+
+describe('Incidents: sync safety', () => {
+  it('does not soft-delete every incident when sync receives an empty array', async () => {
+    const first = await incidentRepo.upsert(homeA, {
+      date: '2026-04-10',
+      type: 'fall',
+      severity: 'minor',
+      description: 'Sync safety incident A',
+      reported_by: 'test-user',
+    });
+    const second = await incidentRepo.upsert(homeA, {
+      date: '2026-04-11',
+      type: 'near_miss',
+      severity: 'minor',
+      description: 'Sync safety incident B',
+      reported_by: 'test-user',
+    });
+    createdIds.push(first.id, second.id);
+
+    await incidentRepo.sync(homeA, []);
+
+    expect(await incidentRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await incidentRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+});

@@ -16,6 +16,7 @@ vi.mock('../../lib/api.js', async () => {
     getHrWarnings: vi.fn().mockResolvedValue([]),
     getFinanceAlerts: vi.fn().mockResolvedValue([]),
     getDashboardSummary: vi.fn().mockResolvedValue(null),
+    getPayrollRuns: vi.fn().mockResolvedValue([]),
     setCurrentHome: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Care Home' }]),
     logout: vi.fn(),
@@ -83,6 +84,13 @@ describe('Dashboard', () => {
     api.getHrWarnings.mockResolvedValue([]);
     api.getFinanceAlerts.mockResolvedValue([]);
     api.getDashboardSummary.mockResolvedValue(null);
+    api.getPayrollRuns.mockResolvedValue([]);
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'home_manager',
+      staffId: null,
+    });
   });
 
   it('shows loading indicator initially', async () => {
@@ -328,20 +336,25 @@ describe('Dashboard', () => {
     );
   });
 
-  it('shows a restricted state for staff self-service accounts and skips dashboard fetches', async () => {
+  it('shows the staff self-service dashboard for staff self-service accounts', async () => {
     useData.mockReturnValue({
       canRead: module => module === 'scheduling' || module === 'payroll',
       canWrite: () => false,
       homeRole: 'staff_member',
       staffId: 'S1',
     });
+    api.getPayrollRuns.mockResolvedValue([{ id: 'run-1', period_start: '2026-03-01', period_end: '2026-03-31', status: 'approved' }]);
 
     renderDashboard({ username: 'staff', role: 'staff_member' });
 
     await waitFor(() =>
-      expect(screen.getByText('Dashboard is not available for staff self-service accounts.')).toBeInTheDocument()
+      expect(screen.getByText('Welcome back, Alice Smith')).toBeInTheDocument()
     );
-    expect(api.getSchedulingData).not.toHaveBeenCalled();
+    expect(screen.getByText('My Rota')).toBeInTheDocument();
+    expect(screen.getByText('My Leave')).toBeInTheDocument();
+    expect(screen.getByText('My Payslips')).toBeInTheDocument();
+    expect(api.getSchedulingData).toHaveBeenCalled();
+    expect(api.getPayrollRuns).toHaveBeenCalled();
     expect(api.getDashboardSummary).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,8 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { DataProvider } from './contexts/DataContext.jsx';
+import { ToastProvider } from './contexts/ToastContext.jsx';
+import { NotificationProvider } from './contexts/NotificationContext.jsx';
+import { ConfirmProvider } from './contexts/ConfirmContext.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 
@@ -8,7 +11,13 @@ function AppInner() {
   if (!user) return <LoginScreen onLogin={login} />;
   return (
     <DataProvider>
-      <AppLayout />
+      <ToastProvider>
+        <ConfirmProvider>
+          <NotificationProvider>
+            <AppLayout />
+          </NotificationProvider>
+        </ConfirmProvider>
+      </ToastProvider>
     </DataProvider>
   );
 }

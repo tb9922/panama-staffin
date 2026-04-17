@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nullableDateInput } from '../../lib/zodHelpers.js';
+import { nullableDateInput, nullableEnumInput, stringArrayInput } from '../../lib/zodHelpers.js';
 
 // ── Shared Schemas ──────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ export const grievanceActionUpdateSchema = z.object({
   due_date:       dateSchema.nullable().optional(),
   completed_date: dateSchema.nullable().optional(),
   status:         grievanceActionStatusSchema,
-  _version:       z.number().int().positive(),
+  _version:       z.number().int().positive().optional(),
 });
 
 // ── Performance Schemas ─────────────────────────────────────────────────────
@@ -298,12 +298,12 @@ export const rtwInterviewBodySchema = z.object({
   follow_up_date:     dateSchema.optional(),
   fit_note_received:  z.boolean().optional(),
   fit_note_date:      dateSchema.optional(),
-  fit_note_type:      z.enum(['not_fit', 'may_be_fit']).nullable().optional(),
+  fit_note_type:      nullableEnumInput(['not_fit', 'may_be_fit']).optional(),
   fit_note_adjustments: z.string().max(5000).nullable().optional(),
   fit_note_review_date: dateSchema.optional(),
   bradford_score_after: z.coerce.number().nonnegative().nullable().optional(),
-  trigger_reached:    z.enum(['informal', 'formal_1', 'formal_2', 'final']).nullable().optional(),
-  action_taken:       z.enum(['none', 'informal_chat', 'formal_meeting', 'referral']).nullable().optional(),
+  trigger_reached:    nullableEnumInput(['none', 'informal', 'formal_1', 'formal_2', 'final']).optional(),
+  action_taken:       nullableEnumInput(['none', 'informal_chat', 'formal_meeting', 'referral']).optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -320,12 +320,12 @@ export const rtwInterviewUpdateSchema = z.object({
   follow_up_date:     dateSchema.nullable().optional(),
   fit_note_received:  z.boolean().optional(),
   fit_note_date:      dateSchema.nullable().optional(),
-  fit_note_type:      z.enum(['not_fit', 'may_be_fit']).nullable().optional(),
+  fit_note_type:      nullableEnumInput(['not_fit', 'may_be_fit']).optional(),
   fit_note_adjustments: z.string().max(5000).nullable().optional(),
   fit_note_review_date: dateSchema.nullable().optional(),
   bradford_score_after: z.coerce.number().nonnegative().nullable().optional(),
-  trigger_reached:    z.enum(['informal', 'formal_1', 'formal_2', 'final']).nullable().optional(),
-  action_taken:       z.enum(['none', 'informal_chat', 'formal_meeting', 'referral']).nullable().optional(),
+  trigger_reached:    nullableEnumInput(['none', 'informal', 'formal_1', 'formal_2', 'final']).optional(),
+  action_taken:       nullableEnumInput(['none', 'informal_chat', 'formal_meeting', 'referral']).optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -346,8 +346,8 @@ export const ohReferralBodySchema = z.object({
   consent_date:     dateSchema.optional(),
   questions_for_oh: z.string().max(5000).nullable().optional(),
   report_summary:   z.string().max(5000).nullable().optional(),
-  fit_for_role:     z.enum(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).nullable().optional(),
-  disability_likely: z.enum(['yes', 'no', 'possible']).nullable().optional(),
+  fit_for_role:     nullableEnumInput(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).optional(),
+  disability_likely: nullableEnumInput(['yes', 'no', 'possible']).optional(),
   estimated_return_date: dateSchema.optional(),
   follow_up_date:   dateSchema.optional(),
   notes:            z.string().max(5000).nullable().optional(),
@@ -367,8 +367,8 @@ export const ohReferralUpdateSchema = z.object({
   consent_date:     dateSchema.nullable().optional(),
   questions_for_oh: z.string().max(5000).nullable().optional(),
   report_summary:   z.string().max(5000).nullable().optional(),
-  fit_for_role:     z.enum(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).nullable().optional(),
-  disability_likely: z.enum(['yes', 'no', 'possible']).nullable().optional(),
+  fit_for_role:     nullableEnumInput(['yes', 'yes_with_adjustments', 'no_currently', 'no_permanently']).optional(),
+  disability_likely: nullableEnumInput(['yes', 'no', 'possible']).optional(),
   estimated_return_date: dateSchema.nullable().optional(),
   follow_up_date:   dateSchema.nullable().optional(),
   notes:            z.string().max(5000).nullable().optional(),
@@ -383,11 +383,8 @@ export const contractBodySchema = z.object({
   end_date:           dateSchema.optional(),
   status:             z.enum(['active','probation','notice_period','terminated','suspended']).optional(),
   hours_per_week:     z.number().nonnegative().optional(),
-  salary:             z.number().nonnegative().optional(),
   hourly_rate:        z.number().nonnegative().optional(),
   probation_end_date: dateSchema.optional(),
-  notice_period_weeks: z.number().int().nonnegative().optional(),
-  signed_date:        dateSchema.optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -397,11 +394,8 @@ export const contractUpdateSchema = z.object({
   end_date:           dateSchema.nullable().optional(),
   status:             z.enum(['active','probation','notice_period','terminated','suspended']).optional(),
   hours_per_week:     z.number().nonnegative().optional(),
-  salary:             z.number().nonnegative().optional(),
   hourly_rate:        z.number().nonnegative().optional(),
   probation_end_date: dateSchema.nullable().optional(),
-  notice_period_weeks: z.number().int().nonnegative().optional(),
-  signed_date:        dateSchema.nullable().optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
 
@@ -447,7 +441,7 @@ export const flexWorkingBodySchema = z.object({
   employee_assessment_of_impact: z.string().max(2000).nullable().optional(),
   meeting_date:       dateSchema.optional(),
   meeting_notes:      z.string().max(5000).nullable().optional(),
-  decision:           z.string().max(100).optional(),
+  decision:           nullableEnumInput(['approved', 'approved_modified', 'refused', 'withdrawn']).optional(),
   decision_date:      dateSchema.optional(),
   decision_reason:    z.string().max(2000).nullable().optional(),
   decision_by:        z.string().max(200).nullable().optional(),
@@ -459,7 +453,7 @@ export const flexWorkingBodySchema = z.object({
   trial_period_end:   dateSchema.optional(),
   appeal_date:        dateSchema.optional(),
   appeal_grounds:     z.string().max(5000).nullable().optional(),
-  appeal_outcome:     z.string().max(100).optional(),
+  appeal_outcome:     nullableEnumInput(['upheld', 'overturned', 'modified']).optional(),
   appeal_outcome_date: dateSchema.optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
@@ -476,7 +470,7 @@ export const flexWorkingUpdateSchema = z.object({
   employee_assessment_of_impact: z.string().max(2000).nullable().optional(),
   meeting_date:       dateSchema.nullable().optional(),
   meeting_notes:      z.string().max(5000).nullable().optional(),
-  decision:           z.string().max(100).nullable().optional(),
+  decision:           nullableEnumInput(['approved', 'approved_modified', 'refused', 'withdrawn']).optional(),
   decision_date:      dateSchema.nullable().optional(),
   decision_reason:    z.string().max(2000).nullable().optional(),
   decision_by:        z.string().max(200).nullable().optional(),
@@ -488,7 +482,7 @@ export const flexWorkingUpdateSchema = z.object({
   trial_period_end:   dateSchema.nullable().optional(),
   appeal_date:        dateSchema.nullable().optional(),
   appeal_grounds:     z.string().max(5000).nullable().optional(),
-  appeal_outcome:     z.string().max(100).nullable().optional(),
+  appeal_outcome:     nullableEnumInput(['upheld', 'overturned', 'modified']).optional(),
   appeal_outcome_date: dateSchema.nullable().optional(),
   notes:              z.string().max(5000).nullable().optional(),
 });
@@ -511,10 +505,10 @@ export const ediBodySchema = z.object({
   respondent_role:      z.string().max(100).nullable().optional(),  // Frontend alias → respondent_type
   handling_route:       z.string().max(100).nullable().optional(),
   linked_case_id:       z.number().int().nullable().optional(),
-  reasonable_steps_evidence: z.string().max(5000).nullable().optional(),
+  reasonable_steps_evidence: stringArrayInput().optional(),
   // Reasonable adjustment fields
   condition_description: z.string().max(5000).nullable().optional(),
-  adjustments:          z.string().max(5000).nullable().optional(),
+  adjustments:          stringArrayInput().optional(),
   oh_referral_id:       z.number().int().nullable().optional(),
   access_to_work_applied: z.boolean().optional(),
   access_to_work_reference: z.string().max(200).nullable().optional(),
@@ -540,9 +534,9 @@ export const ediUpdateSchema = z.object({
   respondent_role:      z.string().max(100).nullable().optional(),
   handling_route:       z.string().max(100).nullable().optional(),
   linked_case_id:       z.number().int().nullable().optional(),
-  reasonable_steps_evidence: z.string().max(5000).nullable().optional(),
+  reasonable_steps_evidence: stringArrayInput().optional(),
   condition_description: z.string().max(5000).nullable().optional(),
-  adjustments:          z.string().max(5000).nullable().optional(),
+  adjustments:          stringArrayInput().optional(),
   oh_referral_id:       z.number().int().nullable().optional(),
   access_to_work_applied: z.boolean().optional(),
   access_to_work_reference: z.string().max(200).nullable().optional(),

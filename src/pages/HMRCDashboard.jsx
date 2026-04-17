@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -34,8 +41,8 @@ function fmt(n) {
 
 function currentTaxYear() {
   const now = new Date();
-  const m = now.getUTCMonth() + 1;
-  const d = now.getUTCDate();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
   if (m > 4 || (m === 4 && d >= 6)) return now.getUTCFullYear();
   return now.getUTCFullYear() - 1;
 }
@@ -44,6 +51,8 @@ export default function HMRCDashboard() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
 
   const [liabilities, setLiabilities] = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -83,7 +92,7 @@ export default function HMRCDashboard() {
     .reduce((s, l) => s + parseFloat(l.total_due || 0), 0);
 
   function openPaid(liability) {
-    setPaidForm({ paid_date: new Date().toISOString().slice(0, 10), paid_reference: '' });
+    setPaidForm({ paid_date: todayLocalISO(), paid_reference: '' });
     setShowPaidModal(liability);
   }
 
@@ -92,6 +101,8 @@ export default function HMRCDashboard() {
     setSaving(true);
     try {
       await markHMRCPaid(homeSlug, showPaidModal.id, paidForm);
+      showNotice('HMRC liability marked as paid.');
+      showToast({ title: 'HMRC liability updated', message: `Month ${showPaidModal.tax_month}` });
       setShowPaidModal(null);
       await load();
     } catch (e) {
@@ -105,10 +116,15 @@ export default function HMRCDashboard() {
   const now = currentTaxYear();
   for (let y = now; y >= now - 4; y--) taxYearOptions.push(y);
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading HMRC liabilities..." /></div>;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -134,7 +150,7 @@ export default function HMRCDashboard() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" role="alert">{error}</div>
+        <ErrorState title="HMRC action needs attention" message={error} onRetry={() => void load()} className="mb-4" />
       )}
 
       {/* Overdue alert */}
@@ -189,9 +205,12 @@ export default function HMRCDashboard() {
           <tbody>
             {liabilities.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No HMRC liabilities for {taxYear}/{String(taxYear + 1).slice(2)}.
-                  Liabilities are created automatically when payroll runs are approved.
+                <td colSpan={canEdit ? 10 : 9} className={TABLE.empty}>
+                  <EmptyState
+                    compact
+                    title={`No HMRC liabilities for ${taxYear}/${String(taxYear + 1).slice(2)}`}
+                    description="Liabilities are created automatically when payroll runs are approved."
+                  />
                 </td>
               </tr>
             )}

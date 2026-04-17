@@ -15,6 +15,9 @@ import {
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 const TABS = [
   { id: 'details', label: 'Risk Details' },
@@ -216,7 +219,7 @@ export default function RiskRegister() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-gray-500 py-12 text-center">Loading risk register...</div>
+        <LoadingState message="Loading risk register..." card />
       </div>
     );
   }
@@ -224,7 +227,7 @@ export default function RiskRegister() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-sm text-red-600 py-12 text-center" role="alert">{error}</div>
+        <ErrorState title="Unable to load risk register" message={error} onRetry={load} />
       </div>
     );
   }
@@ -366,7 +369,17 @@ export default function RiskRegister() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No risks recorded</td></tr>
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No risks recorded yet"
+                      description={canEdit ? 'Click "New Risk" to start the register for this home.' : 'No risks have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New Risk' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(risk => {
                 const catDef = RISK_CATEGORIES.find(c => c.id === risk.category);

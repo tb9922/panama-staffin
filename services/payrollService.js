@@ -25,6 +25,7 @@ import {
   isBankHoliday,
   isWorkingShift,
   isAgencyShift,
+  getALDeductionHours,
 } from '../shared/rotation.js';
 
 import {
@@ -396,7 +397,10 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // Pension contributions — calculated FIRST (UK Net Pay Arrangement:
       // employee pension is deducted before PAYE, reducing taxable income)
       let enrolment = enrolmentMap.get(s.id) || null;
-      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment')) {
+      const postponementActive = enrolment?.status === 'postponed'
+        && enrolment.postponed_until
+        && enrolment.postponed_until >= run.period_end;
+      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment' || (enrolment.status === 'postponed' && !postponementActive))) {
         const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
         if (eligibility.shouldAutoEnrol) {
           await pensionRepo.upsertEnrolment(homeId, {
@@ -552,8 +556,8 @@ export async function approveRun(runId, homeId, homeSlug, username) {
     // ── Increment SSP weeks on active sick periods ──────────────────────────
     // Without this, ssp_weeks_paid stays at 0 and the 28-week cap never triggers.
     const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
-    for (const { staff_id, ssp_days } of sspDaysByStaff) {
-      if (ssp_days <= 0) continue;
+    for (const { staff_id, ssp_days, waiting_days_used } of sspDaysByStaff) {
+      if (ssp_days <= 0 && waiting_days_used <= 0) continue;
       // FOR UPDATE prevents a concurrent approval for an overlapping period from
       // reading the same ssp_weeks_paid value and causing a lost-update race.
       const sickPeriod = await sspRepo.getActiveSickPeriod(
@@ -563,6 +567,7 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
       const weeksToAdd = round2(ssp_days / qualDaysPerWeek);
       await sspRepo.updateSickPeriod(sickPeriod.id, homeId, {
+        waiting_days_served: Math.min(3, (sickPeriod.waiting_days_served || 0) + waiting_days_used),
         ssp_weeks_paid: round2((sickPeriod.ssp_weeks_paid || 0) + weeksToAdd),
       }, client);
     }
@@ -724,6 +729,48 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
   });
 }
 
+export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, format) {
+  return withTransaction(async (client) => {
+    const run = await payrollRunRepo.findById(runId, homeId, client);
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (!['approved', 'exported', 'locked'].includes(run.status)) {
+      throw new ValidationError('Payroll run must be approved before exporting');
+    }
+
+    const lines = await payrollRunRepo.findLinesByRun(runId, homeId, client);
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
+    const allStaff = allStaffResult.rows;
+    const staffMap = new Map(allStaff.map(s => [s.id, s]));
+    const taxYear = getTaxYear(new Date(run.period_end));
+    const staffIds = [...new Set(lines.map(l => l.staff_id))];
+    const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
+    const csv = format === 'sage'
+      ? buildSageCSV(lines, staffMap, run, ytdMap)
+      : buildGenericCSV(lines, staffMap, run, ytdMap);
+    const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
+    await auditRepo.log('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`, client);
+    return { csv, filename };
+  });
+}
+
+export async function markRunExported(runId, homeId, homeSlug, username, format) {
+  return withTransaction(async (client) => {
+    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+    if (!run) throw new NotFoundError('Payroll run not found');
+    if (!['approved', 'exported', 'locked'].includes(run.status)) {
+      throw new ValidationError('Payroll run must be approved before exporting');
+    }
+    if (run.status === 'approved') {
+      await payrollRunRepo.updateStatus(runId, homeId, 'exported', {
+        exported_at: true,
+        export_format: format,
+      }, client, run.version);
+    }
+    await auditRepo.log('payroll_export_mark', homeSlug, username, `Run ID ${runId} format=${format}`, client);
+    return true;
+  });
+}
+
 // ── Holiday Daily Rate ────────────────────────────────────────────────────────
 
 /**
@@ -742,7 +789,7 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
   const contractHours = parseFloat(staff.contract_hours);
   if (!contractHours || contractHours <= 0) return 0;
   const hourlyRate = parseFloat(staff.hourly_rate) || 0;
-  const fallback = round2((contractHours / 5) * hourlyRate);
+  const fallback = round2(getALDeductionHours(staff, holidayDate, config) * hourlyRate);
 
   const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);
   if (!avg) return fallback;

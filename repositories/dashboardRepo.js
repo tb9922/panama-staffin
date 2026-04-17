@@ -37,11 +37,16 @@ export async function getIncidentCounts(homeId) {
              AND i.candour_notification_date IS NULL
              -- CQC Reg 16: 10 working days (Mon–Fri, excluding bank holidays)
              AND (
-               SELECT COUNT(d)
-               FROM generate_series(i.date::date + 1, CURRENT_DATE - 1, '1 day') AS d
-               WHERE EXTRACT(DOW FROM d) NOT IN (0, 6)
-                 AND d::date::text NOT IN (SELECT bh_date FROM home_bh)
-             ) >= 10
+               SELECT MAX(d)::date
+               FROM (
+                 SELECT d,
+                        ROW_NUMBER() OVER (ORDER BY d) AS working_day_number
+                 FROM generate_series(i.date::date + 1, CURRENT_DATE, '1 day') AS d
+                 WHERE EXTRACT(DOW FROM d) NOT IN (0, 6)
+                   AND d::date::text NOT IN (SELECT bh_date FROM home_bh)
+               ) working_days
+               WHERE working_day_number = 10
+             ) < CURRENT_DATE
          )::int AS doc_overdue
        FROM incidents i
        WHERE i.home_id = $1 AND i.deleted_at IS NULL`,

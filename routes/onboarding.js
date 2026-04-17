@@ -2,7 +2,7 @@ import { zodError } from '../errors.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { createReadStream, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
 import crypto from 'crypto';
 import path from 'path';
@@ -10,6 +10,7 @@ import { fileTypeFromFile } from 'file-type';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { diffFields } from '../lib/audit.js';
+import { sendStoredDownload } from '../lib/sendDownload.js';
 import { config } from '../config.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
 import * as onboardingAttachmentsRepo from '../repositories/onboardingAttachments.js';
@@ -90,8 +91,8 @@ router.put('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAcces
     }
     const bodyParsed = onboardingSectionSchema.safeParse(req.body);
     if (!bodyParsed.success) return zodError(res, bodyParsed);
-    const allOnboarding = await onboardingRepo.findByHome(req.home.id);
-    const beforeSection = allOnboarding[staffIdParsed.data]?.[sectionParsed.data] ?? null;
+    const existingOnboarding = await onboardingRepo.findByStaffId(req.home.id, staffIdParsed.data);
+    const beforeSection = existingOnboarding?.[sectionParsed.data] ?? null;
     const result = await onboardingRepo.upsertSection(req.home.id, staffIdParsed.data, sectionParsed.data, bodyParsed.data);
     const changes = diffFields(beforeSection, bodyParsed.data);
     await auditService.log('onboarding_update', req.home.slug, req.user.username, { staffId: staffIdParsed.data, section: sectionParsed.data, changes });
@@ -112,6 +113,48 @@ router.delete('/:staffId/:section', writeRateLimiter, requireAuth, requireHomeAc
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
+
+// --- File attachment routes (static prefix first to avoid /:staffId/:section collision) ---
+
+router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const att = await onboardingAttachmentsRepo.findById(id, req.home.id);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    const uploadRoot = path.resolve(config.upload.dir);
+    const filePath = path.resolve(path.join(
+      config.upload.dir,
+      String(req.home.id),
+      'onboarding',
+      safePath(att.staffId),
+      safePath(att.section),
+      att.stored_name
+    ));
+    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
+    sendStoredDownload(res, next, filePath, {
+      originalName: att.original_name,
+      mimeType: att.mime_type,
+    });
+  } catch (err) { next(err); }
+});
+
+router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
+    const deleted = await onboardingAttachmentsRepo.softDelete(id, req.home.id);
+    if (!deleted) return res.status(404).json({ error: 'Attachment not found' });
+    await auditService.log('onboarding_attachment_delete', req.home.slug, req.user.username, {
+      fileId: id,
+      staffId: deleted.staffId,
+      section: deleted.section,
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// --- Per-staff-section file list and upload ---
 
 router.get('/:staffId/:section/files', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
   try {
@@ -164,50 +207,6 @@ router.post('/:staffId/:section/files', writeRateLimiter, requireAuth, requireHo
         next(uploadErr);
       }
     });
-  } catch (err) { next(err); }
-});
-
-router.get('/files/:id/download', readRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'read'), async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
-    const att = await onboardingAttachmentsRepo.findById(id, req.home.id);
-    if (!att) return res.status(404).json({ error: 'Attachment not found' });
-    const uploadRoot = path.resolve(config.upload.dir);
-    const filePath = path.resolve(path.join(
-      config.upload.dir,
-      String(req.home.id),
-      'onboarding',
-      safePath(att.staffId),
-      safePath(att.section),
-      att.stored_name
-    ));
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: 'Forbidden' });
-    const safeName = att.original_name.replace(/["\r\n;]/g, '_');
-    res.set({
-      'Content-Type': att.mime_type,
-      'Content-Disposition': `attachment; filename="${safeName}"`,
-      'Content-Length': att.size_bytes,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'DENY',
-    });
-    createReadStream(filePath).pipe(res);
-  } catch (err) { next(err); }
-});
-
-router.delete('/files/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('compliance', 'write'), async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid file ID' });
-    const deleted = await onboardingAttachmentsRepo.softDelete(id, req.home.id);
-    if (!deleted) return res.status(404).json({ error: 'Attachment not found' });
-    await auditService.log('onboarding_attachment_delete', req.home.slug, req.user.username, {
-      fileId: id,
-      staffId: deleted.staffId,
-      section: deleted.section,
-    });
-    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

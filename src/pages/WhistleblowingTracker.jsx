@@ -16,6 +16,12 @@ import {
 import { clickableRowProps } from '../lib/a11y.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO } from '../lib/localDates.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'details', label: 'Concern Details' },
@@ -49,6 +55,7 @@ export default function WhistleblowingTracker() {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const today = useLiveDate();
   const homeSlug = getCurrentHome();
@@ -70,9 +77,7 @@ export default function WhistleblowingTracker() {
 
   // Date range for stats: last 90 days
   const statsRange = useMemo(() => {
-    const d = new Date(today + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 89);
-    return { from: d.toISOString().slice(0, 10), to: today };
+    return { from: addDaysLocalISO(today, -89), to: today };
   }, [today]);
 
   const stats = useMemo(() =>
@@ -86,6 +91,14 @@ export default function WhistleblowingTracker() {
     if (filterStatus) list = list.filter(c => c.status === filterStatus);
     return list;
   }, [concerns, filterCategory, filterSeverity, filterStatus]);
+
+  const missingRequired = useMemo(() => {
+    const missing = [];
+    if (!form.date_raised) missing.push('Date raised');
+    if (!form.category) missing.push('Category');
+    if (!form.severity) missing.push('Severity');
+    return missing;
+  }, [form.category, form.date_raised, form.severity]);
 
   function openAdd() {
     setEditingId(null);
@@ -126,11 +139,14 @@ export default function WhistleblowingTracker() {
 
   async function handleSave() {
     if (!form.date_raised || !form.category || !form.severity) return;
+    setSaveError(null);
     try {
       if (editingId) {
         await updateWhistleblowingConcern(homeSlug, editingId, { ...form, _version: form._version });
+        showNotice('Concern updated.');
       } else {
         await createWhistleblowingConcern(homeSlug, form);
+        showNotice('Concern recorded.');
       }
       setShowModal(false);
       await load();
@@ -142,9 +158,11 @@ export default function WhistleblowingTracker() {
   async function handleDelete() {
     if (!editingId) return;
     if (!await confirm('Delete this whistleblowing concern?')) return;
+    setSaveError(null);
     try {
       await deleteWhistleblowingConcern(homeSlug, editingId);
       setShowModal(false);
+      showNotice('Concern deleted.');
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -198,14 +216,20 @@ export default function WhistleblowingTracker() {
   };
 
   if (loading) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return <div className={PAGE.container}><LoadingState message="Loading whistleblowing concerns..." card /></div>;
   }
   if (error) {
-    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+    return <div className={PAGE.container}><ErrorState title="Unable to load whistleblowing concerns" message={error} onRetry={load} /></div>;
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -275,7 +299,17 @@ export default function WhistleblowingTracker() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className={TABLE.empty}>No concerns recorded</td></tr>
+                <tr>
+                  <td colSpan={6} className={TABLE.empty}>
+                    <EmptyState
+                      compact
+                      title="No concerns recorded yet"
+                      description={canEdit ? 'Use "New Concern" to log the first whistleblowing concern for this home.' : 'No whistleblowing concerns have been recorded for this home yet.'}
+                      actionLabel={canEdit ? 'New Concern' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(concern => {
                 const catDef = CONCERN_CATEGORIES.find(c => c.id === concern.category);
@@ -459,6 +493,9 @@ export default function WhistleblowingTracker() {
             <div className={MODAL.footer}>
               {editingId && canEdit && (
                 <button onClick={handleDelete} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+              )}
+              {missingRequired.length > 0 && (
+                <p className="text-sm text-amber-700 mr-auto">Missing: {missingRequired.join(', ')}</p>
               )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

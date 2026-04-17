@@ -168,8 +168,9 @@ describe('ComplaintsTracker', () => {
     api.getComplaints.mockResolvedValue(EMPTY_RESPONSE);
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No complaints recorded')).toBeInTheDocument();
+      expect(screen.getByText('No complaints recorded yet')).toBeInTheDocument();
     });
+    expect(screen.getAllByRole('button', { name: 'Log Complaint' })).not.toHaveLength(0);
   });
 
   it('admin sees Log Complaint button', async () => {

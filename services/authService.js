@@ -36,7 +36,9 @@ export async function login(username, password) {
     if (!dbUser.active) throw new AuthenticationError('Invalid credentials');
     // Account lockout — reject if locked and lockout hasn't expired
     if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
-      throw new AuthenticationError('Invalid credentials');
+      const err = new AuthenticationError('Account locked — contact admin');
+      err.statusCode = 423;
+      throw err;
     }
     const valid = await bcrypt.compare(password, dbUser.password_hash);
     if (!valid) {

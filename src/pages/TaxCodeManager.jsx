@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import { getTaxCodes, upsertTaxCode, getCurrentHome, getSchedulingData } from '../lib/api.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
 const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
@@ -13,7 +20,7 @@ const NI_CATEGORIES = ['A','B','C','F','H','I','J','L','M','S','V','Z'];
 function emptyForm() {
   return {
     staff_id: '', tax_code: '1257L', basis: 'cumulative', ni_category: 'A',
-    effective_from: new Date().toISOString().slice(0, 10),
+    effective_from: todayLocalISO(),
     previous_pay: '', previous_tax: '', student_loan_plan: '',
     source: 'manual', notes: '',
   };
@@ -28,6 +35,8 @@ export default function TaxCodeManager() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('payroll');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const { showToast } = useToast();
 
   const [schedData, setSchedData] = useState(null);
   const [codes, setCodes]       = useState([]);
@@ -85,7 +94,7 @@ export default function TaxCodeManager() {
       tax_code:          code.tax_code || '1257L',
       basis:             code.basis || 'cumulative',
       ni_category:       code.ni_category || 'A',
-      effective_from:    code.effective_from || new Date().toISOString().slice(0, 10),
+      effective_from:    code.effective_from || todayLocalISO(),
       previous_pay:      code.previous_pay != null ? String(code.previous_pay) : '',
       previous_tax:      code.previous_tax != null ? String(code.previous_tax) : '',
       student_loan_plan: code.student_loan_plan || '',
@@ -110,6 +119,11 @@ export default function TaxCodeManager() {
         student_loan_plan: form.student_loan_plan.trim() || null,
         ni_category:   form.ni_category,
       });
+      showNotice(editStaffId ? 'Tax code updated.' : 'Tax code recorded.');
+      showToast({
+        title: editStaffId ? 'Tax code updated' : 'Tax code added',
+        message: form.staff_id,
+      });
       setShowModal(false);
       await load();
     } catch (e) {
@@ -119,10 +133,15 @@ export default function TaxCodeManager() {
     }
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500">Loading...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading tax code data..." /></div>;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -139,7 +158,7 @@ export default function TaxCodeManager() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700" role="alert">{error}</div>
+        <ErrorState title="Tax code action needs attention" message={error} onRetry={() => void load()} className="mb-4" />
       )}
 
       {/* Missing code alert */}
@@ -171,8 +190,14 @@ export default function TaxCodeManager() {
           <tbody>
             {codes.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 10 : 9} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  No tax codes recorded yet. All staff will use 1257L cumulative (Category A).
+                <td colSpan={canEdit ? 10 : 9} className={TABLE.empty}>
+                  <EmptyState
+                    compact
+                    title="No tax codes recorded yet"
+                    description="All staff will use 1257L cumulative (Category A) until a tax code record is added."
+                    actionLabel={canEdit ? 'Add / Update Tax Code' : undefined}
+                    onAction={canEdit ? openNew : undefined}
+                  />
                 </td>
               </tr>
             )}

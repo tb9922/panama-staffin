@@ -37,10 +37,20 @@ export function getNextRetryAt(retryCount) {
 }
 
 async function fireWebhook(hook, event, payload) {
+  const timestamp = typeof payload === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(payload)?.timestamp || new Date().toISOString();
+        } catch {
+          return new Date().toISOString();
+        }
+      })()
+    : new Date().toISOString();
   const body = typeof payload === 'string'
     ? payload // retries pass the original serialised body
-    : JSON.stringify({ event, payload, timestamp: new Date().toISOString() });
-  const signature = crypto.createHmac('sha256', hook.secret).update(body).digest('hex');
+    : JSON.stringify({ event, payload, timestamp });
+  const signatureBase = `${timestamp}.${body}`;
+  const signature = crypto.createHmac('sha256', hook.secret).update(signatureBase).digest('hex');
   const requestId = crypto.randomUUID();
   const start = Date.now();
   let statusCode = null;
@@ -63,6 +73,7 @@ async function fireWebhook(hook, event, payload) {
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': `sha256=${signature}`,
+        'X-Webhook-Timestamp': timestamp,
         'X-Webhook-Event': event,
         'X-Webhook-Request-ID': requestId,
       },
@@ -118,12 +129,8 @@ export async function processRetries() {
       logger.warn({ rescued }, 'Rescued webhook deliveries stuck in_progress');
     }
 
-    const pending = await webhookRepo.findPendingRetries(20);
+    const pending = await webhookRepo.claimPendingRetries(20);
     for (const delivery of pending) {
-      // Mark in_progress BEFORE the HTTP fetch so a process crash during delivery
-      // doesn't leave the row as pending_retry and cause a duplicate delivery.
-      await webhookRepo.markDeliveryInProgress(delivery.id);
-
       // Skip if webhook was deactivated since the original dispatch
       if (!delivery.active) {
         await webhookRepo.markDeliveryFailed(delivery.id);
@@ -138,7 +145,15 @@ export async function processRetries() {
       const body = typeof delivery.payload === 'string'
         ? delivery.payload
         : JSON.stringify(delivery.payload);
-      const signature = crypto.createHmac('sha256', delivery.secret).update(body).digest('hex');
+      const timestamp = (() => {
+        try {
+          return JSON.parse(body)?.timestamp || new Date().toISOString();
+        } catch {
+          return new Date().toISOString();
+        }
+      })();
+      const signatureBase = `${timestamp}.${body}`;
+      const signature = crypto.createHmac('sha256', delivery.secret).update(signatureBase).digest('hex');
       const requestId = crypto.randomUUID();
 
       // Re-validate URL at retry time to prevent DNS rebinding SSRF
@@ -157,6 +172,7 @@ export async function processRetries() {
           headers: {
             'Content-Type': 'application/json',
             'X-Webhook-Signature': `sha256=${signature}`,
+            'X-Webhook-Timestamp': timestamp,
             'X-Webhook-Event': delivery.event,
             'X-Webhook-Request-ID': requestId,
           },

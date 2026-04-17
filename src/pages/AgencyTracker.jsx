@@ -2,12 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getAgencyProviders, createAgencyProvider, updateAgencyProvider,
   getAgencyShifts, createAgencyShift, updateAgencyShift,
   getAgencyMetrics, getCurrentHome, } from '../lib/api.js';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO, todayLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'shifts', label: 'Shift Log' },
@@ -63,7 +69,7 @@ function ProviderModal({ existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Provider' : 'Add Agency Provider'}>
-      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
+      {err && <InlineNotice variant="error" className="mb-3" role="alert">{err}</InlineNotice>}
       <div className="space-y-4">
         <div>
           <label className={INPUT.label}>Provider Name *</label>
@@ -101,7 +107,7 @@ function ProviderModal({ existing, onSave, onClose }) {
 // ── Shift Log Modal ────────────────────────────────────────────────────────────
 
 function ShiftModal({ providers, existing, onSave, onClose }) {
-  const today  = new Date().toISOString().slice(0, 10);
+  const today  = todayLocalISO();
   const blank  = { agency_id: providers[0]?.id || '', date: today, shift_code: 'E', hours: '', hourly_rate: '', worker_name: '', invoice_ref: '', role_covered: '', reconciled: false };
   const [form, setForm]   = useState(existing || blank);
   const [saving, setSaving] = useState(false);
@@ -164,7 +170,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
 
   return (
     <Modal isOpen={true} onClose={onClose} title={existing ? 'Edit Agency Shift' : 'Log Agency Shift'} size="lg">
-      {err && <div className="mb-3 text-sm text-red-600" role="alert">{err}</div>}
+      {err && <InlineNotice variant="error" className="mb-3" role="alert">{err}</InlineNotice>}
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -240,12 +246,8 @@ export default function AgencyTracker() {
   const canEdit = canWrite('payroll');
 
   // Default last 12 weeks
-  const defaultEnd   = new Date().toISOString().slice(0, 10);
-  const defaultStart = (() => {
-    const d = new Date();
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 84))
-      .toISOString().slice(0, 10);
-  })();
+  const defaultEnd = todayLocalISO();
+  const defaultStart = addDaysLocalISO(defaultEnd, -84);
 
   const [tab, setTab]             = useState('shifts'); // 'shifts' | 'providers' | 'metrics'
   const [providers, setProviders] = useState([]);
@@ -259,6 +261,7 @@ export default function AgencyTracker() {
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [editProvider, setEditProvider]   = useState(null);
   const [editShift, setEditShift]         = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showProvModal || showShiftModal);
 
   const loadProviders = useCallback(async () => {
@@ -324,9 +327,8 @@ export default function AgencyTracker() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>
-      )}
+      {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
+      {error && <ErrorState title="Unable to load agency data" message={error} onRetry={loadAll} className="mb-4" />}
 
       {/* Summary Cards */}
       {metrics && (
@@ -371,7 +373,7 @@ export default function AgencyTracker() {
           </div>
           <div className={CARD.flush}>
             {loading ? (
-              <div className="py-10 text-center text-sm text-gray-400">Loading shifts…</div>
+              <LoadingState message="Loading agency shifts..." compact />
             ) : (
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
@@ -392,7 +394,17 @@ export default function AgencyTracker() {
                   </thead>
                   <tbody>
                     {shifts.length === 0 ? (
-                      <tr><td colSpan={canEdit ? 11 : 10} className={TABLE.empty}>No agency shifts logged for this period.</td></tr>
+                      <tr>
+                        <td colSpan={canEdit ? 11 : 10} className={TABLE.empty}>
+                          <EmptyState
+                            title="No agency shifts logged for this period"
+                            description={canEdit ? 'Try widening the date range or log a new agency shift.' : 'Try widening the date range to see earlier cover.'}
+                            actionLabel={canEdit ? 'Log Shift' : undefined}
+                            onAction={canEdit ? () => { setEditShift(null); setShowShiftModal(true); } : undefined}
+                            compact
+                          />
+                        </td>
+                      </tr>
                     ) : shifts.map(sh => (
                       <tr key={sh.id} className={TABLE.tr}>
                         <td className={TABLE.td}>{sh.date}</td>
@@ -445,7 +457,17 @@ export default function AgencyTracker() {
               </thead>
               <tbody>
                 {providers.length === 0 ? (
-                  <tr><td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>No providers added yet.</td></tr>
+                  <tr>
+                    <td colSpan={canEdit ? 6 : 5} className={TABLE.empty}>
+                      <EmptyState
+                        title="No providers added yet"
+                        description={canEdit ? 'Add your agency providers here so shift logging is quicker next time.' : 'No providers have been configured for this home yet.'}
+                        actionLabel={canEdit ? 'Add Provider' : undefined}
+                        onAction={canEdit ? () => { setEditProvider(null); setShowProvModal(true); } : undefined}
+                        compact
+                      />
+                    </td>
+                  </tr>
                 ) : providers.map(p => (
                   <tr key={p.id} className={TABLE.tr}>
                     <td className={TABLE.td + ' font-medium'}>{p.name}</td>
@@ -474,7 +496,13 @@ export default function AgencyTracker() {
       {tab === 'metrics' && (
         <div>
           {!metrics || !metrics.weekly?.length ? (
-            <div className={`${CARD.padded} text-center text-sm text-gray-500 py-8`}>No weekly trend data yet.</div>
+            <div className={CARD.padded}>
+              <EmptyState
+                title="No weekly trend data yet"
+                description="Once agency shifts are logged, the spend trend will appear here."
+                compact
+              />
+            </div>
           ) : (
             <>
               <div className={CARD.flush}>
@@ -512,7 +540,13 @@ export default function AgencyTracker() {
       {showProvModal && (
         <ProviderModal
           existing={editProvider}
-          onSave={async () => { setShowProvModal(false); setEditProvider(null); await loadProviders(); }}
+          onSave={async () => {
+            const wasEditing = !!editProvider;
+            setShowProvModal(false);
+            setEditProvider(null);
+            await loadProviders();
+            showNotice(wasEditing ? 'Agency provider updated.' : 'Agency provider added.');
+          }}
           onClose={() => { setShowProvModal(false); setEditProvider(null); }}
         />
       )}
@@ -523,9 +557,11 @@ export default function AgencyTracker() {
           providers={providers}
           existing={editShift}
           onSave={async () => {
+            const wasEditing = !!editShift;
             setShowShiftModal(false);
             setEditShift(null);
             await Promise.all([loadShifts(), loadMetrics()]);
+            showNotice(wasEditing ? 'Agency shift updated.' : 'Agency shift logged.');
           }}
           onClose={() => { setShowShiftModal(false); setEditShift(null); }}
         />

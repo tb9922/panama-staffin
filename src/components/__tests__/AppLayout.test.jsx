@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import AppLayout from '../AppLayout.jsx';
 
@@ -103,7 +103,7 @@ describe('AppLayout', () => {
   it('renders full-screen error state when error occurs before any homes load', () => {
     mockData({ error: 'Database connection failed', homes: [] });
     renderLayout();
-    expect(screen.getByText('Error Loading Data')).toBeInTheDocument();
+    expect(screen.getByText('Error loading data')).toBeInTheDocument();
     expect(screen.getByText('Database connection failed')).toBeInTheDocument();
     expect(screen.getByText(/Make sure the API server is running/)).toBeInTheDocument();
   });
@@ -113,7 +113,7 @@ describe('AppLayout', () => {
     mockData({ error: 'Save failed', homes: ONE_HOME });
     renderLayout();
     // Full-screen error should NOT appear
-    expect(screen.queryByText('Error Loading Data')).not.toBeInTheDocument();
+    expect(screen.queryByText('Error loading data')).not.toBeInTheDocument();
     // Inline banner should appear in the main content area
     expect(screen.getByText('Save failed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
@@ -122,6 +122,7 @@ describe('AppLayout', () => {
   // 4. Sidebar navigation groups are rendered
   it('shows sidebar navigation section labels', () => {
     renderLayout();
+    expect(screen.getByText('Home')).toBeInTheDocument();
     expect(screen.getByText('Scheduling')).toBeInTheDocument();
     expect(screen.getByText('Staff')).toBeInTheDocument();
     expect(screen.getByText('Compliance')).toBeInTheDocument();
@@ -132,8 +133,8 @@ describe('AppLayout', () => {
   it('shows username and role in the sidebar footer', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false });
     renderLayout();
-    expect(screen.getByText('Admin User')).toBeInTheDocument();
-    expect(screen.getByText(/Home Manager/)).toBeInTheDocument();
+    expect(screen.getAllByText('Admin User').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Home Manager/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows username when displayName is absent', () => {
@@ -146,10 +147,11 @@ describe('AppLayout', () => {
   });
 
   // 6. Admin sees admin-only sections (HR, Finance)
-  it('admin user sees the HR & People nav section', () => {
+  it('admin user sees the split HR nav sections', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: false });
     renderLayout();
-    expect(screen.getByText('HR & People')).toBeInTheDocument();
+    expect(screen.getByText('HR Cases')).toBeInTheDocument();
+    expect(screen.getByText('HR Admin')).toBeInTheDocument();
   });
 
   it('admin user sees the Finance nav section', () => {
@@ -159,12 +161,13 @@ describe('AppLayout', () => {
   });
 
   // 7. Viewer does NOT see admin-only sections (HR, Finance)
-  it('viewer user does not see the HR & People nav section', () => {
+  it('viewer user does not see the HR nav sections', () => {
     mockAuth({ user: VIEWER_USER, isViewer: true, isPlatformAdmin: false });
     const viewerCanRead = (mod) => ['scheduling', 'staff', 'reports'].includes(mod);
     mockData({ canRead: viewerCanRead, canWrite: () => false, homeRole: 'viewer' });
     renderLayout({ username: 'viewer', role: 'viewer' });
-    expect(screen.queryByText('HR & People')).not.toBeInTheDocument();
+    expect(screen.queryByText('HR Cases')).not.toBeInTheDocument();
+    expect(screen.queryByText('HR Admin')).not.toBeInTheDocument();
   });
 
   it('viewer user does not see the Finance nav section', () => {
@@ -178,17 +181,32 @@ describe('AppLayout', () => {
   it('staff_member only sees own-data-safe scheduling links', () => {
     mockAuth({ user: { username: 'staff', role: 'viewer', displayName: 'Staff User' }, isViewer: false, isPlatformAdmin: false });
     mockData({
-      canRead: (mod) => mod === 'scheduling',
+      canRead: (mod) => mod === 'scheduling' || mod === 'payroll',
       canWrite: () => false,
       homeRole: 'staff_member',
       staffId: 'S001',
     });
     renderLayout({ username: 'staff', role: 'viewer' });
+    expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
     expect(screen.queryByText('Daily Status')).not.toBeInTheDocument();
-    expect(screen.queryByText('Roster')).not.toBeInTheDocument();
+    expect(screen.getByText('Roster')).toBeInTheDocument();
     expect(screen.queryByText('Scenarios')).not.toBeInTheDocument();
-    expect(screen.queryByText('Annual Leave')).not.toBeInTheDocument();
-    expect(screen.getByText('Handover Book')).toBeInTheDocument();
+    expect(screen.getByText('Annual Leave')).toBeInTheDocument();
+    expect(screen.getByText('Payroll Runs')).toBeInTheDocument();
+    expect(screen.queryByText('Handover Book')).not.toBeInTheDocument();
+  });
+
+  it('expands finance and payroll sections by default for finance officers', () => {
+    mockData({
+      canRead: (mod) => ['finance', 'payroll', 'reports', 'scheduling'].includes(mod),
+      canWrite: (mod) => ['finance', 'payroll'].includes(mod),
+      homeRole: 'finance_officer',
+    });
+    renderLayout({ username: 'finance', role: 'viewer' });
+    expect(screen.getByText('Payroll Runs')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Statutory/ }));
+    expect(screen.getByText('Tax Codes')).toBeInTheDocument();
+    expect(screen.queryByText('Daily Status')).not.toBeInTheDocument();
   });
 
   it('config-read roles do not see the Users nav item without user-management rights', () => {
@@ -200,7 +218,28 @@ describe('AppLayout', () => {
     });
     renderLayout({ username: 'deputy', role: 'admin' });
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('shows Evidence Hub link when the role can read at least one evidence source', () => {
+    mockData({
+      canRead: (mod) => ['reports', 'hr'].includes(mod),
+      canWrite: () => false,
+      homeRole: 'hr_officer',
+    });
+    renderLayout({ username: 'hr', role: 'viewer' });
+    fireEvent.click(screen.getByRole('button', { name: /System/ }));
+    expect(screen.getByRole('link', { name: 'Evidence Hub' })).toBeInTheDocument();
+  });
+
+  it('hides the System evidence link when the role cannot read reports', () => {
+    mockData({
+      canRead: () => false,
+      canWrite: () => false,
+      homeRole: 'finance_officer',
+    });
+    renderLayout({ username: 'finance', role: 'viewer' });
+    expect(screen.queryByRole('link', { name: 'Evidence Hub' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /System/ })).not.toBeInTheDocument();
   });
 
   // 8. Platform section only visible to platform admin
@@ -214,6 +253,15 @@ describe('AppLayout', () => {
     mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: false });
     renderLayout();
     expect(screen.queryByText('Platform')).not.toBeInTheDocument();
+  });
+
+  it('lets a platform admin with no homes reach platform setup', () => {
+    mockAuth({ user: ADMIN_USER, isViewer: false, isPlatformAdmin: true });
+    mockData({ homes: [], activeHome: null, homeRole: null });
+    renderWithProviders(<AppLayout />, { route: '/platform/homes', path: '*', user: { ...ADMIN_USER, isPlatformAdmin: true } });
+    expect(screen.getByText('Platform Setup')).toBeInTheDocument();
+    expect(screen.getByText(/Create the first home below/)).toBeInTheDocument();
+    expect(screen.getByTestId('app-routes')).toBeInTheDocument();
   });
 
   // 9. Viewer sees read-only mode banner
@@ -242,8 +290,8 @@ describe('AppLayout', () => {
     renderLayout();
     const selector = screen.getByRole('combobox');
     expect(selector).toBeInTheDocument();
-    expect(screen.getByText('Sunrise Care Home')).toBeInTheDocument();
-    expect(screen.getByText('Meadowbrook')).toBeInTheDocument();
+    const options = within(selector).getAllByRole('option');
+    expect(options.map(option => option.textContent)).toEqual(expect.arrayContaining(['Sunrise Care Home', 'Meadowbrook']));
   });
 
   // 12. No home selector when only one home
@@ -259,11 +307,13 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('app-routes')).toBeInTheDocument();
   });
 
-  // 14. Logout and Password buttons present in sidebar
-  it('shows Logout and Password buttons in the sidebar footer', () => {
+  // 14. Logout and change-password buttons present in the sidebar
+  it('shows Logout and Change password buttons in the sidebar footer', () => {
     renderLayout();
-    expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument();
+    const logoutButtons = screen.getAllByRole('button', { name: 'Logout' });
+    const changePasswordButtons = screen.getAllByRole('button', { name: 'Change password' });
+    expect(logoutButtons.length).toBeGreaterThanOrEqual(1);
+    expect(changePasswordButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   // 15. Top-level nav items (Dashboard)

@@ -1,5 +1,6 @@
 import { BTN, CARD, TABLE, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES, getLabel, getStatusBadge, formatCurrency } from '../../lib/finance.js';
+import EmptyState from '../EmptyState.jsx';
 
 function renderBedCell(r) {
   if (!r.bed) {
@@ -22,11 +23,14 @@ function renderFeeReview(r) {
 export default function ResidentTable({ residents, canEdit, onEdit, onDischarge, onAdmit }) {
   if (residents.length === 0) {
     return (
-      <div className={CARD.padded + ' text-center py-12'}>
-        <p className="text-gray-500 mb-4">No residents yet</p>
-        {canEdit && (
-          <button className={BTN.primary} onClick={onAdmit}>Admit your first resident</button>
-        )}
+      <div className={CARD.padded + ' py-12'}>
+        <EmptyState
+          title="No residents yet"
+          description={canEdit ? 'Admit the first resident to start occupancy, fee, and bed tracking for this home.' : 'Residents will appear here once they have been admitted.'}
+          actionLabel={canEdit ? 'Admit your first resident' : undefined}
+          onAction={canEdit ? onAdmit : undefined}
+          compact
+        />
       </div>
     );
   }

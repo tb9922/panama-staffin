@@ -40,6 +40,32 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build container image
+        run: docker build -t panama-staffing:ci .
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: panama-staffing:ci
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+      - name: Upload frontend source maps to Sentry
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != ''
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ secrets.SENTRY_URL }}
+        with:
+          version: ${{ github.sha }}
+          environment: production
+          sourcemaps: ./dist/assets
+          ignore_missing: true
+
       - name: Lint
         run: npm run lint
 

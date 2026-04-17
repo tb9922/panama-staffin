@@ -15,6 +15,11 @@ import {
 } from '../lib/dols.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const EMPTY_DOLS_FORM = {
   resident_name: '', resident_id: null, dob: '', room_number: '',
@@ -47,6 +52,7 @@ export default function DolsTracker() {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal);
 
@@ -103,6 +109,20 @@ export default function DolsTracker() {
     return list;
   }, [mcaAssessments]);
 
+  const missingDolsFields = useMemo(() => {
+    const missing = [];
+    if (!form.resident_name) missing.push('Resident');
+    if (!form.application_date) missing.push('Application date');
+    return missing;
+  }, [form.application_date, form.resident_name]);
+
+  const missingMcaFields = useMemo(() => {
+    const missing = [];
+    if (!form.resident_name) missing.push('Resident');
+    if (!form.assessment_date) missing.push('Assessment date');
+    return missing;
+  }, [form.assessment_date, form.resident_name]);
+
   // ── DoLS CRUD ──────────────────────────────────────────────────────────────
 
   function openAddDols() {
@@ -144,11 +164,14 @@ export default function DolsTracker() {
 
   async function handleSaveDols() {
     if (!form.resident_name || !form.application_date) return;
+    setSaveError(null);
     try {
       if (editingId) {
         await updateDols(homeSlug, editingId, form);
+        showNotice('DoLS/LPS record updated.');
       } else {
         await createDols(homeSlug, form);
+        showNotice('DoLS/LPS record created.');
       }
       setShowModal(false);
       await load();
@@ -160,9 +183,11 @@ export default function DolsTracker() {
   async function handleDeleteDols() {
     if (!editingId) return;
     if (!await confirm('Delete this DoLS/LPS record?')) return;
+    setSaveError(null);
     try {
       await deleteDols(homeSlug, editingId);
       setShowModal(false);
+      showNotice('DoLS/LPS record deleted.');
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -198,11 +223,14 @@ export default function DolsTracker() {
 
   async function handleSaveMca() {
     if (!form.resident_name || !form.assessment_date) return;
+    setSaveError(null);
     try {
       if (editingId) {
         await updateMcaAssessment(homeSlug, editingId, form);
+        showNotice('MCA assessment updated.');
       } else {
         await createMcaAssessment(homeSlug, form);
+        showNotice('MCA assessment created.');
       }
       setShowModal(false);
       await load();
@@ -214,9 +242,11 @@ export default function DolsTracker() {
   async function handleDeleteMca() {
     if (!editingId) return;
     if (!await confirm('Delete this MCA assessment?')) return;
+    setSaveError(null);
     try {
       await deleteMcaAssessment(homeSlug, editingId);
       setShowModal(false);
+      showNotice('MCA assessment deleted.');
       await load();
     } catch (err) {
       setSaveError('Failed to delete: ' + err.message);
@@ -284,14 +314,20 @@ export default function DolsTracker() {
   const typeBadge = (type) => type === 'lps' ? BADGE.purple : BADGE.blue;
 
   if (loading) {
-    return <div className={PAGE.container}><p className="text-gray-400">Loading...</p></div>;
+    return <div className={PAGE.container}><LoadingState message="Loading DoLS and MCA records..." card /></div>;
   }
   if (error) {
-    return <div className={PAGE.container}><p className="text-red-500">Error: {error}</p></div>;
+    return <div className={PAGE.container}><ErrorState title="Unable to load DoLS and MCA records" message={error} onRetry={load} /></div>;
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Header */}
       <div className={PAGE.header}>
         <div>
@@ -377,7 +413,17 @@ export default function DolsTracker() {
                 </thead>
                 <tbody>
                   {filteredDols.length === 0 && (
-                    <tr><td colSpan={7} className={TABLE.empty}>No DoLS/LPS records</td></tr>
+                    <tr>
+                      <td colSpan={7} className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No DoLS/LPS records yet"
+                          description={canEdit ? 'Use "New DoLS/LPS" to start the register for this home.' : 'No DoLS or LPS records have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'New DoLS/LPS' : undefined}
+                          onAction={canEdit ? openAddDols : undefined}
+                        />
+                      </td>
+                    </tr>
                   )}
                   {filteredDols.map(dol => {
                     const st = getDolsStatus(dol, today);
@@ -421,7 +467,17 @@ export default function DolsTracker() {
                 </thead>
                 <tbody>
                   {filteredMca.length === 0 && (
-                    <tr><td colSpan={7} className={TABLE.empty}>No MCA assessments recorded</td></tr>
+                    <tr>
+                      <td colSpan={7} className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No MCA assessments recorded yet"
+                          description={canEdit ? 'Use "New MCA Assessment" when a new capacity decision needs recording.' : 'No MCA assessments have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'New MCA Assessment' : undefined}
+                          onAction={canEdit ? openAddMca : undefined}
+                        />
+                      </td>
+                    </tr>
                   )}
                   {filteredMca.map(mca => {
                     const st = getMcaStatus(mca, today);
@@ -582,6 +638,9 @@ export default function DolsTracker() {
               {editingId && canEdit && (
                 <button onClick={handleDeleteDols} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
               )}
+              {missingDolsFields.length > 0 && (
+                <p className="text-sm text-amber-700 mr-auto">Missing: {missingDolsFields.join(', ')}</p>
+              )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
@@ -658,6 +717,9 @@ export default function DolsTracker() {
             <div className={MODAL.footer}>
               {editingId && canEdit && (
                 <button onClick={handleDeleteMca} className={`${BTN.danger} ${BTN.sm} mr-auto`}>Delete</button>
+              )}
+              {missingMcaFields.length > 0 && (
+                <p className="text-sm text-amber-700 mr-auto">Missing: {missingMcaFields.join(', ')}</p>
               )}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>

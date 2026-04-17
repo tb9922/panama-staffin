@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
-import { formatDate, parseDate } from '../lib/rotation.js';
+import { parseDate } from '../lib/rotation.js';
 import { CARD, INPUT, BTN } from '../lib/design.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { getCurrentHome, getSchedulingData, getSnapshots, getSnapshot, logReportDownload } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
-
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getUTCDay();
-  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-  d.setUTCDate(diff);
-  return d;
-}
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { currentLocalYearMonth, startOfLocalWeekISO } from '../lib/localDates.js';
 
 export default function Reports() {
   const homeSlug = getCurrentHome();
@@ -27,8 +24,8 @@ export default function Reports() {
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading report data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) return <LoadingState message="Loading report data..." className="px-6 py-6" />;
+  if (error || !schedData) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load report data" message={error || 'Failed to load scheduling data'} /></div>;
 
   return <ReportsInner data={schedData} />;
 }
@@ -38,11 +35,9 @@ function ReportsInner({ data }) {
   const canEdit = canWrite('reports');
   const [generating, setGenerating] = useState(null);
   const [genError, setGenError] = useState(null);
-  const [weekDate, setWeekDate] = useState(formatDate(getMonday(new Date())));
-  const [costMonth, setCostMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-  });
+  const { notice, showNotice, clearNotice } = useTransientNotice();
+  const [weekDate, setWeekDate] = useState(startOfLocalWeekISO());
+  const [costMonth, setCostMonth] = useState(currentLocalYearMonth());
   const [boardDays, setBoardDays] = useState(28);
   const [cqcSnapshots, setCqcSnapshots] = useState([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
@@ -81,6 +76,7 @@ function ReportsInner({ data }) {
         dateRange = `${boardDays} days${snapshot ? ` (snapshot: ${snapshot.computed_at?.slice(0, 10)})` : ''}`;
       }
       logReportDownload(type, dateRange);
+      showNotice(`${reports.find(report => report.id === type)?.title || 'Report'} PDF is ready.`);
     } catch (err) {
       console.error('PDF generation error:', err);
       setGenError('Failed to generate PDF: ' + err.message);
@@ -189,7 +185,16 @@ function ReportsInner({ data }) {
         <p className="text-sm text-gray-500">Generate downloadable PDF reports for CQC inspections, management, and compliance</p>
       </div>
 
-      {genError && <p className="mb-4 text-sm text-red-600">{genError}</p>}
+      {notice && (
+        <InlineNotice className="mb-4" variant={notice.variant} onDismiss={clearNotice}>
+          {notice.content}
+        </InlineNotice>
+      )}
+      {genError && (
+        <InlineNotice className="mb-4" variant="error" role="alert" onDismiss={() => setGenError(null)}>
+          {genError}
+        </InlineNotice>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {reports.map(report => {

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import {
   ONBOARDING_SECTIONS, ONBOARDING_STATUS, STATUS_DISPLAY,
@@ -12,7 +13,12 @@ import { downloadXLSX } from '../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   getCurrentHome,
   getOnboardingData,
@@ -32,6 +38,7 @@ export default function OnboardingTracker() {
   const { canWrite } = useData();
   const canEdit = canWrite('staff');
   const { confirm, ConfirmDialog } = useConfirm();
+  const [searchParams] = useSearchParams();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -46,7 +53,9 @@ export default function OnboardingTracker() {
   const [modalStaffId, setModalStaffId] = useState(null);
   const [modalForm, setModalForm] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal);
+  const focusedStaffId = searchParams.get('staffId') || '';
 
   useEffect(() => {
     let stale = false;
@@ -72,7 +81,7 @@ export default function OnboardingTracker() {
     if (filterTeam !== 'All') list = list.filter(s => s.team === filterTeam);
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(s => s.name.toLowerCase().includes(q));
+      list = list.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
     }
     if (filterStatus === 'incomplete') {
       list = list.filter(s => !getStaffOnboardingProgress(s.id, onboardingData).isComplete);
@@ -81,6 +90,14 @@ export default function OnboardingTracker() {
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [activeStaff, filterTeam, search, filterStatus, onboardingData]);
+
+  useEffect(() => {
+    if (!focusedStaffId) return;
+    setFilterTeam('All');
+    setFilterStatus('all');
+    setSearch(focusedStaffId);
+    setExpanded(focusedStaffId);
+  }, [focusedStaffId]);
 
   const fullyOnboarded = useMemo(() => {
     return activeStaff.filter(s => getStaffOnboardingProgress(s.id, onboardingData).isComplete).length;
@@ -129,6 +146,7 @@ export default function OnboardingTracker() {
       await upsertOnboardingSection(homeSlug, modalStaffId, modalSection, modalForm);
       setRefreshKey(k => k + 1);
       setShowModal(false);
+      showNotice('Onboarding section saved.');
     } catch (e) {
       setError('Failed to save: ' + e.message);
     } finally {
@@ -143,6 +161,7 @@ export default function OnboardingTracker() {
       await clearOnboardingSection(homeSlug, modalStaffId, modalSection);
       setRefreshKey(k => k + 1);
       setShowModal(false);
+      showNotice('Onboarding section removed.');
     } catch (e) {
       setError('Failed to remove: ' + e.message);
     } finally {
@@ -769,23 +788,24 @@ export default function OnboardingTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading onboarding data..." /></div>;
+  if (error && !state) return <div className={PAGE.container}><ErrorState title="Unable to load onboarding tracker" message={error} onRetry={() => setRefreshKey(k => k + 1)} /></div>;
 
   const sectionName = ONBOARDING_SECTIONS.find(s => s.id === modalSection)?.name || '';
   const staffName = activeStaff.find(s => s.id === modalStaffId)?.name || '';
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="flex items-center justify-between mb-5">
+    <div className={PAGE.container}>
+      <div className={PAGE.header}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Staff Onboarding</h1>
-          <p className="text-xs text-gray-500 mt-1">CQC Regulation 19 — Pre-employment checks & Day 1 induction</p>
+          <h1 className={PAGE.title}>Staff Onboarding</h1>
+          <p className={PAGE.subtitle}>CQC Regulation 19 — Pre-employment checks and day-one induction</p>
         </div>
         <button onClick={handleExport} className={BTN.secondary}>Export Excel</button>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert">{error}</div>}
+      {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
+      {error && <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -814,7 +834,7 @@ export default function OnboardingTracker() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className={`${CARD.padded} mb-4 flex gap-3 flex-wrap items-center`}>
         <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
         <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="All">All Teams</option>
@@ -912,11 +932,20 @@ export default function OnboardingTracker() {
             </div>
           );
         })}
-        {filteredStaff.length === 0 && <div className="p-8 text-center text-sm text-gray-400">No staff match the current filters</div>}
+        {filteredStaff.length === 0 && (
+          <div className={CARD.padded}>
+            <EmptyState
+              title="No staff match the current filters"
+              description="Try broadening the team or status filters, or clear the search term."
+              compact
+            />
+          </div>
+        )}
       </div>
 
       {/* Section Modal */}
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); setError(null); }} title={`${sectionName} — ${staffName}`} size="lg">
+            {error && <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice>}
             <div className="mb-4">
               <label className={INPUT.label}>Status</label>
               <select value={modalForm.status || ONBOARDING_STATUS.NOT_STARTED} onChange={e => setField('status', e.target.value)} className={`${INPUT.select} w-auto`}>

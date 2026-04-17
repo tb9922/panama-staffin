@@ -2,14 +2,38 @@ import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import { getCurrentHome, getHrFamilyLeave, createHrFamilyLeave, updateHrFamilyLeave } from '../lib/api.js';
 import { FAMILY_LEAVE_TYPES, FAMILY_LEAVE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const PROTECTED_TYPES = ['maternity', 'adoption'];
+const FAMILY_LEAVE_PAY_TYPES = [
+  { id: 'none', name: 'None' },
+  { id: 'SMP', name: 'SMP' },
+  { id: 'SPP', name: 'SPP' },
+  { id: 'ShPP', name: 'ShPP' },
+  { id: 'SAP', name: 'SAP' },
+];
+
+function normalizeLeaveType(value) {
+  if (value === 'parental') return 'parental_unpaid';
+  if (value === 'bereavement') return 'parental_bereavement';
+  return value || 'maternity';
+}
+
+function normalizeLeaveStatus(value) {
+  if (value === 'planned') return 'requested';
+  if (value === 'ended') return 'returned';
+  return value || 'requested';
+}
 
 function typeName(id) {
   return FAMILY_LEAVE_TYPES.find(t => t.id === id)?.name || id;
@@ -21,8 +45,8 @@ function statusName(id) {
 
 const blankForm = () => ({
   staff_id: '', leave_type: 'maternity', start_date: '', end_date: '',
-  status: 'planned', expected_return: '', actual_return: '',
-  kit_days_used: 0, pay_type: '', notes: '',
+  status: 'requested', expected_return: '', actual_return: '',
+  kit_days_used: 0, pay_type: 'none', notes: '',
 });
 
 export default function FamilyLeaveTracker() {
@@ -44,6 +68,7 @@ export default function FamilyLeaveTracker() {
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -84,14 +109,14 @@ export default function FamilyLeaveTracker() {
     setEditing(item);
     setForm({
       staff_id: item.staff_id || '',
-      leave_type: item.leave_type || 'maternity',
+      leave_type: normalizeLeaveType(item.leave_type),
       start_date: item.start_date || '',
       end_date: item.end_date || '',
-      status: item.status || 'planned',
+      status: normalizeLeaveStatus(item.status),
       expected_return: item.expected_return || '',
       actual_return: item.actual_return || '',
       kit_days_used: item.kit_days_used ?? 0,
-      pay_type: item.pay_type || '',
+      pay_type: item.pay_type || 'none',
       notes: item.notes || '',
     });
     setShowModal(true);
@@ -117,6 +142,7 @@ export default function FamilyLeaveTracker() {
       setShowModal(false);
       setForm(blankForm());
       setEditing(null);
+      showNotice(editing ? 'Family leave record updated.' : 'Family leave record created.');
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -143,7 +169,7 @@ export default function FamilyLeaveTracker() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading family leave data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading family leave data..." card /></div>;
 
   const isProtected = PROTECTED_TYPES.includes(form.leave_type);
 
@@ -160,7 +186,13 @@ export default function FamilyLeaveTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Unable to load family leave records" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -187,7 +219,19 @@ export default function FamilyLeaveTracker() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No family leave records</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      title="No family leave records"
+                      description={canEdit ? 'Create the first record to track leave periods, return dates, and statutory pay.' : 'Family leave records will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Leave Record' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>{item.staff_id}</td>
@@ -264,8 +308,10 @@ export default function FamilyLeaveTracker() {
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Pay Type</label>
-                <input className={INPUT.base} value={form.pay_type} onChange={e => set('pay_type', e.target.value)} placeholder="e.g. SMP, SPP, ShPP" />
+                <label htmlFor="family-leave-pay-type" className={INPUT.label}>Pay Type</label>
+                <select id="family-leave-pay-type" className={INPUT.select} value={form.pay_type} onChange={e => set('pay_type', e.target.value)}>
+                  {FAMILY_LEAVE_PAY_TYPES.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                </select>
               </div>
               <div>
                 <label className={INPUT.label}>Notes</label>

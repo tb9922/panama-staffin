@@ -183,8 +183,9 @@ describe('RiskRegister', () => {
     api.getRisks.mockResolvedValue({ risks: [] });
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No risks recorded')).toBeInTheDocument();
+      expect(screen.getByText('No risks recorded yet')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: 'New Risk' })).toBeInTheDocument();
   });
 
   it('shows risk count in the filter bar', async () => {

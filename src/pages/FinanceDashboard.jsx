@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BTN, CARD, TABLE, BADGE, PAGE, INPUT } from '../lib/design.js';
+import { BTN, CARD, TABLE, PAGE, INPUT } from '../lib/design.js';
 import { getCurrentHome, getFinanceDashboard, getFinanceAlerts } from '../lib/api.js';
 import { formatCurrency, getLabel, EXPENSE_CATEGORIES } from '../lib/finance.js';
+import { startOfLocalMonthISO, todayLocalISO } from '../lib/localDates.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 const ALERT_STYLES = {
   error: 'bg-red-50 border-red-200 text-red-700',
@@ -14,15 +18,10 @@ export default function FinanceDashboard() {
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [alerts, setAlerts] = useState([]);
-  const [period, setPeriod] = useState(() => {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const m = now.getUTCMonth();
-    return {
-      from: `${y}-${String(m + 1).padStart(2, '0')}-01`,
-      to: now.toISOString().slice(0, 10),
-    };
-  });
+  const [period, setPeriod] = useState(() => ({
+    from: startOfLocalMonthISO(),
+    to: todayLocalISO(),
+  }));
   const home = getCurrentHome();
 
   const datesReversed = period.from > period.to;
@@ -31,22 +30,27 @@ export default function FinanceDashboard() {
     if (!home || datesReversed) return;
     setLoading(true);
     try {
-      const [d, a] = await Promise.all([
+      const [nextDashboard, nextAlerts] = await Promise.all([
         getFinanceDashboard(home, period.from, period.to),
         getFinanceAlerts(home),
       ]);
       if (signal?.cancelled) return;
-      setDashboard(d);
-      setAlerts(Array.isArray(a) ? a : []);
+      setDashboard(nextDashboard);
+      setAlerts(Array.isArray(nextAlerts) ? nextAlerts : []);
       setError(null);
-    } catch (e) { if (!signal?.cancelled) setError(e.message); }
-    finally { if (!signal?.cancelled) setLoading(false); }
-  }, [home, period.from, period.to, datesReversed]);
+    } catch (e) {
+      if (!signal?.cancelled) setError(e.message);
+    } finally {
+      if (!signal?.cancelled) setLoading(false);
+    }
+  }, [datesReversed, home, period.from, period.to]);
 
   useEffect(() => {
     const signal = { cancelled: false };
-    load(signal);
-    return () => { signal.cancelled = true; };
+    void load(signal);
+    return () => {
+      signal.cancelled = true;
+    };
   }, [load]);
 
   async function handleExport() {
@@ -58,30 +62,52 @@ export default function FinanceDashboard() {
       sheets.push({
         name: 'Monthly Summary',
         headers: ['Month', 'Income', 'Expenses', 'Net'],
-        rows: trendRows.map(r => [r.month, r.income, r.expenses, r.net]),
+        rows: trendRows.map(row => [row.month, row.income, row.expenses, row.net]),
       });
     }
     if (dashboard.expenses_by_category?.length) {
       sheets.push({
         name: 'Expenses by Category',
         headers: ['Category', 'Total', 'Count'],
-        rows: dashboard.expenses_by_category.map(c => [getLabel(c.category, EXPENSE_CATEGORIES), c.total, c.count]),
+        rows: dashboard.expenses_by_category.map(category => [
+          getLabel(category.category, EXPENSE_CATEGORIES),
+          category.total,
+          category.count,
+        ]),
       });
     }
     if (dashboard.ageing?.overdue_items?.length) {
       sheets.push({
         name: 'Overdue Receivables',
         headers: ['Invoice #', 'Payer', 'Type', 'Total', 'Paid', 'Outstanding', 'Due Date', 'Days Overdue'],
-        rows: dashboard.ageing.overdue_items.map(i => [
-          i.invoice_number, i.payer_name, i.payer_type,
-          i.total_amount, i.amount_paid, i.outstanding, i.due_date, i.days_overdue,
+        rows: dashboard.ageing.overdue_items.map(item => [
+          item.invoice_number,
+          item.payer_name,
+          item.payer_type,
+          item.total_amount,
+          item.amount_paid,
+          item.outstanding,
+          item.due_date,
+          item.days_overdue,
         ]),
       });
     }
-    if (sheets.length) downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
+    if (sheets.length) {
+      downloadXLSX(`finance_dashboard_${period.from}_to_${period.to}.xlsx`, sheets);
+    }
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading finance data...</p></div></div>;
+  if (loading) {
+    return <LoadingState message="Loading finance data..." className={PAGE.container} card />;
+  }
+
+  if (error && !dashboard && !datesReversed) {
+    return (
+      <div className={PAGE.container}>
+        <ErrorState title="Unable to load finance dashboard" message={error} onRetry={() => void load()} />
+      </div>
+    );
+  }
 
   return (
     <div className={PAGE.container}>
@@ -91,75 +117,114 @@ export default function FinanceDashboard() {
           <p className={PAGE.subtitle}>Income, expenses and financial position</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))}
-            className={`${INPUT.sm} w-auto`} />
+          <input
+            type="date"
+            value={period.from}
+            onChange={event => setPeriod(current => ({ ...current, from: event.target.value }))}
+            className={`${INPUT.sm} w-auto`}
+          />
           <span className="text-gray-400">to</span>
-          <input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))}
-            className={`${INPUT.sm} w-auto`} />
-          <button onClick={load} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
+          <input
+            type="date"
+            value={period.to}
+            onChange={event => setPeriod(current => ({ ...current, to: event.target.value }))}
+            className={`${INPUT.sm} w-auto`}
+          />
+          <button onClick={() => void load()} className={`${BTN.secondary} ${BTN.sm}`}>Refresh</button>
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
         </div>
       </div>
 
-      {datesReversed && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg mb-4 text-sm">"From" date is after "To" date — adjust the date range to load data.</div>}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {datesReversed && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          "From" date is after "To" date. Adjust the range to load data.
+        </div>
+      )}
+      {error && dashboard && (
+        <ErrorState title="Some finance data could not be refreshed" message={error} onRetry={() => void load()} className="mb-4" />
+      )}
 
-      {/* KPI Cards */}
-      {dashboard && (
+      {!dashboard ? (
+        <div className={CARD.flush}>
+          <EmptyState
+            title="No finance dashboard data for this range"
+            description="Try a broader date range or refresh once finance records have been added."
+          />
+        </div>
+      ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KPICard label="Income (Invoiced)" value={formatCurrency(dashboard.income?.total_invoiced)} sub={`${dashboard.income?.invoice_count ?? 0} invoices`} color="emerald" />
-            <KPICard label="Total Expenses" value={formatCurrency(dashboard.expenses?.total_all)} sub={`Staff: ${formatCurrency(dashboard.expenses?.staff_costs)} | Agency: ${formatCurrency(dashboard.expenses?.agency_costs)}`} color="red" />
-            <KPICard label="Net Position" value={formatCurrency(dashboard.net_position)} sub={`Margin: ${(dashboard.margin ?? 0).toFixed(1)}%`} color={dashboard.net_position >= 0 ? 'emerald' : 'red'} />
-            <KPICard label="Occupancy" value={`${(dashboard.occupancy?.rate ?? 0).toFixed(0)}%`} sub={`${dashboard.occupancy?.active ?? 0} of ${dashboard.occupancy?.registered_beds ?? 0} beds`} color="blue" />
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KPICard
+              label="Income (Invoiced)"
+              value={formatCurrency(dashboard.income?.total_invoiced)}
+              sub={`${dashboard.income?.invoice_count ?? 0} invoices`}
+              color="emerald"
+            />
+            <KPICard
+              label="Total Expenses"
+              value={formatCurrency(dashboard.expenses?.total_all)}
+              sub={`Staff: ${formatCurrency(dashboard.expenses?.staff_costs)} | Agency: ${formatCurrency(dashboard.expenses?.agency_costs)}`}
+              color="red"
+            />
+            <KPICard
+              label="Net Position"
+              value={formatCurrency(dashboard.net_position)}
+              sub={`Margin: ${(dashboard.margin ?? 0).toFixed(1)}%`}
+              color={dashboard.net_position >= 0 ? 'emerald' : 'red'}
+            />
+            <KPICard
+              label="Occupancy"
+              value={`${(dashboard.occupancy?.rate ?? 0).toFixed(0)}%`}
+              sub={`${dashboard.occupancy?.active ?? 0} of ${dashboard.occupancy?.registered_beds ?? 0} beds`}
+              color="blue"
+            />
           </div>
 
-          {/* Alerts */}
           {alerts.length > 0 && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Alerts</h2>
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Alerts</h2>
               <div className="space-y-2">
-                {alerts.map((a, i) => (
-                  <div key={i} className={`px-3 py-2 rounded-lg border text-sm ${ALERT_STYLES[a.type] || ALERT_STYLES.info}`}>
-                    {a.message}
+                {alerts.map((alert, index) => (
+                  <div key={index} className={`rounded-lg border px-3 py-2 text-sm ${ALERT_STYLES[alert.type] || ALERT_STYLES.info}`}>
+                    {alert.message}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Receivables Ageing */}
           {dashboard.ageing && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Receivables Ageing</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Receivables Ageing</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <AgeingCard label="Current" value={dashboard.ageing.buckets?.current} color="emerald" />
                 <AgeingCard label="1-30 days" value={dashboard.ageing.buckets?.days_1_30} color="amber" />
                 <AgeingCard label="31-60 days" value={dashboard.ageing.buckets?.days_31_60} color="orange" />
                 <AgeingCard label="61-90 days" value={dashboard.ageing.buckets?.days_61_90} color="red" />
                 <AgeingCard label="90+ days" value={dashboard.ageing.buckets?.days_90_plus} color="red" />
               </div>
-              <p className="text-xs text-gray-500 mt-2">Total outstanding: {formatCurrency(dashboard.ageing.total_outstanding)}</p>
+              <p className="mt-2 text-xs text-gray-500">Total outstanding: {formatCurrency(dashboard.ageing.total_outstanding)}</p>
             </div>
           )}
 
-          {/* Expenses by Category */}
           {dashboard.expenses_by_category?.length > 0 && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Expenses by Category</h2>
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Expenses by Category</h2>
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
-                  <thead className={TABLE.thead}><tr>
-                    <th scope="col" className={TABLE.th}>Category</th>
-                    <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
-                    <th scope="col" className={`${TABLE.th} text-right`}>Count</th>
-                  </tr></thead>
+                  <thead className={TABLE.thead}>
+                    <tr>
+                      <th scope="col" className={TABLE.th}>Category</th>
+                      <th scope="col" className={`${TABLE.th} text-right`}>Total</th>
+                      <th scope="col" className={`${TABLE.th} text-right`}>Count</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {dashboard.expenses_by_category.map(c => (
-                      <tr key={c.category} className={TABLE.tr}>
-                        <td className={TABLE.td}>{getLabel(c.category, EXPENSE_CATEGORIES)}</td>
-                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(c.total)}</td>
-                        <td className={`${TABLE.td} text-right`}>{c.count}</td>
+                    {dashboard.expenses_by_category.map(category => (
+                      <tr key={category.category} className={TABLE.tr}>
+                        <td className={TABLE.td}>{getLabel(category.category, EXPENSE_CATEGORIES)}</td>
+                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(category.total)}</td>
+                        <td className={`${TABLE.td} text-right`}>{category.count}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -168,25 +233,28 @@ export default function FinanceDashboard() {
             </div>
           )}
 
-          {/* Monthly Trends */}
           {(dashboard.income_trend?.length > 0 || dashboard.expense_trend?.length > 0) && (
             <div className={`${CARD.padded} mb-6`}>
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Monthly Summary (Last 6 Months)</h2>
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Monthly Summary (Last 6 Months)</h2>
               <div className={TABLE.wrapper}>
                 <table className={TABLE.table}>
-                  <thead className={TABLE.thead}><tr>
-                    <th scope="col" className={TABLE.th}>Month</th>
-                    <th scope="col" className={`${TABLE.th} text-right`}>Income</th>
-                    <th scope="col" className={`${TABLE.th} text-right`}>Expenses</th>
-                    <th scope="col" className={`${TABLE.th} text-right`}>Net</th>
-                  </tr></thead>
+                  <thead className={TABLE.thead}>
+                    <tr>
+                      <th scope="col" className={TABLE.th}>Month</th>
+                      <th scope="col" className={`${TABLE.th} text-right`}>Income</th>
+                      <th scope="col" className={`${TABLE.th} text-right`}>Expenses</th>
+                      <th scope="col" className={`${TABLE.th} text-right`}>Net</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {buildTrendRows(dashboard.income_trend, dashboard.expense_trend).map(r => (
-                      <tr key={r.month} className={TABLE.tr}>
-                        <td className={TABLE.td}>{r.month}</td>
-                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(r.income)}</td>
-                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(r.expenses)}</td>
-                        <td className={`${TABLE.td} text-right font-mono ${r.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(r.net)}</td>
+                    {buildTrendRows(dashboard.income_trend, dashboard.expense_trend).map(row => (
+                      <tr key={row.month} className={TABLE.tr}>
+                        <td className={TABLE.td}>{row.month}</td>
+                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(row.income)}</td>
+                        <td className={`${TABLE.td} text-right font-mono`}>{formatCurrency(row.expenses)}</td>
+                        <td className={`${TABLE.td} text-right font-mono ${row.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {formatCurrency(row.net)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -211,9 +279,9 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color }) {
   return (
     <div className={CARD.padded}>
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${KPI_COLORS[color] || 'text-gray-900'}`}>{value}</p>
-      <p className="text-xs text-gray-500 mt-1">{sub}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${KPI_COLORS[color] || 'text-gray-900'}`}>{value}</p>
+      <p className="mt-1 text-xs text-gray-500">{sub}</p>
     </div>
   );
 }
@@ -229,11 +297,13 @@ function AgeingCard({ label, value, color }) {
 
 function buildTrendRows(incomeTrend = [], expenseTrend = []) {
   const months = new Map();
-  for (const r of incomeTrend) months.set(r.month, { month: r.month, income: r.invoiced ?? r.total ?? 0, expenses: 0 });
-  for (const r of expenseTrend) {
-    const existing = months.get(r.month) || { month: r.month, income: 0, expenses: 0 };
-    existing.expenses = r.total ?? 0;
-    months.set(r.month, existing);
+  for (const row of incomeTrend) months.set(row.month, { month: row.month, income: row.invoiced ?? row.total ?? 0, expenses: 0 });
+  for (const row of expenseTrend) {
+    const current = months.get(row.month) || { month: row.month, income: 0, expenses: 0 };
+    current.expenses = row.total ?? 0;
+    months.set(row.month, current);
   }
-  return [...months.values()].sort((a, b) => a.month.localeCompare(b.month)).map(r => ({ ...r, net: r.income - r.expenses }));
+  return [...months.values()]
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .map(row => ({ ...row, net: row.income - row.expenses }));
 }

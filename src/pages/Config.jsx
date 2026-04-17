@@ -6,6 +6,10 @@ import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 export default function Config() {
   const { canWrite } = useData();
@@ -23,6 +27,7 @@ export default function Config() {
   const [syncStatus, setSyncStatus] = useState(null);
   const [newBhDate, setNewBhDate] = useState('');
   const [newBhName, setNewBhName] = useState('');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(dirty);
 
@@ -65,6 +70,7 @@ export default function Config() {
       if (result?.updated_at) setConfigUpdatedAt(result.updated_at);
       setSaved(true);
       setDirty(false);
+      showNotice('Settings saved.');
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setSaveError(e.message);
@@ -86,7 +92,7 @@ export default function Config() {
       <div className="flex items-center gap-1">
         {type === 'number' ? (
           <input type="number" step={step || 1} value={getVal(path)}
-            onChange={e => handleChange(path, parseFloat(e.target.value) || 0)}
+            onChange={e => handleChange(path, e.target.value === '' ? '' : parseFloat(e.target.value))}
             className={INPUT.sm} />
         ) : (
           <input type={type} value={getVal(path)}
@@ -101,7 +107,7 @@ export default function Config() {
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <p className="text-gray-500 text-sm">Loading settings...</p>
+        <LoadingState message="Loading settings..." card />
       </div>
     );
   }
@@ -109,10 +115,7 @@ export default function Config() {
   if (loadError) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-          {loadError}
-          <button onClick={load} className={`${BTN.secondary} ${BTN.xs} ml-3`}>Retry</button>
-        </div>
+        <ErrorState title="Unable to load settings" message={loadError} onRetry={load} />
       </div>
     );
   }
@@ -121,6 +124,11 @@ export default function Config() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
       {dirty && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-sm">
           <span className="text-amber-700">You have unsaved changes</span>
@@ -381,9 +389,13 @@ export default function Config() {
           </button>
         </div>
         {syncStatus && !syncStatus.loading && (
-          <div className={`text-sm px-3 py-2 rounded-xl mb-3 ${syncStatus.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          <InlineNotice
+            variant={syncStatus.success ? 'success' : 'error'}
+            className="mb-3"
+            onDismiss={() => setSyncStatus(null)}
+          >
             {syncStatus.msg}
-          </div>
+          </InlineNotice>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
           {config.bank_holidays?.map((bh, i) => (

@@ -9,6 +9,7 @@ import { withTransaction } from '../db.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { checkNLWViolation } from '../services/validationService.js';
+import { definedWithoutVersion, splitVersion } from '../lib/versionedPayload.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -73,8 +74,8 @@ router.put('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, requir
     if (!parsed.success) return zodError(res, parsed);
     const existing = await staffRepo.findById(req.home.id, idParsed.data);
     if (!existing) return res.status(404).json({ error: 'Staff member not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, parsed.data, version);
+    const { version } = splitVersion(parsed.data);
+    const staff = await staffRepo.updateOne(req.home.id, idParsed.data, definedWithoutVersion(parsed.data), version);
     if (staff === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

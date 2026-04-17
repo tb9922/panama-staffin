@@ -2,6 +2,9 @@
 
 Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built for UK residential care homes. Self-hosted, no subscription.
 
+Latest platform baseline note:
+- `docs/HARDENING_SUMMARY_2026-03-29.md` - summary of the recent auth, scheduling, payroll, GDPR, ops, and test hardening work
+
 ## Engineering Standards — Always Active
 
 **Default thinking mode: experienced-dev.** Every task in this codebase — writing, reviewing, debugging, architecture, deployment — is performed through the lens of a senior developer with 20+ years of production experience. The full skill is at `~/.claude/commands/experienced-dev.md`.
@@ -132,11 +135,16 @@ Login: `admin/admin123` (home_manager role) or `viewer/view123` (viewer role)
 
 ## Tech Stack
 
+Current baseline:
+- PostgreSQL schema evolves regularly; check the `migrations/` directory in the current branch
+- Test totals evolve regularly; run `npm test` / `npm run test:frontend` to verify the live baseline
+- File-count baselines evolve regularly; run `npm run stats` for the current route/repo/service/page/test snapshot
+
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + React Router 7
-- **Backend**: Express 5 (server.js) — PostgreSQL (pg pool, 117 migrations)
+- **Backend**: Express 5 (server.js) — PostgreSQL via `pg`
 - **PDF**: jspdf + jspdf-autotable
 - **APM**: Sentry (`@sentry/node` + `@sentry/react`) — activates when `SENTRY_DSN` is set
-- **Testing**: Vitest — 2,392+ tests across 126 files (unit + integration + page), all passing
+- **Testing**: Vitest + Playwright — run the current branch to verify the live baseline
 
 ## Architecture
 
@@ -281,7 +289,7 @@ Each user has a **per-home role** assigned via `user_home_roles` table (migratio
 
 ## Data Model
 
-Data is stored in PostgreSQL (117 migrations). The logical shape per home:
+Data is stored in PostgreSQL. The logical shape per home:
 
 ```js
 {
@@ -796,7 +804,7 @@ Server-side `validateOverrides()` checks max AL per day, entitlement per staff, 
 
 ## Git & Deployment
 
-- **Repo**: github.com/tb9922/panama-staffin
+- **Repo**: github.com/tb9922/panama-staffing
 - **Branch**: main
 - **gitignored**: homes/, backups/, audit_log.json, node_modules, dist
 - **CI/CD**: GitHub Actions (`.github/workflows/test.yml`) — lint, test, security audit on every push; auto-deploy on push to main (requires `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` secrets). Rollback on migration failure.

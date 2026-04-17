@@ -8,7 +8,7 @@ import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
-import * as auditService from '../services/auditService.js';
+import * as auditRepo from '../repositories/auditRepo.js';
 import { dispatchEvent } from '../services/webhookService.js';
 import { AppError } from '../errors.js';
 import {
@@ -16,6 +16,7 @@ import {
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
 } from '../shared/rotation.js';
 import { isOwnDataOnly } from '../shared/roles.js';
+import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 
@@ -133,9 +134,8 @@ const TRAINING_BLOCKING_CARE_ROLES = new Set([
 ]);
 const BLOCKING_TRAINING_TYPE_IDS = ['fire-safety', 'moving-handling', 'safeguarding-adults'];
 
-function getUtcTodayStr() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString().slice(0, 10);
+function getTodayStr() {
+  return todayLocalISO();
 }
 
 function isValidIsoDateOnly(value) {
@@ -151,7 +151,7 @@ function assertEditLock(req, config, dates) {
   const expectedPin = String(config?.edit_lock_pin || '');
   if (!expectedPin) return;
 
-  const lockedDates = [...new Set(dates.filter(date => date < getUtcTodayStr()))];
+  const lockedDates = [...new Set(dates.filter(date => date < getTodayStr()))];
   if (lockedDates.length === 0) return;
 
   if (String(req.get('X-Edit-Lock-Pin') || '') === expectedPin) return;
@@ -195,7 +195,7 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
   if (!trainingTypes?.length) return null;
 
   const conn = client || pool;
-  const effectiveDateStr = effectiveDate || getUtcTodayStr();
+  const effectiveDateStr = effectiveDate || getTodayStr();
 
   // Get staff role/name + latest expiry per blocking type in a single query.
   // NULL expiry (never-expiring training) is mapped to '9999-12-31' so it never triggers blocking.
@@ -236,7 +236,7 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
 }
 
 // GET /api/scheduling?home=X — full scheduling bundle
-router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read'), async (req, res, next) => {
+router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     // Default ±90-day rolling window; callers may widen with ?from=&to= query params (max 400 days).
     const now = new Date();
@@ -248,8 +248,9 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     if (requestedTo && !isValidIsoDateOnly(requestedTo)) {
       return res.status(400).json({ error: 'Invalid to date' });
     }
-    const fromDate = requestedFrom || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 90)).toISOString().slice(0, 10);
-    const toDate = requestedTo || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)).toISOString().slice(0, 10);
+    const today = todayLocalISO(now);
+    const fromDate = requestedFrom || addDaysLocalISO(today, -90);
+    const toDate = requestedTo || addDaysLocalISO(today, 90);
     // Cap range to 400 days to prevent unbounded queries
     const daySpan = (new Date(toDate) - new Date(fromDate)) / 86400000;
     if (daySpan < 0 || daySpan > 400) {
@@ -336,7 +337,6 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
       }
     }
 
-    let computedALHours = null;
     let trainingWarning = null;
     if (shift === 'AL') {
       // Validate + upsert in a single transaction to prevent concurrent overbooking
@@ -347,10 +347,14 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
           err.isALValidation = true;
           throw err;
         }
-        computedALHours = result.al_hours;
         // Backend computes al_hours — overrides any frontend hint
         await overrideRepo.upsertOne(req.home.id, date, staffId, {
           shift, reason, source, sleep_in, replaces_staff_id, override_hours,
+          al_hours: result.al_hours,
+        }, client);
+        await auditRepo.log('override_upsert', req.home.slug, req.user.username, {
+          date, staffId, shift,
+          ...(replaces_staff_id && { replaces_staff_id }),
           al_hours: result.al_hours,
         }, client);
       });
@@ -366,13 +370,12 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
         await overrideRepo.upsertOne(req.home.id, date, staffId, {
           shift, reason, source, sleep_in, replaces_staff_id, override_hours, al_hours: null,
         }, client);
+        await auditRepo.log('override_upsert', req.home.slug, req.user.username, {
+          date, staffId, shift,
+          ...(replaces_staff_id && { replaces_staff_id }),
+        }, client);
       });
     }
-    await auditService.log('override_upsert', req.home.slug, req.user.username, {
-      date, staffId, shift,
-      ...(replaces_staff_id && { replaces_staff_id }),
-      ...(computedALHours != null && { al_hours: computedALHours }),
-    });
     dispatchEvent(req.home.id, 'override.created', { date, staffId, shift });
     res.json(trainingWarning ? { ok: true, warnings: [trainingWarning] } : { ok: true });
   } catch (err) {
@@ -394,8 +397,13 @@ router.delete('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, re
     const parsed = overrideDeleteSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     assertEditLock(req, req.home.config, [parsed.data.date]);
-    await overrideRepo.deleteOne(req.home.id, parsed.data.date, parsed.data.staffId);
-    await auditService.log('override_delete', req.home.slug, req.user.username, { date: parsed.data.date, staffId: parsed.data.staffId });
+    await withTransaction(async (client) => {
+      await overrideRepo.deleteOne(req.home.id, parsed.data.date, parsed.data.staffId, client);
+      await auditRepo.log('override_delete', req.home.slug, req.user.username, {
+        date: parsed.data.date,
+        staffId: parsed.data.staffId,
+      }, client);
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -476,13 +484,12 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
         if (o.shift !== 'AL') o.al_hours = null;
       }
       await overrideRepo.upsertBulk(req.home.id, overrides, client);
-    });
-
-    const alCount = overrides.filter(o => o.shift === 'AL').length;
-    const totalALHours = overrides.reduce((sum, o) => sum + (o.shift === 'AL' ? (o.al_hours ?? 0) : 0), 0);
-    await auditService.log('override_bulk_upsert', req.home.slug, req.user.username, {
-      count: parsed.data.overrides.length,
-      ...(alCount > 0 && { al_count: alCount, al_hours_total: totalALHours }),
+      const alCount = overrides.filter(o => o.shift === 'AL').length;
+      const totalALHours = overrides.reduce((sum, o) => sum + (o.shift === 'AL' ? (o.al_hours ?? 0) : 0), 0);
+      await auditRepo.log('override_bulk_upsert', req.home.slug, req.user.username, {
+        count: parsed.data.overrides.length,
+        ...(alCount > 0 && { al_count: alCount, al_hours_total: totalALHours }),
+      }, client);
     });
     res.json({
       ok: true,
@@ -513,8 +520,15 @@ router.delete('/overrides/month', writeRateLimiter, requireAuth, requireHomeAcce
     const from = new Date(fromDate), to = new Date(toDate);
     if ((to - from) / 86400000 > 366) return res.status(400).json({ error: 'Date range exceeds 366 days' });
     assertEditLock(req, req.home.config, [fromDate]);
-    const deleted = await overrideRepo.deleteForDateRange(req.home.id, fromDate, toDate);
-    await auditService.log('override_month_revert', req.home.slug, req.user.username, { fromDate, toDate, deleted });
+    const deleted = await withTransaction(async (client) => {
+      const rowCount = await overrideRepo.deleteForDateRange(req.home.id, fromDate, toDate, client);
+      await auditRepo.log('override_month_revert', req.home.slug, req.user.username, {
+        fromDate,
+        toDate,
+        deleted: rowCount,
+      }, client);
+      return rowCount;
+    });
     res.json({ ok: true, deleted });
   } catch (err) {
     next(err);
@@ -533,13 +547,15 @@ router.put('/day-notes', writeRateLimiter, requireAuth, requireHomeAccess, requi
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { date, note } = parsed.data;
     assertEditLock(req, req.home.config, [date]);
-    if (note.trim() === '') {
-      await dayNoteRepo.deleteOne(req.home.id, date);
-      await auditService.log('day_note_delete', req.home.slug, req.user.username, { date });
-    } else {
-      await dayNoteRepo.upsertOne(req.home.id, date, note);
-      await auditService.log('day_note_upsert', req.home.slug, req.user.username, { date });
-    }
+    await withTransaction(async (client) => {
+      if (note.trim() === '') {
+        await dayNoteRepo.deleteOne(req.home.id, date, client);
+        await auditRepo.log('day_note_delete', req.home.slug, req.user.username, { date }, client);
+      } else {
+        await dayNoteRepo.upsertOne(req.home.id, date, note, client);
+        await auditRepo.log('day_note_upsert', req.home.slug, req.user.username, { date }, client);
+      }
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -5,6 +5,7 @@ import { diffFields } from '../../lib/hrFieldMappers.js';
 import { zodError } from '../../errors.js';
 import { z } from 'zod';
 import { idSchema } from './schemas.js';
+import { splitVersion } from '../../lib/versionedPayload.js';
 
 const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -64,11 +65,11 @@ export function registerCaseRoutes(router, { type, path, bodySchema, updateSchem
       const parsed = versionedSchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed);
 
-      const version = parsed.data._version != null ? parsed.data._version : null;
+      const { version, payload } = splitVersion(parsed.data);
       const existing = repoFindById ? await repoFindById(idParsed.data, req.home.id) : null;
       if (repoFindById && !existing) return res.status(404).json({ error: `${type} case not found` });
 
-      const mapped = mapFields ? mapFields(parsed.data, existing) : parsed.data;
+      const mapped = mapFields ? mapFields(payload, existing) : payload;
       const result = await repoUpdate(idParsed.data, req.home.id, mapped, null, version);
       if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
 

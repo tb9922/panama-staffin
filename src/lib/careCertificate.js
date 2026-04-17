@@ -2,6 +2,7 @@
 // Maps to QS6 (Competent Staff) — CQC Regulation 18
 
 import { parseDate } from './rotation.js';
+import { isCareRole } from '../../shared/rotation.js';
 
 // ── Care Certificate Standards (2025 update incl. Oliver McGowan) ──────────
 
@@ -162,19 +163,20 @@ export function getCareCertAlerts(careCertData, activeStaff, config, asOfDate) {
 
 export function calculateCareCertCompletionPct(data, asOfDate) {
   const cc = data.care_certificate || {};
-  const trackedIds = Object.keys(cc);
+  const eligibleStaff = (data.staff || []).filter((staff) => staff?.active !== false && isCareRole(staff.role));
+  const eligibleStaffIds = eligibleStaff.map((staff) => staff.id);
 
-  if (trackedIds.length === 0) {
-    return { score: 100, completed: 0, total: 0, detail: 'No staff tracked for Care Certificate' };
+  if (eligibleStaffIds.length === 0) {
+    return { score: 100, completed: 0, total: 0, detail: 'No eligible care staff' };
   }
 
   let completed = 0;
-  for (const staffId of trackedIds) {
+  for (const staffId of eligibleStaffIds) {
     const record = cc[staffId];
     const result = getCareCertStatus(staffId, cc, record?.start_date, asOfDate);
     if (result.status === 'completed') completed++;
   }
 
-  const score = Math.round((completed / trackedIds.length) * 100);
-  return { score, completed, total: trackedIds.length };
+  const score = Math.round((completed / eligibleStaffIds.length) * 100);
+  return { score, completed, total: eligibleStaffIds.length };
 }

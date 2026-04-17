@@ -18,12 +18,14 @@ import { __primeBankHolidayCacheForTests, __resetBankHolidayCacheForTests } from
 
 const PREFIX = 'coverage-routes';
 const ADMIN_USER = `${PREFIX}-admin`;
+const PLATFORM_ADMIN_USER = `${PREFIX}-platform-admin`;
 const SIGNOFF_USER = `${PREFIX}-signoff`;
 const TRAINING_LEAD_USER = `${PREFIX}-training-lead`;
 const VIEWER_USER = `${PREFIX}-viewer`;
 const PW = 'CoverageTest!2026';
 
 let adminToken;
+let platformAdminToken;
 let signoffToken;
 let trainingLeadToken;
 let viewerToken;
@@ -98,31 +100,35 @@ beforeAll(async () => {
 
   const hash = await bcrypt.hash(PW, 4);
   await pool.query(
-    `INSERT INTO users (username, password_hash, role, active, display_name, created_by)
+    `INSERT INTO users (username, password_hash, role, active, display_name, created_by, is_platform_admin)
      VALUES
-       ($1, $4, 'admin', true, 'Coverage Admin', 'test-setup'),
-       ($2, $4, 'admin', true, 'Coverage Signoff', 'test-setup'),
-       ($3, $4, 'viewer', true, 'Coverage Training Lead', 'test-setup'),
-       ($5, $4, 'viewer', true, 'Coverage Viewer', 'test-setup')`,
-    [ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, hash, VIEWER_USER]
+       ($1, $5, 'admin', true, 'Coverage Admin', 'test-setup', false),
+       ($2, $5, 'admin', true, 'Coverage Platform Admin', 'test-setup', true),
+       ($3, $5, 'admin', true, 'Coverage Signoff', 'test-setup', false),
+       ($4, $5, 'viewer', true, 'Coverage Training Lead', 'test-setup', false),
+       ($6, $5, 'viewer', true, 'Coverage Viewer', 'test-setup', false)`,
+    [ADMIN_USER, PLATFORM_ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, hash, VIEWER_USER]
   );
 
   await pool.query(
     `INSERT INTO user_home_roles (username, home_id, role_id, staff_id, granted_by)
      VALUES
-       ($1, $4, 'home_manager', NULL, 'test-setup'),
-       ($2, $4, 'home_manager', NULL, 'test-setup'),
-       ($3, $4, 'training_lead', NULL, 'test-setup'),
-       ($5, $4, 'viewer', NULL, 'test-setup')`,
-    [ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, homeAId, VIEWER_USER]
+       ($1, $5, 'home_manager', NULL, 'test-setup'),
+       ($2, $5, 'home_manager', NULL, 'test-setup'),
+       ($3, $5, 'home_manager', NULL, 'test-setup'),
+       ($4, $5, 'training_lead', NULL, 'test-setup'),
+       ($6, $5, 'viewer', NULL, 'test-setup')`,
+    [ADMIN_USER, PLATFORM_ADMIN_USER, SIGNOFF_USER, TRAINING_LEAD_USER, homeAId, VIEWER_USER]
   );
 
   const adminLogin = await request(app).post('/api/login').send({ username: ADMIN_USER, password: PW }).expect(200);
+  const platformAdminLogin = await request(app).post('/api/login').send({ username: PLATFORM_ADMIN_USER, password: PW }).expect(200);
   const signoffLogin = await request(app).post('/api/login').send({ username: SIGNOFF_USER, password: PW }).expect(200);
   const trainingLeadLogin = await request(app).post('/api/login').send({ username: TRAINING_LEAD_USER, password: PW }).expect(200);
   const viewerLogin = await request(app).post('/api/login').send({ username: VIEWER_USER, password: PW }).expect(200);
 
   adminToken = adminLogin.body.token;
+  platformAdminToken = platformAdminLogin.body.token;
   signoffToken = signoffLogin.body.token;
   trainingLeadToken = trainingLeadLogin.body.token;
   viewerToken = viewerLogin.body.token;
@@ -190,7 +196,7 @@ describe('audit routes', () => {
       `INSERT INTO audit_log (action, home_slug, user_name, details, ts)
        VALUES
          ('coverage_new', $1, $2, '{"kind":"new"}', NOW()),
-         ('coverage_old', $1, $2, '{"kind":"old"}', NOW() - INTERVAL '90 days')`,
+         ('coverage_old', $1, $2, '{"kind":"old"}', NOW() - INTERVAL '8 years')`,
       [homeASlug, ADMIN_USER]
     );
 
@@ -202,8 +208,9 @@ describe('audit routes', () => {
 
     await authGet(`/api/audit?home=${homeBSlug}`, adminToken).expect(403);
 
-    await authDelete(`/api/audit/purge?home=${homeASlug}`, viewerToken, { days: 30 }).expect(403);
-    const purgeRes = await authDelete(`/api/audit/purge?home=${homeASlug}`, adminToken, { days: 30 }).expect(200);
+    await authDelete(`/api/audit/purge?home=${homeASlug}`, viewerToken, { days: 2555 }).expect(403);
+    await authDelete(`/api/audit/purge?home=${homeASlug}`, adminToken, { days: 2555 }).expect(403);
+    const purgeRes = await authDelete(`/api/audit/purge?home=${homeASlug}`, platformAdminToken, { days: 2555 }).expect(200);
     expect(purgeRes.body.deleted).toBeGreaterThanOrEqual(1);
 
     await authPost(`/api/audit/report-download?home=${homeASlug}`, adminToken, {

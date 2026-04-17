@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { formatDate } from '../lib/rotation.js';
+import { todayLocalISO, startOfNextLocalDay } from '../lib/localDates.js';
 
 /**
  * Returns a reactive today string (YYYY-MM-DD) that updates at midnight.
@@ -7,12 +7,12 @@ import { formatDate } from '../lib/rotation.js';
  * on tabs left open across midnight during shift handover.
  */
 export function useLiveDate() {
-  const [today, setToday] = useState(() => formatDate(new Date()));
+  const [today, setToday] = useState(() => todayLocalISO());
 
   useEffect(() => {
     const now = new Date();
-    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const timer = setTimeout(() => setToday(formatDate(new Date())), utcTomorrow - now.getTime());
+    const nextMidnight = startOfNextLocalDay(now);
+    const timer = setTimeout(() => setToday(todayLocalISO()), nextMidnight.getTime() - now.getTime());
     return () => clearTimeout(timer);
   }, [today]);
 

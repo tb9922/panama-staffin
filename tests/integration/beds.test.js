@@ -279,12 +279,14 @@ describe('bedTransitionRepo', () => {
       toStatus: 'available',
       changedBy: 'admin',
       reason: 'Bed created',
+      notes: 'Created from integration test',
     });
 
     expect(t).not.toBeNull();
     expect(t.bed_id).toBe(bedId);
     expect(t.from_status).toBe('initial');
     expect(t.to_status).toBe('available');
+    expect(t.notes).toBe('Created from integration test');
   });
 
   it('retrieves transitions ordered by newest first', async () => {
@@ -443,11 +445,13 @@ describe('bedService: transitionStatus', () => {
     const bed = await bedService.transitionStatus(bedId, homeA, 'bed-test-a', {
       status: 'vacating',
       reason: 'discharged',
+      notes: 'Family has confirmed pickup at 11am',
       username: 'admin',
       clientUpdatedAt: updatedAt,
     });
 
     expect(bed.status).toBe('vacating');
+    expect(bed.notes).toBe('Family has confirmed pickup at 11am');
     updatedAt = bed.updated_at;
   });
 
@@ -478,6 +482,37 @@ describe('bedService: transitionStatus', () => {
     const transitions = await bedTransitionRepo.getTransitionsByBed(bedId, homeA);
     // initial + 7 transitions
     expect(transitions.length).toBe(8);
+    const vacatingTransition = transitions.find(t => t.to_status === 'vacating');
+    expect(vacatingTransition?.reason).toBe('discharged');
+    expect(vacatingTransition?.notes).toBe('Family has confirmed pickup at 11am');
+  });
+
+  it('stores release reasons in transition history without wiping existing bed notes', async () => {
+    const created = await bedService.createBed(homeA, 'bed-test-a', {
+      room_number: 'REL001',
+      notes: 'Keep this note',
+    }, 'admin');
+    bedIds.push(created.id);
+
+    const reserved = await bedService.transitionStatus(created.id, homeA, 'bed-test-a', {
+      status: 'reserved',
+      username: 'admin',
+      clientUpdatedAt: created.updated_at,
+    });
+
+    const released = await bedService.transitionStatus(created.id, homeA, 'bed-test-a', {
+      status: 'available',
+      releaseReason: 'family_declined',
+      username: 'admin',
+      clientUpdatedAt: reserved.updated_at,
+    });
+
+    expect(released.notes).toBe('Keep this note');
+
+    const transitions = await bedTransitionRepo.getTransitionsByBed(created.id, homeA);
+    const releaseTransition = transitions.find(t => t.from_status === 'reserved' && t.to_status === 'available');
+    expect(releaseTransition?.reason).toBe('family_declined');
+    expect(releaseTransition?.notes).toBeNull();
   });
 });
 

@@ -8,6 +8,12 @@ import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import {
+  validateGdprBreachStatusChange,
+  validateGdprComplaintStatusChange,
+  validateGdprRequestStatusChange,
+} from '../lib/statusTransitions.js';
 
 const router = Router();
 
@@ -131,8 +137,10 @@ router.put('/requests/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (parsed.data.status === 'completed' && existing.request_type === 'erasure') {
       return res.status(400).json({ error: 'Erasure requests must be completed via /execute, not manually' });
     }
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await gdprService.updateRequest(idP.data, req.home.id, parsed.data, null, version);
+    const statusError = validateGdprRequestStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await gdprService.updateRequest(idP.data, req.home.id, payload, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_request_update', req.home.slug, req.user.username, { id: idP.data, changes });
@@ -221,14 +229,16 @@ router.put('/breaches/:id', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findBreachById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Breach not found' });
+    const statusError = validateGdprBreachStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
     // Require rationale when human decision overrides the AI recommendation
     if ('manual_decision' in parsed.data && existing.recommended_ico_notification != null
         && parsed.data.manual_decision !== existing.recommended_ico_notification
         && !parsed.data.decision_rationale?.trim()) {
       return res.status(400).json({ error: 'Decision rationale is required when overriding the ICO notification recommendation' });
     }
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await gdprService.updateBreach(idP.data, req.home.id, parsed.data, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await gdprService.updateBreach(idP.data, req.home.id, payload, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_breach_update', req.home.slug, req.user.username, { id: idP.data, changes });
@@ -321,8 +331,8 @@ router.put('/consent/:id', writeRateLimiter, requireAuth, requireHomeAccess, req
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findConsentById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Consent record not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await gdprService.updateConsent(idP.data, req.home.id, parsed.data, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await gdprService.updateConsent(idP.data, req.home.id, payload, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_consent_update', req.home.slug, req.user.username, { id: idP.data, changes });
@@ -359,8 +369,10 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const existing = await gdprService.findDPComplaintById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Complaint not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const result = await gdprService.updateDPComplaint(idP.data, req.home.id, parsed.data, version);
+    const statusError = validateGdprComplaintStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await gdprService.updateDPComplaint(idP.data, req.home.id, payload, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     const changes = diffFields(existing, result);
     await auditService.log('gdpr_complaint_update', req.home.slug, req.user.username, { id: idP.data, changes });

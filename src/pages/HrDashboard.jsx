@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BTN, CARD, TABLE, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { getCurrentHome, getHrStats, getHrWarnings } from '../lib/api.js';
 import { WARNING_LEVELS } from '../lib/hr.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -15,6 +20,7 @@ export default function HrDashboard() {
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
   const [warnings, setWarnings] = useState([]);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const home = getCurrentHome();
 
   const load = useCallback(async () => {
@@ -44,9 +50,10 @@ export default function HrDashboard() {
         w.warning_expiry_date || '', w.case_id || '',
       ]),
     }]);
+    showNotice('Warning register exported to Excel.');
   }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading HR data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState card message="Loading HR data..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -57,7 +64,12 @@ export default function HrDashboard() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice className="mb-4" variant={notice.variant} onDismiss={clearNotice}>
+          {notice.content}
+        </InlineNotice>
+      )}
+      {error && <ErrorState className="mb-4" title="Unable to load HR data" message={error} onRetry={load} />}
 
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
 
@@ -67,7 +79,13 @@ export default function HrDashboard() {
   );
 
   function renderOverview() {
-    if (!stats) return <div className={CARD.padded}><p className="text-gray-400">No stats available</p></div>;
+    if (!stats) {
+      return (
+        <div className={CARD.padded}>
+          <EmptyState compact title="No stats available" description="HR summary data will appear here once disciplinary, grievance, performance, or flex records are in place." />
+        </div>
+      );
+    }
 
     const cards = [
       { label: 'Open Disciplinary', value: stats.disciplinary_open ?? 0, color: stats.disciplinary_open > 0 ? 'text-amber-600' : '' },
@@ -124,7 +142,11 @@ export default function HrDashboard() {
               </thead>
               <tbody>
                 {warnings.length === 0 && (
-                  <tr><td colSpan={6} className={TABLE.empty}>No active warnings</td></tr>
+                  <tr>
+                    <td colSpan={6} className={TABLE.empty}>
+                      <EmptyState compact title="No active warnings" description="Current written and final warnings will appear here while they remain live." />
+                    </td>
+                  </tr>
                 )}
                 {warnings.map(w => {
                   const level = WARNING_LEVELS.find(l => l.id === w.outcome);

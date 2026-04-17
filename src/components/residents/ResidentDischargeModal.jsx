@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { updateFinanceResident } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 const DISCHARGE_REASONS = [
   { id: 'discharged', label: 'Discharged' },
@@ -12,7 +13,7 @@ const DISCHARGE_REASONS = [
 
 export default function ResidentDischargeModal({ home, resident, onClose, onSaved }) {
   const [reason, setReason] = useState('discharged');
-  const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dischargeDate, setDischargeDate] = useState(todayLocalISO());
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -25,9 +26,17 @@ export default function ResidentDischargeModal({ home, resident, onClose, onSave
     setError(null);
     try {
       const existingNotes = resident.notes || '';
-      const appendedNotes = existingNotes + (notes.trim() ? '\nDischarge: ' + notes.trim() : '');
+      const noteParts = [];
+      if (reason === 'transferred') {
+        noteParts.push('Discharge reason: Transferred');
+      }
+      if (notes.trim()) {
+        noteParts.push(`Discharge: ${notes.trim()}`);
+      }
+      const appendedNotes = existingNotes + (noteParts.length ? `\n${noteParts.join('\n')}` : '');
+      const targetStatus = reason === 'deceased' ? 'deceased' : 'discharged';
       await updateFinanceResident(home, resident.id, {
-        status: reason,
+        status: targetStatus,
         discharge_date: dischargeDate,
         notes: appendedNotes,
         _version: resident.version,

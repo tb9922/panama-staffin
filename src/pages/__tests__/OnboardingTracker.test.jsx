@@ -83,6 +83,15 @@ function renderAdmin() {
   });
 }
 
+function renderAdminAt(route) {
+  api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
+  return renderWithProviders(<OnboardingTracker />, {
+    route,
+    path: '*',
+    user: { username: 'admin', role: 'admin' },
+  });
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -112,7 +121,7 @@ describe('OnboardingTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getOnboardingData.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading onboarding data...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
@@ -240,5 +249,18 @@ describe('OnboardingTracker', () => {
     expect(screen.getByText('Section Documents')).toBeInTheDocument();
     expect(screen.getByText('No documents uploaded for this section yet.')).toBeInTheDocument();
     expect(api.getOnboardingFiles).toHaveBeenCalledWith('onboarding', 'S001::dbs_check');
+  });
+
+  it('deep-links to a staff member from the query string', async () => {
+    renderAdminAt('/onboarding?staffId=S002');
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('S002')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Pre-Employment Checks')).toBeInTheDocument();
+    });
   });
 });

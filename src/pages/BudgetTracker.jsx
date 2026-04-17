@@ -3,16 +3,22 @@ import { getStaffForDay } from '../lib/rotation.js';
 import { calculateDayCost } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { currentLocalYearMonth, endOfLocalMonthISO, startOfLocalMonthISO } from '../lib/localDates.js';
 
 function getMonthDates(year, month) {
   const dates = [];
-  const d = new Date(Date.UTC(year, month, 1));
-  while (d.getUTCMonth() === month) {
+  const d = new Date(year, month, 1);
+  while (d.getMonth() === month) {
     dates.push(new Date(d));
-    d.setUTCDate(d.getUTCDate() + 1);
+    d.setDate(d.getDate() + 1);
   }
   return dates;
 }
@@ -31,16 +37,16 @@ export default function BudgetTracker() {
     if (!homeSlug) return;
     // BudgetTracker shows 6 months back + 5 months forward — request a wider override window
     const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0)).toISOString().slice(0, 10);
+    const from = startOfLocalMonthISO(now, -6);
+    const to = endOfLocalMonthISO(now, 5);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [homeSlug]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading budget data...</div>;
-  if (error) return <div className="p-6 text-red-600" role="alert">Error: {error}</div>;
+  if (loading) return <LoadingState message="Loading budget data..." className="px-6 py-6" />;
+  if (error) return <div className="p-6 max-w-7xl mx-auto"><ErrorState title="Unable to load budget data" message={error} /></div>;
   if (!schedData) return null;
 
   return <BudgetTrackerInner schedData={schedData} setSchedData={setSchedData} editingBudget={editingBudget} setEditingBudget={setEditingBudget} budgetInput={budgetInput} setBudgetInput={setBudgetInput} agencyCapInput={agencyCapInput} setAgencyCapInput={setAgencyCapInput} />;
@@ -51,6 +57,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const canEdit = canWrite('finance');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const config = schedData.config;
   const defaultBudget = config.monthly_staff_budget || 0;
   const defaultAgencyCap = config.monthly_agency_cap || 0;
@@ -61,13 +68,13 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     const result = [];
     const now = new Date();
     for (let i = -6; i <= 5; i++) {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       result.push({
-        year: d.getUTCFullYear(),
-        month: d.getUTCMonth(),
-        key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
-        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        key: currentLocalYearMonth(d),
+        label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+        fullLabel: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
         isCurrent: i === 0,
         isFuture: i > 0,
       });
@@ -117,7 +124,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   // YTD calculations (Jan to current month of current year)
   const ytd = useMemo(() => {
     const now = new Date();
-    const yearMonths = monthData.filter(m => m.year === now.getUTCFullYear() && m.month <= now.getUTCMonth());
+    const yearMonths = monthData.filter(m => m.year === now.getFullYear() && m.month <= now.getMonth());
     const actualYTD = yearMonths.reduce((s, m) => s + m.actual, 0);
     const budgetYTD = yearMonths.reduce((s, m) => s + m.budget, 0);
     const agencyYTD = yearMonths.reduce((s, m) => s + m.agency, 0);
@@ -130,7 +137,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     const recent = monthData.filter(m => !m.isFuture && m.actual > 0).slice(-3);
     if (recent.length === 0) return null;
     const avgMonthly = recent.reduce((s, m) => s + m.actual, 0) / recent.length;
-    const remainingMonths = 12 - (now.getUTCMonth() + 1);
+    const remainingMonths = 12 - (now.getMonth() + 1);
     const projected = ytd.actual + (avgMonthly * remainingMonths);
     const annualBudget = defaultBudget * 12;
     return { avgMonthly, projected, annualBudget, remaining: remainingMonths };
@@ -147,8 +154,12 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
         config: newConfig,
         configUpdatedAt: result?.updated_at || prev.configUpdatedAt || null,
       }));
+      setSaveError(null);
+      showNotice('Budget settings saved. Updated figures are now reflected across the tracker.');
+      return true;
     } catch (e) {
       setSaveError(e.message);
+      return false;
     }
   }
 
@@ -158,8 +169,8 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     try {
-      await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
-      setEditingBudget(null);
+      const saved = await patchConfig({ budget_overrides: { ...budgetOverrides, [monthKey]: val } });
+      if (saved) setEditingBudget(null);
     } finally { setSaving(false); }
   }
 
@@ -169,8 +180,8 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     try {
       const total = parseFloat(budgetInput) || 0;
       const agCap = parseFloat(agencyCapInput) || 0;
-      await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
-      setEditingBudget(null);
+      const saved = await patchConfig({ monthly_staff_budget: total, monthly_agency_cap: agCap });
+      if (saved) setEditingBudget(null);
     } finally { setSaving(false); }
   }
 
@@ -188,7 +199,16 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
         <p className="text-xs text-gray-500">12-month rolling view | Printed: {new Date().toLocaleDateString('en-GB')}</p>
       </div>
 
-      {saveError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded text-sm" role="alert">{saveError}</div>}
+      {notice && (
+        <InlineNotice className="mb-4" variant={notice.variant} onDismiss={clearNotice}>
+          {notice.content}
+        </InlineNotice>
+      )}
+      {saveError && (
+        <InlineNotice className="mb-4" variant="error" role="alert" onDismiss={() => setSaveError(null)}>
+          {saveError}
+        </InlineNotice>
+      )}
       <div className="flex items-center justify-between mb-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Budget vs Actual</h1>
@@ -277,9 +297,18 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
             </div>
           </>
         ) : (
-          <div className="col-span-full bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-            <div className="text-amber-700 font-medium">No budget set</div>
-            <p className="text-amber-600 text-sm mt-1">Click "Set Budget" above to set monthly targets and start tracking variance</p>
+          <div className="col-span-full rounded-xl border border-amber-200 bg-amber-50 px-4">
+            <EmptyState
+              compact
+              title="No budget set"
+              description={canEdit ? 'Set monthly staff and agency targets to start tracking variance and forecast pressure.' : 'Budget targets have not been configured for this home yet.'}
+              actionLabel={canEdit ? 'Set Budget' : undefined}
+              onAction={canEdit ? () => {
+                setEditingBudget('default');
+                setBudgetInput(String(defaultBudget || ''));
+                setAgencyCapInput(String(defaultAgencyCap || ''));
+              } : undefined}
+            />
           </div>
         )}
       </div>

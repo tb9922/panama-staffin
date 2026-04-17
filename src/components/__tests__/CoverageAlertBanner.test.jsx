@@ -95,7 +95,7 @@ describe('CoverageAlertBanner', () => {
   });
 
   it('smoke test — renders without crashing', () => {
-    api.getSchedulingData.mockResolvedValue(makeSchedulingData());
+    api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     expect(() => renderBanner()).not.toThrow();
   });
 
@@ -147,7 +147,7 @@ describe('CoverageAlertBanner', () => {
       expect(screen.getByText(/CRITICAL/i)).toBeInTheDocument();
     });
 
-    const viewDetails = screen.getByRole('button', { name: /View Details/i });
+    const viewDetails = screen.getByRole('button', { name: /View today's coverage details/i });
     expect(viewDetails).toBeInTheDocument();
   });
 

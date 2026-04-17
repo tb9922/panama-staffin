@@ -116,7 +116,7 @@ describe('IncidentTracker', () => {
   it('shows loading state while data is fetching', () => {
     api.getIncidents.mockReturnValue(new Promise(() => {}));
     renderAdmin();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading incidents...')).toBeInTheDocument();
   });
 
   it('displays the page heading after load', async () => {
@@ -178,8 +178,9 @@ describe('IncidentTracker', () => {
     api.getIncidents.mockResolvedValue({ incidents: [], incidentTypes: [], staff: [] });
     renderAdmin();
     await waitFor(() => {
-      expect(screen.getByText('No incidents recorded')).toBeInTheDocument();
+      expect(screen.getByText('No incidents recorded yet')).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: 'New Incident' })).toBeInTheDocument();
   });
 
   it('shows CQC "Pending" badge for notifiable but un-notified incidents (well within deadline)', async () => {
@@ -227,6 +228,19 @@ describe('IncidentTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /\+ New Incident/i })).toBeInTheDocument();
     });
+  });
+
+  it('shows missing required guidance inside the incident modal', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ New Incident/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /\+ New Incident/i }));
+    expect(screen.getByText('Missing: Incident type')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Notifications' }));
+    await user.click(screen.getByLabelText('This incident is CQC notifiable'));
+    expect(screen.getByText('Missing: Incident type, CQC notification type')).toBeInTheDocument();
   });
 
   it('viewer does NOT see the + New Incident button', async () => {

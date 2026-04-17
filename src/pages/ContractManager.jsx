@@ -8,6 +8,12 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
 const emptyForm = () => ({
   staff_id: '', contract_type: 'permanent', start_date: '', end_date: '',
@@ -32,6 +38,7 @@ export default function ContractManager() {
   const [filterStaff, setFilterStaff] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const home = getCurrentHome();
   const { canWrite } = useData();
@@ -102,6 +109,7 @@ export default function ContractManager() {
       };
       if (editing) await updateHrContract(editing.id, { ...payload, _version: editing.version });
       else await createHrContract(home, payload);
+      showNotice(editing ? `Contract ${editing.id} updated.` : 'Contract created.');
       setShowModal(false); setEditing(null); setForm(emptyForm()); load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -124,21 +132,22 @@ export default function ContractManager() {
         i.hours_per_week ?? '', i.probation_end_date || '',
       ]),
     }]);
+    showNotice(`Exported ${items.length} contract${items.length === 1 ? '' : 's'}.`);
   }
 
   // Probation tracker: contracts in probation with days remaining
   const probationItems = items.filter(c => c.status === 'probation' && c.probation_end_date);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
 
   function daysUntil(dateStr) {
     if (!dateStr) return null;
-    const diff = (new Date(dateStr + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000;
+    const diff = (parseLocalDate(dateStr) - parseLocalDate(today)) / 86400000;
     return Math.ceil(diff);
   }
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading contracts...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading contracts..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -153,7 +162,13 @@ export default function ContractManager() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Unable to load contracts" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
@@ -207,7 +222,19 @@ export default function ContractManager() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No contracts</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      title="No contracts"
+                      description={canEdit ? 'Add the first contract to start tracking probation, terms, and hours.' : 'Contracts will appear here once they have been created.'}
+                      actionLabel={canEdit ? 'New Contract' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td + ' font-medium'}>{item.staff_id}</td>

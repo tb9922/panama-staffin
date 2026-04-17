@@ -17,6 +17,14 @@ export async function findByHome(homeId) {
   return result;
 }
 
+export async function findByStaffId(homeId, staffId) {
+  const { rows } = await pool.query(
+    'SELECT data FROM onboarding WHERE home_id = $1 AND staff_id = $2 AND deleted_at IS NULL',
+    [homeId, staffId]
+  );
+  return rows[0]?.data ?? {};
+}
+
 /**
  * Sync onboarding records. Upserts by (home_id, staff_id).
  * @param {number} homeId

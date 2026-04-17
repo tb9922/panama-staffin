@@ -3,11 +3,12 @@
 
 // ── Buttons ──────────────────────────────────────────────────────────────────
 export const BTN = {
-  primary:   'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
-  secondary: 'inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
-  danger:    'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2',
-  ghost:     'inline-flex items-center justify-center px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
-  success:   'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2',
+  disabled:  'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+  primary:   'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+  secondary: 'inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-700 text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+  danger:    'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+  ghost:     'inline-flex items-center justify-center px-4 py-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+  success:   'inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
   // Size variants — append after base
   xs: 'px-2 py-1 text-xs rounded-md',
   sm: 'px-3 py-1.5 text-xs rounded-md',
@@ -55,7 +56,7 @@ export const INPUT = {
 export const TABLE = {
   wrapper:  'overflow-x-auto',
   table:    'w-full text-sm',
-  thead:    'bg-gray-50/80 text-xs font-semibold text-gray-500 uppercase tracking-wider',
+  thead:    'bg-gray-50/80 text-xs font-semibold text-gray-600 uppercase tracking-wider',
   th:       'py-3 px-3 text-left',
   tr:       'border-b border-gray-100 hover:bg-gray-50/50 transition-colors duration-100',
   td:       'py-2.5 px-3',
@@ -66,11 +67,11 @@ export const TABLE = {
 // ── Modals ────────────────────────────────────────────────────────────────────
 export const MODAL = {
   overlay:  'fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50',
-  panel:    'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
-  panelLg:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
-  panelSm:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
-  panelXl:   'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
-  panelWide: 'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 animate-modal-in max-h-[90vh] overflow-y-auto',
+  panel:    'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-modal-in max-h-[85dvh] overflow-y-auto',
+  panelLg:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 animate-modal-in max-h-[85dvh] overflow-y-auto',
+  panelSm:  'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-modal-in max-h-[85dvh] overflow-y-auto',
+  panelXl:   'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 animate-modal-in max-h-[85dvh] overflow-y-auto',
+  panelWide: 'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 animate-modal-in max-h-[85dvh] overflow-y-auto',
   title:    'text-lg font-semibold text-gray-900 mb-4',
   footer:   'flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100',
 };

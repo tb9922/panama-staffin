@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import GrievanceTracker from '../GrievanceTracker.jsx';
 
@@ -61,6 +62,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getHrGrievance.mockResolvedValue(MOCK_RESPONSE);
   api.getHrStaffList.mockResolvedValue([]);
+  api.getGrievanceActions.mockResolvedValue([]);
+  api.getHrCaseNotes.mockResolvedValue([]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -141,5 +144,24 @@ describe('GrievanceTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     });
+  });
+
+  it('uses a select for appeal outcome in the edit flow', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GrievanceTracker />);
+    await waitFor(() => {
+      expect(screen.getByText('S002')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('S002'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Appeal' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('tab', { name: 'Appeal' }));
+
+    expect(screen.getByLabelText('Appeal Outcome')).toHaveDisplayValue('Select...');
+    expect(screen.getByRole('option', { name: 'Partially Upheld' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Overturned' })).toBeInTheDocument();
   });
 });

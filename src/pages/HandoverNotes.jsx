@@ -5,8 +5,14 @@ import { useLiveDate } from '../hooks/useLiveDate.js';
 import { getHandoverEntries, createHandoverEntry, updateHandoverEntry, deleteHandoverEntry, acknowledgeHandoverEntry, getCurrentHome, getIncidents } from '../lib/api.js';
 import { CARD, INPUT, BTN, BADGE, MODAL, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const SHIFTS = [
   { id: 'E', label: 'Early Shift' },
@@ -30,7 +36,7 @@ const PRIORITIES = [
 const EMPTY_FORM = { shift: 'E', category: 'clinical', priority: 'info', content: '', incident_id: '' };
 
 export default function HandoverNotes() {
-  const [dateStr, setDateStr]     = useState(formatDate(new Date()));
+  const [dateStr, setDateStr]     = useState(todayLocalISO());
   const [entries, setEntries]     = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading]     = useState(false);
@@ -40,6 +46,8 @@ export default function HandoverNotes() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [editId, setEditId]       = useState(null);
   const [saving, setSaving]       = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const { canWrite } = useData();
   const canEdit = canWrite('scheduling');
@@ -52,11 +60,11 @@ export default function HandoverNotes() {
     setLoading(true);
     setError(null);
     getHandoverEntries(slug, dateStr)
-      .then(rows => { if (!cancelled) setEntries(rows); })
-      .catch(err => { if (!cancelled) setError(err.message); })
+      .then((rows) => { if (!cancelled) setEntries(rows); })
+      .catch((err) => { if (!cancelled) setError(err.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [slug, dateStr]);
+  }, [slug, dateStr, refreshKey]);
 
   useEffect(() => {
     const h = getCurrentHome();
@@ -99,6 +107,7 @@ export default function HandoverNotes() {
         setEntries(prev => prev.map(e => e.id === editId ? updated : e));
       }
       closeModal();
+      showNotice(modal === 'add' ? 'Handover entry added.' : 'Handover entry updated.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -113,6 +122,7 @@ export default function HandoverNotes() {
     try {
       await deleteHandoverEntry(slug, id);
       setEntries(prev => prev.filter(e => e.id !== id));
+      showNotice('Handover entry deleted.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -126,6 +136,7 @@ export default function HandoverNotes() {
     try {
       const updated = await acknowledgeHandoverEntry(slug, id);
       setEntries(prev => prev.map(e => e.id === id ? updated : e));
+      showNotice('Handover entry acknowledged.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -153,6 +164,7 @@ export default function HandoverNotes() {
       };
     });
     downloadXLSX(`handover-${dateStr}`, sheets);
+    showNotice('Handover export started.');
   }
 
   // Display helpers
@@ -162,13 +174,17 @@ export default function HandoverNotes() {
 
   const todayIncidents = incidents.filter(i => i.date === dateStr);
 
+  function retryLoad() {
+    setRefreshKey((value) => value + 1);
+  }
+
   return (
     <div className={PAGE.container}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-5">
+      <div className={PAGE.header}>
         <div>
           <h1 className={PAGE.title}>Handover Book</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Structured shift handover records — CQC Reg 17 (contemporaneous records)</p>
+          <p className={PAGE.subtitle}>Structured shift handover records for CQC Regulation 17 and safe shift continuity</p>
         </div>
         <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm} shrink-0`}>Export Excel</button>
       </div>
@@ -183,14 +199,13 @@ export default function HandoverNotes() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center justify-between">
-          {error}
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs font-medium ml-3">Dismiss</button>
-        </div>
-      )}
+      {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
+      {error && entries.length === 0 && !loading ? (
+        <ErrorState title="Unable to load handover entries" message={error} onRetry={retryLoad} className="mb-4" />
+      ) : null}
+      {error && entries.length > 0 ? <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice> : null}
 
-      {loading && <div className="text-sm text-gray-400 py-8 text-center">Loading...</div>}
+      {loading && <LoadingState message="Loading handover entries..." />}
 
       {/* Shift sections */}
       {!loading && SHIFTS.map(shift => {
@@ -210,7 +225,15 @@ export default function HandoverNotes() {
             </div>
 
             {shiftEntries.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-gray-400 text-center">No handover entries for {shift.label.toLowerCase()}</div>
+              <div className="px-4 py-2">
+                <EmptyState
+                  title={`No handover entries for ${shift.label.toLowerCase()}`}
+                  description={canEdit ? 'Add the first note for this shift so the next team has the right context.' : 'No notes were recorded for this shift.'}
+                  actionLabel={canEdit ? 'Add Entry' : undefined}
+                  onAction={canEdit ? () => openAdd(shift.id) : undefined}
+                  compact
+                />
+              </div>
             ) : (
               <div className="divide-y divide-gray-50">
                 {CATEGORIES.map(cat => {

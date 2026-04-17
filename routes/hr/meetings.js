@@ -4,6 +4,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
 import { meetingBodySchema, meetingCaseTypeSchema } from './schemas.js';
+import { definedWithoutVersion, splitVersion } from '../../lib/versionedPayload.js';
 
 const router = Router();
 
@@ -46,10 +47,10 @@ router.put('/meetings/:id', requireAuth, requireHomeAccess, requireModule('hr', 
     const versionedSchema = meetingBodySchema.partial().extend({ _version: z.number().int().nonnegative().optional() });
     const parsed = versionedSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const version = parsed.data._version != null ? parsed.data._version : null;
+    const { version } = splitVersion(parsed.data);
     const existing = await hrRepo.findMeetingById(id, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Meeting not found' });
-    const meeting = await hrRepo.updateMeeting(id, req.home.id, parsed.data, null, version);
+    const meeting = await hrRepo.updateMeeting(id, req.home.id, definedWithoutVersion(parsed.data), null, version);
     if (!meeting) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log(`hr_${meeting.case_type}_meeting_update`, req.home.slug, req.user.username, { id: meeting.id });
     res.json(meeting);

@@ -2,17 +2,38 @@ import { useState } from 'react';
 import { login } from '../lib/api.js';
 import { INPUT, BTN } from '../lib/design.js';
 
+function getInitialLoginError() {
+  try {
+    if (window.sessionStorage.getItem('panama_login_notice') === 'session_expired') {
+      window.sessionStorage.removeItem('panama_login_notice');
+      return 'Your session expired — sign in again';
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
 export default function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => getInitialLoginError());
 
   async function handleLogin(e) {
     e.preventDefault();
+    setError('');
     try {
       const user = await login(username, password);
       onLogin(user);
-    } catch {
+    } catch (err) {
+      if (err?.status === 423) {
+        setError('Account locked — contact admin');
+        return;
+      }
+      if (!err?.status) {
+        setError('Cannot reach server — check your connection');
+        return;
+      }
       setError('Invalid username or password');
     }
   }

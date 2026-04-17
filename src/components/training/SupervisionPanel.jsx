@@ -8,6 +8,7 @@ import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -32,7 +33,7 @@ export default function SupervisionPanel({ supervisions, staff, homeSlug, config
 
   useDirtyGuard(showModal);
 
-  const todayStr = formatDate(new Date());
+  const todayStr = todayLocalISO();
   const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
   const supervisionsData = useMemo(() => supervisions || {}, [supervisions]);

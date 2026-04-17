@@ -11,6 +11,9 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -54,7 +57,7 @@ export default function AnnualLeave() {
   const today = useLiveDate();
   const isOwnDataAnnualLeave = homeRole === 'staff_member';
   const loadData = useCallback(async () => {
-    if (!homeSlug || isOwnDataAnnualLeave) {
+    if (!homeSlug) {
       setSchedData(null);
       setError(null);
       setLoading(false);
@@ -70,7 +73,7 @@ export default function AnnualLeave() {
     } finally {
       setLoading(false);
     }
-  }, [homeSlug, isOwnDataAnnualLeave, today]);
+  }, [homeSlug, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -242,11 +245,7 @@ export default function AnnualLeave() {
     return bookings;
   }, [schedData, today]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingState message="Loading annual leave..." className="p-6" card />;
 
   if (!homeSlug) {
     return (
@@ -260,21 +259,18 @@ export default function AnnualLeave() {
   }
 
   if (isOwnDataAnnualLeave) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Annual Leave</h1>
-          <p className="text-sm text-gray-500">Annual leave planning is not available for staff self-service accounts.</p>
+    if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your leave view" message={error} onRetry={() => void loadData()} /></div>;
+    if (!schedData?.staff?.length) {
+      return (
+        <div className="p-6 max-w-5xl mx-auto">
+          <EmptyState title="No leave record available" description="We couldn’t find a linked staff record for this account yet." />
         </div>
-      </div>
-    );
+      );
+    }
+    return <StaffSelfServiceAnnualLeave schedData={schedData} accruals={accruals} today={today} leaveYear={leaveYear} />;
   }
 
-  if (error) return (
-    <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
-    </div>
-  );
+  if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load annual leave" message={error} onRetry={() => void loadData()} /></div>;
 
   if (!schedData) return null;
 
@@ -525,6 +521,69 @@ export default function AnnualLeave() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function StaffSelfServiceAnnualLeave({ schedData, accruals, today, leaveYear }) {
+  const staffMember = schedData.staff?.[0];
+  const accrual = staffMember ? accruals.get(staffMember.id) : null;
+  const upcomingLeave = Object.entries(schedData.overrides || {})
+    .filter(([dateKey]) => dateKey >= today)
+    .flatMap(([dateKey, dayOverrides]) => {
+      const override = dayOverrides?.[staffMember?.id];
+      return override?.shift === 'AL'
+        ? [{ date: dateKey, label: fmtDate(parseDate(dateKey)) }]
+        : [];
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className={CARD.padded}>
+        <h1 className="text-2xl font-bold text-gray-900">My Leave</h1>
+        <p className="mt-2 text-sm text-gray-600">This view keeps your leave picture simple: balance, booked days, and the current leave year. Booking changes still go through your manager.</p>
+      </div>
+
+      {leaveYear && (
+        <div className={CARD.padded}>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Leave year</p>
+          <p className="mt-2 text-lg font-semibold text-gray-900">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <LeaveMetric label="Earned to date" value={`${(accrual?.accruedHours || 0).toFixed(1)}h`} />
+        <LeaveMetric label="Used" value={`${(accrual?.usedHours || 0).toFixed(1)}h`} />
+        <LeaveMetric label="Left" value={`${(accrual?.remainingHours || 0).toFixed(1)}h`} highlight />
+      </div>
+
+      <div className={CARD.flush}>
+        <div className="border-b border-gray-100 px-4 py-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Booked leave</h2>
+        </div>
+        {upcomingLeave.length === 0 ? (
+          <EmptyState compact title="No booked leave ahead" description="When your next annual leave booking is approved, it’ll appear here." />
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {upcomingLeave.map(entry => (
+              <div key={entry.date} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span className="font-medium text-gray-900">{entry.label}</span>
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Annual Leave</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeaveMetric({ label, value, highlight = false }) {
+  return (
+    <div className={CARD.padded}>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-2 text-2xl font-bold ${highlight ? 'text-emerald-700' : 'text-gray-900'}`}>{value}</p>
     </div>
   );
 }

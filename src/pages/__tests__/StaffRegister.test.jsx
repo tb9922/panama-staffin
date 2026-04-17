@@ -300,4 +300,23 @@ describe('StaffRegister', () => {
     });
     expect(screen.queryByRole('button', { name: /Edit/i })).not.toBeInTheDocument();
   });
+
+  it('shows an onboarding handoff notice after creating staff', async () => {
+    const user = userEvent.setup();
+    api.createStaff.mockResolvedValue({ id: 'S999' });
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ Add Staff/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /\+ Add Staff/i }));
+    await user.type(screen.getByLabelText('Name'), 'New Starter');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Staff member added\./i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /Continue in Onboarding/i })).toHaveAttribute('href', '/onboarding?staffId=S999');
+  });
 });

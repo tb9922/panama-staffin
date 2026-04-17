@@ -58,7 +58,7 @@ describe('HMRCDashboard', () => {
   it('shows loading state initially', () => {
     api.getHMRCLiabilities.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<HMRCDashboard />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading HMRC liabilities...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {

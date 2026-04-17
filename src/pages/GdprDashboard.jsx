@@ -3,6 +3,10 @@ import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import TabBar from '../components/TabBar.jsx';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import StaffPicker from '../components/StaffPicker.jsx';
 import ResidentPicker from '../components/ResidentPicker.jsx';
 import {
@@ -23,6 +27,8 @@ import {
 } from '../lib/gdpr.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const TABS = [
   { id: 'overview',   label: 'Overview' },
@@ -38,6 +44,7 @@ export default function GdprDashboard() {
   const { canWrite } = useData();
   const canEdit = canWrite('gdpr');
   const { confirm, ConfirmDialog } = useConfirm();
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -127,6 +134,7 @@ export default function GdprDashboard() {
     try {
       await createSnapshot(home, 'gdpr');
       await loadGdprSnapshots();
+      showNotice('GDPR snapshot saved. Snapshot History has been refreshed.');
     } catch (e) {
       if (e?.status === 409 && /identical snapshot/i.test(e.message || '')) {
         await loadGdprSnapshots();
@@ -149,6 +157,7 @@ export default function GdprDashboard() {
       await signOffSnapshot(home, id, '');
       loadGdprSnapshots();
       if (viewingGdprSnapshot?.id === id) { const snap = await getSnapshot(home, id); setViewingGdprSnapshot(snap); }
+      showNotice('GDPR snapshot signed off.');
     } catch (e) { setError(e.message); }
   }
 
@@ -167,6 +176,7 @@ export default function GdprDashboard() {
       await createDataRequest(home, data);
       setShowModal(null);
       setForm({});
+      showNotice('Data request created.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -187,6 +197,7 @@ export default function GdprDashboard() {
       await createDataBreach(home, data);
       setShowModal(null);
       setForm({});
+      showNotice('Data breach recorded.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -198,6 +209,7 @@ export default function GdprDashboard() {
       await createConsentRecord(home, form);
       setShowModal(null);
       setForm({});
+      showNotice('Consent record created.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -209,6 +221,7 @@ export default function GdprDashboard() {
       await createDPComplaint(home, form);
       setShowModal(null);
       setForm({});
+      showNotice('Data protection complaint logged.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -218,6 +231,7 @@ export default function GdprDashboard() {
     setSaving(true);
     try {
       await assessBreach(home, id);
+      showNotice('Breach assessment updated.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -235,7 +249,7 @@ export default function GdprDashboard() {
     if (!decisionForm.decision_rationale?.trim()) { setError('Decision rationale is required'); return; }
     setSaving(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISO();
       await updateDataBreach(home, decisionBreach.id, {
         manual_decision: decisionForm.manual_decision,
         decision_by: getLoggedInUser()?.username || 'admin',
@@ -245,6 +259,7 @@ export default function GdprDashboard() {
         _version: decisionBreach.version,
       });
       setDecisionBreach(null);
+      showNotice('ICO decision recorded.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -259,7 +274,7 @@ export default function GdprDashboard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `sar_data_${data.subject_id}_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `sar_data_${data.subject_id}_${todayLocalISO()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) { setError(e.message); } finally { setSaving(false); }
@@ -277,6 +292,7 @@ export default function GdprDashboard() {
       await executeErasure(home, erasureConfirm);
       setErasureConfirm(null);
       setErasureInput('');
+      showNotice('Erasure completed and records refreshed.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -292,6 +308,7 @@ export default function GdprDashboard() {
       if (type === 'request') await updateDataRequest(home, id, { status, _version });
       else if (type === 'breach') await updateDataBreach(home, id, { status, _version });
       else if (type === 'complaint') await updateDPComplaint(home, id, { status, _version });
+      showNotice(`${type === 'request' ? 'Request' : type === 'breach' ? 'Breach' : 'Complaint'} status updated to ${status}.`);
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -302,6 +319,7 @@ export default function GdprDashboard() {
     try {
       const scan = await scanRetention(home);
       setRetentionScan(scan);
+      showNotice('Retention scan completed.');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
 
@@ -312,6 +330,7 @@ export default function GdprDashboard() {
     try {
       const record = consent.find(c => c.id === id);
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString(), _version: record?.version });
+      showNotice('Consent withdrawn.');
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -325,7 +344,7 @@ export default function GdprDashboard() {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading GDPR data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState card message="Loading GDPR data..." /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -337,8 +356,17 @@ export default function GdprDashboard() {
         {canEdit && <button onClick={handleCreateGdprSnapshot} disabled={saving} className={`${BTN.secondary} ${BTN.sm}`}>Save Snapshot</button>}
       </div>
 
-      {snapshotNotice && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg mb-4">{snapshotNotice}</div>}
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {snapshotNotice && (
+        <InlineNotice className="mb-4" variant="warning" onDismiss={() => setSnapshotNotice(null)}>
+          {snapshotNotice}
+        </InlineNotice>
+      )}
+      {notice && (
+        <InlineNotice className="mb-4" variant={notice.variant} onDismiss={clearNotice}>
+          {notice.content}
+        </InlineNotice>
+      )}
+      {error && <ErrorState className="mb-4" title="Unable to complete GDPR action" message={error} onRetry={load} />}
 
       {/* Tab bar */}
       <TabBar tabs={TABS} activeTab={tab} onTabChange={setTab} className="mb-6" />
@@ -548,31 +576,37 @@ export default function GdprDashboard() {
           <button onClick={() => setShowGdprSnapshots(!showGdprSnapshots)} className={`${BTN.ghost} ${BTN.sm} mb-2`}>
             {showGdprSnapshots ? 'Hide' : 'Show'} Snapshot History ({gdprSnapshots.length})
           </button>
-          {showGdprSnapshots && gdprSnapshots.length > 0 && (
-            <div className={CARD.flush}>
-              <table className={TABLE.table}>
-                <thead className={TABLE.thead}>
-                  <tr><th className={TABLE.th}>Date</th><th className={TABLE.th}>Score</th><th className={TABLE.th}>Band</th><th className={TABLE.th}>Engine</th><th className={TABLE.th}>Sign-off</th><th className={TABLE.th}>Actions</th></tr>
-                </thead>
-                <tbody>
-                  {gdprSnapshots.map(s => (
-                    <tr key={s.id} className={TABLE.tr}>
-                      <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
-                      <td className={TABLE.td}>{s.overall_score}%</td>
-                      <td className={TABLE.td}><span className={BADGE[s.band === 'Good' ? 'green' : s.band === 'Adequate' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
-                      <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
-                      <td className={TABLE.td}>{s.signed_off_by ? <span className={BADGE.green}>{s.signed_off_by}</span> : <span className={BADGE.gray}>Pending</span>}</td>
-                      <td className={TABLE.td}>
-                        <div className="flex gap-1">
-                          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewGdprSnapshot(s.id)}>View</button>
-                          {!s.signed_off_by && canEdit && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOffGdprSnapshot(s.id)}>Sign Off</button>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {showGdprSnapshots && (
+            gdprSnapshots.length > 0 ? (
+              <div className={CARD.flush}>
+                <table className={TABLE.table}>
+                  <thead className={TABLE.thead}>
+                    <tr><th className={TABLE.th}>Date</th><th className={TABLE.th}>Score</th><th className={TABLE.th}>Band</th><th className={TABLE.th}>Engine</th><th className={TABLE.th}>Sign-off</th><th className={TABLE.th}>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {gdprSnapshots.map(s => (
+                      <tr key={s.id} className={TABLE.tr}>
+                        <td className={TABLE.td}>{s.computed_at?.slice(0, 10)}</td>
+                        <td className={TABLE.td}>{s.overall_score}%</td>
+                        <td className={TABLE.td}><span className={BADGE[s.band === 'Good' ? 'green' : s.band === 'Adequate' ? 'blue' : s.band === 'Requires Improvement' ? 'amber' : 'red']}>{s.band}</span></td>
+                        <td className={TABLE.td}><span className={BADGE.gray}>{s.engine_version}</span></td>
+                        <td className={TABLE.td}>{s.signed_off_by ? <span className={BADGE.green}>{s.signed_off_by}</span> : <span className={BADGE.gray}>Pending</span>}</td>
+                        <td className={TABLE.td}>
+                          <div className="flex gap-1">
+                            <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleViewGdprSnapshot(s.id)}>View</button>
+                            {!s.signed_off_by && canEdit && <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => handleSignOffGdprSnapshot(s.id)}>Sign Off</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className={CARD.padded}>
+                <EmptyState compact title="No saved snapshots yet" description="Save a GDPR snapshot to freeze the live controls score, issues, and sign-off state." />
+              </div>
+            )
           )}
         </div>
       </div>
@@ -584,7 +618,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Requests</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('request'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ request_type: 'sar', subject_type: 'staff', date_received: todayLocalISO() }); setShowModal('request'); }}>
             New Request
           </button>}
         </div>
@@ -595,7 +629,13 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Type</th><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Received</th><th scope="col" className={TABLE.th}>Deadline</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {requests.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data requests</td></tr>}
+                {requests.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className={TABLE.empty}>
+                      <EmptyState compact title="No data requests" description="Subject access, rectification, erasure, and portability requests will appear here." />
+                    </td>
+                  </tr>
+                )}
                 {requests.map(r => {
                   const days = daysUntilDeadline(r.deadline);
                   const overdue = r.status !== 'completed' && r.status !== 'rejected' && days < 0;
@@ -642,7 +682,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Breaches</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: now.toISOString().slice(0, 10), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { const now = new Date(); setForm({ severity: 'low', risk_to_rights: 'unlikely', discovered_date: todayLocalISO(now), discovered_time: now.toTimeString().slice(0, 5) }); setShowModal('breach'); }}>
             Report Breach
           </button>}
         </div>
@@ -653,7 +693,13 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Title</th><th scope="col" className={TABLE.th}>Discovered</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {breaches.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No data breaches recorded</td></tr>}
+                {breaches.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className={TABLE.empty}>
+                      <EmptyState compact title="No data breaches recorded" description="Potential or confirmed personal-data breaches will appear here with ICO decision support and status tracking." />
+                    </td>
+                  </tr>
+                )}
                 {breaches.map(b => (
                   <tr key={b.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{b.title}<br /><span className="text-xs text-gray-400">{b.individuals_affected} affected</span></td>
@@ -740,7 +786,13 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Subject</th><th scope="col" className={TABLE.th}>Purpose</th><th scope="col" className={TABLE.th}>Legal Basis</th><th scope="col" className={TABLE.th}>Given</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {consent.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No consent records</td></tr>}
+                {consent.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className={TABLE.empty}>
+                      <EmptyState compact title="No consent records" description="Record explicit consent decisions here when consent is the legal basis for processing." />
+                    </td>
+                  </tr>
+                )}
                 {consent.map(c => (
                   <tr key={c.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{c.subject_name || c.subject_id}<br /><span className="text-xs text-gray-400">{c.subject_type}</span></td>
@@ -768,7 +820,7 @@ export default function GdprDashboard() {
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">Data Protection Complaints</h2>
-          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: new Date().toISOString().slice(0, 10) }); setShowModal('complaint'); }}>
+          {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={() => { setForm({ category: 'access', severity: 'low', date_received: todayLocalISO() }); setShowModal('complaint'); }}>
             Log Complaint
           </button>}
         </div>
@@ -779,7 +831,13 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Date</th><th scope="col" className={TABLE.th}>Category</th><th scope="col" className={TABLE.th}>Description</th><th scope="col" className={TABLE.th}>Severity</th><th scope="col" className={TABLE.th}>ICO</th><th scope="col" className={TABLE.th}>Status</th><th scope="col" className={TABLE.th}>Actions</th></tr>
               </thead>
               <tbody>
-                {complaints.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No DP complaints</td></tr>}
+                {complaints.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className={TABLE.empty}>
+                      <EmptyState compact title="No DP complaints" description="Complaints about privacy, access, retention, or consent will appear here for investigation and closure." />
+                    </td>
+                  </tr>
+                )}
                 {complaints.map(c => (
                   <tr key={c.id} className={TABLE.tr}>
                     <td className={TABLE.td}>{c.date_received}</td>
@@ -815,7 +873,13 @@ export default function GdprDashboard() {
                 <tr><th scope="col" className={TABLE.th}>Time</th><th scope="col" className={TABLE.th}>User</th><th scope="col" className={TABLE.th}>Role</th><th scope="col" className={TABLE.th}>Method</th><th scope="col" className={TABLE.th}>Endpoint</th><th scope="col" className={TABLE.th}>Categories</th><th scope="col" className={TABLE.th}>Status</th></tr>
               </thead>
               <tbody>
-                {accessLogData.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No access log entries</td></tr>}
+                {accessLogData.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className={TABLE.empty}>
+                      <EmptyState compact title="No access log entries" description="Audit log access events will appear here once requests are made against protected data endpoints." />
+                    </td>
+                  </tr>
+                )}
                 {accessLogData.map(a => (
                   <tr key={a.id} className={TABLE.tr}>
                     <td className={TABLE.td + ' text-xs font-mono'}>{a.ts ? new Date(a.ts).toLocaleString('en-GB') : '—'}</td>

@@ -8,6 +8,7 @@ import * as careCertRepo from '../repositories/careCertRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from '../services/auditService.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { addDaysLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 const staffIdSchema = z.string().min(1).max(20);
@@ -64,13 +65,9 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     const parsed = careCertCreateSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     const { staffId, start_date, supervisor } = parsed.data;
-    // Calculate expected_completion: start_date + 12 weeks (UTC prevents BST off-by-one)
-    const start = new Date(start_date + 'T00:00:00Z');
-    const expected = new Date(start);
-    expected.setUTCDate(expected.getUTCDate() + 84); // 12 weeks
     const record = {
       start_date,
-      expected_completion: expected.toISOString().slice(0, 10),
+      expected_completion: addDaysLocalISO(start_date, 84),
       supervisor: supervisor || null,
       status: 'in_progress',
       completion_date: null,

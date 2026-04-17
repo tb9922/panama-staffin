@@ -235,6 +235,7 @@ export default function BedManagerModals({
                   <th scope="col" className={TABLE.th}>To</th>
                   <th scope="col" className={TABLE.th}>By</th>
                   <th scope="col" className={TABLE.th}>Reason</th>
+                  <th scope="col" className={TABLE.th}>Notes</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,6 +250,7 @@ export default function BedManagerModals({
                     </td>
                     <td className={TABLE.td}>{entry.changed_by || '--'}</td>
                     <td className={TABLE.td}>{entry.reason || '--'}</td>
+                    <td className={TABLE.td}>{entry.notes || '--'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -10,7 +10,12 @@ import {
 import { downloadXLSX } from '../lib/excel.js';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import { getCurrentHome, getCareCertData, startCareCert, updateCareCert, deleteCareCert } from '../lib/api.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -28,6 +33,12 @@ const STD_BADGE_MAP = {
   passed: BADGE.green,
   failed: BADGE.red,
 };
+
+function cloneCareCertRecord(record) {
+  if (!record) return {};
+  if (typeof structuredClone === 'function') return structuredClone(record);
+  return JSON.parse(JSON.stringify(record));
+}
 
 export default function CareCertificateTracker() {
   const homeSlug = getCurrentHome();
@@ -51,6 +62,7 @@ export default function CareCertificateTracker() {
   // Pending standard updates buffered locally before save
   const [pendingUpdates, setPendingUpdates] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal || showStartModal);
 
   const today = useLiveDate();
@@ -78,6 +90,7 @@ export default function CareCertificateTracker() {
     if (filterStatus !== 'all') {
       list = list.filter(s => {
         const result = getCareCertStatus(s.id, careCertData, careCertData[s.id]?.start_date, today);
+        if (filterStatus === 'unfinished') return result.completedCount < TOTAL_STANDARDS;
         return result.status === filterStatus;
       });
     }
@@ -114,6 +127,7 @@ export default function CareCertificateTracker() {
       });
       setRefreshKey(k => k + 1);
       setShowStartModal(false);
+      showNotice('Care Certificate started.');
     } catch (e) {
       setError('Failed to start Care Certificate: ' + e.message);
     } finally {
@@ -128,7 +142,7 @@ export default function CareCertificateTracker() {
     setExpandedStd(null);
     setEditSupervisor(careCertData[staffId]?.supervisor || '');
     // Clone record for local edits without immediate save
-    setPendingUpdates(JSON.parse(JSON.stringify(careCertData[staffId] || {})));
+    setPendingUpdates(cloneCareCertRecord(careCertData[staffId]));
     setShowModal(true);
   }
 
@@ -138,7 +152,7 @@ export default function CareCertificateTracker() {
   }
 
   function handleStandardUpdate(stdId, field, value) {
-    const updated = JSON.parse(JSON.stringify(pendingUpdates || careCertData[selectedStaffId] || {}));
+    const updated = cloneCareCertRecord(pendingUpdates || careCertData[selectedStaffId]);
     if (!updated.standards) updated.standards = {};
     if (!updated.standards[stdId]) {
       updated.standards[stdId] = { status: 'not_started', completion_date: null, assessor: '', notes: '' };
@@ -181,6 +195,7 @@ export default function CareCertificateTracker() {
       setRefreshKey(k => k + 1);
       setShowModal(false);
       setPendingUpdates(null);
+      showNotice('Care Certificate progress saved.');
     } catch (e) {
       setError('Failed to save changes: ' + e.message);
     } finally {
@@ -196,6 +211,7 @@ export default function CareCertificateTracker() {
       setRefreshKey(k => k + 1);
       // Keep modal open, update pending state
       if (pendingUpdates) setPendingUpdates({ ...pendingUpdates, supervisor: editSupervisor });
+      showNotice('Supervisor updated.');
     } catch (e) {
       setError('Failed to save supervisor: ' + e.message);
     } finally {
@@ -212,6 +228,7 @@ export default function CareCertificateTracker() {
       setShowModal(false);
       setSelectedStaffId(null);
       setPendingUpdates(null);
+      showNotice('Care Certificate tracking removed.');
     } catch (e) {
       setError('Failed to remove: ' + e.message);
     } finally {
@@ -263,8 +280,8 @@ export default function CareCertificateTracker() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (!state && error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading Care Certificate data..." /></div>;
+  if (!state && error) return <div className={PAGE.container}><ErrorState title="Unable to load Care Certificate tracker" message={error} onRetry={() => setRefreshKey(k => k + 1)} /></div>;
 
   const selectedRecord = getSelectedRecord();
   const selectedStaff = selectedStaffId ? activeStaff.find(s => s.id === selectedStaffId) : null;
@@ -283,7 +300,8 @@ export default function CareCertificateTracker() {
         </div>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert">{error}</div>}
+      {notice && <InlineNotice variant={notice.variant} className="mb-4" onDismiss={clearNotice}>{notice.content}</InlineNotice>}
+      {error && <InlineNotice variant="error" className="mb-4" onDismiss={() => setError(null)} role="alert">{error}</InlineNotice>}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -310,13 +328,14 @@ export default function CareCertificateTracker() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className={`${CARD.padded} mb-4 flex gap-3 flex-wrap items-center`}>
         <input type="text" placeholder="Search staff..." value={search} onChange={e => setSearch(e.target.value)} className={`${INPUT.sm} w-44`} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={`${INPUT.select} w-auto`}>
           <option value="all">All Statuses</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
           <option value="overdue">Overdue</option>
+          <option value="unfinished">Has unfinished standards</option>
         </select>
         <span className="text-xs text-gray-400 self-center">{trackedStaff.length} staff tracked | {stats.totalTracked} total</span>
       </div>
@@ -339,11 +358,19 @@ export default function CareCertificateTracker() {
             </thead>
             <tbody>
               {trackedStaff.length === 0 && (
-                <tr><td colSpan={8} className={TABLE.empty}>
-                  {Object.keys(careCertData).length === 0
-                    ? 'No staff are being tracked for Care Certificate. Click "Start New" to begin.'
-                    : 'No staff match the current filters.'}
-                </td></tr>
+                <tr>
+                  <td colSpan={8} className={TABLE.empty}>
+                    <EmptyState
+                      title={Object.keys(careCertData).length === 0 ? 'No staff are being tracked for Care Certificate' : 'No staff match the current filters'}
+                      description={Object.keys(careCertData).length === 0
+                        ? 'Start a new Care Certificate record to begin tracking progress.'
+                        : 'Try clearing the filters to see more staff records.'}
+                      actionLabel={canEdit && eligibleStaff.length > 0 ? 'Start New' : undefined}
+                      onAction={canEdit && eligibleStaff.length > 0 ? openStartModal : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
               )}
               {trackedStaff.map(s => {
                 const record = careCertData[s.id];

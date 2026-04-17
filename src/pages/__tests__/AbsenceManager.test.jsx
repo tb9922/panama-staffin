@@ -161,8 +161,30 @@ describe('AbsenceManager', () => {
     api.getHrOhReferrals.mockResolvedValue({ rows: [], total: 0 });
     renderWithProviders(<AbsenceManager />);
     await waitFor(() =>
-      expect(screen.getByText('No absence data')).toBeInTheDocument()
+      expect(screen.getByText('No absence data yet')).toBeInTheDocument()
     );
+  });
+
+  it('supports the Daily Status handoff into a prefilled RTW interview', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<AbsenceManager />, {
+      route: '/hr/absence?tab=rtw&staffId=S001&source=daily-status&date=2026-03-08',
+      path: '/hr/absence',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/Daily Status marked S001 sick on 2026-03-08/i)).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Start RTW Interview' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'New RTW Interview' })).toBeInTheDocument()
+    );
+    expect(screen.getByLabelText(/Staff Member/)).toHaveValue('S001');
+    expect(screen.getByLabelText('Absence Start Date')).toHaveValue('2026-03-08');
   });
 
   it('requires Conducted By before saving a new RTW interview', async () => {
@@ -175,7 +197,7 @@ describe('AbsenceManager', () => {
 
     await user.click(screen.getByRole('tab', { name: 'RTW Interviews' }));
     await user.click(screen.getByRole('button', { name: 'New RTW Interview' }));
-    await user.selectOptions(screen.getByLabelText('Staff Member'), 'S001');
+    await user.selectOptions(screen.getByLabelText(/Staff Member/), 'S001');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
     expect(screen.getByText('Conducted By is required')).toBeInTheDocument();
@@ -192,19 +214,29 @@ describe('AbsenceManager', () => {
 
     await user.click(screen.getByRole('tab', { name: 'RTW Interviews' }));
     await user.click(screen.getByRole('button', { name: 'New RTW Interview' }));
+    await user.click(screen.getByRole('button', { name: 'Return Assessment' }));
     expect(screen.getByLabelText('Follow-up Date')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Fit Note' }));
     expect(screen.getByLabelText('Fit Note Received')).toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Fit Note Received'));
     expect(screen.getByLabelText('Fit Note Type')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Trigger Assessment' }));
     expect(screen.getByLabelText('Bradford Score After RTW')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     await user.click(screen.getByRole('tab', { name: 'OH Referrals' }));
     await user.click(screen.getByRole('button', { name: 'New OH Referral' }));
-    expect(screen.getByLabelText('Referred By')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Referral' }));
+    expect(screen.getByLabelText(/Referred By/)).toBeInTheDocument();
     expect(screen.getByLabelText('Questions for OH Provider')).toBeInTheDocument();
 
+    await user.click(screen.getByRole('button', { name: 'Report' }));
+    expect(screen.getByLabelText('Report Received')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Consent' }));
     await user.click(screen.getByLabelText('Consent Obtained'));
     expect(screen.getByLabelText('Consent Date')).toBeInTheDocument();
   });

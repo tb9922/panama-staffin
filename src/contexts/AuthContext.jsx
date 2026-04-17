@@ -1,10 +1,28 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { getLoggedInUser, logout as apiLogout } from '../lib/api.js';
 
 const AuthContext = createContext(null);
 
+function persistSessionExpiredNotice() {
+  try {
+    window.sessionStorage.setItem('panama_login_notice', 'session_expired');
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getLoggedInUser);
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      persistSessionExpiredNotice();
+      setUser(null);
+    }
+    window.addEventListener('panama:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('panama:session-expired', handleSessionExpired);
+  }, []);
 
   const handleLogin = useCallback((u) => setUser(u), []);
 

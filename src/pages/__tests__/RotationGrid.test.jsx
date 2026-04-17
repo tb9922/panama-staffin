@@ -76,7 +76,7 @@ describe('RotationGrid', () => {
     });
   });
 
-  it('shows a restricted state for staff self-service accounts', async () => {
+  it('shows the self-service rota view for staff self-service accounts', async () => {
     useData.mockReturnValue({
       canRead: () => true,
       canWrite: () => false,
@@ -87,9 +87,10 @@ describe('RotationGrid', () => {
       user: { username: 'staff', role: 'viewer' },
     });
     await waitFor(() => {
-      expect(screen.getByText('Roster management is not available for staff self-service accounts.')).toBeInTheDocument();
+      expect(screen.getByText('My Rota')).toBeInTheDocument();
     });
-    expect(api.getSchedulingData).not.toHaveBeenCalled();
+    expect(screen.getByText('Working shifts')).toBeInTheDocument();
+    expect(api.getSchedulingData).toHaveBeenCalled();
   });
 
   it('displays month header with month label and navigation arrows', async () => {

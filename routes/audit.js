@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, requireHomeAccess, requireModule, requirePlatformAdmin } from '../middleware/auth.js';
 import * as auditService from '../services/auditService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
@@ -36,10 +36,10 @@ router.get('/', readRateLimiter, requireAuth, requireAdmin, async (req, res, nex
 
 // DELETE /api/audit/purge — remove audit entries older than N days (default 2555 = ~7 years)
 const purgeSchema = z.object({
-  days: z.coerce.number().int().min(30).max(3650).default(2555),
+  days: z.coerce.number().int().min(2555).max(3650).default(2555),
 });
 
-router.delete('/purge', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('config', 'write'), async (req, res, next) => {
+router.delete('/purge', writeRateLimiter, requireAuth, requirePlatformAdmin, requireHomeAccess, async (req, res, next) => {
   try {
     const parsed = purgeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

@@ -55,7 +55,13 @@ export default function CoverageAlertBanner() {
           return <span key={p} className="px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-medium capitalize">{p}: {esc.label}</span>;
         })}
       </div>
-      <button onClick={() => navigate(`/day/${today}`)} className="text-xs font-medium underline hover:no-underline">View Details</button>
+      <button
+        onClick={() => navigate(`/day/${today}`)}
+        className="rounded-md px-2 py-1 text-xs font-medium underline hover:bg-white/10 hover:no-underline"
+        aria-label="View today's coverage details"
+      >
+        View Details
+      </button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import ReceivablesManager from '../ReceivablesManager.jsx';
 
@@ -84,7 +85,7 @@ describe('ReceivablesManager', () => {
   it('shows loading text initially', () => {
     api.getReceivablesDetail.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<ReceivablesManager />);
-    expect(screen.getByText('Loading receivables...')).toBeInTheDocument();
+    expect(screen.getByText('Loading receivables and chase history...')).toBeInTheDocument();
   });
 
   it('shows error message when API call fails', async () => {
@@ -137,7 +138,7 @@ describe('ReceivablesManager', () => {
   });
 
   it('viewer cannot see Record Chase button in modal', async () => {
-    const user = (await import('@testing-library/user-event')).default.setup();
+    const user = userEvent.setup();
     renderViewer();
     await waitFor(() =>
       expect(screen.getByText('INV-001')).toBeInTheDocument()
@@ -147,5 +148,24 @@ describe('ReceivablesManager', () => {
       expect(screen.getByText('Chase History')).toBeInTheDocument()
     );
     expect(screen.queryByRole('button', { name: 'Record Chase' })).not.toBeInTheDocument();
+  });
+
+  it('lets admins log the same chase against multiple selected invoices', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('INV-001')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByLabelText('Select invoice INV-001'));
+    await user.click(screen.getByLabelText('Select invoice INV-002'));
+    await user.click(screen.getByRole('button', { name: 'Log chase on 2 selected' }));
+
+    await user.selectOptions(screen.getByLabelText('Method *'), 'email');
+    await user.click(screen.getByRole('button', { name: 'Log chase on 2' }));
+
+    await waitFor(() => {
+      expect(api.createInvoiceChase).toHaveBeenCalledTimes(2);
+    });
   });
 });

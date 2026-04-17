@@ -23,6 +23,7 @@ import { getRiskStats, getRiskBand, RISK_CATEGORIES } from './riskRegister.js';
 import { getPolicyStats, getPolicyStatus, POLICY_STATUSES } from './policyReview.js';
 import { getWhistleblowingStats } from './whistleblowing.js';
 import { getDolsStats } from './dols.js';
+import { buildReadinessMatrix, getOverallReadiness, getQuestionReadiness, getReadinessGaps, serialiseReadinessMatrix } from './cqcReadiness.js';
 
 function addHeader(doc, title, subtitle, homeName) {
   doc.setFontSize(16);
@@ -403,6 +404,15 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   const dateRange = getDateRange(dateRangeDays);
   // Use snapshot result if provided, otherwise compute live
   const score = snapshot?.result || calculateComplianceScore(data, dateRange, today);
+  const readiness = snapshot?.result?.readiness || (() => {
+    const matrix = buildReadinessMatrix(data, dateRange, today);
+    return {
+      entries: serialiseReadinessMatrix(matrix),
+      questionSummary: getQuestionReadiness(matrix),
+      overall: getOverallReadiness(matrix),
+      gaps: getReadinessGaps(matrix),
+    };
+  })();
   const homeName = data.config?.home_name || 'Care Home';
   const periodLabel = snapshot
     ? `Snapshot: ${snapshot.computed_at?.slice(0, 10)} (${snapshot.engine_version})${snapshot.signed_off_by ? ` \u2014 Signed off by ${snapshot.signed_off_by}` : ''}`
@@ -460,6 +470,43 @@ export function generateEvidencePackPDF(data, dateRangeDays = 28, snapshot = nul
   });
 
   // ── Page 2: S1 — Staffing Levels ──────────────────────────────────────────
+  doc.addPage();
+  y = addHeader(doc, 'CQC Readiness Summary', periodLabel, homeName);
+  const questionRows = (readiness.questionSummary || []).map((entry) => [
+    entry.question === 'well-led' ? 'Well-Led' : entry.question.replace(/^\w/, (value) => value.toUpperCase()),
+    `${entry.strong}/${entry.total}`,
+    String(entry.partial || 0),
+    String(entry.stale || 0),
+    String(entry.weak || 0),
+    String(entry.missing || 0),
+  ]);
+  autoTable(doc, {
+    startY: y,
+    head: [['Question', 'Strong', 'Partial', 'Stale', 'Weak', 'Missing']],
+    body: questionRows.length > 0 ? questionRows : [['-', '0/0', '0', '0', '0', '0']],
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+  });
+
+  const readinessRows = (readiness.gaps || []).slice(0, 12).map((gap) => [
+    gap.statementId,
+    gap.statementName,
+    gap.status,
+    String(gap.reviewOverdue || 0),
+    String(gap.summary || (gap.reasons || []).join('; ')).slice(0, 120),
+  ]);
+  if (readinessRows.length === 0) {
+    readinessRows.push(['-', 'No significant gaps identified', 'strong', '0', 'Readiness checks looked healthy at export time']);
+  }
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 6,
+    head: [['Statement', 'Name', 'Status', 'Overdue', 'Key Gaps']],
+    body: readinessRows,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [31, 41, 55], fontSize: 8 },
+  });
+
   doc.addPage();
   y = addHeader(doc, 'S1: Staffing Levels', 'Regulation 18 — Safe Staffing', homeName);
 

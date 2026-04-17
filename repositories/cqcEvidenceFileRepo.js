@@ -36,6 +36,23 @@ export async function findByEvidence(homeId, evidenceId, client) {
   return rows.map(shape);
 }
 
+export async function findByHome(homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT f.${COLS.split(', ').join(', f.')}
+       FROM cqc_evidence_files f
+       INNER JOIN cqc_evidence e
+               ON e.home_id = f.home_id
+              AND e.id = f.evidence_id
+              AND e.deleted_at IS NULL
+      WHERE f.home_id = $1
+        AND f.deleted_at IS NULL
+      ORDER BY f.created_at DESC`,
+    [homeId]
+  );
+  return rows.map(shape);
+}
+
 export async function findById(id, homeId, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

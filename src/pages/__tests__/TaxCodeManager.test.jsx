@@ -120,7 +120,7 @@ describe('TaxCodeManager', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getTaxCodes.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<TaxCodeManager />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading tax code data...')).toBeInTheDocument();
   });
 
   it('shows error message when API fails', async () => {

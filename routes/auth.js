@@ -7,6 +7,7 @@ import * as authService from '../services/authService.js';
 import * as auditService from '../services/auditService.js';
 import * as authRepo from '../repositories/authRepo.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { PostgresRateLimitStore } from '../lib/postgresRateLimitStore.js';
 import logger from '../logger.js';
 
 const router = Router();
@@ -24,6 +25,7 @@ const loginLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: config.nodeEnv === 'test' ? undefined : new PostgresRateLimitStore({ prefix: 'login:' }),
   message: { error: 'Too many login attempts — try again in 15 minutes' },
 });
 
@@ -80,8 +82,6 @@ router.post('/', loginLimiter, async (req, res, next) => {
   }
 });
 
-// ── Logout (clear cookie) ───────────────────────────────────────────────────
-
 router.post('/logout', requireAuth, async (req, res) => {
   if (req.user.jti) {
     const expiresAt = new Date(req.user.exp * 1000);
@@ -98,8 +98,6 @@ router.post('/logout', requireAuth, async (req, res) => {
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
   res.json({ ok: true, revoked: true });
 });
-
-// ── Token revocation ──────────────────────────────────────────────────────────
 
 const revokeSchema = z.object({
   username: z.string().min(1, 'Username required'),

@@ -3,7 +3,6 @@ import {
   isCqcNotificationOverdue,
   isRiddorOverdue,
   isDutyOfCandourOverdue,
-  addWorkingDays,
   getCqcNotificationDeadline,
   getIncidentAlerts,
 } from '../incidents.js';

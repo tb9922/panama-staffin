@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import { loadAuditLog } from '../lib/api.js';
-import { CARD, TABLE, BTN, BADGE } from '../lib/design.js';
+import { CARD, TABLE, BTN, BADGE, PAGE } from '../lib/design.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 export default function AuditLog() {
   const [log, setLog] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useEffect(() => { loadAuditLog().then(setLog).catch(err => setError(err.message)).finally(() => setLoading(false)); }, []);
 
   async function handleExport() {
@@ -25,6 +31,7 @@ export default function AuditLog() {
           e.details || '',
         ]),
       }]);
+      showNotice('Audit log exported.');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -33,7 +40,7 @@ export default function AuditLog() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={PAGE.container}>
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
         <button onClick={handleExport} disabled={exporting} className={`${BTN.secondary} ${BTN.sm} disabled:opacity-50`}>
@@ -41,7 +48,23 @@ export default function AuditLog() {
         </button>
       </div>
       <p className="text-sm text-gray-500 mb-5">Last 100 actions — who changed what and when</p>
-      {error && <p className="text-red-600 mb-4" role="alert">Failed to load audit log: {error}</p>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+      {error && (
+        <ErrorState
+          title="Unable to load audit log"
+          message={error}
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+            loadAuditLog().then(setLog).catch(err => setError(err.message)).finally(() => setLoading(false));
+          }}
+          className="mb-4"
+        />
+      )}
       <div className={CARD.flush}>
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
@@ -55,9 +78,9 @@ export default function AuditLog() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className={TABLE.empty} role="status">Loading audit log…</td></tr>
+              <tr><td colSpan={5} className={TABLE.empty}><LoadingState message="Loading audit log..." compact /></td></tr>
             ) : log.length === 0 ? (
-              <tr><td colSpan={5} className={TABLE.empty}>No audit entries yet</td></tr>
+              <tr><td colSpan={5} className={TABLE.empty}><EmptyState title="No audit entries yet" description="Recent activity will appear here as people use the system." compact /></td></tr>
             ) : log.map((entry, i) => (
               <tr key={entry.id ?? `${entry.ts}-${i}`} className={TABLE.tr}>
                 <td className={`${TABLE.td} text-xs font-mono text-gray-500`}>{new Date(entry.ts).toLocaleString('en-GB')}</td>

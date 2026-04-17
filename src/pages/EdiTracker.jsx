@@ -2,12 +2,30 @@ import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import { getCurrentHome, getHrEdi, createHrEdi, updateHrEdi } from '../lib/api.js';
 import { EDI_RECORD_TYPES, EDI_STATUSES, HARASSMENT_CATEGORIES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+
+function toMultilineText(value) {
+  if (Array.isArray(value)) return value.join('\n');
+  return value || '';
+}
+
+function toStringArray(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 function recordTypeName(id) {
   return EDI_RECORD_TYPES.find(t => t.id === id)?.name || id;
@@ -23,12 +41,12 @@ function categoryName(id) {
 
 const blankForm = () => ({
   record_type: 'harassment_complaint', staff_id: '',
-  date_recorded: new Date().toISOString().slice(0, 10),
+  date_recorded: todayLocalISO(),
   category: '', status: 'open', notes: '',
   // harassment-specific
   third_party: false, third_party_type: '', respondent_name: '', respondent_role: '', handling_route: '', description: '',
   // reasonable adjustment-specific
-  condition_description: '', adjustments: '', access_to_work_applied: false, access_to_work_reference: '', access_to_work_amount: '',
+  condition_description: '', reasonable_steps_evidence: '', adjustments: '', access_to_work_applied: false, access_to_work_reference: '', access_to_work_amount: '',
   // common
   outcome: '',
 });
@@ -44,6 +62,7 @@ export default function EdiTracker() {
   const [formError, setFormError] = useState('');
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   // Filters
   const [filterType, setFilterType] = useState('');
@@ -123,7 +142,8 @@ export default function EdiTracker() {
       handling_route: item.handling_route || '',
       description: item.description || '',
       condition_description: item.condition_description || '',
-      adjustments: item.adjustments || '',
+      reasonable_steps_evidence: toMultilineText(item.reasonable_steps_evidence),
+      adjustments: toMultilineText(item.adjustments),
       access_to_work_applied: item.access_to_work_applied ?? false,
       access_to_work_reference: item.access_to_work_reference || '',
       access_to_work_amount: item.access_to_work_amount ?? '',
@@ -162,10 +182,14 @@ export default function EdiTracker() {
       }
       if (payload.record_type !== 'reasonable_adjustment') {
         delete payload.condition_description;
+        delete payload.reasonable_steps_evidence;
         delete payload.adjustments;
         delete payload.access_to_work_applied;
         delete payload.access_to_work_reference;
         delete payload.access_to_work_amount;
+      } else {
+        payload.reasonable_steps_evidence = toStringArray(payload.reasonable_steps_evidence);
+        payload.adjustments = toStringArray(payload.adjustments);
       }
       if (editing) {
         await updateHrEdi(editing.id, { ...payload, _version: editing.version });
@@ -175,6 +199,7 @@ export default function EdiTracker() {
       setShowModal(false);
       setForm(blankForm());
       setEditing(null);
+      showNotice(editing ? `EDI record ${editing.id} updated.` : 'EDI record created.');
       load();
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -196,11 +221,12 @@ export default function EdiTracker() {
         i.category || '', statusName(i.status), i.notes || '',
       ]),
     }]);
+    showNotice(`Exported ${items.length} EDI record${items.length === 1 ? '' : 's'}.`);
   }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading EDI data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading EDI data..." card /></div>;
 
   const isHarassment = form.record_type === 'harassment_complaint';
   const isAdjustment = form.record_type === 'reasonable_adjustment';
@@ -218,7 +244,13 @@ export default function EdiTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Unable to load EDI records" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -244,7 +276,19 @@ export default function EdiTracker() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={6} className={TABLE.empty}>No EDI records</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={6} className={TABLE.empty}>
+                    <EmptyState
+                      title="No EDI records"
+                      description={canEdit ? 'Create the first record to track harassment complaints or reasonable adjustments.' : 'EDI records will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Record' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => (
                 <tr key={item.id} className={TABLE.tr}>
                   <td className={TABLE.td}>{recordTypeName(item.record_type)}</td>
@@ -360,8 +404,12 @@ export default function EdiTracker() {
                     <textarea id={conditionDescriptionId} className={INPUT.base} rows={2} value={form.condition_description} onChange={e => set('condition_description', e.target.value)} placeholder="Describe the condition or disability" />
                   </div>
                   <div>
+                    <label className={INPUT.label}>Reasonable Steps Evidence</label>
+                    <textarea className={INPUT.base} rows={3} value={form.reasonable_steps_evidence} onChange={e => set('reasonable_steps_evidence', e.target.value)} placeholder="One evidence point per line" />
+                  </div>
+                  <div>
                     <label htmlFor={adjustmentsId} className={INPUT.label}>Adjustments</label>
-                    <textarea id={adjustmentsId} className={INPUT.base} rows={3} value={form.adjustments} onChange={e => set('adjustments', e.target.value)} placeholder="Describe the reasonable adjustments made or requested" />
+                    <textarea id={adjustmentsId} className={INPUT.base} rows={3} value={form.adjustments} onChange={e => set('adjustments', e.target.value)} placeholder="One adjustment per line" />
                   </div>
                   <div className="border rounded-lg p-3 space-y-2">
                     <p className="text-xs font-semibold">Access to Work</p>

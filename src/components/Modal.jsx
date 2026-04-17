@@ -77,7 +77,9 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
       // Restore focus to previously focused element
-      if (previousFocus.current?.focus) previousFocus.current.focus();
+      if (previousFocus.current?.isConnected && typeof previousFocus.current.focus === 'function') {
+        previousFocus.current.focus();
+      }
     };
   }, [isOpen]);
 
@@ -91,7 +93,17 @@ export default function Modal({ isOpen, onClose, title, size = 'md', children })
       aria-labelledby={titleId}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div ref={panelRef} className={PANEL_SIZE[size] || PANEL_SIZE.md}>
+      <div ref={panelRef} className={`${PANEL_SIZE[size] || PANEL_SIZE.md} relative`}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Close"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
         <h3 id={titleId} className={MODAL.title}>{title}</h3>
         {children}
       </div>

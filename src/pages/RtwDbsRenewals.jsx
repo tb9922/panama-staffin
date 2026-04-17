@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useId } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import { getCurrentHome, getHrRenewals, createHrRenewal, updateHrRenewal } from '../lib/api.js';
 import { RENEWAL_CHECK_TYPES, RENEWAL_STATUSES, getStatusBadge } from '../lib/hr.js';
 import StaffPicker from '../components/StaffPicker.jsx';
@@ -186,7 +189,7 @@ export default function RtwDbsRenewals() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading renewal data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading renewal data..." card /></div>;
 
   const overdueCount = items.filter(isHighlighted).length;
 
@@ -206,7 +209,7 @@ export default function RtwDbsRenewals() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {error && <ErrorState title="Unable to load renewal records" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -237,7 +240,19 @@ export default function RtwDbsRenewals() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No renewal records</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      title="No renewal records"
+                      description={canEdit ? 'Create the first RTW or DBS check to start tracking due dates and expiries.' : 'Renewal records will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Check' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => {
                 const highlighted = isHighlighted(item);
                 return (

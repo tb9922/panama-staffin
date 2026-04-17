@@ -36,6 +36,7 @@ import { generateSummaryPDF }  from '../lib/payrollSummary.js';
 import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { todayLocalISO } from '../lib/dateOnly.js';
 
 const router = Router();
 const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
@@ -129,6 +130,10 @@ const agencyShiftBodySchema = z.object({
   role_covered: z.string().max(100).nullable().optional(),
 });
 
+const timesheetBatchBodySchema = z.object({
+  entries: z.array(z.unknown()).min(1, 'entries array required').max(62, 'Maximum 62 entries per batch'),
+});
+
 // ── Pay Rate Rules ─────────────────────────────────────────────────────────────
 
 // GET /api/payroll/rates?home=X — list active rules (seeds defaults on first call)
@@ -191,7 +196,7 @@ router.get('/nmw', readRateLimiter, requireAuth, async (req, res, next) => {
 // ── Timesheets ─────────────────────────────────────────────────────────────────
 
 // GET /api/payroll/timesheets?home=X&date=YYYY-MM-DD — entries for a date
-router.get('/timesheets', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/timesheets', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const dateP = dateSchema.safeParse(req.query.date);
     if (!dateP.success) return res.status(400).json({ error: 'date parameter required (YYYY-MM-DD)' });
@@ -205,7 +210,7 @@ router.get('/timesheets', readRateLimiter, requireAuth, requireHomeAccess, requi
 });
 
 // GET /api/payroll/timesheets/period?home=X&start=X&end=X — period view
-router.get('/timesheets/period', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/timesheets/period', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const startP = dateSchema.safeParse(req.query.start);
     const endP   = dateSchema.safeParse(req.query.end);
@@ -271,9 +276,9 @@ router.post('/timesheets/bulk-approve', writeRateLimiter, requireAuth, requireHo
 // POST /api/payroll/timesheets/batch-upsert?home=X — bulk create/update entries
 router.post('/timesheets/batch-upsert', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
   try {
-    const { entries } = req.body;
-    if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ error: 'entries array required' });
-    if (entries.length > 62) return res.status(400).json({ error: 'Maximum 62 entries per batch' });
+    const bodyParsed = timesheetBatchBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) return res.status(400).json({ error: bodyParsed.error.issues[0].message });
+    const { entries } = bodyParsed.data;
     const parsed = [];
     for (const e of entries) {
       const p = timesheetBodySchema.safeParse(e);
@@ -305,11 +310,13 @@ router.post('/timesheets/approve-range', writeRateLimiter, requireAuth, requireH
 // ── Payroll Runs ──────────────────────────────────────────────────────────────
 
 // GET /api/payroll/runs?home=X — list all runs
-router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     if (requireStaffLink(req, res, 'payroll')) return;
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
-    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const rawOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Math.min(500, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 100));
+    const offset = Math.max(0, Number.isFinite(rawOffset) ? rawOffset : 0);
     const { rows, total } = await payrollRunRepo.findByHome(req.home.id, { limit, offset });
     // staff_member: strip aggregate totals from run list
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
@@ -346,7 +353,7 @@ router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireMo
 });
 
 // GET /api/payroll/runs/:runId?home=X — get run with lines
-router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -448,7 +455,7 @@ router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAcces
     const format = ['sage', 'xero', 'generic'].includes(req.query.format)
       ? req.query.format
       : 'generic';
-    const { csv, filename } = await payrollService.exportRunCSV(
+    const { csv, filename } = await payrollService.exportRunCSVReadOnly(
       runIdP.data, req.home.id, req.home.slug, req.user.username, format,
     );
     res.setHeader('Content-Type', 'text/csv');
@@ -458,8 +465,20 @@ router.get('/runs/:runId/export', readRateLimiter, requireAuth, requireHomeAcces
   } catch (err) { next(err); }
 });
 
+router.post('/runs/:runId/export', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+  try {
+    const runIdP = runIdSchema.safeParse(req.params.runId);
+    if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
+    const format = ['sage', 'xero', 'generic'].includes(req.body?.format)
+      ? req.body.format
+      : 'generic';
+    await payrollService.markRunExported(runIdP.data, req.home.id, req.home.slug, req.user.username, format);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/payroll/runs/:runId/payslips/:staffId?home=X — single payslip PDF
-router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -482,7 +501,7 @@ router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requi
 });
 
 // GET /api/payroll/runs/:runId/payslips?home=X — bulk payslip data (JSON, frontend renders PDF)
-router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const runIdP = runIdSchema.safeParse(req.params.runId);
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
@@ -572,7 +591,8 @@ router.put('/agency/shifts/:id', writeRateLimiter, requireAuth, requireHomeAcces
 router.get('/agency/metrics', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     if (blockOwnDataRole(req, res, 'payroll')) return;
-    const weeks = Math.min(52, Math.max(1, parseInt(req.query.weeks, 10) || 12));
+    const rawWeeks = Number.parseInt(req.query.weeks, 10);
+    const weeks = Math.min(52, Math.max(1, Number.isFinite(rawWeeks) ? rawWeeks : 12));
     res.json(await agencyRepo.getMetrics(req.home.id, weeks));
   } catch (err) { next(err); }
 });
@@ -593,7 +613,7 @@ const taxCodeBodySchema = z.object({
 });
 
 // GET /api/payroll/tax-codes?home=X
-router.get('/tax-codes', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/tax-codes', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     if (requireStaffLink(req, res, 'payroll')) return;
     let codes = await taxRepo.listTaxCodesByHome(req.home.id);
@@ -616,7 +636,7 @@ router.post('/tax-codes', writeRateLimiter, requireAuth, requireHomeAccess, requ
 });
 
 // GET /api/payroll/ytd?home=X&staffId=X&year=X
-router.get('/ytd', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/ytd', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     const year = z.coerce.number().int().min(2020).safeParse(req.query.year);
     if (!year.success) return res.status(400).json({ error: 'year is required' });
@@ -650,7 +670,7 @@ const enrolmentBodySchema = z.object({
 });
 
 // GET /api/payroll/pensions?home=X
-router.get('/pensions', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/pensions', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     if (requireStaffLink(req, res, 'payroll')) return;
     let enrolments = await pensionRepo.listEnrolmentsByHome(req.home.id);
@@ -676,7 +696,7 @@ router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requi
 router.get('/pension-config', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
   try {
     if (blockOwnDataRole(req, res, 'payroll')) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     const config = await pensionRepo.getPensionConfig(today);
     res.json(config || {});
   } catch (err) { next(err); }
@@ -716,7 +736,7 @@ const sickPeriodUpdateSchema = z.object({
 });
 
 // GET /api/payroll/sick-periods?home=X[&staffId=X]
-router.get('/sick-periods', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read'), async (req, res, next) => {
+router.get('/sick-periods', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
     if (requireStaffLink(req, res, 'payroll')) return;
     // staff_member: force own staffId

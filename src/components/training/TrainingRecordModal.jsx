@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useId } from 'react';
-import { formatDate } from '../../lib/rotation.js';
 import { calculateExpiry, TRAINING_METHODS, getRequiredLevel } from '../../lib/training.js';
 import { MODAL, INPUT, BTN } from '../../lib/design.js';
 import { upsertTrainingRecord, deleteTrainingRecord } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 export default function TrainingRecordModal({ isOpen, onClose, staffId, staffName, typeId, typeName, type, existing, homeSlug, staff, onSaved, readOnly = false }) {
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
 
   const initForm = () => ({
     completed: existing?.completed || today,

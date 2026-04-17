@@ -18,6 +18,19 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function normalizeTransitionNotes(notes) {
+  if (typeof notes !== 'string') return null;
+  const trimmed = notes.trim();
+  return trimmed || null;
+}
+
+function getTransitionReason(oldStatus, newStatus, transitionData) {
+  if (oldStatus === 'reserved' && newStatus === 'available') {
+    return transitionData.releaseReason ?? null;
+  }
+  return transitionData.reason ?? null;
+}
+
 function assertNotStale(bed, clientUpdatedAt) {
   if (!clientUpdatedAt) return;
   const serverTs = bed.updated_at instanceof Date
@@ -52,8 +65,9 @@ async function assertResidentNotAlreadyOccupied(homeId, residentId, currentBedId
 function buildStatusData(oldStatus, newStatus, transitionData) {
   const {
     residentId, holdExpires, reservedUntil,
-    bookedFrom, bookedUntil, reason, username,
+    bookedFrom, bookedUntil, username,
   } = transitionData;
+  const transitionNotes = normalizeTransitionNotes(transitionData.notes);
 
   const data = {
     status: newStatus,
@@ -65,9 +79,12 @@ function buildStatusData(oldStatus, newStatus, transitionData) {
       : null,
     booked_from: bookedFrom ?? null,
     booked_until: bookedUntil ?? null,
-    notes: reason ?? null,
     updated_by: username,
   };
+
+  if (transitionNotes) {
+    data.notes = transitionNotes;
+  }
 
   const clearFields = CLEAR_ON_EXIT[oldStatus];
   if (clearFields) {
@@ -235,6 +252,8 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
     }
 
     const statusData = buildStatusData(bed.status, newStatus, transitionData);
+    const transitionReason = getTransitionReason(bed.status, newStatus, transitionData);
+    const transitionNotes = normalizeTransitionNotes(transitionData.notes);
     const updated = await bedRepo.updateStatus(bedId, homeId, statusData, client);
 
     await bedTransitionRepo.recordTransition(homeId, {
@@ -243,7 +262,8 @@ export async function transitionStatus(bedId, homeId, homeSlug, transitionData) 
       toStatus: newStatus,
       residentId: residentId ?? null,
       changedBy: username,
-      reason: transitionData.reason ?? null,
+      reason: transitionReason,
+      notes: transitionNotes,
     }, client);
 
     return { updated, fromStatus: bed.status, roomNumber: bed.room_number };

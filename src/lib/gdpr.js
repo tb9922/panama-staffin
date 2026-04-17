@@ -298,7 +298,8 @@ function evaluateDomain(domainId, data) {
       // ROPA — Article 30 compliance
       const ropa = data.ropa || [];
       const activeRopa = ropa.filter(x => x.status === 'active');
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       // Overdue = review date in the past, OR no review date set on an active entry (never reviewed)
       const overdueRopa = activeRopa.filter(x => !x.next_review_due || x.next_review_due < today);
       controls.push({ id: 'ropa_maintained', label: 'ROPA maintained (Art 30)', evidenced: activeRopa.length > 0, detail: `${activeRopa.length} active entries` });

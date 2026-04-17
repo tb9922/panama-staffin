@@ -186,3 +186,24 @@ describe('Risk Register: soft delete', () => {
     expect(byId).toBeNull();
   });
 });
+
+describe('Risk Register: sync safety', () => {
+  it('does not soft-delete every risk when sync receives an empty array', async () => {
+    const first = await riskRepo.upsert(homeA, {
+      title: 'Sync safety risk A',
+      category: 'compliance',
+      status: 'open',
+    });
+    const second = await riskRepo.upsert(homeA, {
+      title: 'Sync safety risk B',
+      category: 'clinical',
+      status: 'open',
+    });
+    ids.push(first.id, second.id);
+
+    await riskRepo.sync(homeA, []);
+
+    expect(await riskRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await riskRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+});

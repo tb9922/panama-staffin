@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import { ROLES } from '../../shared/roles.js';
+import { canAccessEvidenceHub } from '../../shared/evidenceHub.js';
 
 export function RequireModule({ module, children }) {
   const { canRead } = useData();
@@ -25,5 +26,13 @@ export function RequireUserManagement({ children }) {
   const { isPlatformAdmin } = useAuth();
   const { homeRole } = useData();
   if (!isPlatformAdmin && !ROLES[homeRole]?.canManageUsers) return <Navigate to="/" replace />;
+  return children;
+}
+
+export function RequireEvidenceHub({ children }) {
+  const { isPlatformAdmin } = useAuth();
+  const { homeRole, canRead } = useData();
+  if (!canRead('reports')) return <Navigate to="/" replace />;
+  if (!isPlatformAdmin && !canAccessEvidenceHub(homeRole)) return <Navigate to="/" replace />;
   return children;
 }

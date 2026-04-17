@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, requireHomeAccess, requireModule } from '../../middleware/auth.js';
+import { perUserKey } from '../../lib/rateLimiter.js';
+import { PostgresRateLimitStore } from '../../lib/postgresRateLimitStore.js';
 import * as staffRepo from '../../repositories/staffRepo.js';
 import * as hrRepo from '../../repositories/hrRepo.js';
 import * as auditService from '../../services/auditService.js';
+import { definedWithoutVersion, splitVersion } from '../../lib/versionedPayload.js';
 import {
   mapDisciplinaryFields, mapGrievanceFields, mapPerformanceFields,
   mapRtwFields, mapOhFields, mapContractFields, mapFamilyLeaveFields,
@@ -40,6 +43,8 @@ if (process.env.NODE_ENV !== 'test') {
   router.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
+    keyGenerator: perUserKey,
+    store: new PostgresRateLimitStore({ prefix: 'hr:' }),
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' },
@@ -107,7 +112,8 @@ router.put('/grievance-actions/:id', requireAuth, requireHomeAccess, requireModu
     if (!idP.success) return res.status(400).json({ error: 'Invalid action ID' });
     const parsed = grievanceActionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, parsed.data, null, parsed.data._version);
+    const { version } = splitVersion(parsed.data);
+    const result = await hrRepo.updateGrievanceAction(idP.data, req.home.id, definedWithoutVersion(parsed.data), null, version);
     if (!result) return res.status(404).json({ error: 'Grievance action not found' });
     await auditService.log('hr_grievance_action_update', req.home.slug, req.user.username, { id: result.id });
     res.json(result);

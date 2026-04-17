@@ -3,8 +3,9 @@ import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { FUNDING_TYPES, CARE_TYPES } from '../../lib/finance.js';
 import { createFinanceResident, getLoggedInUser } from '../../lib/api.js';
 import Modal from '../Modal.jsx';
+import { todayLocalISO } from '../../lib/localDates.js';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocalISO();
 
 const EMPTY = {
   resident_name: '', room_number: '', care_type: 'residential', funding_type: 'self_funded',

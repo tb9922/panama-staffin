@@ -1,5 +1,8 @@
 # Panama Staffing - Deployment Guide
 
+The current hardening and verification baseline is summarized in
+[HARDENING_SUMMARY_2026-03-29.md](HARDENING_SUMMARY_2026-03-29.md).
+
 ## Prerequisites
 
 - Ubuntu 22.04+ LTS (or similar)
@@ -232,6 +235,8 @@ After deployment, verify:
 - [ ] SSL certificate is valid
 - [ ] Backup script runs: `./scripts/backup-db.sh`
 - [ ] Metrics endpoint responds when enabled: `curl -H "Authorization: Bearer $METRICS_TOKEN" https://panama.yourdomain.com/metrics`
+- [ ] PM2 logs show request IDs on live traffic
+- [ ] Sentry receives backend and frontend events when configured
 
 ## Known Open Hardening Item
 

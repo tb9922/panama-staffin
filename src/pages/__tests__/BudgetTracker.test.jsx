@@ -106,7 +106,7 @@ describe('BudgetTracker', () => {
     api.getSchedulingData.mockRejectedValue(new Error('Network error'));
     renderWithProviders(<BudgetTracker />);
     await waitFor(() =>
-      expect(screen.getByText(/Error:.*Network error/)).toBeInTheDocument()
+      expect(screen.getByText('Network error')).toBeInTheDocument()
     );
     expect(screen.queryByText('Budget vs Actual')).not.toBeInTheDocument();
   });

@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLiveDate } from '../useLiveDate.js';
 
-vi.mock('../../lib/rotation.js', () => ({
-  formatDate: (d) => d.toISOString().slice(0, 10),
-}));
-
 describe('useLiveDate', () => {
   beforeEach(() => {
     vi.useFakeTimers();

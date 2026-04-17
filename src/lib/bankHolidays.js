@@ -1,7 +1,6 @@
-// UK Bank Holidays (England & Wales) — hardcoded 2024-2028 + GOV.UK API sync
+// UK Bank Holidays (England & Wales) — hardcoded baseline + generated fallback
 
 const UK_BANK_HOLIDAYS = [
-  // 2024
   { date: '2024-01-01', name: "New Year's Day" },
   { date: '2024-03-29', name: 'Good Friday' },
   { date: '2024-04-01', name: 'Easter Monday' },
@@ -10,7 +9,6 @@ const UK_BANK_HOLIDAYS = [
   { date: '2024-08-26', name: 'Summer bank holiday' },
   { date: '2024-12-25', name: 'Christmas Day' },
   { date: '2024-12-26', name: 'Boxing Day' },
-  // 2025
   { date: '2025-01-01', name: "New Year's Day" },
   { date: '2025-04-18', name: 'Good Friday' },
   { date: '2025-04-21', name: 'Easter Monday' },
@@ -19,7 +17,6 @@ const UK_BANK_HOLIDAYS = [
   { date: '2025-08-25', name: 'Summer bank holiday' },
   { date: '2025-12-25', name: 'Christmas Day' },
   { date: '2025-12-26', name: 'Boxing Day' },
-  // 2026
   { date: '2026-01-01', name: "New Year's Day" },
   { date: '2026-04-03', name: 'Good Friday' },
   { date: '2026-04-06', name: 'Easter Monday' },
@@ -28,7 +25,6 @@ const UK_BANK_HOLIDAYS = [
   { date: '2026-08-31', name: 'Summer bank holiday' },
   { date: '2026-12-25', name: 'Christmas Day' },
   { date: '2026-12-28', name: 'Boxing Day (substitute)' },
-  // 2027
   { date: '2027-01-01', name: "New Year's Day" },
   { date: '2027-03-26', name: 'Good Friday' },
   { date: '2027-03-29', name: 'Easter Monday' },
@@ -37,7 +33,6 @@ const UK_BANK_HOLIDAYS = [
   { date: '2027-08-30', name: 'Summer bank holiday' },
   { date: '2027-12-27', name: 'Christmas Day (substitute)' },
   { date: '2027-12-28', name: 'Boxing Day (substitute)' },
-  // 2028
   { date: '2028-01-03', name: "New Year's Day (substitute)" },
   { date: '2028-04-14', name: 'Good Friday' },
   { date: '2028-04-17', name: 'Easter Monday' },
@@ -48,22 +43,110 @@ const UK_BANK_HOLIDAYS = [
   { date: '2028-12-26', name: 'Boxing Day' },
 ];
 
-// Get hardcoded bank holidays for a year range
+function formatDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function makeUtcDate(year, monthIndex, day) {
+  return new Date(Date.UTC(year, monthIndex, day));
+}
+
+function nthWeekdayOfMonth(year, monthIndex, weekday, ordinal) {
+  const date = makeUtcDate(year, monthIndex, 1);
+  let seen = 0;
+  while (date.getUTCMonth() === monthIndex) {
+    if (date.getUTCDay() === weekday) {
+      seen += 1;
+      if (seen === ordinal) return new Date(date);
+    }
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return null;
+}
+
+function lastWeekdayOfMonth(year, monthIndex, weekday) {
+  const date = makeUtcDate(year, monthIndex + 1, 0);
+  while (date.getUTCDay() !== weekday) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  }
+  return date;
+}
+
+function substituteIfWeekend(date) {
+  const day = date.getUTCDay();
+  if (day === 6) date.setUTCDate(date.getUTCDate() + 2);
+  if (day === 0) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
+function easterSunday(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return makeUtcDate(year, month - 1, day);
+}
+
+function generateFallbackBankHolidays(year) {
+  const easter = easterSunday(year);
+  const goodFriday = new Date(easter);
+  goodFriday.setUTCDate(goodFriday.getUTCDate() - 2);
+  const easterMonday = new Date(easter);
+  easterMonday.setUTCDate(easterMonday.getUTCDate() + 1);
+
+  const newYearsDay = substituteIfWeekend(makeUtcDate(year, 0, 1));
+  const christmasDay = substituteIfWeekend(makeUtcDate(year, 11, 25));
+  const boxingDay = substituteIfWeekend(makeUtcDate(year, 11, 26));
+  if (formatDate(christmasDay) === formatDate(boxingDay)) {
+    boxingDay.setUTCDate(boxingDay.getUTCDate() + 1);
+  }
+
+  return [
+    { date: formatDate(newYearsDay), name: newYearsDay.getUTCDate() === 1 ? "New Year's Day" : "New Year's Day (substitute)" },
+    { date: formatDate(goodFriday), name: 'Good Friday' },
+    { date: formatDate(easterMonday), name: 'Easter Monday' },
+    { date: formatDate(nthWeekdayOfMonth(year, 4, 1, 1)), name: 'Early May bank holiday' },
+    { date: formatDate(lastWeekdayOfMonth(year, 4, 1)), name: 'Spring bank holiday' },
+    { date: formatDate(lastWeekdayOfMonth(year, 7, 1)), name: 'Summer bank holiday' },
+    { date: formatDate(christmasDay), name: christmasDay.getUTCDate() === 25 ? 'Christmas Day' : 'Christmas Day (substitute)' },
+    { date: formatDate(boxingDay), name: boxingDay.getUTCDate() === 26 ? 'Boxing Day' : 'Boxing Day (substitute)' },
+  ];
+}
+
 export function getHardcodedBankHolidays(yearFrom, yearTo) {
   return UK_BANK_HOLIDAYS.filter(bh => {
-    const y = parseInt(bh.date.substring(0, 4));
+    const y = parseInt(bh.date.substring(0, 4), 10);
     return y >= yearFrom && y <= yearTo;
   });
 }
 
-// Fetch from GOV.UK API via server proxy
+export function getFallbackBankHolidays(yearFrom, yearTo) {
+  const holidays = [...getHardcodedBankHolidays(yearFrom, yearTo)];
+  const coveredYears = new Set(holidays.map(bh => parseInt(bh.date.substring(0, 4), 10)));
+  for (let year = yearFrom; year <= yearTo; year += 1) {
+    if (!coveredYears.has(year)) {
+      holidays.push(...generateFallbackBankHolidays(year));
+    }
+  }
+  return holidays.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export async function fetchGovUKBankHolidays() {
   const res = await fetch('/api/bank-holidays');
   if (!res.ok) throw new Error('Failed to fetch from GOV.UK');
   return res.json();
 }
 
-// Merge new holidays into existing list (no duplicates)
 export function mergeBankHolidays(existing, newHolidays) {
   const dateSet = new Set((existing || []).map(bh => bh.date));
   const merged = [...(existing || [])];
@@ -76,17 +159,16 @@ export function mergeBankHolidays(existing, newHolidays) {
   return merged.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Sync bank holidays: try API first, fall back to hardcoded
 export async function syncBankHolidays(existing) {
-  let source = 'hardcoded';
+  let source = 'fallback';
   let holidays;
   try {
     holidays = await fetchGovUKBankHolidays();
     source = 'GOV.UK API';
   } catch {
     const now = new Date();
-    holidays = getHardcodedBankHolidays(now.getFullYear(), now.getFullYear() + 2);
-    source = 'hardcoded (API unavailable)';
+    holidays = getFallbackBankHolidays(now.getUTCFullYear(), now.getUTCFullYear() + 6);
+    source = 'generated fallback (API unavailable)';
   }
   const merged = mergeBankHolidays(existing, holidays);
   const added = merged.length - (existing || []).length;

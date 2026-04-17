@@ -5,6 +5,11 @@ import Modal from '../components/Modal.jsx';
 import TabBar from '../components/TabBar.jsx';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   getIpcStats,
   DEFAULT_IPC_AUDIT_TYPES, OUTBREAK_STATUSES,
@@ -48,6 +53,7 @@ export default function IpcAuditTracker() {
   const [activeTab, setActiveTab] = useState('details');
   const [filterType, setFilterType] = useState('');
   const [saveError, setSaveError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const home = getCurrentHome();
 
@@ -128,6 +134,7 @@ export default function IpcAuditTracker() {
       } else {
         await createIpcAudit(home, record);
       }
+      showNotice(editingId ? 'IPC audit updated.' : 'IPC audit created.');
       setShowModal(false);
       await load();
     } catch (err) {
@@ -141,6 +148,7 @@ export default function IpcAuditTracker() {
     try {
       await deleteIpcAudit(home, editingId);
       setShowModal(false);
+      showNotice('IPC audit deleted.', { variant: 'warning' });
       await load();
     } catch (err) {
       setSaveError(err.message || 'Failed to delete IPC audit');
@@ -174,6 +182,7 @@ export default function IpcAuditTracker() {
         'Actions', 'Active Outbreak', 'Outbreak Type', 'Notes'],
       rows,
     }]);
+    showNotice(`Exported ${filtered.length} IPC audit${filtered.length === 1 ? '' : 's'}.`);
   }
 
   const statusBadge = (score) => {
@@ -191,7 +200,7 @@ export default function IpcAuditTracker() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-gray-400">Loading IPC audits...</div>
+        <LoadingState message="Loading IPC audits..." />
       </div>
     );
   }
@@ -199,10 +208,7 @@ export default function IpcAuditTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-red-500">{error}</div>
-        <div className="text-center">
-          <button onClick={load} className={BTN.primary}>Retry</button>
-        </div>
+        <ErrorState title="Unable to load IPC audits" message={error} onRetry={load} />
       </div>
     );
   }
@@ -220,6 +226,12 @@ export default function IpcAuditTracker() {
           {canEdit && <button onClick={openAdd} className={BTN.primary}>+ New Audit</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -271,7 +283,17 @@ export default function IpcAuditTracker() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className={TABLE.empty}>No IPC audits recorded</td></tr>
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      title="No IPC audits recorded"
+                      description={canEdit ? 'Create the first audit to track scores, outbreaks, and corrective actions.' : 'IPC audits will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? '+ New Audit' : undefined}
+                      onAction={canEdit ? openAdd : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
               )}
               {filtered.map(audit => {
                 const typeDef = auditTypes.find(t => t.id === audit.audit_type);

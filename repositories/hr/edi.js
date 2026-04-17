@@ -10,13 +10,34 @@ const COLS = `id, home_id, record_type, staff_id,
   created_at, updated_at, deleted_at, version`;
 
 function stringifyJsonText(value) {
-  return JSON.stringify(value ?? '');
+  if (value == null || value === '') return JSON.stringify([]);
+  if (Array.isArray(value)) return JSON.stringify(value.filter(Boolean).map((item) => String(item).trim()).filter(Boolean));
+  if (typeof value === 'string') {
+    return JSON.stringify(
+      value
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    );
+  }
+  return JSON.stringify([]);
 }
 
-function normalizeJsonText(value) {
-  if (Array.isArray(value)) return value.filter(Boolean).join('\n');
-  if (value == null) return '';
-  return typeof value === 'string' ? value : JSON.stringify(value);
+function normalizeJsonArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map((item) => String(item));
+  if (value == null || value === '') return [];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(Boolean).map((item) => String(item));
+      }
+    } catch {
+      // Fall back to newline-delimited legacy strings.
+    }
+    return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 const shapeEdi = createShaper({
@@ -33,8 +54,8 @@ const shapeEdi = createShaper({
   dates: ['complaint_date'],
   floats: ['access_to_work_amount'],
   aliases: {
-    reasonable_steps_evidence: (row, out) => normalizeJsonText(out.reasonable_steps_evidence),
-    adjustments: (row, out) => normalizeJsonText(out.adjustments),
+    reasonable_steps_evidence: (row) => normalizeJsonArray(row.reasonable_steps_evidence),
+    adjustments: (row) => normalizeJsonArray(row.adjustments),
     date_recorded: 'complaint_date',
     category: (row, out) => out.record_type === 'reasonable_adjustment' ? (out.description || null) : out.harassment_category,
     respondent_role: 'respondent_type',

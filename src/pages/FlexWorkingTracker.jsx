@@ -4,11 +4,16 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import { getCurrentHome, getHrFlexWorking, createHrFlexWorking, updateHrFlexWorking } from '../lib/api.js';
 import { FLEX_WORKING_STATUSES, FLEX_REFUSAL_REASONS, getStatusBadge } from '../lib/hr.js';
-import { parseDate } from '../lib/rotation.js';
 import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO, parseLocalDate } from '../lib/localDates.js';
 
 const DECISION_OPTIONS = [
   { id: '', name: '— Not decided —' },
@@ -25,11 +30,11 @@ function statusName(id) {
 function isOverdue(item) {
   if (!item.decision_deadline) return false;
   if (item.status !== 'pending' && item.status !== 'meeting_scheduled') return false;
-  return item.decision_deadline < new Date().toISOString().slice(0, 10);
+  return item.decision_deadline < todayLocalISO();
 }
 
 const blankForm = () => ({
-  staff_id: '', request_date: new Date().toISOString().slice(0, 10),
+  staff_id: '', request_date: todayLocalISO(),
   requested_change: '', decision_deadline: '', status: 'pending',
   reason: '', current_pattern: '', effective_date_requested: '',
   employee_assessment_of_impact: '', meeting_date: '', meeting_notes: '',
@@ -84,6 +89,7 @@ export default function FlexWorkingTracker() {
   const appealOutcomeId = useId();
   const appealOutcomeDateId = useId();
   const flexNotesId = useId();
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useDirtyGuard(showModal);
 
   const LIMIT = 50;
@@ -116,16 +122,16 @@ export default function FlexWorkingTracker() {
 
   function openNew() {
     setEditing(null);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     // ERA 2025: employer must decide within 2 months
     // Clamp day to avoid month overflow (e.g. Dec 31 + 2 months → Feb 28, not Mar 3)
-    const deadline = parseDate(today);
-    const targetMonth = deadline.getUTCMonth() + 2;
-    deadline.setUTCDate(1);
-    deadline.setUTCMonth(targetMonth);
-    const lastDay = new Date(Date.UTC(deadline.getUTCFullYear(), deadline.getUTCMonth() + 1, 0)).getUTCDate();
-    deadline.setUTCDate(Math.min(parseDate(today).getUTCDate(), lastDay));
-    setForm({ ...blankForm(), request_date: today, decision_deadline: deadline.toISOString().slice(0, 10) });
+    const deadline = parseLocalDate(today);
+    const requestDay = deadline.getDate();
+    deadline.setDate(1);
+    deadline.setMonth(deadline.getMonth() + 2);
+    const lastDay = new Date(deadline.getFullYear(), deadline.getMonth() + 1, 0).getDate();
+    deadline.setDate(Math.min(requestDay, lastDay));
+    setForm({ ...blankForm(), request_date: today, decision_deadline: todayLocalISO(deadline) });
     setShowModal(true);
   }
 
@@ -182,6 +188,7 @@ export default function FlexWorkingTracker() {
       } else {
         await createHrFlexWorking(home, payload);
       }
+      showNotice(editing ? `Request ${editing.id} updated.` : 'Flexible working request created.');
       setShowModal(false);
       setForm(blankForm());
       setEditing(null);
@@ -206,11 +213,12 @@ export default function FlexWorkingTracker() {
         statusName(i.status), i.decision || '', i.decision_date || '', i.notes || '',
       ]),
     }]);
+    showNotice(`Exported ${items.length} flexible working request${items.length === 1 ? '' : 's'}.`);
   }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading flexible working data...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading flexible working data..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -225,7 +233,13 @@ export default function FlexWorkingTracker() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert">{error}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
+      {error && <ErrorState title="Unable to load flexible working requests" message={error} onRetry={load} className="mb-4" />}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -252,7 +266,19 @@ export default function FlexWorkingTracker() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={7} className={TABLE.empty}>No flexible working requests</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={TABLE.empty}>
+                    <EmptyState
+                      title="No flexible working requests"
+                      description={canEdit ? 'Create the first request to track meetings, decisions, and appeals.' : 'Requests will appear here once they have been logged.'}
+                      actionLabel={canEdit ? 'New Request' : undefined}
+                      onAction={canEdit ? openNew : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {items.map(item => {
                 const overdue = isOverdue(item);
                 return (

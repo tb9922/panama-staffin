@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import ModalWrapper from '../Modal.jsx';
 import TabBar from '../TabBar.jsx';
 import ResidentPicker from '../ResidentPicker.jsx';
@@ -10,6 +11,34 @@ import {
   PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES,
 } from '../../lib/incidents.js';
+
+function getCqcCountdown(form, nowMs) {
+  if (!form.cqc_notifiable || form.cqc_notified || !form.cqc_notification_deadline || !form.date) {
+    return null;
+  }
+
+  const windowHours = form.cqc_notification_deadline === 'immediate'
+    ? 24
+    : form.cqc_notification_deadline === '72h'
+      ? 72
+      : null;
+  if (!windowHours) return null;
+
+  const incidentAt = new Date(`${form.date}T${form.time || '00:00'}:00`);
+  if (isNaN(incidentAt.getTime())) return null;
+
+  const dueAt = new Date(incidentAt.getTime() + (windowHours * 60 * 60 * 1000));
+  const diffMs = dueAt.getTime() - nowMs;
+  const hours = Math.max(1, Math.ceil(Math.abs(diffMs) / (60 * 60 * 1000)));
+
+  if (diffMs < 0) {
+    return { tone: 'text-red-600', text: `Overdue by ${hours}h` };
+  }
+  if (hours <= 6) {
+    return { tone: 'text-amber-700', text: `${hours}h left` };
+  }
+  return { tone: 'text-gray-500', text: `${hours}h left` };
+}
 
 export default function IncidentTrackerModal({
   isOpen,
@@ -37,6 +66,24 @@ export default function IncidentTrackerModal({
   handleAddAddendum,
 }) {
   const title = editingId ? (isFrozen ? 'Incident (Frozen)' : 'Edit Incident') : 'New Incident';
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [isOpen]);
+
+  const cqcCountdown = useMemo(() => getCqcCountdown(form, nowMs), [form, nowMs]);
+  const missingRequired = useMemo(() => {
+    const missing = [];
+    if (!form.date) missing.push('Date');
+    if (!form.type) missing.push('Incident type');
+    if (!form.severity) missing.push('Severity');
+    if (form.cqc_notifiable && !form.cqc_notification_type) missing.push('CQC notification type');
+    if (form.riddor_reportable && !form.riddor_category) missing.push('RIDDOR category');
+    return missing;
+  }, [form]);
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={onClose} title={title} size="xl">
@@ -219,7 +266,7 @@ export default function IncidentTrackerModal({
               <div className="ml-6 space-y-2">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={INPUT.label}>Notification Type</label>
+                    <label className={INPUT.label}>Notification Type *</label>
                     <select
                       className={INPUT.select}
                       value={form.cqc_notification_type}
@@ -240,6 +287,11 @@ export default function IncidentTrackerModal({
                       readOnly
                       value={form.cqc_notification_deadline === 'immediate' ? 'Immediate (24 hours)' : form.cqc_notification_deadline === '72h' ? 'Within 72 hours' : '-'}
                     />
+                    {cqcCountdown && (
+                      <p className={`mt-1 text-xs font-medium ${cqcCountdown.tone}`}>
+                        CQC notification window: {cqcCountdown.text}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -271,7 +323,7 @@ export default function IncidentTrackerModal({
             {form.riddor_reportable && (
               <div className="ml-6 space-y-2">
                 <div>
-                  <label className={INPUT.label}>RIDDOR Category</label>
+                  <label className={INPUT.label}>RIDDOR Category *</label>
                   <select className={INPUT.select} value={form.riddor_category} onChange={e => setForm({ ...form, riddor_category: e.target.value })}>
                     <option value="">Select...</option>
                     {RIDDOR_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
@@ -540,7 +592,14 @@ export default function IncidentTrackerModal({
             {freezing ? 'Freezing...' : 'Freeze Record'}
           </button>
         )}
-        {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
+        {(missingRequired.length > 0 || saveError) && (
+          <div className="mr-auto">
+            {missingRequired.length > 0 && (
+              <p className="text-xs text-amber-700">Missing: {missingRequired.join(', ')}</p>
+            )}
+            {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+          </div>
+        )}
         <div className="flex-1" />
         <button onClick={onClose} className={BTN.ghost}>Close</button>
         {canEdit && !isFrozen && (

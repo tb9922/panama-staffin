@@ -46,6 +46,9 @@ import cqcEvidenceRouter from './routes/cqcEvidence.js';
 import trainingRouter from './routes/training.js';
 import careCertRouter from './routes/careCert.js';
 import onboardingRouter from './routes/onboarding.js';
+import evidenceHubRouter from './routes/evidenceHub.js';
+import notificationsRouter from './routes/notifications.js';
+import recordAttachmentsRouter from './routes/recordAttachments.js';
 import staffRouter from './routes/staff.js';
 import schedulingRouter from './routes/scheduling.js';
 import usersRouter from './routes/users.js';
@@ -129,6 +132,9 @@ app.use('/api/cqc-evidence', cqcEvidenceRouter);
 app.use('/api/training', trainingRouter);
 app.use('/api/care-cert', careCertRouter);
 app.use('/api/onboarding', onboardingRouter);
+app.use('/api/evidence-hub', evidenceHubRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/record-attachments', recordAttachmentsRouter);
 app.use('/api/staff', staffRouter);
 app.use('/api/scheduling', schedulingRouter);
 app.use('/api/users', usersRouter);
@@ -142,9 +148,17 @@ app.use('/api/import', importRouter);
 
 // Readiness probe — returns 503 during graceful shutdown (for load balancer drain)
 let shuttingDown = false;
-app.get('/readiness', (req, res) => {
+app.get('/readiness', async (req, res) => {
   if (shuttingDown) return res.status(503).json({ status: 'shutting_down' });
-  res.json({ status: 'ready' });
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    res.json({ status: 'ready', db: 'ok' });
+  } catch {
+    res.status(503).json({ status: 'degraded', db: 'error' });
+  }
 });
 
 // Health check — intentionally public (Docker/load balancer probe)
@@ -198,7 +212,7 @@ if (config.nodeEnv === 'production') {
       }
     },
   }));
-  app.get('*', (req, res) => {
+  app.get('/{*splat}', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(distDir, 'index.html'));
   });
@@ -239,9 +253,13 @@ app.use((err, req, res, next) => {
 // Export app for testing (supertest)
 export { app };
 
-// Only listen when run directly (not when imported by tests)
-const isMainModule = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
-const server = isMainModule ? app.listen(config.port, async () => {
+// Start the HTTP server for normal execution, including PM2 workers.
+// Tests import the app object directly and should not bind a port.
+const isDirectRun = Boolean(process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')));
+const isPm2Process = process.env.pm_id != null || process.env.NODE_APP_INSTANCE != null;
+const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+const shouldListen = !isTestProcess && (isDirectRun || isPm2Process);
+const server = shouldListen ? app.listen(config.port, async () => {
   // Request + connection timeouts
   server.setTimeout(30000);        // 30s max request duration
   server.keepAliveTimeout = 65000; // slightly above typical LB idle (60s)
@@ -307,5 +325,9 @@ process.on('unhandledRejection', (reason, _promise) => {
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Uncaught exception — shutting down');
   if (config.sentryDsn) Sentry.captureException(err);
-  shutdown('uncaughtException');
+  shuttingDown = true;
+  if (server) {
+    try { server.close(); } catch { /* ignore */ }
+  }
+  setTimeout(() => process.exit(1), 250).unref();
 });

@@ -40,7 +40,7 @@ describe('getStatusBadge', () => {
 
   it('works across different status lists', () => {
     expect(getStatusBadge('open', GRIEVANCE_STATUSES)).toBe('blue');
-    expect(getStatusBadge('planned', FAMILY_LEAVE_STATUSES)).toBe('blue');
+    expect(getStatusBadge('requested', FAMILY_LEAVE_STATUSES)).toBe('blue');
     expect(getStatusBadge('pending', FLEX_WORKING_STATUSES)).toBe('blue');
     expect(getStatusBadge('escalated', EDI_STATUSES)).toBe('red');
     expect(getStatusBadge('consultation', TUPE_STATUSES)).toBe('amber');
@@ -284,10 +284,24 @@ describe('constants', () => {
     }
   });
 
-  it('CONTRACT_TYPES includes permanent and zero_hours', () => {
-    const ids = CONTRACT_TYPES.map(t => t.id);
-    expect(ids).toContain('permanent');
-    expect(ids).toContain('zero_hours');
+  it('CONTRACT_TYPES only exposes backend-supported ids', () => {
+    expect(CONTRACT_TYPES.map(t => t.id)).toEqual([
+      'permanent',
+      'fixed_term',
+      'zero_hours',
+      'bank',
+      'casual',
+    ]);
+  });
+
+  it('CONTRACT_STATUSES only exposes backend-supported ids', () => {
+    expect(CONTRACT_STATUSES.map(s => s.id)).toEqual([
+      'active',
+      'probation',
+      'notice_period',
+      'suspended',
+      'terminated',
+    ]);
   });
 
   it('CONTRACT_STATUSES has items with badgeKey', () => {

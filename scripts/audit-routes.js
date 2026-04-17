@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = new Set([
   'GET /health',
   'GET /readiness',
   'GET *',
+  'GET /{*splat}',
 ]);
 
 const TOKEN_GATED_ROUTES = new Set([

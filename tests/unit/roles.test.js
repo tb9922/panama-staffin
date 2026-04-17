@@ -4,6 +4,11 @@ import {
   hasModuleAccess, getVisibleModules, canWriteModule,
   canAssignRole, getRoleLabel, isOwnDataOnly,
 } from '../../shared/roles.js';
+import {
+  canAccessEvidenceHub,
+  getReadableEvidenceSources,
+  getWritableEvidenceSources,
+} from '../../shared/evidenceHub.js';
 
 describe('shared/roles.js', () => {
   describe('MODULES', () => {
@@ -97,6 +102,11 @@ describe('shared/roles.js', () => {
       expect(hasModuleAccess('staff_member', 'scheduling', 'read')).toBe(true);
     });
 
+    it('read check can explicitly exclude own-data access', () => {
+      expect(hasModuleAccess('staff_member', 'scheduling', 'read', { includeOwn: false })).toBe(false);
+      expect(hasModuleAccess('viewer', 'scheduling', 'read', { includeOwn: false })).toBe(true);
+    });
+
     it('write check: write satisfies write', () => {
       expect(hasModuleAccess('home_manager', 'payroll', 'write')).toBe(true);
     });
@@ -113,12 +123,12 @@ describe('shared/roles.js', () => {
       expect(hasModuleAccess('staff_member', 'scheduling', 'own')).toBe(true);
     });
 
-    it('own check: read satisfies own', () => {
-      expect(hasModuleAccess('viewer', 'scheduling', 'own')).toBe(true);
+    it('own check: read does NOT satisfy own', () => {
+      expect(hasModuleAccess('viewer', 'scheduling', 'own')).toBe(false);
     });
 
-    it('own check: write satisfies own', () => {
-      expect(hasModuleAccess('home_manager', 'scheduling', 'own')).toBe(true);
+    it('own check: write does NOT satisfy own', () => {
+      expect(hasModuleAccess('home_manager', 'scheduling', 'own')).toBe(false);
     });
 
     it('defaults to read level', () => {
@@ -270,6 +280,37 @@ describe('shared/roles.js', () => {
 
     it('returns false for staff_member on modules with none access', () => {
       expect(isOwnDataOnly('staff_member', 'hr')).toBe(false);
+    });
+  });
+
+  describe('evidence hub access helpers', () => {
+    it('home manager can access all evidence sources', () => {
+      expect(canAccessEvidenceHub('home_manager')).toBe(true);
+      expect(getReadableEvidenceSources('home_manager').map((source) => source.id)).toEqual([
+        'hr',
+        'cqc_evidence',
+        'onboarding',
+        'training',
+        'record',
+      ]);
+    });
+
+    it('hr officer can access HR and permitted operational evidence', () => {
+      expect(canAccessEvidenceHub('hr_officer')).toBe(true);
+      expect(getReadableEvidenceSources('hr_officer').map((source) => source.id)).toEqual(['hr', 'record']);
+      expect(getWritableEvidenceSources('hr_officer').map((source) => source.id)).toEqual(['hr', 'record']);
+    });
+
+    it('finance officer can access record evidence only', () => {
+      expect(canAccessEvidenceHub('finance_officer')).toBe(true);
+      expect(getReadableEvidenceSources('finance_officer').map((source) => source.id)).toEqual(['record']);
+      expect(getWritableEvidenceSources('finance_officer').map((source) => source.id)).toEqual(['record']);
+    });
+
+    it('viewer can access only record evidence backed by staff read access', () => {
+      expect(canAccessEvidenceHub('viewer')).toBe(true);
+      expect(getReadableEvidenceSources('viewer').map((source) => source.id)).toEqual(['record']);
+      expect(getWritableEvidenceSources('viewer')).toEqual([]);
     });
   });
 });

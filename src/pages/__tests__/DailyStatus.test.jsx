@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyStatus from '../DailyStatus.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -193,6 +193,36 @@ describe('DailyStatus', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: 'Mark Sick' })).toBeInTheDocument();
+  });
+
+  it('shows the RTW handoff notice after marking someone sick', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('+Sick')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('+Sick'));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'S001');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.upsertOverride).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          date: FIXED_DATE,
+          staffId: 'S001',
+          shift: 'SICK',
+          source: 'manual',
+        }),
+        expect.any(Object),
+      );
+    });
+
+    expect(await screen.findByRole('button', { name: 'Record RTW Interview' })).toBeInTheDocument();
+    expect(screen.getByText(/Alice Smith marked sick for 2026-03-08/i)).toBeInTheDocument();
   });
 
   it('clicking a shift badge opens the change-status modal and saves a new shift', async () => {

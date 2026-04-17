@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import PayrollDetail from '../PayrollDetail.jsx';
 
@@ -22,12 +23,15 @@ vi.mock('../../lib/api.js', async () => {
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getPayrollRun: vi.fn(),
+    getPayrollRuns: vi.fn(),
     calculatePayrollRun: vi.fn(),
     approvePayrollRun: vi.fn(),
     getPayrollExportUrl: vi.fn(() => '/api/payroll/export'),
     getPayrollSummaryPdfUrl: vi.fn(() => '/api/payroll/summary.pdf'),
     getPayslips: vi.fn(),
     getSchedulingData: vi.fn(),
+    markPayrollRunExported: vi.fn(),
+    downloadAuthenticatedFile: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
     logout: vi.fn(),
@@ -122,9 +126,56 @@ const MOCK_APPROVED_RUN = {
   lines: MOCK_LINES,
 };
 
+const MOCK_PREVIOUS_RUN = {
+  id: 'run-0',
+  period_start: '2026-02-01',
+  period_end: '2026-02-28',
+  pay_frequency: 'monthly',
+  status: 'exported',
+  staff_count: 1,
+  total_gross: '3500.00',
+  total_enhancements: '80.00',
+};
+
+const MOCK_PREVIOUS_DETAIL = {
+  run: {
+    ...MOCK_PREVIOUS_RUN,
+    approved_by: 'admin',
+    exported_at: '2026-03-01T10:00:00Z',
+    notes: null,
+  },
+  lines: [
+    {
+      staff_id: 'S001',
+      base_hours: '140.00',
+      base_pay: '3500.00',
+      night_enhancement: '80.00',
+      weekend_enhancement: '0.00',
+      bank_holiday_enhancement: '0.00',
+      overtime_enhancement: '0.00',
+      sleep_in_pay: '0.00',
+      on_call_enhancement: '0.00',
+      total_hours: '140.00',
+      gross_pay: '3500.00',
+      holiday_pay: '0.00',
+      ssp_amount: '0.00',
+      tax_deducted: '350.00',
+      employee_ni: '200.00',
+      employer_ni: '250.00',
+      pension_employee: '60.00',
+      student_loan: '0.00',
+      net_pay: '2890.00',
+      nmw_compliant: true,
+    },
+  ],
+};
+
 function setupMocks(runData = MOCK_CALCULATED_RUN) {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
-  api.getPayrollRun.mockResolvedValue(runData);
+  api.getPayrollRuns.mockResolvedValue([runData.run, MOCK_PREVIOUS_RUN]);
+  api.getPayrollRun.mockImplementation(async (_home, id) => (
+    String(id) === String(MOCK_PREVIOUS_RUN.id) ? MOCK_PREVIOUS_DETAIL : runData
+  ));
   api.getPayslips.mockResolvedValue([]);
 }
 
@@ -176,7 +227,7 @@ describe('PayrollDetail', () => {
     renderWithProviders(<PayrollDetail />);
     // When getPayrollRun fails, run stays null, so the not-found state shows
     await waitFor(() =>
-      expect(screen.getByText('Payroll run not found.')).toBeInTheDocument()
+      expect(screen.getByText('Payroll run not found')).toBeInTheDocument()
     );
   });
 
@@ -202,6 +253,15 @@ describe('PayrollDetail', () => {
     expect(screen.getAllByText('Staff').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Total Gross')).toBeInTheDocument();
     expect(screen.getByText('Enhancements')).toBeInTheDocument();
+  });
+
+  it('shows the payroll pre-flight links before approval', async () => {
+    renderAdmin(MOCK_CALCULATED_RUN);
+    await waitFor(() =>
+      expect(screen.getByText('Payroll Pre-flight')).toBeInTheDocument()
+    );
+    expect(screen.getAllByRole('button', { name: 'Review Timesheets' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Review Pay Rates' }).length).toBeGreaterThan(0);
   });
 
   it('shows Calculate button for admin on draft run', async () => {
@@ -230,11 +290,31 @@ describe('PayrollDetail', () => {
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
   });
 
-  it('shows export buttons for admin on approved run', async () => {
+  it('shows export dropdown for admin on approved run', async () => {
     renderAdmin(MOCK_APPROVED_RUN);
     await waitFor(() =>
       expect(screen.getByText(/Payroll Run/)).toBeInTheDocument()
     );
+    expect(screen.getByRole('button', { name: 'Export ▾' })).toBeInTheDocument();
+  });
+
+  it('shows previous-run delta text in the summary cards', async () => {
+    renderAdmin(MOCK_CALCULATED_RUN);
+    await waitFor(() =>
+      expect(screen.getAllByText((_, node) => node?.textContent?.includes('vs previous run: +1') ?? false).length).toBeGreaterThan(0)
+    );
+    expect(screen.getAllByText((_, node) => node?.textContent?.includes('vs previous run: +180h') ?? false).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((_, node) => (node?.textContent?.includes('vs previous run: +') ?? false) && (node?.textContent?.includes('920.00') ?? false)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((_, node) => (node?.textContent?.includes('vs previous run: +') ?? false) && (node?.textContent?.includes('20.00') ?? false)).length).toBeGreaterThan(0);
+  });
+
+  it('opens the export dropdown menu with all export options', async () => {
+    const user = userEvent.setup();
+    renderAdmin(MOCK_APPROVED_RUN);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Export ▾' })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole('button', { name: 'Export ▾' }));
     expect(screen.getByRole('button', { name: 'Sage CSV' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xero CSV' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Generic CSV' })).toBeInTheDocument();

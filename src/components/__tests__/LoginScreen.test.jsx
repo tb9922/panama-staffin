@@ -64,8 +64,10 @@ describe('LoginScreen', () => {
     });
   });
 
-  it('shows an error message when login fails', async () => {
-    login.mockRejectedValueOnce(new Error('Unauthorized'));
+  it('shows an invalid-credentials error when login fails with 401', async () => {
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    login.mockRejectedValueOnce(err);
     const user = userEvent.setup();
     render(<LoginScreen onLogin={vi.fn()} />);
 
@@ -78,10 +80,42 @@ describe('LoginScreen', () => {
     });
   });
 
+  it('shows an account locked message for 423 responses', async () => {
+    const err = new Error('Account locked');
+    err.status = 423;
+    login.mockRejectedValueOnce(err);
+    const user = userEvent.setup();
+    render(<LoginScreen onLogin={vi.fn()} />);
+
+    await user.type(screen.getByPlaceholderText('Enter username'), 'admin');
+    await user.type(screen.getByPlaceholderText('Enter password'), 'wrongpassword');
+    await user.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Account locked — contact admin')).toBeInTheDocument();
+    });
+  });
+
+  it('shows a connection error when the server cannot be reached', async () => {
+    login.mockRejectedValueOnce(new Error('Network error'));
+    const user = userEvent.setup();
+    render(<LoginScreen onLogin={vi.fn()} />);
+
+    await user.type(screen.getByPlaceholderText('Enter username'), 'admin');
+    await user.type(screen.getByPlaceholderText('Enter password'), 'wrongpassword');
+    await user.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cannot reach server — check your connection')).toBeInTheDocument();
+    });
+  });
+
   it('calls onLogin on a subsequent successful login even when a previous error is shown', async () => {
     // First attempt fails, second succeeds.
     // The component does not clear the error state on success — onLogin fires regardless.
-    login.mockRejectedValueOnce(new Error('Unauthorized'));
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    login.mockRejectedValueOnce(err);
     login.mockResolvedValueOnce({ username: 'admin', role: 'admin' });
 
     const onLogin = vi.fn();
@@ -111,5 +145,12 @@ describe('LoginScreen', () => {
   it('does not show an error message on initial render', () => {
     render(<LoginScreen onLogin={vi.fn()} />);
     expect(screen.queryByText('Invalid username or password')).not.toBeInTheDocument();
+  });
+
+  it('shows a session expired banner from session storage once', () => {
+    window.sessionStorage.setItem('panama_login_notice', 'session_expired');
+    render(<LoginScreen onLogin={vi.fn()} />);
+    expect(screen.getByText('Your session expired — sign in again')).toBeInTheDocument();
+    expect(window.sessionStorage.getItem('panama_login_notice')).toBeNull();
   });
 });

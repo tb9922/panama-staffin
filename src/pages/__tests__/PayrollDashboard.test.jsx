@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 import PayrollDashboard from '../PayrollDashboard.jsx';
 
 vi.mock('../../lib/api.js', async () => {
@@ -58,11 +59,17 @@ describe('PayrollDashboard', () => {
     api.getPayrollRuns.mockResolvedValue(MOCK_RUNS);
     api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
     api.getCurrentHome.mockReturnValue('test-home');
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: () => true,
+      homeRole: 'home_manager',
+      staffId: null,
+    });
   });
 
   it('renders the page heading', async () => {
     renderWithProviders(<PayrollDashboard />);
-    expect(screen.getByText('Payroll Runs')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Payroll Runs')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
   });
 
@@ -70,27 +77,25 @@ describe('PayrollDashboard', () => {
     let resolve;
     api.getPayrollRuns.mockReturnValue(new Promise(r => { resolve = r; }));
     renderWithProviders(<PayrollDashboard />);
-    expect(screen.getByText('Loading payroll runs…')).toBeInTheDocument();
-    await act(async () => { resolve(MOCK_RUNS); });
+    expect(screen.getByText('Loading payroll runs...')).toBeInTheDocument();
+    await act(async () => {
+      resolve(MOCK_RUNS);
+    });
     await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
   });
 
   it('renders runs table with correct data after load', async () => {
     renderWithProviders(<PayrollDashboard />);
-    // Both cards and table may show 2026-02-01 — use getAllByText
     await waitFor(() => expect(screen.getAllByText('2026-02-01').length).toBeGreaterThan(0));
     expect(screen.getByText('2026-01-01')).toBeInTheDocument();
-    // Status badges
     expect(screen.getByText('Approved')).toBeInTheDocument();
     expect(screen.getByText('Draft')).toBeInTheDocument();
   });
 
   it('displays summary cards for the latest run', async () => {
     renderWithProviders(<PayrollDashboard />);
-    // £48,500.00 appears in both summary card and table row — that is correct
     await waitFor(() => expect(screen.getAllByText('£48,500.00').length).toBeGreaterThan(0));
     expect(screen.getAllByText('£3,200.00').length).toBeGreaterThan(0);
-    // Staff count in card
     expect(screen.getAllByText('12').length).toBeGreaterThan(0);
   });
 
@@ -112,11 +117,8 @@ describe('PayrollDashboard', () => {
     renderWithProviders(<PayrollDashboard />);
     await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /new payroll run/i }));
-    // Modal title appears
     expect(screen.getByText('New Payroll Run')).toBeInTheDocument();
-    // Modal has Pay Frequency label text
     expect(screen.getByText('Pay Frequency')).toBeInTheDocument();
-    // Modal has Period Start/End labels
     expect(screen.getByText('Period Start')).toBeInTheDocument();
   });
 
@@ -130,5 +132,21 @@ describe('PayrollDashboard', () => {
     api.getPayrollRuns.mockResolvedValue([]);
     renderWithProviders(<PayrollDashboard />);
     await waitFor(() => expect(screen.getByText(/no payroll runs yet/i)).toBeInTheDocument());
+  });
+
+  it('shows the self-service payroll view for staff members', async () => {
+    api.getLoggedInUser.mockReturnValue({ username: 'staff', role: 'viewer' });
+    useData.mockReturnValue({
+      canRead: (module) => module === 'payroll' || module === 'scheduling',
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S001',
+    });
+    renderWithProviders(<PayrollDashboard />, {
+      user: { username: 'staff', role: 'viewer' },
+    });
+    await waitFor(() => expect(screen.getByText('My Payslips')).toBeInTheDocument());
+    expect(screen.getAllByRole('button', { name: 'Open' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /new payroll run/i })).not.toBeInTheDocument();
   });
 });

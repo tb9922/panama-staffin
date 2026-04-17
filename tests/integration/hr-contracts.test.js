@@ -150,11 +150,13 @@ describe('Contracts: optimistic locking', () => {
   });
 
   it('increments version on update', async () => {
+    const before = await hrRepo.findContractById(caseId, homeA);
     const updated = await hrRepo.updateContract(caseId, homeA,
-      { hours_per_week: 35 }, null, 1
+      { hours_per_week: 35 }, null, before.version
     );
-    expect(updated.version).toBe(2);
+    expect(updated.version).toBe(before.version + 1);
     expect(updated.hours_per_week).toBe(35);
+    expect(updated.updated_at).not.toBe(before.updated_at);
   });
 
   it('returns null on stale version', async () => {

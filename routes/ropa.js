@@ -7,6 +7,8 @@ import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
 import { zodError } from '../errors.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import { validateRopaStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 
@@ -84,8 +86,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await ropaRepo.findById(idP.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = Number.isFinite(parsed.data._version) ? parsed.data._version : null;
-    const result = await ropaRepo.update(idP.data, req.home.id, parsed.data, null, version);
+    const statusError = validateRopaStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await ropaRepo.update(idP.data, req.home.id, payload, null, version);
     if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     await auditService.log('ropa_update', req.home.slug, req.user.username, { id: idP.data, changes: diffFields(existing, result) });
     res.json(result);

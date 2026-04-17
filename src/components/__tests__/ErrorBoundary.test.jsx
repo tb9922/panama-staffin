@@ -51,13 +51,13 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText(/Your data has not been affected/i)).toBeInTheDocument();
   });
 
-  it('shows a "Reload Page" button in the error UI', () => {
+  it('shows a "Reload App" button in the error UI', () => {
     render(
       <ErrorBoundary>
         <ThrowingComponent />
       </ErrorBoundary>,
     );
-    expect(screen.getByRole('button', { name: /Reload Page/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reload App/i })).toBeInTheDocument();
   });
 
   it('calls Sentry.captureException when a child throws', () => {

@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { CARD, BTN, BADGE, INPUT, MODAL, PAGE, TABLE } from '../lib/design.js';
-import { formatDate } from '../lib/rotation.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import { downloadXLSX } from '../lib/excel.js';
 import Modal from '../components/Modal.jsx';
@@ -17,6 +16,12 @@ import {
   createComplaintSurvey, updateComplaintSurvey, deleteComplaintSurvey, getLoggedInUser,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO } from '../lib/localDates.js';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const TABS = [
   { id: 'details', label: 'Details' },
@@ -68,6 +73,7 @@ export default function ComplaintsTracker() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [surveyError, setSurveyError] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   useDirtyGuard(showModal || showSurveyModal);
 
@@ -113,10 +119,23 @@ export default function ComplaintsTracker() {
 
   const today = useLiveDate();
 
+  useEffect(() => {
+    if (!showModal) return;
+    const basisDate = form.acknowledged_date || form.date;
+    if (!basisDate) return;
+    const nextDeadline = addDaysLocalISO(basisDate, COMPLAINT_CONFIG.complaint_response_days);
+    if (form.response_deadline === nextDeadline) return;
+    setForm(current => {
+      const currentBasisDate = current.acknowledged_date || current.date;
+      if (!currentBasisDate) return current;
+      const recalculated = addDaysLocalISO(currentBasisDate, COMPLAINT_CONFIG.complaint_response_days);
+      if (current.response_deadline === recalculated) return current;
+      return { ...current, response_deadline: recalculated };
+    });
+  }, [form.acknowledged_date, form.date, form.response_deadline, showModal]);
+
   const statsRange = useMemo(() => {
-    const d = new Date(today + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 89);
-    return { from: d.toISOString().slice(0, 10), to: today };
+    return { from: addDaysLocalISO(today, -89), to: today };
   }, [today]);
 
   const stats = useMemo(() =>
@@ -142,9 +161,23 @@ export default function ComplaintsTracker() {
     return list;
   }, [complaints, filterCategory, filterStatus, search]);
 
+  const missingComplaintFields = useMemo(() => {
+    const missing = [];
+    if (!form.date) missing.push('Date');
+    if (!form.title) missing.push('Title');
+    return missing;
+  }, [form.date, form.title]);
+
+  const missingSurveyFields = useMemo(() => {
+    const missing = [];
+    if (!surveyForm.date) missing.push('Date');
+    if (!surveyForm.type) missing.push('Survey type');
+    return missing;
+  }, [surveyForm.date, surveyForm.type]);
+
   function openAdd() {
     setEditingId(null);
-    const deadline = formatDate(new Date(Date.now() + (COMPLAINT_CONFIG.complaint_response_days) * 86400000));
+    const deadline = addDaysLocalISO(today, COMPLAINT_CONFIG.complaint_response_days);
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
     setSaveError(null);
@@ -162,12 +195,15 @@ export default function ComplaintsTracker() {
   async function handleSave() {
     if (saving) return;
     if (!form.date || !form.title) return;
+    setSaveError(null);
     setSaving(true);
     try {
       if (editingId) {
         await updateComplaint(home, editingId, form);
+        showNotice('Complaint updated.');
       } else {
         await createComplaint(home, { ...form, reported_by: getLoggedInUser()?.username || 'admin' });
+        showNotice('Complaint logged.');
       }
       setShowModal(false);
       load();
@@ -180,10 +216,12 @@ export default function ComplaintsTracker() {
     if (saving) return;
     if (!editingId) return;
     if (!await confirm('Delete this complaint?')) return;
+    setSaveError(null);
     setSaving(true);
     try {
       await deleteComplaint(home, editingId);
       setShowModal(false);
+      showNotice('Complaint deleted.');
       load();
     } catch (err) {
       setSaveError(err.message || 'Failed to delete complaint');
@@ -207,12 +245,15 @@ export default function ComplaintsTracker() {
   async function handleSaveSurvey() {
     if (saving) return;
     if (!surveyForm.date || !surveyForm.type) return;
+    setSurveyError(null);
     setSaving(true);
     try {
       if (editingSurveyId) {
         await updateComplaintSurvey(home, editingSurveyId, { ...surveyForm, _version: surveyForm._version });
+        showNotice('Survey updated.');
       } else {
         await createComplaintSurvey(home, surveyForm);
+        showNotice('Survey added.');
       }
       setShowSurveyModal(false);
       load();
@@ -225,10 +266,12 @@ export default function ComplaintsTracker() {
     if (saving) return;
     if (!editingSurveyId) return;
     if (!await confirm('Delete this survey?')) return;
+    setSurveyError(null);
     setSaving(true);
     try {
       await deleteComplaintSurvey(home, editingSurveyId);
       setShowSurveyModal(false);
+      showNotice('Survey deleted.');
       load();
     } catch (err) {
       setSurveyError(err.message || 'Failed to delete survey');
@@ -263,7 +306,7 @@ export default function ComplaintsTracker() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-gray-400">Loading complaints...</div>
+        <LoadingState message="Loading complaints..." card />
       </div>
     );
   }
@@ -271,16 +314,19 @@ export default function ComplaintsTracker() {
   if (error) {
     return (
       <div className={PAGE.container}>
-        <div className="text-center py-12 text-red-500">{error}</div>
-        <div className="text-center">
-          <button onClick={load} className={BTN.secondary}>Retry</button>
-        </div>
+        <ErrorState title="Unable to load complaints" message={error} onRetry={load} />
       </div>
     );
   }
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       <div className={PAGE.header}>
         <h1 className={PAGE.title}>Complaints & Feedback</h1>
         <div className="flex gap-2">
@@ -356,7 +402,17 @@ export default function ComplaintsTracker() {
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan="7" className={`${TABLE.td} text-center text-gray-400`}>No complaints recorded</td></tr>
+                    <tr>
+                      <td colSpan="7" className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No complaints recorded yet"
+                          description={canEdit ? 'Use "Log Complaint" to record the first complaint for this home.' : 'No complaints have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'Log Complaint' : undefined}
+                          onAction={canEdit ? openAdd : undefined}
+                        />
+                      </td>
+                    </tr>
                   )}
                   {filtered.map(c => {
                     const cat = complaintCategories.find(cat => cat.id === c.category);
@@ -408,7 +464,17 @@ export default function ComplaintsTracker() {
                 </thead>
                 <tbody>
                   {surveys.length === 0 && (
-                    <tr><td colSpan="6" className={`${TABLE.td} text-center text-gray-400`}>No surveys recorded</td></tr>
+                    <tr>
+                      <td colSpan="6" className={TABLE.empty}>
+                        <EmptyState
+                          compact
+                          title="No surveys recorded yet"
+                          description={canEdit ? 'Add a survey when you are ready to capture resident or relative feedback.' : 'No surveys have been recorded for this home yet.'}
+                          actionLabel={canEdit ? 'Add Survey' : undefined}
+                          onAction={canEdit ? openAddSurvey : undefined}
+                        />
+                      </td>
+                    </tr>
                   )}
                   {[...surveys].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(s => (
                     <tr key={s.id} className={TABLE.tr}>
@@ -507,6 +573,9 @@ export default function ComplaintsTracker() {
                       <input type="date" value={form.response_deadline}
                         onChange={e => setForm({ ...form, response_deadline: e.target.value })}
                         className={INPUT.base} />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Automatically set to {COMPLAINT_CONFIG.complaint_response_days} days after the complaint or acknowledgement date.
+                      </p>
                     </div>
                   </div>
                   <div>
@@ -591,6 +660,7 @@ export default function ComplaintsTracker() {
 
             <div className={MODAL.footer}>
               {canEdit && editingId && <button onClick={handleDelete} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+              {missingComplaintFields.length > 0 && <p className="text-sm text-amber-700 mr-auto">Missing: {missingComplaintFields.join(', ')}</p>}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowModal(false)} className={BTN.secondary}>Cancel</button>
@@ -662,6 +732,7 @@ export default function ComplaintsTracker() {
             </div>
             <div className={MODAL.footer}>
               {canEdit && editingSurveyId && <button onClick={handleDeleteSurvey} disabled={saving} className={BTN.danger}>{saving ? 'Deleting...' : 'Delete'}</button>}
+              {missingSurveyFields.length > 0 && <p className="text-sm text-amber-700 mr-auto">Missing: {missingSurveyFields.join(', ')}</p>}
               {surveyError && <p className="text-sm text-red-600 mr-auto">{surveyError}</p>}
               <div className="flex-1" />
               <button onClick={() => setShowSurveyModal(false)} className={BTN.secondary}>Cancel</button>

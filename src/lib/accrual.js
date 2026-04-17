@@ -5,15 +5,35 @@ export { getLeaveYear, STATUTORY_WEEKS } from './rotation.js';
 import { parseDate, addDays, getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from './rotation.js';
 
 /**
- * Count complete months from start to end (end may be before start → returns 0).
- * A month completes when the same day-of-month is reached in the next month.
+ * Count elapsed months including a proportional partial month.
+ * Preserves mid-month starters instead of dropping the final partial month.
  */
 function monthsBetween(start, end) {
   const s = new Date(start);
   const e = new Date(end);
-  let months = (e.getUTCFullYear() - s.getUTCFullYear()) * 12 + (e.getUTCMonth() - s.getUTCMonth());
-  if (e.getUTCDate() < s.getUTCDate()) months--;
-  return Math.max(0, months);
+  if (e <= s) return 0;
+
+  const buildAnchor = (monthsOffset) => new Date(Date.UTC(
+    s.getUTCFullYear(),
+    s.getUTCMonth() + monthsOffset,
+    Math.min(
+      s.getUTCDate(),
+      new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth() + monthsOffset + 1, 0)).getUTCDate(),
+    ),
+  ));
+
+  let wholeMonths = (e.getUTCFullYear() - s.getUTCFullYear()) * 12 + (e.getUTCMonth() - s.getUTCMonth());
+  let anchor = buildAnchor(wholeMonths);
+  if (anchor > e) {
+    wholeMonths -= 1;
+    anchor = buildAnchor(wholeMonths);
+  }
+  const nextAnchor = buildAnchor(wholeMonths + 1);
+  const partialMonth = nextAnchor > anchor
+    ? (e - anchor) / (nextAnchor - anchor)
+    : 0;
+
+  return Math.max(0, wholeMonths + Math.max(0, Math.min(1, partialMonth)));
 }
 
 /**

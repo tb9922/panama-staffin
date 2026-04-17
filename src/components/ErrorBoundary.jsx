@@ -35,12 +35,20 @@ export default class ErrorBoundary extends Component {
             <p className="text-sm text-gray-600 mb-4">
               An unexpected error occurred. Your data has not been affected.
             </p>
-            <button
-              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-              className={BTN.primary}
-            >
-              Reload Page
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                onClick={() => { this.setState({ hasError: false, error: null }); }}
+                className={BTN.secondary}
+              >
+                Try Again
+              </button>
+              <button
+                onClick={() => { window.location.reload(); }}
+                className={BTN.primary}
+              >
+                Reload App
+              </button>
+            </div>
           </div>
         </div>
       );

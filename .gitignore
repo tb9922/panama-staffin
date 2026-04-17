@@ -44,3 +44,13 @@ playwright-report/
 *.njsproj
 *.sln
 *.sw?
+
+# Scratch / debug artefacts
+.tmp-*
+CQC_Evidence_Pack_*.pdf
+temp/
+nul
+_gen.py
+.claude/settings.local.json
+.claude/worktrees/
+.codex-*/

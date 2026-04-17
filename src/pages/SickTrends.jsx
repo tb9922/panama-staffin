@@ -4,16 +4,20 @@ import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { downloadXLSX } from '../lib/excel.js';
 import { getCurrentHome, getSchedulingData } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { endOfLocalMonth, endOfLocalMonthISO, startOfLocalMonth, startOfLocalMonthISO } from '../lib/localDates.js';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 function getMonthRange(monthsBack) {
   const months = [];
   const now = new Date();
   for (let i = monthsBack - 1; i >= 0; i--) {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 0));
+    const start = startOfLocalMonth(now, -i);
+    const end = endOfLocalMonth(now, -i);
     months.push({
-      label: start.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
-      fullLabel: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+      label: start.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+      fullLabel: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
       start,
       end,
       dates: getDatesInRange(start, end),
@@ -27,7 +31,7 @@ function getDatesInRange(start, end) {
   const d = new Date(start);
   while (d <= end) {
     dates.push(new Date(d));
-    d.setUTCDate(d.getUTCDate() + 1);
+    d.setDate(d.getDate() + 1);
   }
   return dates;
 }
@@ -37,6 +41,7 @@ export default function SickTrends() {
   const canEdit = canWrite('staff');
   const homeSlug = getCurrentHome();
   const [schedData, setSchedData] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -44,16 +49,30 @@ export default function SickTrends() {
     if (!homeSlug) return;
     // SickTrends shows 6 months back — request wider override window
     const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+    const from = startOfLocalMonthISO(now, -6);
+    const to = endOfLocalMonthISO(now, 0);
     getSchedulingData(homeSlug, { from, to })
       .then(setSchedData)
       .catch(e => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [homeSlug]);
+  }, [homeSlug, refreshKey]);
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading sick trend data...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) return <LoadingState message="Loading sick trend data..." className="p-6 max-w-7xl mx-auto" card />;
+  if (error || !schedData) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <ErrorState
+          title="Unable to load sick trends"
+          message={error || 'Failed to load scheduling data'}
+          onRetry={() => {
+            setError(null);
+            setSchedData(null);
+            setRefreshKey((current) => current + 1);
+          }}
+        />
+      </div>
+    );
+  }
 
   return <SickTrendsInner schedData={schedData} canEdit={canEdit} />;
 }
@@ -85,8 +104,8 @@ function SickTrendsInner({ schedData, canEdit }) {
           if (actual.shift === 'SICK') {
             sickDates.push({
               date: formatDate(date),
-              day: date.getUTCDate(),
-              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
+              day: date.getDate(),
+              dayOfWeek: date.toLocaleDateString('en-GB', { weekday: 'short' }),
               reason: actual.reason || '',
             });
           }
@@ -265,7 +284,11 @@ function SickTrendsInner({ schedData, canEdit }) {
         <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Highest Absence</h2>
           {staffWithSick.length === 0 ? (
-            <div className="text-sm text-green-600 font-medium py-4">No sick days recorded</div>
+            <EmptyState
+              compact
+              title="No sick days recorded"
+              description="Once sickness is logged in the rota, this panel will highlight the staff members with the highest absence."
+            />
           ) : (
             <div className="space-y-2">
               {staffWithSick.slice(0, 10).map((s, i) => {
@@ -374,14 +397,22 @@ function SickTrendsInner({ schedData, canEdit }) {
               <option value="All">All Months</option>
               {uniqueMonths.map(m => {
                 const [y, mo] = m.split('-');
-                const label = new Date(Date.UTC(Number(y), Number(mo) - 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+                const label = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
                 return <option key={m} value={m}>{label}</option>;
               })}
             </select>
           </div>
         </div>
         {filteredLog.length === 0 ? (
-          <div className={TABLE.empty}>No sick days recorded{filterStaff !== 'All' || filterMonth !== 'All' ? ' for this filter' : ''}</div>
+          <div className="p-4">
+            <EmptyState
+              compact
+              title={filterStaff !== 'All' || filterMonth !== 'All' ? 'No sick days for this filter' : 'No sick days recorded'}
+              description={filterStaff !== 'All' || filterMonth !== 'All'
+                ? 'Try a different staff member or month to view matching sick-day entries.'
+                : 'Exact-date sickness entries will appear here once rota overrides include sick days.'}
+            />
+          </div>
         ) : (
           <table className={TABLE.table}>
             <thead className={TABLE.thead}>

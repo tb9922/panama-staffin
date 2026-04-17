@@ -148,30 +148,37 @@ export function calculateSpeakUpCulture(data, fromDate, toDate) {
   const concerns = filterByDateRange(data.whistleblowing_concerns || [], fromDate, toDate);
 
   if (concerns.length === 0) {
-    return { score: 100, totalConcerns: 0, resolutionRate: 0, protectionRate: 0, detail: 'No concerns raised' };
+    return {
+      score: 50,
+      totalConcerns: 0,
+      resolutionRate: null,
+      protectionRate: null,
+      detail: 'No concerns logged in the selected period',
+    };
   }
 
-  // Concerns logged: having any is positive (scored 40%)
-  const loggedScore = 40;
+  // Logged concerns should be treated as neutral evidence, not a penalty.
+  const baselineScore = 50;
 
-  // Resolution rate: % resolved/closed (scored 30%)
+  // Resolution rate: % resolved/closed (scored 25%)
   const resolvedOrClosed = concerns.filter(c => c.status === 'resolved' || c.status === 'closed').length;
   const resolutionRate = Math.round((resolvedOrClosed / concerns.length) * 100);
-  const resolutionScore = Math.round((resolutionRate / 100) * 30);
+  const resolutionScore = Math.round((resolutionRate / 100) * 25);
 
-  // Protection rate: % with reporter_protected out of non-anonymous (scored 30%)
-  // If all concerns are anonymous, protection is N/A — award full 30% (no one to protect)
+  // Protection rate: % with reporter_protected out of non-anonymous (scored 25%)
+  // If all concerns are anonymous, protection is N/A — award full 25% (no one to protect)
   const nonAnonymous = concerns.filter(c => !c.anonymous);
   const protectedCount = nonAnonymous.filter(c => c.reporter_protected === true).length;
   const protectionRate = nonAnonymous.length > 0 ? Math.round((protectedCount / nonAnonymous.length) * 100) : null;
-  const protectionScore = protectionRate != null ? Math.round((protectionRate / 100) * 30) : 30;
+  const protectionScore = protectionRate != null ? Math.round((protectionRate / 100) * 25) : 25;
 
-  const score = loggedScore + resolutionScore + protectionScore;
+  const score = baselineScore + resolutionScore + protectionScore;
 
   return {
     score,
     totalConcerns: concerns.length,
     resolutionRate,
     protectionRate,
+    detail: `${concerns.length} concern${concerns.length === 1 ? '' : 's'} logged`,
   };
 }

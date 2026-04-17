@@ -12,6 +12,7 @@ import { CARD, TABLE, INPUT, BTN, BADGE, PAGE, ESC_COLORS } from '../lib/design.
 import useEscapeKey from '../hooks/useEscapeKey.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import {
   getCurrentHome,
   getSchedulingData,
@@ -25,6 +26,11 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 import DailyStatusCoverageGapPanel from '../components/scheduling/DailyStatusCoverageGapPanel.jsx';
 import DailyStatusModal from '../components/scheduling/DailyStatusModal.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 function getCenteredSchedulingRange(date, radiusDays = 200) {
   return {
@@ -64,6 +70,8 @@ export default function DailyStatus() {
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [gapPanelDate, setGapPanelDate] = useState(null);
   const [gapPanelAbsentStaffId, setGapPanelAbsentStaffId] = useState(null);
+  const [dayNoteState, setDayNoteState] = useState('idle');
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const noteTimerRef = useRef(null);
   const savingRef = useRef(false);
@@ -79,6 +87,31 @@ export default function DailyStatus() {
   }, []);
 
   useEscapeKey(!!modal, closeModal);
+  const goDay = useCallback((offset) => {
+    navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
+  }, [currentDate, navigate]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (modal) return;
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goDay(-1);
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goDay(1);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goDay, modal]);
 
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
@@ -139,7 +172,7 @@ export default function DailyStatus() {
     });
   }, [availableStaff, schedData, currentDate]);
 
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
   const {
     showLockPrompt,
@@ -159,11 +192,8 @@ export default function DailyStatus() {
   useEffect(() => {
     dismissLockPrompt();
     setOverrideWarnings([]);
+    setDayNoteState('idle');
   }, [dateStr, dismissLockPrompt]);
-
-  function goDay(offset) {
-    navigate(`/day/${formatDate(addDays(currentDate, offset))}`);
-  }
 
   async function applyOverride(staffId, shift, reason, source, sleepIn = false, replacesStaffId = null, extra = {}) {
     if (savingRef.current) return;
@@ -299,6 +329,23 @@ export default function DailyStatus() {
     setSaving(false);
     setModal(null);
     setSelectedStaff('');
+    const absentStaff = staffForDay.find(member => member.id === staffId);
+    const handoffPath = `/hr/absence?tab=rtw&staffId=${encodeURIComponent(staffId)}&source=daily-status&date=${encodeURIComponent(dateStr)}`;
+    showNotice(
+      <div className="space-y-2">
+        <p>
+          {absentStaff?.name || staffId} marked sick for {dateStr}. When they return, record the RTW interview in Absence Management.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(handoffPath)}
+          className={`${BTN.secondary} ${BTN.xs}`}
+        >
+          Record RTW Interview
+        </button>
+      </div>,
+      { variant: 'success', duration: 8000 },
+    );
     if (projectedCoverage.overallLevel >= 1) {
       setShowGapPanel(true);
       setGapPanelDate(dateStr);
@@ -509,19 +556,12 @@ export default function DailyStatus() {
     </div>
   );
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingState message="Loading daily status..." className="min-h-[16rem]" />;
 
   if (!homeSlug) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
-          <p className="text-sm text-gray-500">Select a home to view daily status.</p>
-        </div>
+        <EmptyState title="Daily Status is not ready yet" description="Select a home to view daily status and manage cover for the day." />
       </div>
     );
   }
@@ -529,27 +569,23 @@ export default function DailyStatus() {
   if (isOwnDataDailyStatus) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Daily Status</h1>
-          <p className="text-sm text-gray-500">Daily Status is not available for staff self-service accounts.</p>
-        </div>
+        <EmptyState title="Daily Status is not available" description="Daily Status is not available for staff self-service accounts." />
       </div>
     );
   }
 
-  if (error) return (
-    <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm flex items-center justify-between">
-        <span>{error}</span>
-        <button onClick={() => { setError(null); loadData(); }} className="text-red-900 underline text-xs ml-4">Retry</button>
-      </div>
-    </div>
-  );
+  if (error) return <div className="p-6"><ErrorState title="Unable to load daily status" message={error} onRetry={() => { setError(null); loadData(); }} /></div>;
 
   if (!schedData) return null;
 
   return (
     <div className={PAGE.container}>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{schedData.config.home_name} — Daily Status</h1>
@@ -575,7 +611,7 @@ export default function DailyStatus() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => window.print()} className={`${BTN.secondary} ${BTN.sm}`}>Print</button>
-          <button onClick={() => navigate(`/day/${formatDate(new Date())}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
+          <button onClick={() => navigate(`/day/${todayLocalISO()}`)} className={`${BTN.ghost} ${BTN.sm} text-blue-600`}>Today</button>
         </div>
       </div>
 
@@ -652,13 +688,30 @@ export default function DailyStatus() {
 
           {/* Day Notes */}
           <div className="border-t mt-3 pt-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Handover Notes</h3>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase">Handover Notes</h3>
+              <span className={`text-[11px] ${
+                dayNoteState === 'saving' ? 'text-blue-600' :
+                dayNoteState === 'saved' ? 'text-emerald-600' :
+                dayNoteState === 'dirty' ? 'text-amber-600' :
+                'text-gray-400'
+              }`}>
+                {dayNoteState === 'saving'
+                  ? 'Saving…'
+                  : dayNoteState === 'saved'
+                    ? 'Saved'
+                    : dayNoteState === 'dirty'
+                      ? 'Unsaved changes'
+                      : 'Auto-saves after a pause'}
+              </span>
+            </div>
             <textarea
               value={schedData.day_notes?.[dateStr] || ''}
               readOnly={isLocked || !canEdit}
               onChange={e => {
                 if (isLocked || !canEdit) return;
                 const note = e.target.value;
+                setDayNoteState('dirty');
                 // Optimistic local update for responsive UI
                 setSchedData(prev => ({
                   ...prev,
@@ -667,14 +720,18 @@ export default function DailyStatus() {
                 clearTimeout(noteTimerRef.current);
                 noteTimerRef.current = setTimeout(async () => {
                   try {
+                    setDayNoteState('saving');
                     await upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr));
+                    setDayNoteState('saved');
                   } catch (err) {
                     if (err.status === 423) {
                       handleLockedError(dateStr, () => {
                         upsertDayNote(getCurrentHome(), dateStr, note, getEditLockOptions(dateStr)).catch(innerErr => setError(innerErr.message));
                       });
+                      setDayNoteState('dirty');
                       return;
                     }
+                    setDayNoteState('dirty');
                     setError(err.message);
                   }
                 }, 800);

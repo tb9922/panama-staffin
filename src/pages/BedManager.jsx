@@ -10,6 +10,12 @@ import {
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import BedManagerModals from '../components/beds/BedManagerModals.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGES = {
   available: 'green', reserved: 'blue', occupied: 'gray',
@@ -75,8 +81,8 @@ function getTransitionLabel(fromStatus, toStatus) {
 
 function defaultDate(daysAhead = 0) {
   const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysAhead))
-    .toISOString().slice(0, 10);
+  d.setDate(d.getDate() + daysAhead);
+  return todayLocalISO(d);
 }
 
 const EMPTY_BED_FORM = {
@@ -123,6 +129,7 @@ export default function BedManager() {
   const [revertReason, setRevertReason] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   // Residents for picker
   const [residents, setResidents] = useState([]);
@@ -217,6 +224,7 @@ export default function BedManager() {
       setShowAddModal(false);
       setAddForm({ ...EMPTY_BED_FORM });
       await load();
+      showNotice('Bed added successfully.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -244,6 +252,7 @@ export default function BedManager() {
       setEditBed(null);
       setEditForm({ ...EMPTY_BED_FORM });
       await load();
+      showNotice(`Bed ${editBed.room_number} updated.`);
     } catch (err) {
       if (err.message.includes('409') || err.message.toLowerCase().includes('conflict')) {
         setError('Conflict: bed details changed. Please refresh.');
@@ -288,6 +297,7 @@ export default function BedManager() {
       setShowTransitionModal(false);
       setTransitionBed(null);
       await load();
+      showNotice(`Bed ${transitionBed.room_number} marked as ${STATUS_LABELS[transitionTarget] || transitionTarget}.`);
     } catch (err) {
       if (err.message.includes('409') || err.message.toLowerCase().includes('conflict')) {
         setError('Conflict: bed state changed. Please refresh.');
@@ -315,6 +325,7 @@ export default function BedManager() {
       setShowMoveModal(false);
       setMoveBed(null);
       await load();
+      showNotice(`Resident moved from bed ${moveBed.room_number}.`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -351,6 +362,7 @@ export default function BedManager() {
       setShowRevertModal(false);
       setRevertBed(null);
       await load();
+      showNotice(`Last transition for bed ${revertBed.room_number} was reverted.`, { variant: 'warning' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -372,6 +384,7 @@ export default function BedManager() {
       setShowDeleteModal(false);
       setDeleteTarget(null);
       await load();
+      showNotice(`Bed ${deleteTarget.room_number} was deleted.`);
     } catch (err) {
       if (err.message.includes('409') || err.message.toLowerCase().includes('conflict')) {
         setError('Conflict: bed state changed. Please refresh.');
@@ -388,7 +401,7 @@ export default function BedManager() {
   if (loading) {
     return (
       <div className={PAGE.container}>
-        <p className="text-gray-500 text-sm">Loading beds...</p>
+        <LoadingState message="Loading beds..." card />
       </div>
     );
   }
@@ -404,13 +417,16 @@ export default function BedManager() {
         )}
       </div>
 
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+
       {error && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <span>{error}</span>
-          <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
+        <InlineNotice variant="error" onDismiss={() => setError(null)} className="mb-4" role="alert">
+          {error}
+        </InlineNotice>
       )}
 
       {requestedResident && (
@@ -450,9 +466,12 @@ export default function BedManager() {
 
       {beds.length === 0 ? (
         <div className={CARD.padded}>
-          <p className="py-8 text-center text-gray-500">
-            No beds configured yet.{canEdit ? ' Click "Add Bed" to get started.' : ''}
-          </p>
+          <EmptyState
+            title="No beds configured yet."
+            description={canEdit ? 'Add the first bed to start tracking occupancy, reservations, and discharges.' : 'Beds will appear here once they have been configured for this home.'}
+            actionLabel={canEdit ? 'Add Bed' : undefined}
+            onAction={canEdit ? () => setShowAddModal(true) : undefined}
+          />
         </div>
       ) : (
         <div className={CARD.flush}>

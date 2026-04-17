@@ -160,6 +160,30 @@ describe('webhookRepo retry functions', () => {
     await webhookRepo.markDeliveryFailed(id);
   });
 
+  it('claimPendingRetries marks due deliveries in_progress atomically', async () => {
+    const id = await webhookRepo.logDelivery(
+      testWebhookId, 'override.created', '{"retry":"claim"}', null, 100, 'timeout', 'pending_retry'
+    );
+    await pool.query(
+      `UPDATE webhook_deliveries SET retry_count = 2, next_retry_at = NOW() - INTERVAL '1 minute' WHERE id = $1`,
+      [id]
+    );
+
+    const claimed = await webhookRepo.claimPendingRetries(10);
+    const found = claimed.find(d => d.id === id);
+    expect(found).toBeDefined();
+    expect(found.retry_count).toBe(2);
+
+    const { rows } = await pool.query(
+      'SELECT status, locked_at FROM webhook_deliveries WHERE id = $1',
+      [id]
+    );
+    expect(rows[0].status).toBe('in_progress');
+    expect(rows[0].locked_at).not.toBeNull();
+
+    await webhookRepo.markDeliveryFailed(id);
+  });
+
   it('findPendingRetries skips future retries', async () => {
     const id = await webhookRepo.logDelivery(
       testWebhookId, 'override.created', '{"future":"test"}', null, 100, 'timeout', 'pending_retry'
@@ -174,6 +198,32 @@ describe('webhookRepo retry functions', () => {
     expect(found).toBeUndefined();
 
     // Clean up
+    await webhookRepo.markDeliveryFailed(id);
+  });
+
+  it('rescueStuckInProgress resets stuck rows without burning retry budget', async () => {
+    const id = await webhookRepo.logDelivery(
+      testWebhookId, 'override.created', '{"retry":"rescue"}', null, 100, 'timeout', 'in_progress'
+    );
+    await pool.query(
+      `UPDATE webhook_deliveries
+       SET retry_count = 3, locked_at = NOW() - INTERVAL '11 minutes'
+       WHERE id = $1`,
+      [id]
+    );
+
+    const rescued = await webhookRepo.rescueStuckInProgress();
+    expect(rescued).toBeGreaterThanOrEqual(1);
+
+    const { rows } = await pool.query(
+      'SELECT status, retry_count, locked_at, next_retry_at FROM webhook_deliveries WHERE id = $1',
+      [id]
+    );
+    expect(rows[0].status).toBe('pending_retry');
+    expect(rows[0].retry_count).toBe(3);
+    expect(rows[0].locked_at).toBeNull();
+    expect(rows[0].next_retry_at).not.toBeNull();
+
     await webhookRepo.markDeliveryFailed(id);
   });
 

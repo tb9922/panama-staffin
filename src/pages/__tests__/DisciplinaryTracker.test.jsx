@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import DisciplinaryTracker from '../DisciplinaryTracker.jsx';
 
@@ -48,7 +49,7 @@ const EMPTY_RESPONSE = { rows: [], total: 0 };
 beforeEach(() => {
   vi.clearAllMocks();
   api.getHrDisciplinary.mockResolvedValue(MOCK_RESPONSE);
-  api.getHrStaffList.mockResolvedValue([]);
+  api.getHrStaffList.mockResolvedValue([{ id: 'S001', name: 'Alice Example', role: 'Carer', active: true }]);
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -115,5 +116,34 @@ describe('DisciplinaryTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     });
+  });
+
+  it('shows create flow as details-first and structured witness controls', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DisciplinaryTracker />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Case/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Case/i }));
+
+    expect(screen.getByRole('tab', { name: 'Details' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Investigation' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Allegation Summary *')).toBeInTheDocument();
+
+    api.getHrCaseNotes.mockResolvedValue([]);
+    api.createHrDisciplinary.mockResolvedValue({ ...MOCK_CASE, witnesses: [], evidence_items: [] });
+
+    await user.selectOptions(screen.getByLabelText(/Staff Member/), 'S001');
+    await user.type(screen.getByLabelText('Allegation Summary *'), 'Late handover summary');
+    await user.type(screen.getByLabelText('Raised By *'), 'Jane Manager');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Investigation' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /\+ Add witness/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ Add evidence item/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Witnesses \(JSON\)/i)).not.toBeInTheDocument();
   });
 });

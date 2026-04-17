@@ -1,52 +1,65 @@
-# Authentication & Authorization
+# Authentication And Authorization
+
+This note reflects the current auth and session hardening baseline. For the
+broader platform summary, see
+[HARDENING_SUMMARY_2026-03-29.md](HARDENING_SUMMARY_2026-03-29.md).
 
 ## Overview
 
-Panama Staffing uses dual-mode authentication: browser-based (HttpOnly cookies) and API-based (Bearer tokens). Both modes use the same JWT tokens; the difference is how the token is transported.
+Panama Staffing supports two transport modes for the same JWT-based auth model:
 
-## Browser Flow (Frontend)
+- browser auth using HttpOnly cookies plus a CSRF header
+- API auth using `Authorization: Bearer <token>`
 
-```
+## Browser Flow
+
+```text
 POST /api/login { username, password }
-    ↓
-200 OK + Set-Cookie: panama_token (HttpOnly) + panama_csrf (JS-readable)
-    ↓
-Subsequent requests: cookie sent automatically, frontend sends X-CSRF-Token header
-    ↓
-POST /api/login/logout → clears both cookies
+  -> 200 OK
+  -> Set-Cookie: panama_token (HttpOnly)
+  -> Set-Cookie: panama_csrf (readable by frontend)
+
+Subsequent mutating requests:
+  cookie sent automatically
+  frontend also sends X-CSRF-Token header
+
+POST /api/login/logout
+  -> clears auth cookies
 ```
 
 ### Cookies
 
 | Cookie | HttpOnly | SameSite | Path | MaxAge | Purpose |
 |--------|----------|----------|------|--------|---------|
-| `panama_token` | Yes | Lax | `/api` | 4 hours | JWT auth token — immune to XSS (JS cannot read it) |
-| `panama_csrf` | No | Strict | `/api` | 4 hours | CSRF double-submit token — JS reads this to send as header |
+| `panama_token` | Yes | Lax | `/api` | 4 hours by default | JWT auth token |
+| `panama_csrf` | No | Strict | `/api` | 4 hours by default | double-submit CSRF token |
+
+JWT expiry is controlled by `JWT_EXPIRES_IN` and defaults to `4h`.
 
 ### CSRF Protection
 
-Mutating requests (POST/PUT/DELETE) from cookie-authenticated users must include:
-- `X-CSRF-Token` header with the value of the `panama_csrf` cookie
+Mutating requests from cookie-authenticated users must include:
 
-The server compares the cookie value to the header value. An attacker from another origin can cause the cookie to be sent (via a form POST) but cannot read its value (same-origin policy), so they cannot forge the header.
+- `X-CSRF-Token` with the same value as the `panama_csrf` cookie
 
-**Exempt:**
-- GET/HEAD/OPTIONS requests (safe methods, must not mutate state)
-- Requests using `Authorization: Bearer` header (API clients handle their own CSRF)
+Current hardening details:
 
-## API Flow (Integration / Machine-to-Machine)
+- safe methods (`GET`, `HEAD`, `OPTIONS`) are exempt
+- bearer-token requests are exempt
+- comparison is byte-safe for multi-byte UTF-8 values, so crafted header-length
+  edge cases return `403` instead of `500`
 
-```
+## API Flow
+
+```text
 POST /api/login { username, password }
-    ↓
-200 OK { token, username, role }
-    ↓
-Subsequent requests: Authorization: Bearer {token}
-    ↓
-No CSRF header required
+  -> 200 OK { token, username, role }
+
+Subsequent requests:
+  Authorization: Bearer <token>
 ```
 
-The login response includes the JWT in the response body for API clients. Use the `Authorization: Bearer {token}` header on all subsequent requests.
+No CSRF header is required for bearer-token requests.
 
 ## JWT Payload
 
@@ -61,62 +74,62 @@ The login response includes the JWT in the response body for API clients. Use th
 }
 ```
 
-- `role`: `"admin"` or `"viewer"` — legacy global role. Actual permissions are determined by per-home role (see below)
-- `is_platform_admin`: `true` for users who can manage homes and users across the platform
-- `jti`: Unique token ID used for deny-list revocation
-- Token expires after 4 hours
+- `role` is the legacy global role field
+- real app permissions are resolved per home using `req.homeRole`
+- `is_platform_admin` allows platform-wide administration
+- `jti` is used for deny-list revocation
 
-## Endpoints
+## Session And Revocation Model
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/login` | None | Authenticate — returns token + sets cookies |
-| POST | `/api/login/logout` | Required | Clear auth cookies |
-| POST | `/api/login/revoke` | Admin | Revoke all tokens for a user |
+- revoked tokens are persisted in `token_denylist`
+- password changes and resets invalidate older tokens via `session_version`
+- role changes revoke existing tokens
+- logout is fail-closed when token revocation cannot be persisted
+- auth dependency failures now return `503` instead of forcing a false logout
 
 ## Account Lockout
 
-- **Threshold:** 5 consecutive failed login attempts
-- **Duration:** 30 minutes (automatic unlock)
-- **Storage:** `failed_login_count` and `locked_until` columns on `users` table (migration 087)
-- **No user enumeration:** Wrong password, deactivated user, and non-existent user all return the same `401 Invalid credentials` message
+- threshold: 5 consecutive failed logins
+- lock duration: 30 minutes
+- storage: `failed_login_count` and `locked_until` on `users`
+- invalid username, wrong password, and inactive-user paths return the same
+  generic `401 Invalid credentials` response
 
 ## Rate Limiting
 
-- **Login endpoint:** 30 attempts per 15-minute window per IP+username (per-user keying prevents one user's failures from blocking others at the same care home)
-- **Disabled in test environment** (set to 1000 to avoid test interference)
-- Returns `429 Too Many Requests` with message: "Too many login attempts — try again in 15 minutes"
-
-## Token Deny List
-
-- Revoked tokens are stored in the DB-backed `token_denylist` table — queried per request (cluster-safe, no cross-worker drift)
-- Revocations survive server restarts. `loadDenyList()` verifies table reachability on startup
-- Checked on every authenticated request via `isTokenDenied(decoded)`
-- **Pruning:** Expired entries removed hourly via `setInterval`
-- **Admin revocation:** `POST /api/login/revoke { username }` adds all tokens for that user to the deny list
-- **Role changes:** Changing a user's role automatically revokes their existing tokens
+- login endpoint: 30 attempts per 15-minute window per IP+username
+- test environment uses a much higher ceiling to avoid suite interference
+- failure response: `429 Too Many Requests`
 
 ## Authorization Middleware
 
-| Middleware | Purpose | Error |
-|-----------|---------|-------|
-| `requireAuth` | Validates JWT, checks deny list, enforces CSRF | 401/403 |
-| `requireAdmin` | Checks `role === 'admin'` | 403 |
-| `requirePlatformAdmin` | Checks `role === 'admin'` AND `is_platform_admin === true` | 403 |
-| `requireHomeAccess` | Validates `?home=` param, resolves per-home role from `user_home_roles` into `req.homeRole` and `req.staffId` | 400/403/404 |
-| `requireModule(moduleId, level)` | Checks per-home role has access to module at given level (`read` or `write`) | 403 |
-| `requireHomeManager` | Checks `req.homeRole === 'home_manager'` (user management within a home) | 403 |
+| Middleware | Purpose |
+|-----------|---------|
+| `requireAuth` | validates JWT, deny-list, `session_version`, and CSRF |
+| `requireAdmin` | checks admin privilege |
+| `requirePlatformAdmin` | checks platform-admin privilege |
+| `requireHomeAccess` | resolves `req.home`, `req.homeRole`, and `req.staffId` |
+| `requireModule(moduleId, level)` | checks per-home module read/write level |
+| `requireHomeManager` | restricts home-level user management actions |
 
-All middleware is defined in `middleware/auth.js`. `requireHomeAccess` must be used after `requireAuth` (it needs `req.user`). `requireModule` must be used after `requireHomeAccess` (it needs `req.homeRole`).
+Additional current behavior:
+
+- the authenticated DB user is cached on the request and reused downstream
+- inactive-user checks are enforced in the auth path, not just at login time
+- own-data roles are blocked from manager-only routes where required
 
 ## Per-Home RBAC
 
-Each user has a **per-home role** assigned via the `user_home_roles` table. Roles are defined in `shared/roles.js` (8 roles, 10 modules). The JWT `role` field is a legacy global role — actual permissions are resolved per-home by `requireHomeAccess`. Platform admins (`is_platform_admin`) bypass all module checks.
+Each user has a per-home role in `user_home_roles`. Roles are defined in
+`shared/roles.js` and currently cover 8 roles across 10 modules.
+
+Platform admins bypass per-home module checks. Everyone else is evaluated
+through `requireHomeAccess` and `requireModule`.
 
 ## Security Properties
 
-- **XSS-immune tokens:** HttpOnly cookie cannot be read by JavaScript
-- **CSRF protection:** Double-submit cookie pattern with SameSite enforcement
-- **No credential leakage:** Passwords hashed with bcrypt (cost 12), never logged
-- **JWT_SECRET:** Minimum 32 characters, enforced at startup (`config.js`)
-- **DB SSL:** Enabled by default, opt-out via `DB_SSL=false`
+- HttpOnly auth cookie limits token exposure to XSS
+- double-submit CSRF protection is enforced on cookie auth
+- passwords are bcrypt-hashed and never logged
+- `JWT_SECRET` is required at startup
+- DB SSL is enabled by default unless explicitly disabled

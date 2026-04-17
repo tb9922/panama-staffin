@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as homeService from '../services/homeService.js';
-import * as auditService from '../services/auditService.js';
 import { validateAll } from '../services/validationService.js';
 import { homeConfigSchema } from '../lib/zodHelpers.js';
 import { isOwnDataOnly } from '../shared/roles.js';
@@ -50,10 +49,8 @@ const dataBodySchema = z.object({
   { message: 'Payload too large (max 5MB)' },
 );
 
-/** Detect data-corruption issues that MUST block the save */
 function detectCriticalErrors(body) {
   const errors = [];
-  // Duplicate staff IDs → data loss on round-trip
   const ids = body.staff.map(s => s.id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (dupes.length > 0) {
@@ -69,7 +66,6 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     logger.warn({ home: req.home.slug, user: req.user.username }, 'GET /api/data called — deprecated, use dedicated endpoints');
     res.setHeader('X-Deprecated', 'Use /api/scheduling, /api/incidents, etc.');
 
-    // staff_member own-data: block full data blob access
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured — contact your home manager' });
       return res.status(403).json({ error: 'Use /api/scheduling for staff member access' });
@@ -89,34 +85,22 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
       return res.status(400).json({ error: 'Invalid data shape — expected { config, staff, overrides }' });
     }
     const body = parsed.data;
-
     const homeSlug = req.home.slug;
 
-    // Block save on data-corruption issues
     const criticalErrors = detectCriticalErrors(body);
     if (criticalErrors.length > 0) {
       return res.status(400).json({ error: 'Data integrity check failed', errors: criticalErrors });
     }
 
     const username = req.user?.username || 'unknown';
-    // Optimistic locking + row-level lock handled inside saveData's transaction.
-    // SELECT ... FOR UPDATE serialises concurrent saves per home.
+    const warnings = validateAll(body);
     const clientUpdatedAt = body._clientUpdatedAt || null;
-    const result = await homeService.saveData(homeSlug, body, username, clientUpdatedAt);
+    const result = await homeService.saveData(homeSlug, body, username, clientUpdatedAt, {
+      staffCount: body.staff.length,
+      warningCount: warnings.length,
+    });
 
-    // Respond immediately — validation is informational and doesn't block the save.
-    // Run validateAll() fire-and-forget so the 17 domain validators don't add
-    // latency to every save. Warning count is still logged for audit purposes.
     res.json({ ok: true, backedUp: true, _updatedAt: result?.updatedAt });
-
-    // Fire-and-forget: validate + audit after response is sent
-    try {
-      const warnings = validateAll(body);
-      await auditService.log('data_save', homeSlug, username, {
-        staffCount: body.staff.length,
-        warningCount: warnings.length,
-      });
-    } catch (auditErr) { logger.error({ err: auditErr?.message }, 'Post-save audit/validation failed'); }
   } catch (err) {
     next(err);
   }

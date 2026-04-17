@@ -16,6 +16,7 @@ import { calculatePolicyCompliancePct } from './policyReview.js';
 import { calculateSpeakUpCulture } from './whistleblowing.js';
 import { calculateDolsCompliancePct } from './dols.js';
 import { calculateCareCertCompletionPct } from './careCertificate.js';
+import { normalizeEvidenceCategory } from './cqcEvidenceCategories.js';
 
 // ── Engine Version ──────────────────────────────────────────────────────────
 // Bump when the scoring model changes materially (metric weights, banding thresholds,
@@ -612,24 +613,24 @@ export function calculateTrainingTrend(data, asOfDate) {
 // ── Per-metric Provenance, Confidence, and Evidence Summaries ────────────────
 
 const METRIC_PROVENANCE = {
-  trainingCompliance:      { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Training types from config trusted'], exclusions: [] },
-  staffingFillRate:        { source_modules: ['rotation', 'escalation'], evidence_category: 'management_info', assumptions: ['minimum_staffing config trusted'], exclusions: ['Agency skill level not assessed'] },
-  agencyDependency:        { source_modules: ['rotation', 'escalation'], evidence_category: 'management_info', assumptions: ['Agency rates from config'], exclusions: [] },
-  incidentResponseTime:    { source_modules: ['incidents'], evidence_category: 'management_info', assumptions: ['Notification time based on date-only field'], exclusions: [] },
-  cqcNotifications:        { source_modules: ['incidents'], evidence_category: 'management_info', assumptions: ['Deadline interpretation per Reg 18'], exclusions: [] },
-  supervisionCompletion:   { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Supervision frequency from config'], exclusions: [] },
-  staffTurnover:           { source_modules: ['rotation'], evidence_category: 'management_info', assumptions: ['Leaving date set on deactivation'], exclusions: [] },
-  appraisalCompletion:     { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Annual cycle assumed'], exclusions: [] },
-  fireDrillCompliance:     { source_modules: ['training'], evidence_category: 'management_info', assumptions: ['Quarterly = 91 days'], exclusions: [] },
+  trainingCompliance:      { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Training types from config trusted'], exclusions: [] },
+  staffingFillRate:        { source_modules: ['rotation', 'escalation'], evidence_category: 'processes', assumptions: ['minimum_staffing config trusted'], exclusions: ['Agency skill level not assessed'] },
+  agencyDependency:        { source_modules: ['rotation', 'escalation'], evidence_category: 'processes', assumptions: ['Agency rates from config'], exclusions: [] },
+  incidentResponseTime:    { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Notification time based on date-only field'], exclusions: [] },
+  cqcNotifications:        { source_modules: ['incidents'], evidence_category: 'processes', assumptions: ['Deadline interpretation per Reg 18'], exclusions: [] },
+  supervisionCompletion:   { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Supervision frequency from config'], exclusions: [] },
+  staffTurnover:           { source_modules: ['rotation'], evidence_category: 'outcomes', assumptions: ['Leaving date set on deactivation'], exclusions: [] },
+  appraisalCompletion:     { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Annual cycle assumed'], exclusions: [] },
+  fireDrillCompliance:     { source_modules: ['training'], evidence_category: 'processes', assumptions: ['Quarterly = 91 days'], exclusions: [] },
   careCertCompletion:      { source_modules: ['careCertificate'], evidence_category: 'outcomes', assumptions: ['12-week completion target'], exclusions: [] },
   complaintResolutionRate: { source_modules: ['complaints'], evidence_category: 'outcomes', assumptions: ['Resolution = status closed/resolved'], exclusions: [] },
   maintenanceCompliancePct:{ source_modules: ['maintenance'], evidence_category: 'processes', assumptions: ['Frequency from check config'], exclusions: [] },
   ipcAuditCompliance:      { source_modules: ['ipc'], evidence_category: 'processes', assumptions: ['Quarterly audits expected'], exclusions: [] },
-  dolsCompliancePct:       { source_modules: ['dols'], evidence_category: 'management_info', assumptions: ['Expiry dates accurate'], exclusions: [] },
+  dolsCompliancePct:       { source_modules: ['dols'], evidence_category: 'processes', assumptions: ['Expiry dates accurate'], exclusions: [] },
   riskManagementScore:     { source_modules: ['riskRegister'], evidence_category: 'processes', assumptions: ['Review dates maintained'], exclusions: [] },
   policyCompliancePct:     { source_modules: ['policyReview'], evidence_category: 'processes', assumptions: ['Review frequency from policy config'], exclusions: [] },
   satisfactionScore:       { source_modules: ['complaints'], evidence_category: 'peoples_experience', assumptions: ['Survey responses representative'], exclusions: ['Response rate not factored'] },
-  speakUpCulture:          { source_modules: ['whistleblowing'], evidence_category: 'feedback', assumptions: ['Anonymous concerns included'], exclusions: ['Protection rate N/A when all anonymous'] },
+  speakUpCulture:          { source_modules: ['whistleblowing'], evidence_category: 'staff_leader_feedback', assumptions: ['Anonymous concerns included'], exclusions: ['Protection rate N/A when all anonymous'] },
 };
 
 function deriveConfidence(metricId, raw, detail, data) {
@@ -767,7 +768,7 @@ export function calculateComplianceScore(data, dateRange, asOfDate) {
     const metricDef = METRIC_DEFINITIONS.find(m => m.id === id);
     metric.weight = metricDef?.weight || 0;
     metric.source_modules = prov.source_modules || [];
-    metric.evidence_category = prov.evidence_category || 'management_info';
+    metric.evidence_category = normalizeEvidenceCategory(prov.evidence_category) || 'processes';
     metric.evidence_summary = buildEvidenceSummary(id, metric.raw, metric.detail, dateRange);
     metric.assumptions = prov.assumptions || [];
     metric.exclusions = prov.exclusions || [];
@@ -1082,7 +1083,12 @@ export function getEvidenceForStatement(statementId, data, dateRange, asOfDate) 
     });
   }
 
-  const manualEvidence = (data.cqc_evidence || []).filter(e => e.quality_statement === statementId);
+  const manualEvidence = (data.cqc_evidence || [])
+    .filter((entry) => entry.quality_statement === statementId)
+    .map((entry) => ({
+      ...entry,
+      evidence_category: normalizeEvidenceCategory(entry.evidence_category),
+    }));
 
   return { statement, autoEvidence, manualEvidence };
 }

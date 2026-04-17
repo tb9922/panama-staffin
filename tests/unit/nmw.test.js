@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getMinimumWageRate } from '../../shared/nmw.js';
+import { DEFAULT_NLW_RATE, getConfiguredNlwRate, getMinimumWageRate } from '../../shared/nmw.js';
 
 // Fix "today" so age calculations are deterministic
 const FIXED_NOW = new Date('2025-06-15T12:00:00Z');
@@ -19,6 +19,12 @@ afterEach(() => { dateSpy.mockRestore(); });
 const config = { nlw_rate: 12.71, nmw_rate_18_20: 10.85, nmw_rate_under_18: 8.00 };
 
 describe('getMinimumWageRate', () => {
+  it('returns the configured NLW fallback through the shared helper', () => {
+    expect(getConfiguredNlwRate(config)).toBe(12.71);
+    expect(getConfiguredNlwRate({})).toBe(DEFAULT_NLW_RATE);
+    expect(getConfiguredNlwRate(null)).toBe(DEFAULT_NLW_RATE);
+  });
+
   it('returns NLW for staff aged 21+', () => {
     const result = getMinimumWageRate('1990-01-01', config);
     expect(result).toEqual({ rate: 12.71, label: 'NLW' });

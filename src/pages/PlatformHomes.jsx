@@ -4,6 +4,11 @@ import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import EmptyState from '../components/EmptyState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 import {
   listPlatformHomes, createPlatformHome, updatePlatformHome, deletePlatformHome,
 } from '../lib/api.js';
@@ -24,7 +29,7 @@ export default function PlatformHomes() {
   const [homes, setHomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editHome, setEditHome] = useState(null);
@@ -44,13 +49,7 @@ export default function PlatformHomes() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  useEffect(() => {
-    if (!success) return;
-    const t = setTimeout(() => setSuccess(null), 4000);
-    return () => clearTimeout(t);
-  }, [success]);
-
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-400 text-sm py-12 text-center">Loading homes...</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading homes..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -59,8 +58,12 @@ export default function PlatformHomes() {
         <button className={BTN.primary} onClick={() => setAddOpen(true)}>Add Home</button>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4" role="alert">{error}</div>}
-      {success && <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{success}</div>}
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
+      {error && <ErrorState title="Unable to load homes" message={error} onRetry={refresh} className="mb-4" />}
 
       <div className={CARD.base}>
         <table className={TABLE.table}>
@@ -78,7 +81,17 @@ export default function PlatformHomes() {
           </thead>
           <tbody>
             {homes.length === 0 && (
-              <tr><td colSpan={8} className={`${TABLE.td} text-center text-gray-400`}>No homes configured</td></tr>
+              <tr>
+                <td colSpan={8} className={TABLE.td}>
+                  <EmptyState
+                    title="No homes configured"
+                    description="Create the first home to set up residents, staffing, and scheduling."
+                    actionLabel="Add Home"
+                    onAction={() => setAddOpen(true)}
+                    compact
+                  />
+                </td>
+              </tr>
             )}
             {homes.map(home => (
               <tr key={home.id} className={TABLE.tr}>
@@ -102,9 +115,9 @@ export default function PlatformHomes() {
         </table>
       </div>
 
-      {addOpen && <CreateHomeModal onClose={() => setAddOpen(false)} onSuccess={(msg) => { setSuccess(msg); refresh(); refreshHomes(); }} />}
-      {editHome && <EditHomeModal home={editHome} onClose={() => setEditHome(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); refreshHomes(); }} />}
-      {deleteHome && <DeleteHomeModal home={deleteHome} onClose={() => setDeleteHome(null)} onSuccess={(msg) => { setSuccess(msg); refresh(); refreshHomes(); }} />}
+      {addOpen && <CreateHomeModal onClose={() => setAddOpen(false)} onSuccess={(msg) => { showNotice(msg); refresh(); refreshHomes(); }} />}
+      {editHome && <EditHomeModal home={editHome} onClose={() => setEditHome(null)} onSuccess={(msg) => { showNotice(msg); refresh(); refreshHomes(); }} />}
+      {deleteHome && <DeleteHomeModal home={deleteHome} onClose={() => setDeleteHome(null)} onSuccess={(msg) => { showNotice(msg, { variant: 'warning' }); refresh(); refreshHomes(); }} />}
     </div>
   );
 }
@@ -138,7 +151,7 @@ function CreateHomeModal({ onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Create Home">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
+        {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div>
           <label className={INPUT.label}>Home Name *</label>
@@ -210,7 +223,7 @@ function EditHomeModal({ home, onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Edit Home">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
+        {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div>
           <label className={INPUT.label}>Slug</label>
@@ -275,7 +288,7 @@ function DeleteHomeModal({ home, onClose, onSuccess }) {
   return (
     <Modal isOpen onClose={onClose} title="Delete Home">
       <div className="space-y-4">
-        {err && <div className="text-red-600 text-sm" role="alert">{err}</div>}
+        {err && <InlineNotice variant="error" className="mb-4" role="alert">{err}</InlineNotice>}
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800 text-sm font-medium">This will soft-delete the home and revoke access for all users.</p>

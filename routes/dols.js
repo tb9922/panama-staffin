@@ -8,6 +8,8 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import { validateDolsReviewStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -90,8 +92,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dolsRepo.findDolsById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const record = await dolsRepo.updateDols(idParsed.data, req.home.id, parsed.data, version);
+    const statusError = validateDolsReviewStatusChange(existing, parsed.data);
+    if (statusError) return res.status(400).json({ error: statusError });
+    const { version, payload } = splitVersion(parsed.data);
+    const record = await dolsRepo.updateDols(idParsed.data, req.home.id, payload, version);
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
@@ -133,8 +137,8 @@ router.put('/mca/:id', writeRateLimiter, requireAuth, requireHomeAccess, require
     if (!parsed.success) return zodError(res, parsed);
     const existing = await dolsRepo.findMcaById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const record = await dolsRepo.updateMca(idParsed.data, req.home.id, parsed.data, version);
+    const { version, payload } = splitVersion(parsed.data);
+    const record = await dolsRepo.updateMca(idParsed.data, req.home.id, payload, version);
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }

@@ -1,0 +1,2 @@
+ALTER TABLE bed_transitions
+  ADD COLUMN IF NOT EXISTS notes TEXT;

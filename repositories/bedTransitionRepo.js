@@ -1,7 +1,7 @@
 import { pool } from '../db.js';
 import { toIsoOrNull } from '../lib/serverTimestamps.js';
 
-const TRANSITION_COLS = 'id, home_id, bed_id, from_status, to_status, resident_id, changed_by, changed_at, reason';
+const TRANSITION_COLS = 'id, home_id, bed_id, from_status, to_status, resident_id, changed_by, changed_at, reason, notes';
 
 const ts = toIsoOrNull;
 const f = v => v != null ? parseFloat(v) : null;
@@ -20,6 +20,7 @@ function shapeTransition(row) {
     changed_by: row.changed_by,
     changed_at: ts(row.changed_at),
     reason: row.reason,
+    notes: row.notes,
   };
 }
 
@@ -30,11 +31,11 @@ export async function recordTransition(homeId, data, client) {
   const { rows } = await conn.query(
     `/* bedTransitionRepo – recordTransition */
      INSERT INTO bed_transitions
-       (home_id, bed_id, from_status, to_status, resident_id, changed_by, reason)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+       (home_id, bed_id, from_status, to_status, resident_id, changed_by, reason, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING ${TRANSITION_COLS}`,
     [homeId, data.bedId, data.fromStatus || null, data.toStatus,
-     data.residentId || null, data.changedBy || null, data.reason || null]
+     data.residentId || null, data.changedBy || null, data.reason || null, data.notes || null]
   );
   return shapeTransition(rows[0]);
 }

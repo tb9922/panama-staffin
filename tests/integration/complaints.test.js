@@ -346,3 +346,26 @@ describe('Surveys: soft delete', () => {
     expect(byId).toBeNull();
   });
 });
+
+describe('Complaints: sync safety', () => {
+  it('does not soft-delete every complaint when sync receives an empty array', async () => {
+    const first = await complaintRepo.upsert(homeA, {
+      date: '2026-04-20',
+      title: 'Sync safety complaint A',
+      status: 'open',
+      reported_by: 'admin',
+    });
+    const second = await complaintRepo.upsert(homeA, {
+      date: '2026-04-21',
+      title: 'Sync safety complaint B',
+      status: 'open',
+      reported_by: 'admin',
+    });
+    complaintIds.push(first.id, second.id);
+
+    await complaintRepo.sync(homeA, []);
+
+    expect(await complaintRepo.findById(first.id, homeA)).not.toBeNull();
+    expect(await complaintRepo.findById(second.id, homeA)).not.toBeNull();
+  });
+});

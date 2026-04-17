@@ -11,11 +11,12 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
 
-const PREFIX = 'compliance-route-test';
+const RUN_ID = Date.now().toString(36).slice(-6);
+const PREFIX = `compliance-route-${RUN_ID}`;
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'CompliancePass1Test';
 const HOME_SLUG = `${PREFIX}-home`;
-const STAFF_ID = `${PREFIX}-staff-01`;
+const STAFF_ID = `CP${RUN_ID}`.slice(0, 20);
 
 let token;
 let homeId;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BADGE, BTN, CARD, PAGE } from '../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES } from '../lib/finance.js';
@@ -12,6 +12,10 @@ import ResidentEditModal from '../components/residents/ResidentEditModal.jsx';
 import ResidentDischargeModal from '../components/residents/ResidentDischargeModal.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import ErrorState from '../components/ErrorState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 export default function Residents() {
   const [residents, setResidents] = useState([]);
@@ -26,8 +30,7 @@ export default function Residents() {
   const [showAdmit, setShowAdmit] = useState(false);
   const [editResident, setEditResident] = useState(null);
   const [dischargeResident, setDischargeResident] = useState(null);
-  const [toast, setToast] = useState(null);
-  const toastTimeoutRef = useRef(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const home = getCurrentHome();
   const { canWrite } = useData();
@@ -59,12 +62,6 @@ export default function Residents() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => () => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-  }, []);
-
   function handleSearchKeyDown(e) {
     if (e.key === 'Enter') setSearchQuery(searchInput.trim());
   }
@@ -95,17 +92,6 @@ export default function Residents() {
     };
   }, [residents, bedsAvailable]);
 
-  function showToast(msg, duration = 5000) {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast(msg);
-    toastTimeoutRef.current = setTimeout(() => {
-      toastTimeoutRef.current = null;
-      setToast(null);
-    }, duration);
-  }
-
   return (
     <div className={PAGE.container}>
       <div className={PAGE.header}>
@@ -118,18 +104,14 @@ export default function Residents() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex justify-between items-center">
-          <span>{error}</span>
-          <button className="text-red-500 hover:text-red-700" onClick={() => setError(null)}>Dismiss</button>
-        </div>
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
       )}
 
-      {toast && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex justify-between items-center">
-          <span>{toast}</span>
-          <button className="text-blue-500 hover:text-blue-700" onClick={() => setToast(null)}>Dismiss</button>
-        </div>
+      {error && (
+        <ErrorState title="Unable to load residents" message={error} onRetry={load} className="mb-4" />
       )}
 
       <ResidentSummaryBar stats={stats} />
@@ -166,7 +148,7 @@ export default function Residents() {
       </div>
 
       {loading ? (
-        <p className="text-center text-gray-500 py-12">Loading residents...</p>
+        <LoadingState message="Loading residents..." />
       ) : (
         <ResidentTable
           residents={residents}
@@ -184,7 +166,7 @@ export default function Residents() {
             onSaved={(resident) => {
               load();
               const bedUrl = resident?.id ? `/beds?residentId=${resident.id}` : '/beds';
-              showToast(<>Resident admitted. <Link to={bedUrl} className="underline font-medium">Assign a bed in Bed Manager &rarr;</Link></>, 10000);
+              showNotice(<>Resident admitted. <Link to={bedUrl} className="underline font-medium">Assign a bed in Bed Manager &rarr;</Link></>, { duration: 10000 });
             }}
           />
         )}
@@ -208,9 +190,9 @@ export default function Residents() {
               load();
               if (hadBed) {
                 const bedUrl = dischargeResident?.id ? `/beds?residentId=${dischargeResident.id}` : '/beds';
-                showToast(<>Resident discharged. Room {roomNumber} still occupied &mdash; <Link to={bedUrl} className="underline font-medium">update in Bed Manager &rarr;</Link></>, 10000);
+                showNotice(<>Resident discharged. Room {roomNumber} still occupied &mdash; <Link to={bedUrl} className="underline font-medium">update in Bed Manager &rarr;</Link></>, { duration: 10000, variant: 'warning' });
               } else {
-                showToast('Resident discharged.');
+                showNotice('Resident discharged.');
               }
           }}
         />

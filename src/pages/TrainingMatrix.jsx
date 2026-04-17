@@ -8,6 +8,8 @@ import SupervisionPanel from '../components/training/SupervisionPanel.jsx';
 import AppraisalPanel from '../components/training/AppraisalPanel.jsx';
 import FireDrillPanel from '../components/training/FireDrillPanel.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
 
 const TABS = [
   { id: 'training', label: 'Training' },
@@ -40,8 +42,8 @@ export default function TrainingMatrix() {
     return () => { stale = true; };
   }, [homeSlug, refreshKey]);
 
-  if (loading) return <div className={PAGE.container} role="status"><p className="text-gray-500 mt-8">Loading...</p></div>;
-  if (error) return <div className={PAGE.container}><p className="text-red-600 mt-8" role="alert">{error}</p></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading training data..." card /></div>;
+  if (error) return <div className={PAGE.container}><ErrorState title="Unable to load training data" message={error} onRetry={() => setRefreshKey(k => k + 1)} /></div>;
   if (!state) return null;
 
   return (

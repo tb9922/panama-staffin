@@ -20,35 +20,47 @@ export function validatePassword(password) {
 }
 
 /**
- * Seed admin/viewer users from env vars if the users table is empty.
+ * Ensure bootstrap users from env vars exist and keep the seed admin elevated.
  * Called once at startup. Non-fatal if table does not exist yet.
  */
 export async function ensureSeedUsers() {
-  const existing = await userRepo.listAll();
-  if (existing.length > 0) return;
-
-  let seeded = 0;
+  const hasSeedHashes = config.users.some(envUser => !!envUser.hash);
+  let seededCount = 0;
+  let repairedCount = 0;
   for (const envUser of config.users) {
     if (!envUser.hash) continue;
-    const exists = await userRepo.existsByUsername(envUser.username);
-    if (exists) continue;
 
-    await userRepo.create(
-      envUser.username,
-      envUser.hash,
-      envUser.role,
-      envUser.username === 'admin' ? 'Administrator' : 'Viewer',
-      'system'
-    );
+    const existing = await userRepo.findByUsername(envUser.username);
+    if (!existing) {
+      await userRepo.create(
+        envUser.username,
+        envUser.hash,
+        envUser.role,
+        envUser.username === 'admin' ? 'Administrator' : 'Viewer',
+        'system'
+      );
+      seededCount++;
+      logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
+    }
+
     if (envUser.role === 'admin') {
+      const current = existing || await userRepo.findByUsername(envUser.username);
+      if (current && !current.is_platform_admin) {
+        await userRepo.setPlatformAdmin(envUser.username, true);
+        repairedCount++;
+        logger.info({ username: envUser.username }, 'Granted platform admin to bootstrap admin');
+      }
       await userHomeRepo.grantAllHomesRole(envUser.username);
     }
-    seeded++;
-    logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
   }
 
-  if (seeded === 0) {
-    logger.warn('Users table is empty and no env var hashes found - no users seeded');
+  if (!hasSeedHashes) {
+    logger.warn('No env var hashes found - bootstrap users were not ensured');
+    return;
+  }
+
+  if (seededCount > 0 || repairedCount > 0) {
+    logger.info({ seededCount, repairedCount }, 'Completed env bootstrap user checks');
   }
 }
 

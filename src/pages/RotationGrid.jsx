@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   getStaffForDay, formatDate, getActualShift, getCycleDay,
   getScheduledShift, isCareRole, isAgencyShift, isOTShift,
-  calculateStaffPeriodHours, SHIFT_COLORS,
+  calculateStaffPeriodHours, getShiftHours, SHIFT_COLORS, WORKING_SHIFTS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, PAGE } from '../lib/design.js';
@@ -18,9 +18,13 @@ import {
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../lib/localDates.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 import RotationGridModals from '../components/scheduling/RotationGridModals.jsx';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -98,7 +102,7 @@ export default function RotationGrid() {
   }, [monthOffset]);
 
   const loadData = useCallback(async () => {
-    if (!homeSlug || isOwnDataRoster) {
+    if (!homeSlug) {
       setSchedData(null);
       setError(null);
       setLoading(false);
@@ -114,7 +118,7 @@ export default function RotationGrid() {
     } finally {
       setLoading(false);
     }
-  }, [homeSlug, isOwnDataRoster, monthDates]);
+  }, [homeSlug, monthDates]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -290,7 +294,7 @@ export default function RotationGrid() {
     };
   }, [editing, schedData, monthDates]);
 
-  const today = formatDate(new Date());
+  const today = todayLocalISO();
   const hasEditLock = Boolean(schedData?.config?.edit_lock_enabled);
   const {
     showLockPrompt,
@@ -299,7 +303,6 @@ export default function RotationGrid() {
     updateLockPin,
     dismissLockPrompt,
     attemptUnlock,
-    isDateLocked,
     getEditLockOptions,
     requestUnlock,
     handleLockedError,
@@ -440,11 +443,7 @@ export default function RotationGrid() {
     downloadCSV(`roster_${monthLabel.replace(' ', '_')}.csv`, headers, rows);
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <LoadingState message="Loading roster..." className="p-6" card />;
 
   if (!homeSlug) {
     return (
@@ -458,21 +457,20 @@ export default function RotationGrid() {
   }
 
   if (isOwnDataRoster) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Roster</h1>
-          <p className="text-sm text-gray-500">Roster management is not available for staff self-service accounts.</p>
+    if (error) {
+      return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your rota" message={error} onRetry={() => void loadData()} /></div>;
+    }
+    if (!schedData?.staff?.length) {
+      return (
+        <div className="p-6 max-w-5xl mx-auto">
+          <EmptyState title="No rota link available" description="We couldn’t find a linked staff record for this account yet." />
         </div>
-      </div>
-    );
+      );
+    }
+    return <StaffSelfServiceRoster schedData={schedData} monthDates={monthDates} monthLabel={monthLabel} monthOffset={monthOffset} setMonthOffset={setMonthOffset} />;
   }
 
-  if (error) return (
-    <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm" role="alert">{error}</div>
-    </div>
-  );
+  if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load the roster" message={error} onRetry={() => void loadData()} /></div>;
 
   if (!schedData) return null;
 
@@ -630,6 +628,7 @@ export default function RotationGrid() {
                           } ${isOverride ? 'ring-1 ring-blue-400' : ''} ${isEditing ? 'ring-2 ring-blue-600 scale-110' : ''} disabled:cursor-not-allowed`}
                           title={[
                             `${s.name} — ${shift}${isOverride ? ' (override)' : ''}`,
+                            isOverride ? `Scheduled: ${s.scheduledPattern?.[i] || actual.scheduledShift || 'OFF'}` : '',
                             schedData.overrides[dateKey]?.[s.id]?.sleep_in ? '+Sleep In' : '',
                             actual.replaces_staff_id
                               ? `Covers: ${staffMap.get(actual.replaces_staff_id)?.name || actual.replaces_staff_id}`
@@ -748,6 +747,73 @@ export default function RotationGrid() {
         applyChange={applyChange}
       />
       {ConfirmDialog}
+    </div>
+  );
+}
+
+function StaffSelfServiceRoster({ schedData, monthDates, monthLabel, monthOffset, setMonthOffset }) {
+  const staffMember = schedData.staff?.[0];
+  const rows = monthDates.map(date => {
+    const actual = getActualShift(staffMember, date, schedData.overrides || {}, schedData.config?.cycle_start_date);
+    const shift = typeof actual === 'string' ? actual : actual?.shift || 'OFF';
+    const hours = WORKING_SHIFTS.includes(shift) ? getShiftHours(shift, schedData.config) : 0;
+    return {
+      key: formatDate(date),
+      label: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
+      shift,
+      hours,
+    };
+  });
+
+  const workingDays = rows.filter(row => !['OFF', 'AL', 'SICK'].includes(row.shift));
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className={CARD.padded}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Rota</h1>
+            <p className="mt-2 text-sm text-gray-600">Your rota is shown here in a staff-safe view. Manager tools like coverage editing and team-wide overrides stay hidden.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button aria-label="Previous month" onClick={() => setMonthOffset(monthOffset - 1)} className={`${BTN.ghost} ${BTN.xs}`}>&larr;</button>
+            {monthOffset !== 0 && <button aria-label="Current month" onClick={() => setMonthOffset(0)} className={`${BTN.ghost} ${BTN.xs} text-blue-600`}>Current</button>}
+            <button aria-label="Next month" onClick={() => setMonthOffset(monthOffset + 1)} className={`${BTN.ghost} ${BTN.xs}`}>&rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className={CARD.padded}>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Month</p>
+          <p className="mt-2 text-xl font-bold text-gray-900">{monthLabel}</p>
+        </div>
+        <div className={CARD.padded}>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Working shifts</p>
+          <p className="mt-2 text-xl font-bold text-gray-900">{workingDays.length}</p>
+        </div>
+        <div className={CARD.padded}>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Planned hours</p>
+          <p className="mt-2 text-xl font-bold text-gray-900">{workingDays.reduce((sum, row) => sum + row.hours, 0).toFixed(1)}</p>
+        </div>
+      </div>
+
+      <div className={CARD.flush}>
+        <div className="border-b border-gray-100 px-4 py-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{staffMember?.name || 'My shifts'}</h2>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {rows.map(row => (
+            <div key={row.key} className="flex items-center justify-between px-4 py-3 text-sm">
+              <span className="font-medium text-gray-900">{row.label}</span>
+              <div className="flex items-center gap-3">
+                {row.hours > 0 && <span className="text-xs text-gray-500">{row.hours.toFixed(1)}h</span>}
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.shift === 'OFF' ? 'bg-gray-100 text-gray-600' : row.shift === 'AL' ? 'bg-amber-100 text-amber-700' : row.shift === 'SICK' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{row.shift}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

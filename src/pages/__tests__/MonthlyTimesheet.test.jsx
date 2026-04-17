@@ -146,7 +146,7 @@ describe('MonthlyTimesheet', () => {
     api.getSchedulingData.mockReturnValue(new Promise(() => {}));
     api.getTimesheetPeriod.mockReturnValue(new Promise(() => {}));
     renderWithProviders(<MonthlyTimesheet />);
-    expect(screen.getByText('Loading data...')).toBeInTheDocument();
+    expect(screen.getByText('Loading monthly timesheet data...')).toBeInTheDocument();
   });
 
   it('loads scheduling data for the visible payroll month only', async () => {
@@ -169,7 +169,7 @@ describe('MonthlyTimesheet', () => {
     renderWithProviders(<MonthlyTimesheet />);
     // schedData stays null, so the component keeps showing the loading fallback
     await waitFor(() =>
-      expect(screen.getByText('Loading data...')).toBeInTheDocument()
+      expect(screen.getByText('Loading monthly timesheet data...')).toBeInTheDocument()
     );
   });
 

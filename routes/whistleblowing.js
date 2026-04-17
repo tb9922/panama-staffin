@@ -8,6 +8,8 @@ import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
+import { splitVersion } from '../lib/versionedPayload.js';
+import { validateWhistleblowingStatusChange } from '../lib/statusTransitions.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -91,8 +93,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (!parsed.success) return zodError(res, parsed);
     const existing = await whistleblowingRepo.findById(idParsed.data, req.home.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const version = parsed.data._version != null ? parsed.data._version : null;
-    const updateData = { ...parsed.data };
+    const { version, payload } = splitVersion(parsed.data);
+    const updateData = { ...payload };
+    const statusError = validateWhistleblowingStatusChange(existing, updateData);
+    if (statusError) return res.status(400).json({ error: statusError });
     // Prevent de-anonymisation: never overwrite raised_by_role on anonymous concerns
     if (existing.anonymous) delete updateData.raised_by_role;
     const concern = await whistleblowingRepo.update(idParsed.data, req.home.id, updateData, version);

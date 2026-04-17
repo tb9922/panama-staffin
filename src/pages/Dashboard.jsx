@@ -6,10 +6,14 @@ import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getPayrollRuns } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import LoadingState from '../components/LoadingState.jsx';
+import ErrorState from '../components/ErrorState.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
 const DEFAULT_PRIORITY = { error: 3, warning: 2, info: 1 };
@@ -67,6 +71,8 @@ function CoverageGauge({ period, cov }) {
 export default function Dashboard() {
   const { homeRole } = useData();
   const [schedData, setSchedData] = useState(null);
+  const [staffRuns, setStaffRuns] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const homeSlug = getCurrentHome();
@@ -74,28 +80,39 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    setError(null);
-    setSchedData(null);
+    if (!homeSlug) return () => { cancelled = true; };
 
-    if (!homeSlug || isOwnDataDashboard) {
-      setLoading(false);
-      return () => { cancelled = true; };
+    async function loadDashboard() {
+      setLoading(true);
+      setError(null);
+      setSchedData(null);
+      setStaffRuns([]);
+      try {
+        const [data, runs] = await Promise.all([
+          getSchedulingData(homeSlug),
+          isOwnDataDashboard ? getPayrollRuns(homeSlug) : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+        setSchedData(data);
+        setStaffRuns(Array.isArray(runs) ? runs : (runs?.rows || []));
+      } catch (e) {
+        if (!cancelled) setError(e.message || 'Failed to load');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
-    setLoading(true);
-    getSchedulingData(homeSlug)
-      .then(data => {
-        if (!cancelled) setSchedData(data);
-      })
-      .catch(e => {
-        if (!cancelled) setError(e.message || 'Failed to load');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void loadDashboard();
 
     return () => { cancelled = true; };
-  }, [homeSlug, isOwnDataDashboard]);
+  }, [homeSlug, isOwnDataDashboard, refreshKey]);
+
+  function retryLoad() {
+    setError(null);
+    setSchedData(null);
+    setStaffRuns([]);
+    setRefreshKey((current) => current + 1);
+  }
 
   if (!homeSlug) {
     return (
@@ -109,20 +126,145 @@ export default function Dashboard() {
   }
 
   if (isOwnDataDashboard) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className={CARD.padded}>
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-sm text-gray-500">Dashboard is not available for staff self-service accounts.</p>
+    if (loading) return <LoadingState message="Loading your staff portal..." className="p-6" card />;
+    if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your staff portal" message={error} onRetry={retryLoad} /></div>;
+    if (!schedData?.staff?.length) {
+      return (
+        <div className="p-6 max-w-5xl mx-auto">
+          <EmptyState
+            title="Your staff portal is not ready yet"
+            description="We couldn’t find a linked staff record for this account. Ask a manager to finish your staff link and try again."
+          />
         </div>
-      </div>
-    );
+      );
+    }
+    return <StaffSelfServiceDashboard schedData={schedData} payrollRuns={staffRuns} />;
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm" role="status">Loading dashboard...</div>;
-  if (error || !schedData) return <div className="p-6 text-red-600" role="alert">{error || 'Failed to load scheduling data'}</div>;
+  if (loading) return <LoadingState message="Loading dashboard..." className="p-6" card />;
+  if (error || !schedData) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load the dashboard" message={error || 'Failed to load scheduling data'} onRetry={retryLoad} /></div>;
 
   return <DashboardInner schedData={schedData} />;
+}
+
+function StaffSelfServiceDashboard({ schedData, payrollRuns }) {
+  const navigate = useNavigate();
+  const staffMember = schedData.staff?.[0] || null;
+  const upcomingShifts = useMemo(() => {
+    if (!staffMember) return [];
+    const list = [];
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    for (let index = 0; index < 7; index += 1) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const [staffForDay] = getStaffForDay(schedData.staff, date, schedData.overrides || {}, schedData.config) || [];
+      list.push({
+        date: todayLocalISO(date),
+        label: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+        shift: staffForDay?.shift || 'OFF',
+      });
+    }
+    return list;
+  }, [schedData, staffMember]);
+
+  const upcomingLeave = useMemo(() => upcomingShifts.filter(shift => shift.shift === 'AL').length, [upcomingShifts]);
+  const nextWorkingShift = upcomingShifts.find(shift => !['OFF', 'AL', 'SICK'].includes(shift.shift));
+  const recentRuns = payrollRuns.slice(0, 3);
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className={`${CARD.padded} border-blue-100 bg-blue-50/70`}>
+        <h1 className="text-2xl font-bold text-slate-900">Welcome back, {staffMember?.name || 'team member'}</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          This is your staff portal. From here you can check your rota, your leave picture, your recent payroll runs, and the latest handover without landing in manager-only tools.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <PortalCard title="My Rota" description="See the next month of shifts and quick upcoming days." actionLabel="Open rota" onClick={() => navigate('/rotation')} />
+        <PortalCard title="My Leave" description="Check booked leave and your current annual leave balance." actionLabel="Open leave" onClick={() => navigate('/leave')} />
+        <PortalCard title="My Payslips" description="Open payroll runs and download your own payslips when they’re available." actionLabel="Open payroll" onClick={() => navigate('/payroll')} />
+        <PortalCard title="Handover Book" description="Read the latest handover notes for your next shift." actionLabel="Open handover" onClick={() => navigate('/handover')} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className={CARD.padded}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Next 7 Days</h2>
+            {nextWorkingShift && <span className="text-xs font-medium text-slate-500">Next working shift: {nextWorkingShift.label} ({nextWorkingShift.shift})</span>}
+          </div>
+          <div className="mt-4 divide-y divide-slate-100">
+            {upcomingShifts.map(shift => (
+              <div key={shift.date} className="flex items-center justify-between py-3 text-sm">
+                <span className="font-medium text-slate-900">{shift.label}</span>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${shift.shift === 'OFF' ? 'bg-slate-100 text-slate-600' : shift.shift === 'AL' ? 'bg-amber-100 text-amber-700' : shift.shift === 'SICK' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {shift.shift}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className={CARD.padded}>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Quick Snapshot</h2>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <MetricCard label="Upcoming leave days" value={String(upcomingLeave)} />
+              <MetricCard label="Recent payroll runs" value={String(payrollRuns.length)} />
+            </div>
+          </div>
+          <div className={CARD.padded}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Recent Payroll Runs</h2>
+              <button type="button" className="text-xs font-medium text-blue-600 hover:text-blue-700" onClick={() => navigate('/payroll')}>View all</button>
+            </div>
+            {recentRuns.length === 0 ? (
+              <EmptyState compact title="No payroll runs yet" description="Your payslips will appear here once the next payroll run is processed." />
+            ) : (
+              <div className="mt-3 space-y-2">
+                {recentRuns.map(run => (
+                  <button
+                    key={run.id}
+                    type="button"
+                    onClick={() => navigate(`/payroll/${run.id}`)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{run.period_start} to {run.period_end}</p>
+                      <p className="text-xs text-slate-500">{run.status}</p>
+                    </div>
+                    <span className="text-xs font-medium text-blue-600">Open</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalCard({ title, description, actionLabel, onClick }) {
+  return (
+    <div className={CARD.padded}>
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      <p className="mt-2 text-sm text-slate-600">{description}</p>
+      <button type="button" className="mt-4 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800" onClick={onClick}>
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+    </div>
+  );
 }
 
 function DashboardInner({ schedData }) {
@@ -152,29 +294,25 @@ function DashboardInner({ schedData }) {
   const home = getCurrentHome();
 
   useEffect(() => {
-    if (!home) {
+    if (!home) return;
+
+    let cancelled = false;
+    async function loadAuxData() {
       setHrData({ stats: null, warnings: [] });
       setFinanceAlerts([]);
       setSummary(null);
       setAuxFailures([]);
-      return;
-    }
 
-    let cancelled = false;
-    setHrData({ stats: null, warnings: [] });
-    setFinanceAlerts([]);
-    setSummary(null);
-    setAuxFailures([]);
+      const [statsResult, warningsResult, financeResult, summaryResult] = await Promise.all([
+        canViewHr ? getHrStats(home) : Promise.resolve(null),
+        canViewHr ? getHrWarnings(home) : Promise.resolve([]),
+        canViewFinance ? getFinanceAlerts(home) : Promise.resolve([]),
+        getDashboardSummary(home),
+      ].map(p => Promise.resolve(p).then(
+        value => ({ ok: true, value }),
+        error => ({ ok: false, error }),
+      )));
 
-    Promise.all([
-      canViewHr ? getHrStats(home) : Promise.resolve(null),
-      canViewHr ? getHrWarnings(home) : Promise.resolve([]),
-      canViewFinance ? getFinanceAlerts(home) : Promise.resolve([]),
-      getDashboardSummary(home),
-    ].map(p => Promise.resolve(p).then(
-      value => ({ ok: true, value }),
-      error => ({ ok: false, error }),
-    ))).then(([statsResult, warningsResult, financeResult, summaryResult]) => {
       if (cancelled) return;
 
       const failures = [];
@@ -208,7 +346,9 @@ function DashboardInner({ schedData }) {
       }
 
       setAuxFailures(failures);
-    });
+    }
+
+    void loadAuxData();
 
     return () => { cancelled = true; };
   }, [home, canViewFinance, canViewHr]);
@@ -244,6 +384,7 @@ function DashboardInner({ schedData }) {
   const al = todayStaff.filter(s => s.shift === 'AL');
   const agencyToday = todayStaff.filter(s => s.shift?.startsWith('AG-'));
   const floatDeployed = todayStaff.filter(s => s.team === 'Float' && isWorkingShift(s.shift) && s.shift !== 'AVL');
+  const activeStaffCount = staff.filter(s => s.active !== false).length;
 
   const cycleCost = useMemo(() => cycleData.reduce((s, d) => s + d.cost.total, 0), [cycleData]);
   const monthlyProj = cycleCost / 28 * 30.44;
@@ -365,6 +506,14 @@ function DashboardInner({ schedData }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={CARD.padded}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Staffing Summary</h2>
+          {activeStaffCount === 0 ? (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              No active staff are set up for this home yet.
+              <button type="button" onClick={() => navigate('/staff')} className="ml-2 font-semibold text-blue-700 underline underline-offset-2">
+                Open Staff Register
+              </button>
+            </div>
+          ) : (
           <div className="grid grid-cols-3 gap-3">
             {[
               ['On Duty', onDuty.length, 'text-emerald-600', 'border-l-emerald-500'],
@@ -372,7 +521,7 @@ function DashboardInner({ schedData }) {
               ['Annual Leave', al.length, al.length > 0 ? 'text-yellow-600' : 'text-gray-400', 'border-l-yellow-500'],
               ['Float Deployed', floatDeployed.length, floatDeployed.length > 0 ? 'text-orange-600' : 'text-gray-400', 'border-l-orange-500'],
               ['Agency', agencyToday.length, agencyToday.length > 0 ? 'text-red-600' : 'text-gray-400', 'border-l-pink-500'],
-              ['Total Staff', staff.filter(s => s.active !== false).length, 'text-gray-700', 'border-l-blue-500'],
+              ['Total Staff', activeStaffCount, 'text-gray-700', 'border-l-blue-500'],
             ].map(([label, count, color, accent]) => (
               <div key={label} className={`border rounded-xl p-3 text-center border-l-4 ${accent}`}>
                 <div className={`text-2xl font-bold ${color}`}>{count}</div>
@@ -380,6 +529,7 @@ function DashboardInner({ schedData }) {
               </div>
             ))}
           </div>
+          )}
         </div>
 
         {canViewFinance ? (

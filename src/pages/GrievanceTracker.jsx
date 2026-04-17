@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 import TabBar from '../components/TabBar.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 import {
   getCurrentHome, getHrGrievance, createHrGrievance, updateHrGrievance,
   getGrievanceActions, createGrievanceAction, updateGrievanceAction,
@@ -15,6 +18,8 @@ import FileAttachments from '../components/FileAttachments.jsx';
 import InvestigationMeetings from '../components/InvestigationMeetings.jsx';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const PROTECTED_CHARACTERISTICS = [
   { id: '', name: 'None' },
@@ -60,10 +65,12 @@ export default function GrievanceTracker() {
   const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [modalNotice, setModalNotice] = useState(null);
   const home = getCurrentHome();
   const { canWrite } = useData();
   const canEdit = canWrite('hr');
   const editReqRef = useRef(0);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   useEffect(() => setOffset(0), [filterStaff, filterStatus]);
 
   const LIMIT = 50;
@@ -87,13 +94,14 @@ export default function GrievanceTracker() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ date_raised: new Date().toISOString().slice(0, 10), category: 'other', status: 'open', confidential: false, raised_by_method: 'written' });
+    setForm({ date_raised: todayLocalISO(), category: 'other', status: 'open', confidential: false, raised_by_method: 'written' });
     setModalTab('details');
     setCaseNotes([]);
     setActions([]);
     setNoteText('');
     setShowActionForm(false);
     setActionForm({});
+    setModalNotice(null);
     setShowModal(true);
   }
 
@@ -107,6 +115,7 @@ export default function GrievanceTracker() {
     setActionForm({});
     setCaseNotes([]);
     setActions([]);
+    setModalNotice(null);
     setShowModal(true);
     if (c.id) {
       const [notes, acts] = await Promise.all([
@@ -129,6 +138,7 @@ export default function GrievanceTracker() {
     setShowActionForm(false);
     setActionForm({});
     setError(null);
+    setModalNotice(null);
   }
 
   async function handleSave() {
@@ -143,10 +153,23 @@ export default function GrievanceTracker() {
     try {
       if (editing?.id) {
         await updateHrGrievance(editing.id, { ...form, _version: editing.version });
+        closeModal();
+        showNotice('Grievance case updated.');
       } else {
-        await createHrGrievance(home, form);
+        const created = await createHrGrievance(home, form);
+        setEditing(created);
+        setForm({ ...created, description: created.subject_summary || created.description || '' });
+        setModalTab('acknowledgement');
+        setCaseNotes([]);
+        setActions([]);
+        setShowActionForm(false);
+        setActionForm({});
+        setModalNotice({
+          variant: 'success',
+          content: 'Case created. Continue with acknowledgement, investigation, actions, and notes.',
+        });
+        showNotice('Grievance case created.');
       }
-      closeModal();
       setRefreshKey(k => k + 1);
     } catch (e) {
       if (e.message?.includes('modified by another user')) {
@@ -187,7 +210,7 @@ export default function GrievanceTracker() {
       await updateGrievanceAction(action.id, {
         ...action,
         status: 'completed',
-        completed_date: new Date().toISOString().slice(0, 10),
+        completed_date: todayLocalISO(),
         _version: action.version,
       });
       setActions(await getGrievanceActions(editing.id));
@@ -217,7 +240,7 @@ export default function GrievanceTracker() {
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  if (loading) return <div className={PAGE.container} role="status"><div className={CARD.padded}><p className="text-center py-10 text-gray-500">Loading grievance cases...</p></div></div>;
+  if (loading) return <div className={PAGE.container}><LoadingState message="Loading grievance cases..." card /></div>;
 
   return (
     <div className={PAGE.container}>
@@ -231,6 +254,12 @@ export default function GrievanceTracker() {
           {canEdit && <button className={BTN.primary + ' ' + BTN.sm} onClick={openCreate}>New Case</button>}
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
+          {notice.content}
+        </InlineNotice>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -261,7 +290,19 @@ export default function GrievanceTracker() {
               </tr>
             </thead>
             <tbody>
-              {cases.length === 0 && <tr><td colSpan={5} className={TABLE.empty}>No grievance cases</td></tr>}
+              {cases.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={TABLE.empty}>
+                    <EmptyState
+                      title="No grievance cases"
+                      description={canEdit ? 'Create the first grievance case to track hearings, actions, and outcomes.' : 'Grievance cases will appear here once they have been recorded.'}
+                      actionLabel={canEdit ? 'New Case' : undefined}
+                      onAction={canEdit ? openCreate : undefined}
+                      compact
+                    />
+                  </td>
+                </tr>
+              )}
               {cases.map(c => (
                 <tr key={c.id} className={`${TABLE.tr}${canEdit ? ' cursor-pointer' : ''}`} {...clickableRowProps(() => canEdit && openEdit(c))}>
                   <td className={TABLE.tdMono}>{c.staff_id}</td>
@@ -291,11 +332,17 @@ export default function GrievanceTracker() {
   );
 
   function renderModal() {
+    const availableTabs = editing ? MODAL_TABS : [MODAL_TABS[0]];
     return (
       <Modal isOpen={showModal} onClose={closeModal} title={editing ? 'Edit Grievance Case' : 'New Grievance Case'} size="xl">
           {/* Modal tabs */}
-          <TabBar tabs={editing ? MODAL_TABS : MODAL_TABS.filter(t => t.id !== 'notes' && t.id !== 'actions')} activeTab={modalTab} onTabChange={setModalTab} />
+          <TabBar tabs={availableTabs} activeTab={modalTab} onTabChange={setModalTab} />
 
+          {modalNotice && (
+            <InlineNotice variant={modalNotice.variant} onDismiss={() => setModalNotice(null)} className="mb-4">
+              {modalNotice.content}
+            </InlineNotice>
+          )}
           {modalTab === 'details' && renderDetailsTab()}
           {modalTab === 'acknowledgement' && renderAcknowledgementTab()}
           {modalTab === 'investigation' && renderInvestigationTab()}
@@ -318,15 +365,15 @@ export default function GrievanceTracker() {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <StaffPicker value={form.staff_id || ''} onChange={val => f('staff_id', val)} label="Staff Member" />
+          <StaffPicker value={form.staff_id || ''} onChange={val => f('staff_id', val)} label="Staff Member" required />
           <div>
-            <label className={INPUT.label}>Date Raised</label>
+            <label className={INPUT.label}>Date Raised *</label>
             <input type="date" className={INPUT.base} value={form.date_raised || ''} onChange={e => f('date_raised', e.target.value)} />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className={INPUT.label}>Category</label>
+            <label className={INPUT.label}>Category *</label>
             <select className={INPUT.select} value={form.category || ''} onChange={e => f('category', e.target.value)}>
               <option value="">Select...</option>
               {GRIEVANCE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -348,7 +395,7 @@ export default function GrievanceTracker() {
           </div>
         </div>
         <div>
-          <label className={INPUT.label}>Description</label>
+          <label className={INPUT.label}>Description *</label>
           <textarea className={INPUT.base} rows={3} value={form.description || ''} onChange={e => f('description', e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -476,8 +523,13 @@ export default function GrievanceTracker() {
           <textarea className={INPUT.base} rows={3} value={form.appeal_grounds || ''} onChange={e => f('appeal_grounds', e.target.value)} />
         </div>
         <div>
-          <label className={INPUT.label}>Appeal Outcome</label>
-          <input className={INPUT.base} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value)} placeholder="e.g. upheld, overturned, modified" />
+          <label htmlFor="grievance-appeal-outcome" className={INPUT.label}>Appeal Outcome</label>
+          <select id="grievance-appeal-outcome" className={INPUT.select} value={form.appeal_outcome || ''} onChange={e => f('appeal_outcome', e.target.value || null)}>
+            <option value="">Select...</option>
+            <option value="upheld">Upheld</option>
+            <option value="partially_upheld">Partially Upheld</option>
+            <option value="overturned">Overturned</option>
+          </select>
         </div>
       </div>
     );

@@ -3,7 +3,7 @@ import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import { getHomeRole } from '../repositories/userHomeRepo.js';
 import { findByUsername as findUserByUsername } from '../repositories/userRepo.js';
-import { hasModuleAccess, ROLES } from '../shared/roles.js';
+import { hasModuleAccess, ROLES, isOwnDataOnly } from '../shared/roles.js';
 import { setRequestContext } from '../requestContext.js';
 import { z } from 'zod';
 
@@ -52,8 +52,10 @@ export async function requireAuth(req, res, next) {
   // An attacker from another origin can cause the cookie to be sent but cannot
   // read its value (same-origin policy), so they cannot forge the header.
   // Safe methods (GET/HEAD/OPTIONS) are exempt - they must not mutate state.
-  // Authorization header requests are exempt (API clients handle their own CSRF).
-  if (req.cookies?.panama_token && !req.headers.authorization) {
+  // If a browser session cookie is present, enforce CSRF even when a Bearer header
+  // is also present. That prevents XSS-assisted header injection from bypassing the
+  // double-submit protection on cookie-authenticated requests.
+  if (req.cookies?.panama_token) {
     const safeMethod = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
     if (!safeMethod) {
       const cookieToken = req.cookies.panama_csrf;
@@ -175,15 +177,21 @@ export async function requireHomeAccess(req, res, next) {
  * Must be used AFTER requireHomeAccess (needs req.homeRole).
  * @param {string} moduleId - one of MODULES
  * @param {string} level - 'read' | 'write'
+ * @param {{ allowOwn?: boolean }} options
  */
-export function requireModule(moduleId, level = 'read') {
+export function requireModule(moduleId, level = 'read', options = {}) {
+  const { allowOwn = false } = options;
   return (req, res, next) => {
     // Platform admins bypass module checks - only if requireHomeAccess already ran and
     // re-verified the DB claim (indicated by req.homeRole being set).
     // This prevents a stale JWT claim from bypassing checks on routes that skip requireHomeAccess.
     if (req.user.is_platform_admin && req.homeRole != null) return next();
 
-    if (!hasModuleAccess(req.homeRole, moduleId, level)) {
+    if (allowOwn && level === 'read' && isOwnDataOnly(req.homeRole, moduleId)) {
+      return next();
+    }
+
+    if (!hasModuleAccess(req.homeRole, moduleId, level, { includeOwn: false })) {
       return res.status(403).json({ error: `Insufficient permissions for ${moduleId}` });
     }
     next();

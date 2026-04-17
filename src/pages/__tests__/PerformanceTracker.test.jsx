@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import PerformanceTracker from '../PerformanceTracker.jsx';
 
@@ -112,5 +113,19 @@ describe('PerformanceTracker', () => {
       expect(screen.getByDisplayValue('All Statuses')).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue('All Types')).toBeInTheDocument();
+  });
+
+  it('keeps the create flow on the concern tab until the case exists', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PerformanceTracker />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Case/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /New Case/i }));
+
+    expect(screen.getByRole('tab', { name: 'Concern' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Informal' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Performance Area *')).toBeInTheDocument();
   });
 });

@@ -71,6 +71,7 @@ describe('webhookService', () => {
     expect(opts.method).toBe('POST');
     expect(opts.headers['Content-Type']).toBe('application/json');
     expect(opts.headers['X-Webhook-Event']).toBe('incident.created');
+    expect(opts.headers['X-Webhook-Timestamp']).toBeTruthy();
     expect(opts.headers['X-Webhook-Signature']).toMatch(/^sha256=[a-f0-9]+$/);
   });
 
@@ -83,7 +84,8 @@ describe('webhookService', () => {
 
     const [, opts] = fetchSpy.mock.calls[0];
     const body = opts.body;
-    const expectedSig = crypto.createHmac('sha256', 'my-webhook-secret-key').update(body).digest('hex');
+    const signatureBase = `${opts.headers['X-Webhook-Timestamp']}.${body}`;
+    const expectedSig = crypto.createHmac('sha256', 'my-webhook-secret-key').update(signatureBase).digest('hex');
     expect(opts.headers['X-Webhook-Signature']).toBe(`sha256=${expectedSig}`);
   });
 

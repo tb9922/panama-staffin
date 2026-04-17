@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { formatDate, parseDate } from '../../lib/rotation.js';
+import { parseDate } from '../../lib/rotation.js';
 import { getFireDrillStatus } from '../../lib/training.js';
 import { createFireDrill, updateFireDrill, deleteFireDrill } from '../../lib/api.js';
 import { downloadXLSX } from '../../lib/excel.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, MODAL } from '../../lib/design.js';
 import Modal from '../Modal.jsx';
 import useDirtyGuard from '../../hooks/useDirtyGuard.js';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, readOnly = false }) {
   const [showModal, setShowModal] = useState(false);
@@ -15,7 +16,7 @@ export default function FireDrillPanel({ fireDrills, staff, homeSlug, onReload, 
 
   useDirtyGuard(showModal);
 
-  const todayStr = formatDate(new Date());
+  const todayStr = todayLocalISO();
   const today = useMemo(() => parseDate(todayStr), [todayStr]);
   const activeStaff = useMemo(() => (staff || []).filter(s => s.active !== false), [staff]);
   const drillsList = useMemo(() => fireDrills || [], [fireDrills]);

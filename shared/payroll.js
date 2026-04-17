@@ -12,6 +12,14 @@
 
 import { NIGHT_SHIFTS, getShiftHours, isOTShift, formatDate } from './rotation.js';
 
+function toLocalISODate(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // ── Age & NMW ─────────────────────────────────────────────────────────────────
 
 /**
@@ -109,7 +117,7 @@ export function checkNMWCompliance(staff, shiftDate, totalPay, hours, nmwRates) 
  */
 export function classifyShiftEnhancements(shift, date, isBankHoliday, isSleepIn) {
   const types = [];
-  const dateStr = typeof date === 'string' ? date : date.toISOString().slice(0, 10);
+  const dateStr = typeof date === 'string' ? date : toLocalISODate(date);
   const dayOfWeek = new Date(dateStr + 'T12:00:00Z').getUTCDay(); // 0=Sun, 6=Sat
 
   // Night enhancement: N and BH-N (BH-N was originally a night shift)
@@ -290,15 +298,13 @@ export function calculatePayableHours(snappedStart, snappedEnd, breakMinutes, da
  * Returns { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
  */
 export function suggestNextPeriod(lastRun, payFrequency) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalISODate();
 
   if (!lastRun) {
     // First run: default to current calendar month
-    const d = new Date(today + 'T00:00:00Z');
-    const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
-      .toISOString().slice(0, 10);
-    const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
-      .toISOString().slice(0, 10);
+    const d = new Date(`${today}T00:00:00`);
+    const start = toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+    const end = toLocalISODate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
     return { start, end };
   }
 
@@ -311,21 +317,21 @@ export function suggestNextPeriod(lastRun, payFrequency) {
     const nextEnd = new Date(Date.UTC(
       nextStart.getUTCFullYear(), nextStart.getUTCMonth(), nextStart.getUTCDate() + 6,
     ));
-    return { start: nextStart.toISOString().slice(0, 10), end: nextEnd.toISOString().slice(0, 10) };
+    return { start: formatDate(nextStart), end: formatDate(nextEnd) };
   }
 
   if (payFrequency === 'fortnightly') {
     const nextEnd = new Date(Date.UTC(
       nextStart.getUTCFullYear(), nextStart.getUTCMonth(), nextStart.getUTCDate() + 13,
     ));
-    return { start: nextStart.toISOString().slice(0, 10), end: nextEnd.toISOString().slice(0, 10) };
+    return { start: formatDate(nextStart), end: formatDate(nextEnd) };
   }
 
   // monthly (default): start to last day of same calendar month
   const nextEnd = new Date(Date.UTC(
     nextStart.getUTCFullYear(), nextStart.getUTCMonth() + 1, 0,
   ));
-  return { start: nextStart.toISOString().slice(0, 10), end: nextEnd.toISOString().slice(0, 10) };
+  return { start: formatDate(nextStart), end: formatDate(nextEnd) };
 }
 
 // ── CSV Export Builders ───────────────────────────────────────────────────────

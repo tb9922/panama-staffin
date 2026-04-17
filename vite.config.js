@@ -1,16 +1,17 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    chunkSizeWarningLimit: 1000, // ExcelJS (937KB) is lazy-loaded on export — not a perf concern
+    sourcemap: true,
+    chunkSizeWarningLimit: 1000, // ExcelJS (937KB) is lazy-loaded on export - not a perf concern
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3001'
-    }
+      '/api': 'http://localhost:3001',
+    },
   },
   test: {
     testTimeout: 15000,
@@ -25,7 +26,7 @@ export default defineConfig({
           ],
           setupFiles: ['src/test/setup.js'],
           testTimeout: 15000,
-          // Fast bcrypt for tests — cost 4 vs production 12 (~1ms vs ~300ms per hash)
+          // Fast bcrypt for tests - cost 4 vs production 12 (~1ms vs ~300ms per hash)
           env: { BCRYPT_ROUNDS: '4' },
         },
       },
@@ -59,4 +60,4 @@ export default defineConfig({
       exclude: ['src/lib/design.js', 'src/lib/bankHolidays.js'],
     },
   },
-})
+});

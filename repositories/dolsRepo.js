@@ -63,7 +63,7 @@ export async function syncDols(homeId, arr, client) {
   if (!arr) return;
   const incomingIds = arr.map(d => d.id);
 
-  const COLS_PER_ROW = 17;
+  const COLS_PER_ROW = 18;
   const CHUNK = Math.floor(65000 / COLS_PER_ROW);
   for (let i = 0; i < arr.length; i += CHUNK) {
     const chunk = arr.slice(i, i + CHUNK);
@@ -74,10 +74,10 @@ export async function syncDols(homeId, arr, client) {
       placeholders.push(
         `($${b},$1,$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},` +
         `$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},` +
-        `$${b+15},$${b+16})`
+        `$${b+15},$${b+16},$${b+17})`
       );
       values.push(
-        d.id, d.resident_name || null, d.dob || null, d.room_number || null,
+        d.id, d.resident_name || null, d.resident_id || null, d.dob || null, d.room_number || null,
         d.application_type || null, d.application_date || null,
         d.authorised ?? false,
         d.authorisation_date || null, d.expiry_date || null,
@@ -89,14 +89,14 @@ export async function syncDols(homeId, arr, client) {
     });
     await conn.query(
       `INSERT INTO dols (
-         id, home_id, resident_name, dob, room_number,
+         id, home_id, resident_name, resident_id, dob, room_number,
          application_type, application_date, authorised,
          authorisation_date, expiry_date, authorisation_number, authorising_authority,
          restrictions, reviewed_date, review_status, next_review_date,
          notes, updated_at
        ) VALUES ${placeholders.join(',')}
        ON CONFLICT (home_id, id) DO UPDATE SET
-         resident_name=EXCLUDED.resident_name,dob=EXCLUDED.dob,room_number=EXCLUDED.room_number,
+         resident_name=EXCLUDED.resident_name,resident_id=EXCLUDED.resident_id,dob=EXCLUDED.dob,room_number=EXCLUDED.room_number,
          application_type=EXCLUDED.application_type,application_date=EXCLUDED.application_date,authorised=EXCLUDED.authorised,
          authorisation_date=EXCLUDED.authorisation_date,expiry_date=EXCLUDED.expiry_date,
          authorisation_number=EXCLUDED.authorisation_number,authorising_authority=EXCLUDED.authorising_authority,
