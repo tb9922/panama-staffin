@@ -29,8 +29,19 @@ export async function submitALRequest({ homeId, staffId, date, reason }) {
     if (alHours <= 0) {
       throw new AppError('Annual leave can only be requested on a working day', 400, 'AL_NON_WORKING_DAY');
     }
-    if (accrual.remainingHours < alHours - 0.05) {
-      throw new AppError('This request would exceed your current leave balance', 400, 'AL_BALANCE_EXCEEDED');
+    // Aggregate-pending guard: a staff member can submit multiple AL requests
+    // that each individually fit balance but collectively exceed it. Subtract
+    // the sum of currently-pending AL requests from the projected balance.
+    const pendingHours = existing
+      .filter((item) => item.status === 'pending' && item.requestType === 'AL')
+      .reduce((sum, item) => sum + (Number(item.alHours) || 0), 0);
+    const projectedRemaining = accrual.remainingHours - pendingHours;
+    if (projectedRemaining < alHours - 0.05) {
+      throw new AppError(
+        `This request plus your other pending leave (${pendingHours.toFixed(1)}h) would exceed your balance`,
+        400,
+        'AL_BALANCE_EXCEEDED',
+      );
     }
 
     const request = await overrideRequestRepo.create({
@@ -124,6 +135,15 @@ export async function cancelByStaff({ homeId, staffId, id, expectedVersion }) {
       request_id: id,
       staff_id: staffId,
     }, client);
+    // Webhook parity with submitted/approved/rejected — receivers must be able to
+    // mirror the full lifecycle. Without this the third-party state diverges
+    // permanently for cancelled requests.
+    await dispatchEvent(homeId, 'override_request.cancelled', {
+      requestId: id,
+      staffId,
+      requestType: updated.requestType,
+      date: updated.date,
+    });
     return updated;
   });
 }

@@ -6,6 +6,7 @@ import { AuthenticationError } from '../errors.js';
 import * as authRepo from '../repositories/authRepo.js';
 import * as userRepo from '../repositories/userRepo.js';
 import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
+import * as auditService from './auditService.js';
 import logger from '../logger.js';
 
 const STAFF_LOCKOUT_MINUTES = 15;
@@ -118,6 +119,9 @@ export async function login(username, password) {
     await staffAuthRepo.recordSuccessfulLogin(creds.homeId, creds.staffId);
     const freshCreds = await staffAuthRepo.findByStaff(creds.homeId, creds.staffId);
     const { token } = issueStaffToken(freshCreds || creds);
+    auditService.log('staff_login', creds.homeSlug, creds.username, {
+      staff_id: creds.staffId,
+    }).catch((err) => logger.warn({ err: err.message }, 'staff_login audit failed'));
     return {
       username: creds.username,
       role: 'staff_member',

@@ -40,11 +40,55 @@ describe('OverrideRequestReview', () => {
     expect(screen.getByText('Staff ID: S009')).toBeInTheDocument();
   });
 
-  it('approves a request with the expected optimistic version', async () => {
+  it('approves a request with the expected optimistic version and decision note', async () => {
     renderWithProviders(<OverrideRequestReview />);
 
     await screen.findByText('Wedding');
+    // Expand the review pane first (note input is collapsed by default).
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.change(await screen.findByLabelText(/decision note/i), {
+      target: { value: 'Approved, enjoy the wedding' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => {
+      expect(decideOverrideRequest).toHaveBeenCalledWith('amberwood', 11, {
+        status: 'approved',
+        expectedVersion: 2,
+        decisionNote: 'Approved, enjoy the wedding',
+      });
+    });
+  });
+
+  it('rejection requires a non-empty decision note', async () => {
+    renderWithProviders(<OverrideRequestReview />);
+
+    await screen.findByText('Wedding');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    const rejectBtn = await screen.findByRole('button', { name: 'Reject' });
+    expect(rejectBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/decision note/i), {
+      target: { value: 'Coverage gap — try a different week' },
+    });
+    expect(rejectBtn).not.toBeDisabled();
+
+    fireEvent.click(rejectBtn);
+    await waitFor(() => {
+      expect(decideOverrideRequest).toHaveBeenCalledWith('amberwood', 11, {
+        status: 'rejected',
+        expectedVersion: 2,
+        decisionNote: 'Coverage gap — try a different week',
+      });
+    });
+  });
+
+  it('approves with empty note (note required for rejection only)', async () => {
+    renderWithProviders(<OverrideRequestReview />);
+
+    await screen.findByText('Wedding');
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
     await waitFor(() => {
       expect(decideOverrideRequest).toHaveBeenCalledWith('amberwood', 11, {

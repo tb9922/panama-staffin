@@ -1972,25 +1972,18 @@ export async function getStaffInvite(token) {
 }
 
 export async function consumeStaffInvite(payload) {
-  const res = await fetch(`${API_BASE}/staff-auth/invite/consume`, {
+  // Routed through apiFetch (rather than raw fetch) so the CSRF header + standard
+  // 401 handling apply consistently. The endpoint itself is unauthenticated — the
+  // invite token is the credential — but the centralised wrapper costs nothing
+  // and keeps every state-changing POST going through the same path.
+  // localStorage write is intentionally NOT done here: the caller (StaffInviteSetup)
+  // calls onLogin() which routes through AuthContext, the single source of truth
+  // for client auth state.
+  return apiFetch(`${API_BASE}/staff-auth/invite/consume`, {
     method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(body.error || `Invite setup failed (${res.status})`);
-    err.status = res.status;
-    throw err;
-  }
-  localStorage.setItem('user', JSON.stringify({
-    username: body.username,
-    role: body.role,
-    displayName: body.displayName || '',
-    isPlatformAdmin: false,
-  }));
-  return body;
 }
 
 export async function createStaffInvite(homeSlug, staffId) {

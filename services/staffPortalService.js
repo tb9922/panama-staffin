@@ -196,6 +196,18 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
 
+    // Idempotency guard: if SICK is already recorded for this date, return early
+    // without re-emitting webhook + audit. Otherwise repeated submits (double-click,
+    // network retry, second-tab) would double-count and confuse downstream listeners.
+    const existingOverrides = await overrideRepo.findByHome(homeId, date, date, client);
+    const alreadySick = (existingOverrides || []).some(
+      (o) => o.staff_id === staffId && o.shift === 'SICK',
+    );
+    const activePeriod = await sspRepo.getActiveSickPeriod(homeId, staffId, date, date, client);
+    if (alreadySick && activePeriod) {
+      return { ok: true, sickPeriod: activePeriod, alreadyRecorded: true };
+    }
+
     await overrideRepo.upsertOne(homeId, date, staffId, {
       shift: 'SICK',
       reason: reason || 'Self-reported sick',
@@ -203,7 +215,6 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
       al_hours: null,
     }, client);
 
-    const activePeriod = await sspRepo.getActiveSickPeriod(homeId, staffId, date, date, client);
     let sickPeriod = activePeriod;
     if (!activePeriod) {
       const previous = await sspRepo.findRecentClosedPeriod(homeId, staffId, date, 56, client);

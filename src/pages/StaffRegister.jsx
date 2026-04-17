@@ -13,6 +13,7 @@ import {
   updateStaffMember,
   deleteStaffMember,
   createStaffInvite,
+  revokeStaffSessions,
 } from '../lib/api.js';
 import { DEFAULT_NLW_RATE, getConfiguredNlwRate, getMinimumWageRate } from '../../shared/nmw.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -72,6 +73,8 @@ export default function StaffRegister() {
   const [inviteModal, setInviteModal] = useState(null);
   const [inviteBusyId, setInviteBusyId] = useState(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [revokeBusyId, setRevokeBusyId] = useState(null);
+  const [revokeMessage, setRevokeMessage] = useState(null);
 
   useDirtyGuard(!!editing || showAdd);
 
@@ -258,6 +261,29 @@ export default function StaffRegister() {
     if (!inviteModal?.inviteUrl) return;
     await navigator.clipboard.writeText(inviteModal.inviteUrl);
     setInviteCopied(true);
+  }
+
+  async function handleRevokeSessions(staffMember) {
+    if (!canEdit) return;
+    if (!window.confirm(`Sign out ${staffMember.name} from the staff portal everywhere? They'll need to log in again.`)) {
+      return;
+    }
+    setRevokeBusyId(staffMember.id);
+    setRevokeMessage(null);
+    setRowError(null);
+    try {
+      await revokeStaffSessions(homeSlug, staffMember.id);
+      setRevokeMessage({ id: staffMember.id, msg: `${staffMember.name} signed out — sessions revoked.` });
+    } catch (e) {
+      // 404 means staff has no portal credentials — surface as a friendly hint
+      if (e.status === 404) {
+        setRowError({ id: staffMember.id, msg: 'No active staff-portal sessions to revoke.' });
+      } else {
+        setRowError({ id: staffMember.id, msg: e.message });
+      }
+    } finally {
+      setRevokeBusyId(null);
+    }
   }
 
   const teamCounts = useMemo(() => {
@@ -752,6 +778,14 @@ export default function StaffRegister() {
                                 {inviteBusyId === s.id ? 'Inviting...' : 'Invite'}
                               </button>
                             )}
+                            <button
+                              onClick={() => { void handleRevokeSessions(s); }}
+                              disabled={revokeBusyId === s.id}
+                              title="Sign this staff member out of the staff portal everywhere"
+                              className="text-amber-600 hover:text-amber-700 text-xs transition-colors disabled:opacity-50"
+                            >
+                              {revokeBusyId === s.id ? 'Revoking...' : 'Revoke'}
+                            </button>
                           </>
                         )}
                         <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
@@ -763,6 +797,13 @@ export default function StaffRegister() {
                     <tr key={`${s.id}-err`}>
                       <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-red-50 text-red-600 text-xs border-b border-red-100">
                         {rErr}
+                      </td>
+                    </tr>
+                  )}
+                  {revokeMessage?.id === s.id && (
+                    <tr key={`${s.id}-revoke`}>
+                      <td colSpan={canEdit ? 15 : 13} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs border-b border-emerald-100">
+                        {revokeMessage.msg}
                       </td>
                     </tr>
                   )}

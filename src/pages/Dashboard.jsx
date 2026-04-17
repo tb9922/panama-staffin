@@ -14,6 +14,7 @@ import { todayLocalISO } from '../lib/localDates.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import OverrideRequestReview from '../components/staff/OverrideRequestReview.jsx';
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
 const DEFAULT_PRIORITY = { error: 3, warning: 2, info: 1 };
@@ -478,6 +479,15 @@ function DashboardInner({ schedData }) {
       {degradedSources.length > 0 && (
         <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800">
           Some dashboard data could not be loaded ({degradedSources.join('; ')}). Alerts and counts may be incomplete.
+        </div>
+      )}
+
+      {/* Pending staff leave requests — surface here so managers act on them
+          before falling through to general alerts. Component handles its own
+          empty/loading state and only renders if user has scheduling write. */}
+      {canEdit && (
+        <div className="mb-6">
+          <OverrideRequestReview />
         </div>
       )}
 
