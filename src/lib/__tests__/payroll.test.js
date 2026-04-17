@@ -399,6 +399,14 @@ describe('calculatePayableHours', () => {
   it('backward compat: without date, cross-midnight still works', () => {
     expect(calculatePayableHours('20:00', '06:00', 30)).toBe(9.5);
   });
+
+  it('uses Europe/London local time for the spring DST transition', () => {
+    expect(calculatePayableHours('00:30', '03:30', 0, '2026-03-29')).toBe(2);
+  });
+
+  it('uses Europe/London local time for the autumn DST transition', () => {
+    expect(calculatePayableHours('00:30', '03:30', 0, '2026-10-25')).toBe(4);
+  });
 });
 
 // ── suggestNextPeriod ─────────────────────────────────────────────────────────

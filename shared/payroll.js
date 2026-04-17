@@ -20,6 +20,40 @@ function toLocalISODate(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+const londonOffsetFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  timeZoneName: 'shortOffset',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+function getLondonOffsetSuffix(date) {
+  const offsetPart = londonOffsetFormatter
+    .formatToParts(date)
+    .find(part => part.type === 'timeZoneName')?.value || 'GMT';
+  if (offsetPart === 'GMT') return 'Z';
+  const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return 'Z';
+  const [, sign, hours, minutes = '00'] = match;
+  return `${sign}${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function addIsoDays(dateStr, days) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return formatDate(date);
+}
+
+function parseLondonDateTime(dateStr, timeStr, dayOffset = 0) {
+  const targetDate = dayOffset === 0 ? dateStr : addIsoDays(dateStr, dayOffset);
+  const [year, month, day] = targetDate.split('-').map(Number);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const approxUtc = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+  const offsetSuffix = getLondonOffsetSuffix(approxUtc);
+  return new Date(`${targetDate}T${timeStr}:00${offsetSuffix}`);
+}
+
 // ── Age & NMW ─────────────────────────────────────────────────────────────────
 
 /**
@@ -264,17 +298,11 @@ export function calculatePayableHours(snappedStart, snappedEnd, breakMinutes, da
   if (snappedStart === snappedEnd) return 0; // Same clock-in/out = 0, not 24
 
   if (date) {
-    // DST-aware path: construct local-time Date objects
-    const startDate = new Date(`${date}T${snappedStart}:00`);
-    let endDate = new Date(`${date}T${snappedEnd}:00`);
+    // DST-aware path: construct Europe/London local-time Date objects.
+    const startDate = parseLondonDateTime(date, snappedStart);
+    let endDate = parseLondonDateTime(date, snappedEnd);
     if (endDate <= startDate) {
-      // Cross-midnight: end is next calendar day
-      const next = new Date(startDate);
-      next.setDate(next.getDate() + 1);
-      const y = next.getFullYear();
-      const m = String(next.getMonth() + 1).padStart(2, '0');
-      const d = String(next.getDate()).padStart(2, '0');
-      endDate = new Date(`${y}-${m}-${d}T${snappedEnd}:00`);
+      endDate = parseLondonDateTime(date, snappedEnd, 1);
     }
     const realMinutes = (endDate - startDate) / (1000 * 60);
     const payable = Math.max(0, realMinutes - (breakMinutes || 0));

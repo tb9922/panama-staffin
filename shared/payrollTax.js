@@ -485,7 +485,7 @@ export function getSSPConfig(payDate, sspConfigs) {
  * @param {object} sspConfig  From getSSPConfig().
  * @returns {{ eligible: boolean, sspAmount: number, sspDays: number, waitingDaysUsed: number }}
  */
-export function calculateSSP(sickPeriod, payDate, sspConfig) {
+export function calculateSSP(sickPeriod, payDate, sspConfig, averageWeeklyEarnings = null) {
   const ZERO = { eligible: false, sspAmount: 0, sspDays: 0, waitingDaysUsed: 0 };
 
   if (!sspConfig || !sickPeriod) return ZERO;
@@ -502,7 +502,14 @@ export function calculateSSP(sickPeriod, payDate, sspConfig) {
   if ((sickPeriod.ssp_weeks_paid || 0) >= maxWeeks) return ZERO;
 
   // LEL check (abolished April 2026)
-  // We trust that the caller has verified LEL at the start of the sick period.
+  if (
+    sspConfig.lel_weekly != null &&
+    averageWeeklyEarnings != null &&
+    Number.isFinite(Number(averageWeeklyEarnings)) &&
+    Number(averageWeeklyEarnings) < Number(sspConfig.lel_weekly)
+  ) {
+    return ZERO;
+  }
   // sspConfig.lel_weekly === null means LEL abolished — no check needed.
 
   // Waiting days: linked period means waiting_days_served may already be ≥ waiting_days

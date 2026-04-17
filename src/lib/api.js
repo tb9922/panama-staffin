@@ -1370,6 +1370,16 @@ export async function recordFinancePayment(homeSlug, invoiceId, data) {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
   });
 }
+export async function voidFinanceInvoice(homeSlug, invoiceId) {
+  return apiFetch(`${API_BASE}/finance/invoices/${invoiceId}/void?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
+export async function creditFinanceInvoice(homeSlug, invoiceId) {
+  return apiFetch(`${API_BASE}/finance/invoices/${invoiceId}/credit?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(),
+  });
+}
 
 // Expenses
 export async function getFinanceExpenses(homeSlug, filters = {}) {

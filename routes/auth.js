@@ -19,14 +19,25 @@ const loginLimiter = rateLimit({
   max: config.nodeEnv === 'test' ? 1000 : 30,
   keyGenerator: (req) => {
     const ip = ipKeyGenerator(req.ip);
-    // Normalise to lowercase + truncate to prevent memory exhaustion
     const username = (req.body?.username || '').toLowerCase().slice(0, 100);
     return `login:${ip}:${username}`;
   },
   standardHeaders: true,
   legacyHeaders: false,
   store: config.nodeEnv === 'test' ? undefined : new PostgresRateLimitStore({ prefix: 'login:' }),
-  message: { error: 'Too many login attempts — try again in 15 minutes' },
+  message: { error: 'Too many login attempts - try again in 15 minutes' },
+});
+
+const loginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  // Secondary IP-only guard to reduce username spraying from a single network.
+  // Kept above the username-scoped limit to avoid whole-home lockouts.
+  max: config.nodeEnv === 'test' ? 1000 : 120,
+  keyGenerator: (req) => `login-ip:${ipKeyGenerator(req.ip)}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: config.nodeEnv === 'test' ? undefined : new PostgresRateLimitStore({ prefix: 'login-ip:' }),
+  message: { error: 'Too many login attempts from this network - try again in 15 minutes' },
 });
 
 const loginSchema = z.object({
@@ -34,7 +45,7 @@ const loginSchema = z.object({
   password: z.string().min(10, 'Password must be at least 10 characters').max(200),
 });
 
-router.post('/', loginLimiter, async (req, res, next) => {
+router.post('/', loginIpLimiter, loginLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -44,22 +55,16 @@ router.post('/', loginLimiter, async (req, res, next) => {
     const result = await authService.login(username, password);
     auditService.log('login', '-', username, null).catch(() => {});
 
-    // Set JWT as HttpOnly cookie — not accessible to JavaScript, immune to XSS token theft.
-    // SameSite=Lax allows top-level navigations (email/Slack links) while blocking cross-origin POSTs.
-    // Secure requires HTTPS in production. Path=/ so Playwright storageState captures it.
     res.cookie('panama_token', result.token, {
       httpOnly: true,
       secure: config.nodeEnv === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 4 * 60 * 60 * 1000, // 4 hours (matches JWT expiry)
+      maxAge: 4 * 60 * 60 * 1000,
     });
 
-    // Clear any stale CSRF cookie from old path (migration from path=/api to path=/)
     res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
 
-    // CSRF double-submit cookie — JS-readable so the frontend can send it back
-    // as X-CSRF-Token header. SameSite=Strict prevents cross-site transmission.
     res.cookie('panama_csrf', randomBytes(32).toString('hex'), {
       httpOnly: false,
       secure: config.nodeEnv === 'production',
@@ -68,14 +73,8 @@ router.post('/', loginLimiter, async (req, res, next) => {
       maxAge: 4 * 60 * 60 * 1000,
     });
 
-    // Security trade-off: token is included in the response body for API clients
-    // using Bearer auth and integration tests (30+ test files read res.body.token).
-    // The frontend ignores it — the HttpOnly cookie is the auth mechanism.
-    // If removing, all integration tests and any external API consumers would need
-    // to extract the JWT from the Set-Cookie header instead.
     res.json(result);
   } catch (err) {
-    // Log failed login attempt for brute-force detection
     const username = req.body?.username || '(empty)';
     await auditService.log('login_failure', '-', username, null).catch(() => {});
     next(err);
@@ -83,20 +82,26 @@ router.post('/', loginLimiter, async (req, res, next) => {
 });
 
 router.post('/logout', requireAuth, async (req, res) => {
+  let revoked = true;
   if (req.user.jti) {
     const expiresAt = new Date(req.user.exp * 1000);
     try {
       await authRepo.addToDenyList(req.user.jti, req.user.username, expiresAt);
     } catch (err) {
       logger.error({ jti: req.user.jti, err: err.message }, 'logout deny-list write failed');
-      return res.status(503).json({ error: 'Logout failed — please retry' });
+      revoked = false;
     }
   }
+
   auditService.log('logout', '-', req.user.username, null).catch(() => {});
   res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
-  res.json({ ok: true, revoked: true });
+  res.json({
+    ok: true,
+    revoked,
+    warning: revoked ? null : 'Server-side revoke failed; local session was cleared',
+  });
 });
 
 const revokeSchema = z.object({

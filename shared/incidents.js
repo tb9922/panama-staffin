@@ -72,9 +72,9 @@ export const CQC_NOTIFICATION_TYPES = [
   { id: 'abuse_allegation',       name: 'Abuse / allegation of abuse',           deadline: 'without_delay' },
   { id: 'police',                 name: 'Police involvement / criminal offence', deadline: 'without_delay' },
   { id: 'unauthorised_absence',   name: 'Unauthorised absence of a service user', deadline: 'without_delay' },
-  { id: 'deprivation_of_liberty', name: 'Deprivation of Liberty application',    deadline: '72h' },
-  { id: 'seclusion_restraint',    name: 'Seclusion or restraint',                deadline: '72h' },
-  { id: 'other',                  name: 'Other notifiable event',                deadline: '72h' },
+  { id: 'deprivation_of_liberty', name: 'Deprivation of Liberty application',    deadline: 'without_delay' },
+  { id: 'seclusion_restraint',    name: 'Seclusion or restraint',                deadline: 'without_delay' },
+  { id: 'other',                  name: 'Other notifiable event',                deadline: 'without_delay' },
 ];
 
 export const RIDDOR_CATEGORIES = [
@@ -118,10 +118,14 @@ export function getCqcNotificationDeadline(incident, asOfDate = new Date()) {
   if (!incident.cqc_notifiable || !incident.date) return { deadline: null, hoursAllowed: null, isOverdue: false };
 
   // "without_delay" (Reg 18) = same day for deaths, within hours for others.
-  // We use 4h as the measurable window for "without delay" and 72h for DoLS/seclusion/other.
-  // Legacy "immediate" mapped to same window for backward compatibility.
+  // We use 4h as the measurable window for "without delay".
+  // Legacy "immediate" and "72h" are kept for backward compatibility with older records.
   const dl = incident.cqc_notification_deadline;
-  const hoursAllowed = (dl === 'without_delay' || dl === 'immediate') ? 4 : 72;
+  const hoursAllowed = (dl === 'without_delay' || dl === 'immediate')
+    ? 4
+    : dl === '72h'
+      ? 72
+      : 4;
   const incidentTime = incident.time || '00:00';
   // Append 'Z' to parse as UTC, avoiding BST/GMT offset in deadline calculation
   const incidentDate = new Date(incident.date + 'T' + incidentTime + ':00Z');

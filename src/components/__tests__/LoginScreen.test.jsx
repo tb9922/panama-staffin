@@ -92,7 +92,7 @@ describe('LoginScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Account locked — contact admin')).toBeInTheDocument();
+      expect(screen.getByText('Account locked - contact admin')).toBeInTheDocument();
     });
   });
 
@@ -106,13 +106,11 @@ describe('LoginScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Cannot reach server — check your connection')).toBeInTheDocument();
+      expect(screen.getByText('Cannot reach server - check your connection')).toBeInTheDocument();
     });
   });
 
   it('calls onLogin on a subsequent successful login even when a previous error is shown', async () => {
-    // First attempt fails, second succeeds.
-    // The component does not clear the error state on success — onLogin fires regardless.
     const err = new Error('Unauthorized');
     err.status = 401;
     login.mockRejectedValueOnce(err);
@@ -122,7 +120,6 @@ describe('LoginScreen', () => {
     const user = userEvent.setup();
     render(<LoginScreen onLogin={onLogin} />);
 
-    // Fail first
     await user.type(screen.getByPlaceholderText('Enter username'), 'admin');
     await user.type(screen.getByPlaceholderText('Enter password'), 'bad');
     await user.click(screen.getByRole('button', { name: 'Sign In' }));
@@ -131,7 +128,6 @@ describe('LoginScreen', () => {
       expect(screen.getByText('Invalid username or password')).toBeInTheDocument();
     });
 
-    // Retry with correct credentials
     const passwordInput = screen.getByPlaceholderText('Enter password');
     await user.clear(passwordInput);
     await user.type(passwordInput, 'admin123');
@@ -150,7 +146,27 @@ describe('LoginScreen', () => {
   it('shows a session expired banner from session storage once', () => {
     window.sessionStorage.setItem('panama_login_notice', 'session_expired');
     render(<LoginScreen onLogin={vi.fn()} />);
-    expect(screen.getByText('Your session expired — sign in again')).toBeInTheDocument();
+    expect(screen.getByText('Your session expired - sign in again')).toBeInTheDocument();
     expect(window.sessionStorage.getItem('panama_login_notice')).toBeNull();
+  });
+
+  it('disables the form while a login request is pending', async () => {
+    let resolveLogin;
+    login.mockReturnValueOnce(new Promise(resolve => { resolveLogin = resolve; }));
+    const user = userEvent.setup();
+    render(<LoginScreen onLogin={vi.fn()} />);
+
+    await user.type(screen.getByPlaceholderText('Enter username'), 'admin');
+    await user.type(screen.getByPlaceholderText('Enter password'), 'admin123456');
+    await user.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    expect(screen.getByRole('button', { name: 'Signing In...' })).toBeDisabled();
+    expect(screen.getByPlaceholderText('Enter username')).toBeDisabled();
+    expect(screen.getByPlaceholderText('Enter password')).toBeDisabled();
+
+    resolveLogin({ username: 'admin', role: 'admin' });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Signing In...' })).not.toBeInTheDocument();
+    });
   });
 });

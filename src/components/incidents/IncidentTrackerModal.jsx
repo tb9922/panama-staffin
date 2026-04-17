@@ -10,6 +10,7 @@ import {
   RIDDOR_CATEGORIES,
   PERSON_AFFECTED_TYPES,
   INCIDENT_CATEGORIES,
+  getCqcNotificationDeadline,
 } from '../../lib/incidents.js';
 
 function getCqcCountdown(form, nowMs) {
@@ -17,17 +18,9 @@ function getCqcCountdown(form, nowMs) {
     return null;
   }
 
-  const windowHours = form.cqc_notification_deadline === 'immediate'
-    ? 24
-    : form.cqc_notification_deadline === '72h'
-      ? 72
-      : null;
-  if (!windowHours) return null;
+  const { deadline: dueAt } = getCqcNotificationDeadline(form, new Date(nowMs));
+  if (!(dueAt instanceof Date) || Number.isNaN(dueAt.getTime())) return null;
 
-  const incidentAt = new Date(`${form.date}T${form.time || '00:00'}:00`);
-  if (isNaN(incidentAt.getTime())) return null;
-
-  const dueAt = new Date(incidentAt.getTime() + (windowHours * 60 * 60 * 1000));
   const diffMs = dueAt.getTime() - nowMs;
   const hours = Math.max(1, Math.ceil(Math.abs(diffMs) / (60 * 60 * 1000)));
 
@@ -38,6 +31,14 @@ function getCqcCountdown(form, nowMs) {
     return { tone: 'text-amber-700', text: `${hours}h left` };
   }
   return { tone: 'text-gray-500', text: `${hours}h left` };
+}
+
+function getCqcDeadlineLabel(value) {
+  if (value === 'without_delay' || value === 'immediate') {
+    return 'Without delay (target within 4 hours)';
+  }
+  if (value === '72h') return 'Within 72 hours';
+  return '-';
 }
 
 export default function IncidentTrackerModal({
@@ -98,8 +99,8 @@ export default function IncidentTrackerModal({
         <fieldset disabled={isFrozen} className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className={INPUT.label}>Date *</label>
-              <input type="date" className={INPUT.base} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              <label htmlFor="incident-date" className={INPUT.label}>Date *</label>
+              <input id="incident-date" type="date" className={INPUT.base} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
             </div>
             <div>
               <label className={INPUT.label}>Time</label>
@@ -116,8 +117,8 @@ export default function IncidentTrackerModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Incident Type *</label>
-              <select className={INPUT.select} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+              <label htmlFor="incident-type" className={INPUT.label}>Incident Type *</label>
+              <select id="incident-type" className={INPUT.select} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
                 <option value="">Select...</option>
                 {INCIDENT_CATEGORIES.map(category => (
                   <optgroup key={category.id} label={category.name}>
@@ -129,8 +130,8 @@ export default function IncidentTrackerModal({
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Severity *</label>
-              <select className={INPUT.select} value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
+              <label htmlFor="incident-severity" className={INPUT.label}>Severity *</label>
+              <select id="incident-severity" className={INPUT.select} value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
                 <option value="minor">Minor - no injury / low impact</option>
                 <option value="moderate">Moderate - injury or service impact</option>
                 <option value="major">Major - serious harm / significant risk</option>
@@ -266,8 +267,9 @@ export default function IncidentTrackerModal({
               <div className="ml-6 space-y-2">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={INPUT.label}>Notification Type *</label>
+                    <label htmlFor="incident-cqc-type" className={INPUT.label}>Notification Type *</label>
                     <select
+                      id="incident-cqc-type"
                       className={INPUT.select}
                       value={form.cqc_notification_type}
                       onChange={e => {
@@ -285,7 +287,7 @@ export default function IncidentTrackerModal({
                       type="text"
                       className={INPUT.base}
                       readOnly
-                      value={form.cqc_notification_deadline === 'immediate' ? 'Immediate (24 hours)' : form.cqc_notification_deadline === '72h' ? 'Within 72 hours' : '-'}
+                      value={getCqcDeadlineLabel(form.cqc_notification_deadline)}
                     />
                     {cqcCountdown && (
                       <p className={`mt-1 text-xs font-medium ${cqcCountdown.tone}`}>
@@ -323,8 +325,8 @@ export default function IncidentTrackerModal({
             {form.riddor_reportable && (
               <div className="ml-6 space-y-2">
                 <div>
-                  <label className={INPUT.label}>RIDDOR Category *</label>
-                  <select className={INPUT.select} value={form.riddor_category} onChange={e => setForm({ ...form, riddor_category: e.target.value })}>
+                  <label htmlFor="incident-riddor-category" className={INPUT.label}>RIDDOR Category *</label>
+                  <select id="incident-riddor-category" className={INPUT.select} value={form.riddor_category} onChange={e => setForm({ ...form, riddor_category: e.target.value })}>
                     <option value="">Select...</option>
                     {RIDDOR_CATEGORIES.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
                   </select>

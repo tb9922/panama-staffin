@@ -6,6 +6,14 @@ import * as overrideRepo from '../repositories/overrideRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 
+function getSchedulingWindow(anchorDate = new Date()) {
+  const anchor = anchorDate instanceof Date ? anchorDate : new Date(anchorDate);
+  return {
+    from: new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 6, 1)).toISOString().slice(0, 10),
+    to: new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 3, 0)).toISOString().slice(0, 10),
+  };
+}
+
 export async function listHomes() {
   return homeRepo.listAll();
 }
@@ -18,9 +26,8 @@ export async function assembleData(homeSlug, userRole) {
 
   // Bound overrides + day notes to a reasonable window (6 months back, 3 months forward)
   // to prevent unbounded data growth as deployment ages.
-  const today = new Date();
-  const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-  const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+  const windowAnchor = new Date();
+  const { from, to } = getSchedulingWindow(windowAnchor);
 
   const [staffResult, overrides, dayNotes] = await Promise.all([
     staffRepo.findByHome(home.id),
@@ -31,6 +38,7 @@ export async function assembleData(homeSlug, userRole) {
 
   const payload = {
     _updatedAt: home.updated_at?.toISOString() || null,
+    _windowAnchorDate: windowAnchor.toISOString(),
     config: home.config,
     annual_leave: home.annual_leave,
     staff,
@@ -80,9 +88,12 @@ export async function saveData(homeSlug, body, username, clientUpdatedAt, auditD
 
     // Use the same date window as assembleData to avoid destroying overrides/notes
     // outside the loaded range (e.g. far-future AL bookings).
-    const today = new Date();
-    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 0)).toISOString().slice(0, 10);
+    const windowAnchor = body?._windowAnchorDate
+      ? new Date(body._windowAnchorDate)
+      : clientUpdatedAt
+        ? new Date(clientUpdatedAt)
+        : new Date();
+    const { from, to } = getSchedulingWindow(windowAnchor);
 
     if (body.config) await homeRepo.updateConfig(home.id, body.config, client);
     if (body.staff) await staffRepo.sync(home.id, body.staff, client);

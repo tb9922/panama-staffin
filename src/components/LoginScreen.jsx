@@ -6,7 +6,7 @@ function getInitialLoginError() {
   try {
     if (window.sessionStorage.getItem('panama_login_notice') === 'session_expired') {
       window.sessionStorage.removeItem('panama_login_notice');
-      return 'Your session expired — sign in again';
+      return 'Your session expired - sign in again';
     }
   } catch {
     return '';
@@ -18,23 +18,28 @@ export default function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(() => getInitialLoginError());
+  const [pending, setPending] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
+    if (pending) return;
     setError('');
+    setPending(true);
     try {
       const user = await login(username, password);
       onLogin(user);
     } catch (err) {
       if (err?.status === 423) {
-        setError('Account locked — contact admin');
+        setError('Account locked - contact admin');
         return;
       }
       if (!err?.status) {
-        setError('Cannot reach server — check your connection');
+        setError('Cannot reach server - check your connection');
         return;
       }
       setError('Invalid username or password');
+    } finally {
+      setPending(false);
     }
   }
 
@@ -54,17 +59,38 @@ export default function LoginScreen({ onLogin }) {
         <div className="space-y-4">
           <div>
             <label htmlFor="login-username" className={INPUT.label}>Username</label>
-            <input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)}
-              className={INPUT.base} placeholder="Enter username" autoFocus autoComplete="username"
-              aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
+            <input
+              id="login-username"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className={INPUT.base}
+              placeholder="Enter username"
+              autoFocus
+              autoComplete="username"
+              disabled={pending}
+              aria-describedby={error ? 'login-error' : undefined}
+              aria-invalid={!!error}
+            />
           </div>
           <div>
             <label htmlFor="login-password" className={INPUT.label}>Password</label>
-            <input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className={INPUT.base} placeholder="Enter password" autoComplete="current-password"
-              aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className={INPUT.base}
+              placeholder="Enter password"
+              autoComplete="current-password"
+              disabled={pending}
+              aria-describedby={error ? 'login-error' : undefined}
+              aria-invalid={!!error}
+            />
           </div>
-          <button type="submit" className={`${BTN.primary} w-full`}>Sign In</button>
+          <button type="submit" disabled={pending} className={`${BTN.primary} w-full`}>
+            {pending ? 'Signing In...' : 'Sign In'}
+          </button>
         </div>
       </form>
     </div>

@@ -647,6 +647,22 @@ describe('calculateSSP', () => {
 
 // ─── Holiday daily rate formula (mirrors payrollService.calculateHolidayDailyRate) ──
 
+describe('calculateSSP LEL guard', () => {
+  it('blocks SSP when weekly earnings are below the LEL threshold', () => {
+    const period = makeSickPeriod('2025-06-09');
+    const r = calculateSSP(period, '2025-06-12', sspConf2025, 124.99);
+    expect(r.eligible).toBe(false);
+    expect(r.sspAmount).toBe(0);
+  });
+
+  it('allows SSP when weekly earnings meet the LEL threshold', () => {
+    const period = makeSickPeriod('2025-06-09');
+    const r = calculateSSP(period, '2025-06-12', sspConf2025, 125);
+    expect(r.eligible).toBe(true);
+    expect(r.sspAmount).toBeCloseTo(118.75 / 5, 2);
+  });
+});
+
 describe('holiday daily rate formula', () => {
   // This tests the same logic as the private calculateHolidayDailyRate function
   function holidayDailyRate(contractHours, hourlyRate) {

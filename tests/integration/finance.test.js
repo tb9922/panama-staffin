@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { pool } from '../../db.js';
 import * as financeRepo from '../../repositories/financeRepo.js';
+import * as financeService from '../../services/financeService.js';
 
 let homeA, homeB;
 
@@ -46,6 +47,7 @@ afterAll(async () => {
   ]) {
     await pool.query(`DELETE FROM ${tbl} WHERE home_id IN ($1, $2)`, [homeA, homeB]).catch(() => {});
   }
+  await pool.query('DELETE FROM beds WHERE home_id IN ($1, $2)', [homeA, homeB]).catch(() => {});
   if (homeA) await pool.query('DELETE FROM homes WHERE id = $1', [homeA]);
   if (homeB) await pool.query('DELETE FROM homes WHERE id = $1', [homeB]);
 });
@@ -316,6 +318,72 @@ describe('Finance: invoices', () => {
 });
 
 // ── Expenses ─────────────────────────────────────────────────────────────────
+
+describe('Finance service hotfixes', () => {
+  it('rejects creating an invoice directly as paid', async () => {
+    await expect(financeService.createInvoiceWithLines(homeA, {
+      payer_type: 'resident',
+      payer_name: 'Hotfix Resident',
+      status: 'paid',
+      lines: [{ description: 'Care fees', quantity: 1, unit_price: 1000, amount: 1000, line_type: 'fee' }],
+    }, 'admin')).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('voids an unpaid sent invoice', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Void Test Resident',
+      weekly_fee: 1000,
+      created_by: 'admin',
+    });
+    const created = await financeService.createInvoiceWithLines(homeA, {
+      resident_id: resident.id,
+      payer_type: 'resident',
+      payer_name: resident.resident_name,
+      status: 'sent',
+      lines: [{ description: 'Care fees', quantity: 1, unit_price: 1000, amount: 1000, line_type: 'fee' }],
+    }, 'admin');
+
+    const result = await financeService.voidInvoice(created.id, homeA, 'admin');
+    expect(result.status).toBe('void');
+    expect(result.balance_due).toBe(0);
+  });
+
+  it('creates a credit note for an unpaid sent invoice', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Credit Test Resident',
+      weekly_fee: 1000,
+      created_by: 'admin',
+    });
+    const created = await financeService.createInvoiceWithLines(homeA, {
+      resident_id: resident.id,
+      payer_type: 'resident',
+      payer_name: resident.resident_name,
+      status: 'sent',
+      lines: [{ description: 'Care fees', quantity: 1, unit_price: 850, amount: 850, line_type: 'fee' }],
+    }, 'admin');
+
+    const result = await financeService.creditInvoice(created.id, homeA, 'admin');
+    expect(result.invoice.status).toBe('credited');
+    expect(result.credit_note.status).toBe('credited');
+    expect(result.credit_note.total_amount).toBe(-850);
+  });
+
+  it('blocks resident deletion while a bed is still occupied', async () => {
+    const resident = await financeRepo.createResident(homeA, {
+      resident_name: 'Occupied Resident',
+      weekly_fee: 900,
+      created_by: 'admin',
+    });
+    await pool.query(
+      `INSERT INTO beds (home_id, room_number, status, resident_id, created_by, updated_by)
+       VALUES ($1, $2, 'occupied', $3, 'admin', 'admin')`,
+      [homeA, `HTFX-${resident.id}`, resident.id]
+    );
+
+    await expect(financeService.softDeleteResident(resident.id, homeA, 'admin'))
+      .rejects.toMatchObject({ statusCode: 400 });
+  });
+});
 
 describe('Finance: expenses', () => {
   let expenseId;
@@ -714,8 +782,6 @@ describe('Finance: summary queries', () => {
 });
 
 // ── Invoice cross-home resident validation ────────────────────────────────────
-
-import * as financeService from '../../services/financeService.js';
 
 describe('Invoice: cross-home resident validation', () => {
   let invoiceId, residentA, residentB, invoiceVersion;

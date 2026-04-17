@@ -80,7 +80,7 @@ const invoiceBodySchema = z.object({
   adjustments: z.coerce.number().optional(),
   issue_date: dateSchema.nullable().optional(),
   due_date: dateSchema.nullable().optional(),
-  status: z.enum(['draft', 'sent', 'partially_paid', 'paid', 'overdue', 'void', 'credited']).optional(),
+  status: z.enum(['draft', 'sent']).optional(),
   notes: z.string().max(5000).nullable().optional(),
   lines: z.array(invoiceLineSchema).optional(),
 });
@@ -326,6 +326,32 @@ router.post('/invoices/:id/payment', writeRateLimiter, requireAuth, requireHomeA
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const result = await financeService.recordPayment(idP.data, req.home.id, parsed.data, req.user.username);
     await auditService.log('finance_create', req.home.slug, req.user.username, { id: idP.data, entity: 'payment', amount: parsed.data.amount });
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.post('/invoices/:id/void', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idP = idSchema.safeParse(req.params.id);
+    if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
+    const result = await financeService.voidInvoice(idP.data, req.home.id, req.user.username);
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'invoice', action: 'void' });
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.post('/invoices/:id/credit', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('finance', 'write'), async (req, res, next) => {
+  try {
+    const idP = idSchema.safeParse(req.params.id);
+    if (!idP.success) return res.status(400).json({ error: 'Invalid invoice ID' });
+    const result = await financeService.creditInvoice(idP.data, req.home.id, req.user.username);
+    await auditService.log('finance_update', req.home.slug, req.user.username, { id: idP.data, entity: 'invoice', action: 'credit' });
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });

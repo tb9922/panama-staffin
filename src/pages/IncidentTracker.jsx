@@ -220,10 +220,17 @@ export default function IncidentTracker() {
   async function handleSave() {
     if (saving) return;
     if (isFrozen) return;
-    if (!form.date || !form.type || !form.severity) return;
+    const validationError = validateFormBeforeSave();
+    if (validationError) {
+      setSaveError(validationError.message);
+      setActiveTab(validationError.tab);
+      focusField(validationError.fieldId);
+      return;
+    }
     const home = getCurrentHome();
     const username = getLoggedInUser()?.username || 'admin';
     setSaving(true);
+    setSaveError(null);
     try {
       if (editingId) {
         await updateIncident(home, editingId, form);
@@ -262,6 +269,27 @@ export default function IncidentTracker() {
       ? form.staff_involved.filter(id => id !== staffId)
       : [...form.staff_involved, staffId];
     setForm({ ...form, staff_involved: list });
+  }
+
+  function focusField(fieldId) {
+    if (typeof document === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(fieldId);
+      if (element?.focus) element.focus();
+    });
+  }
+
+  function validateFormBeforeSave() {
+    if (!form.date) return { tab: 'details', fieldId: 'incident-date', message: 'Date is required before you can save this incident.' };
+    if (!form.type) return { tab: 'details', fieldId: 'incident-type', message: 'Incident type is required before you can save this incident.' };
+    if (!form.severity) return { tab: 'details', fieldId: 'incident-severity', message: 'Severity is required before you can save this incident.' };
+    if (form.cqc_notifiable && !form.cqc_notification_type) {
+      return { tab: 'notifications', fieldId: 'incident-cqc-type', message: 'Select the CQC notification type before saving this incident.' };
+    }
+    if (form.riddor_reportable && !form.riddor_category) {
+      return { tab: 'notifications', fieldId: 'incident-riddor-category', message: 'Select the RIDDOR category before saving this incident.' };
+    }
+    return null;
   }
 
   function handleExport() {

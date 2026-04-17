@@ -1,4 +1,7 @@
+import path from 'path';
+import { unlink } from 'fs/promises';
 import { pool } from './shared.js';
+import { config } from '../../config.js';
 
 export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = true) {
   const caseTables = [
@@ -28,11 +31,41 @@ export async function purgeExpiredRecords(homeId, retentionYears = 6, dryRun = t
       let total = 0;
       for (const [caseType, parentTable] of Object.entries(caseTypeMap)) {
         const subquery = `SELECT id FROM ${parentTable} WHERE home_id = $1 AND deleted_at IS NOT NULL AND deleted_at < ${cutoffExpr}`;
-        const sql = dryRun
-          ? `SELECT COUNT(*) FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`
-          : `DELETE FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`;
-        const result = await client.query(sql, [homeId, years, caseType]);
-        total += dryRun ? parseInt(result.rows[0].count, 10) : result.rowCount;
+        if (dryRun) {
+          const result = await client.query(
+            `SELECT COUNT(*) FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`,
+            [homeId, years, caseType]
+          );
+          total += parseInt(result.rows[0].count, 10);
+          continue;
+        }
+
+        if (child === 'hr_file_attachments') {
+          const { rows: attachments } = await client.query(
+            `SELECT case_id, stored_name
+             FROM hr_file_attachments
+             WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`,
+            [homeId, years, caseType]
+          );
+          for (const attachment of attachments) {
+            const filePath = path.join(
+              config.upload.dir,
+              String(homeId),
+              caseType,
+              String(attachment.case_id),
+              attachment.stored_name,
+            );
+            await unlink(filePath).catch((err) => {
+              if (err?.code !== 'ENOENT') throw err;
+            });
+          }
+        }
+
+        const result = await client.query(
+          `DELETE FROM ${child} WHERE home_id = $1 AND case_type = $3 AND case_id IN (${subquery})`,
+          [homeId, years, caseType]
+        );
+        total += result.rowCount;
       }
       counts[child] = total;
     }

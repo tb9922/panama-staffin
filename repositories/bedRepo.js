@@ -273,7 +273,7 @@ export async function findByResidentId(residentId, homeId, client) {
   const { rows } = await conn.query(
     `/* bedRepo – findByResidentId */
      SELECT ${BED_COLS} FROM beds
-     WHERE resident_id = $1 AND home_id = $2 AND status = 'occupied'`,
+     WHERE resident_id = $1 AND home_id = $2 AND status IN ('occupied', 'hospital_hold')`,
     [residentId, homeId]
   );
   return shapeBed(rows[0]);

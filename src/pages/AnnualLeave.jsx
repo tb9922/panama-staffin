@@ -15,6 +15,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import OverrideRequestReview from '../components/staff/OverrideRequestReview.jsx';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -40,6 +41,7 @@ function getCenteredSchedulingRange(date, radiusDays = 200) {
 export default function AnnualLeave() {
   const { canWrite, homeRole } = useData();
   const canEdit = canWrite('scheduling');
+  const { confirm, ConfirmDialog } = useConfirm();
   const [schedData, setSchedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -210,6 +212,7 @@ export default function AnnualLeave() {
       requestUnlock(dateKey, () => cancelAL(staffId, dateKey));
       return;
     }
+    if (!await confirm(`Cancel annual leave for ${dateKey}?`)) return;
     setSaving(true);
     try {
       await deleteOverride(getCurrentHome(), dateKey, staffId, getEditLockOptions(dateKey));
@@ -259,6 +262,8 @@ export default function AnnualLeave() {
     );
   }
 
+  const confirmDialog = ConfirmDialog;
+
   if (isOwnDataAnnualLeave) {
     if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your leave view" message={error} onRetry={() => void loadData()} /></div>;
     if (!schedData?.staff?.length) {
@@ -279,7 +284,9 @@ export default function AnnualLeave() {
   const amberThreshold = (parseFloat(schedData.config?.shifts?.EL?.hours) || 12);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <>
+      {confirmDialog}
+      <div className="p-6 max-w-7xl mx-auto">
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{schedData.config.home_name} — Annual Leave</h1>
@@ -528,7 +535,8 @@ export default function AnnualLeave() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

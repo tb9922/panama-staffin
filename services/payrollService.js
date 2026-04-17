@@ -238,7 +238,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
               const runWeeksKey = sickPeriod.id;
               const weeksThisRun = sspRunWeeks.get(runWeeksKey) || 0;
               const periodWithCap = { ...sickPeriod, ssp_weeks_paid: (sickPeriod.ssp_weeks_paid || 0) + weeksThisRun };
-              const r = calculateSSP(periodWithCap, date, sspConfig);
+              const averageWeeklyEarnings =
+                (parseFloat(s.contract_hours) || 0) * (parseFloat(s.hourly_rate) || 0);
+              const r = calculateSSP(periodWithCap, date, sspConfig, averageWeeklyEarnings);
               if (r.eligible) {
                 acc.ssp_days += r.sspDays;
                 sspAmount = r.sspAmount;

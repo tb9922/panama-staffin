@@ -1,6 +1,7 @@
 import { withTransaction } from '../db.js';
 import logger from '../logger.js';
 import * as financeRepo from '../repositories/financeRepo.js';
+import * as bedRepo from '../repositories/bedRepo.js';
 
 // ── Residents ─────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,10 @@ export async function createInvoiceWithLines(homeId, data, username) {
     const adjustments = parseFloat(data.adjustments) || 0;
     const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
     if (totalAmount < 0) throw Object.assign(new Error('Invoice total cannot be negative after adjustments'), { statusCode: 400 });
+    const requestedStatus = data.status || 'draft';
+    if (!['draft', 'sent'].includes(requestedStatus)) {
+      throw Object.assign(new Error('New invoices can only be created as draft or sent'), { statusCode: 400 });
+    }
 
     const invoice = await financeRepo.createInvoice(homeId, {
       ...data,
@@ -110,6 +115,7 @@ export async function createInvoiceWithLines(homeId, data, username) {
       total_amount: totalAmount,
       amount_paid: 0,
       balance_due: totalAmount,
+      status: requestedStatus,
       created_by: username,
     }, client);
 
@@ -124,6 +130,97 @@ export async function createInvoiceWithLines(homeId, data, username) {
     logger.info({ homeId, invoiceId: invoice.id, invoiceNumber, total: totalAmount, payerType: invoice.payer_type, createdBy: username }, 'Invoice created');
     const savedLines = await financeRepo.findInvoiceLines(invoice.id, homeId, client);
     return { ...invoice, lines: savedLines };
+  });
+}
+
+export async function voidInvoice(id, homeId, username) {
+  return withTransaction(async (client) => {
+    const invoice = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
+    if (!invoice) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 });
+    if (!['draft', 'sent', 'overdue'].includes(invoice.status)) {
+      throw Object.assign(new Error(`Cannot void invoice with status '${invoice.status}'`), { statusCode: 400 });
+    }
+    if ((invoice.amount_paid || 0) > 0) {
+      throw Object.assign(new Error('Cannot void an invoice that already has payments recorded - issue a credit note instead'), { statusCode: 400 });
+    }
+    const updated = await financeRepo.updateInvoice(id, homeId, {
+      status: 'void',
+      amount_paid: 0,
+      balance_due: 0,
+      paid_date: null,
+      payment_method: null,
+      payment_reference: null,
+      notes: [invoice.notes, `Voided by ${username} on ${new Date().toISOString().slice(0, 10)}`].filter(Boolean).join('\n'),
+    }, client);
+    if (invoice.resident_id) {
+      await financeRepo.recalculateResidentBalance(invoice.resident_id, homeId, client);
+    }
+    logger.info({ homeId, invoiceId: id, username }, 'Invoice voided');
+    return updated;
+  });
+}
+
+export async function creditInvoice(id, homeId, username) {
+  return withTransaction(async (client) => {
+    const invoice = await financeRepo.findInvoiceById(id, homeId, client, { forUpdate: true });
+    if (!invoice) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 });
+    if (!['sent', 'overdue'].includes(invoice.status)) {
+      throw Object.assign(new Error(`Cannot credit invoice with status '${invoice.status}'`), { statusCode: 400 });
+    }
+    if ((invoice.amount_paid || 0) > 0) {
+      throw Object.assign(new Error('Cannot credit an invoice with payments already recorded'), { statusCode: 400 });
+    }
+
+    const existingLines = await financeRepo.findInvoiceLines(id, homeId, client);
+    const now = new Date();
+    const prefix = `CRN-${String(now.getUTCFullYear()).slice(2)}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const creditNumber = await financeRepo.getNextInvoiceNumber(homeId, prefix, client);
+    const creditInvoice = await financeRepo.createInvoice(homeId, {
+      invoice_number: creditNumber,
+      resident_id: invoice.resident_id,
+      payer_type: invoice.payer_type,
+      payer_name: invoice.payer_name,
+      payer_reference: invoice.payer_reference,
+      period_start: invoice.period_start,
+      period_end: invoice.period_end,
+      subtotal: -(invoice.subtotal || 0),
+      adjustments: -(invoice.adjustments || 0),
+      total_amount: -(invoice.total_amount || 0),
+      amount_paid: 0,
+      balance_due: 0,
+      status: 'credited',
+      issue_date: now.toISOString().slice(0, 10),
+      due_date: null,
+      notes: `Credit note for ${invoice.invoice_number}`,
+      created_by: username,
+    }, client);
+
+    for (const line of existingLines) {
+      await financeRepo.createInvoiceLine(creditInvoice.id, homeId, {
+        description: `Credit - ${line.description}`,
+        quantity: line.quantity,
+        unit_price: -(line.unit_price || 0),
+        amount: -(line.amount || 0),
+        line_type: 'credit',
+      }, client);
+    }
+
+    const updatedOriginal = await financeRepo.updateInvoice(id, homeId, {
+      status: 'credited',
+      amount_paid: 0,
+      balance_due: 0,
+      paid_date: null,
+      payment_method: null,
+      payment_reference: null,
+      notes: [invoice.notes, `Credited by ${username} via ${creditNumber}`].filter(Boolean).join('\n'),
+    }, client);
+
+    if (invoice.resident_id) {
+      await financeRepo.recalculateResidentBalance(invoice.resident_id, homeId, client);
+    }
+
+    logger.info({ homeId, invoiceId: id, creditInvoiceId: creditInvoice.id, username }, 'Invoice credited');
+    return { invoice: updatedOriginal, credit_note: creditInvoice };
   });
 }
 
@@ -528,6 +625,10 @@ export async function softDeleteResident(id, homeId, username) {
     if (!existing) return false;
     if (parseFloat(existing.outstanding_balance || 0) > 0) {
       throw Object.assign(new Error('Cannot delete resident with outstanding balance. Zero the balance first.'), { statusCode: 400 });
+    }
+    const bed = await bedRepo.findByResidentId(id, homeId, client);
+    if (bed && ['occupied', 'hospital_hold'].includes(bed.status)) {
+      throw Object.assign(new Error(`Cannot delete resident while bed ${bed.room_number || bed.id} is still ${bed.status.replace('_', ' ')}`), { statusCode: 400 });
     }
     const deleted = await financeRepo.softDelete('resident', id, homeId, client);
     if (deleted) logger.info({ homeId, residentId: id, deletedBy: username }, 'Finance resident soft-deleted');

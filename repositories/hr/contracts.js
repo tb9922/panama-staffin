@@ -28,7 +28,7 @@ const shapeContract = createShaper({
     'termination_type', 'termination_date', 'termination_reason', 'notice_given_date',
     'notice_given_by', 'last_working_day', 'garden_leave', 'pilon',
     'exit_interview_date', 'exit_interview_notes', 'references_agreed',
-    'status', 'created_at', 'updated_at', 'version',
+    'status', 'notes', 'created_at', 'updated_at', 'version',
   ],
   dates: [
     'statement_issued_date', 'contract_start_date', 'contract_end_date',

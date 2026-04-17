@@ -492,11 +492,9 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   const conn = client || pool;
   const refStr = typeof referenceDate === 'string' ? referenceDate : referenceDate.toISOString().slice(0, 10);
   const { rows } = await conn.query(
-    `SELECT COALESCE(SUM(pl.gross_pay), 0)::numeric AS total_gross,
-            COUNT(*)::int AS run_count,
-            LEAST(52, GREATEST(1, ROUND(
-              SUM(pr.period_end::date - pr.period_start::date + 1) / 7.0
-            )))::int AS divisor_weeks
+    `SELECT pr.period_start::text,
+            pr.period_end::text,
+            COALESCE(pl.gross_pay, 0)::numeric AS gross_pay
      FROM payroll_lines pl
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pr.home_id = $1
@@ -506,11 +504,31 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
        AND pr.period_end >= ($3::date - INTERVAL '364 days')`,
     [homeId, staffId, refStr],
   );
-  const row = rows[0];
-  const runCount = parseInt(row?.run_count || 0, 10);
-  if (runCount < 1) return null;
-  // ERA 1996 s.224: divide by actual weeks with pay (capped at 52), not always 52.
-  // New starters with fewer than 52 weeks of history get a fair average, not one
-  // artificially deflated by dividing by 52 when only a few weeks of data exist.
-  return { total_gross: parseFloat(row.total_gross), divisor_weeks: parseInt(row.divisor_weeks, 10) };
+  const paidRows = rows
+    .map(row => ({
+      period_start: row.period_start,
+      period_end: row.period_end,
+      gross_pay: parseFloat(row.gross_pay) || 0,
+    }))
+    .filter(row => row.gross_pay > 0)
+    .sort((a, b) => b.period_end.localeCompare(a.period_end));
+
+  if (paidRows.length < 1) return null;
+
+  let totalGross = 0;
+  let usedDays = 0;
+  for (const row of paidRows) {
+    if (usedDays >= 364) break;
+    const start = new Date(`${row.period_start}T00:00:00Z`);
+    const end = new Date(`${row.period_end}T00:00:00Z`);
+    const runDays = Math.max(1, Math.floor((end - start) / 86400000) + 1);
+    const daysToUse = Math.min(runDays, 364 - usedDays);
+    totalGross += row.gross_pay * (daysToUse / runDays);
+    usedDays += daysToUse;
+  }
+
+  return {
+    total_gross: totalGross,
+    divisor_weeks: Math.max(1, usedDays / 7),
+  };
 }

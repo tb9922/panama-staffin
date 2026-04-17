@@ -1,7 +1,7 @@
 const REDACTED = '[REDACTED]'
 const MAX_DEPTH = 6
 
-const SENSITIVE_KEY_RE = /(^|_|-)(password|passcode|secret|token|authorization|cookie|csrf|email|phone|mobile|dob|date_of_birth|ni_number|national_insurance|resident_name|staff_name|full_name|first_name|last_name|username|ip_address|ipaddress|address|postcode|post_code|notes?)$/i
+const SENSITIVE_KEY_RE = /(^|_|-)(password|passcode|secret|token|authorization|cookie|csrf|email|phone|mobile|dob|date_of_birth|ni_number|national_insurance|resident_name|staff_name|full_name|first_name|last_name|username|ip_address|ipaddress|address|postcode|post_code|notes?|dbs_certificate_number|nhs_number|passport_number|safeguarding_reference)$/i
 const NI_NUMBER_RE = /\b(?!BG|GB|KN|NK|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b/gi
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 

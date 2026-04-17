@@ -237,7 +237,7 @@ describe('Session and logout hardening', () => {
     await pool.query('UPDATE users SET active = true WHERE username = $1', [ADMIN_USER]);
   });
 
-  it('fails closed when logout deny-list persistence fails', async () => {
+  it('clears the local session even when logout deny-list persistence fails', async () => {
     vi.spyOn(authRepo, 'addToDenyList').mockRejectedValueOnce(new Error('db down'));
     const loginRes = await request(app).post('/api/login').send({ username: LOCKOUT_USER, password: LOCKOUT_PW });
     expect(loginRes.status).toBe(200);
@@ -246,11 +246,12 @@ describe('Session and logout hardening', () => {
     const res = await request(app)
       .post('/api/login/logout')
       .set('Authorization', `Bearer ${userToken}`)
-      .expect(503);
+      .expect(200);
 
-    expect(res.body.error).toMatch(/logout failed/i);
+    expect(res.body.revoked).toBe(false);
+    expect(res.body.warning).toMatch(/local session was cleared/i);
     const setCookies = res.headers['set-cookie'] || [];
-    expect(setCookies.some(cookie => cookie.startsWith('panama_token=;'))).toBe(false);
+    expect(setCookies.some(cookie => cookie.startsWith('panama_token=;'))).toBe(true);
 
     await request(app)
       .get('/api/homes')

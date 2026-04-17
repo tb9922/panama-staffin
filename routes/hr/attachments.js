@@ -56,7 +56,8 @@ router.get('/attachments/download/:id', requireAuth, requireHomeAccess, requireM
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
     const uploadDir = path.resolve(config.upload.dir);
     const filePath = path.resolve(path.join(config.upload.dir, String(req.home.id), att.case_type, String(att.case_id), att.stored_name));
-    if (!filePath.startsWith(uploadDir)) return res.status(403).json({ error: 'Forbidden' });
+    const withinUploadDir = filePath === uploadDir || filePath.startsWith(`${uploadDir}${path.sep}`);
+    if (!withinUploadDir) return res.status(403).json({ error: 'Forbidden' });
     sendStoredDownload(res, next, filePath, {
       originalName: att.original_name,
       mimeType: att.mime_type,

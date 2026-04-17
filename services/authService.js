@@ -60,7 +60,6 @@ export async function loadDenyList() {
 }
 
 export async function login(username, password) {
-  const allowLegacyEnvAuth = process.env.ALLOW_LEGACY_ENV_AUTH === '1';
   // Try database-backed users first
   let dbUser = null;
   let usersTableExists = true;
@@ -134,18 +133,8 @@ export async function login(username, password) {
     await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
     throw new AuthenticationError('Invalid credentials');
   }
-  if (!allowLegacyEnvAuth) {
-    logger.error('Legacy env-var authentication is disabled because the users table is unavailable');
-    throw new AuthenticationError('Login unavailable until database migrations are applied');
-  }
-
-  // Fallback: env-var users (backward compatibility before migration)
-  const envUser = config.users.find(u => u.username === username);
-  if (!envUser) throw new AuthenticationError('Invalid credentials');
-  const valid = await bcrypt.compare(password, envUser.hash);
-  if (!valid) throw new AuthenticationError('Invalid credentials');
-  const { token } = issueToken({ username: envUser.username, role: envUser.role, session_version: 0 });
-  return { username: envUser.username, role: envUser.role, token, isPlatformAdmin: false };
+  logger.error('Database-backed authentication is unavailable because the users table is missing');
+  throw new AuthenticationError('Login unavailable until database migrations are applied');
 }
 
 export function verifyToken(token) {

@@ -1,9 +1,9 @@
 // Shared NMW/NLW rate lookup used by server validation and frontend UI.
-// Rates are configurable per home; fallbacks are April 2026 statutory rates.
+// Rates are configurable per home; fallbacks are statutory rates from 1 April 2026.
 
-export const DEFAULT_NLW_RATE = 12.21;
-export const DEFAULT_NMW_RATE_18_20 = 10.00;
-export const DEFAULT_NMW_RATE_UNDER_18 = 7.55;
+export const DEFAULT_NLW_RATE = 12.71;
+export const DEFAULT_NMW_RATE_18_20 = 10.85;
+export const DEFAULT_NMW_RATE_UNDER_18 = 8.00;
 
 export function getConfiguredNlwRate(config) {
   return config?.nlw_rate || DEFAULT_NLW_RATE;

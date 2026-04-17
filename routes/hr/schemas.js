@@ -6,6 +6,16 @@ import { nullableDateInput, nullableEnumInput, stringArrayInput } from '../../li
 export const idSchema = z.coerce.number().int().positive();
 export const dateSchema = nullableDateInput;
 export const staffIdSchema = z.string().min(1).max(20);
+export const FLEX_REFUSAL_REASONS = [
+  'burden_of_additional_costs',
+  'detrimental_to_meet_customer_demand',
+  'inability_to_reorganise_work',
+  'inability_to_recruit_additional_staff',
+  'detrimental_to_quality',
+  'detrimental_to_performance',
+  'insufficiency_of_work_during_periods',
+  'planned_structural_changes',
+];
 export const caseTypeSchema = z.enum([
   'disciplinary', 'grievance', 'performance', 'rtw_interview',
   'oh_referral', 'contract', 'family_leave', 'flexible_working',
@@ -445,7 +455,7 @@ export const flexWorkingBodySchema = z.object({
   decision_date:      dateSchema.optional(),
   decision_reason:    z.string().max(2000).nullable().optional(),
   decision_by:        z.string().max(200).nullable().optional(),
-  refusal_reason:     z.string().max(100).nullable().optional(),
+  refusal_reason:     nullableEnumInput(FLEX_REFUSAL_REASONS).optional(),
   refusal_explanation: z.string().max(5000).nullable().optional(),
   approved_pattern:   z.string().max(500).nullable().optional(),
   approved_effective_date: dateSchema.optional(),
@@ -474,7 +484,7 @@ export const flexWorkingUpdateSchema = z.object({
   decision_date:      dateSchema.nullable().optional(),
   decision_reason:    z.string().max(2000).nullable().optional(),
   decision_by:        z.string().max(200).nullable().optional(),
-  refusal_reason:     z.string().max(100).nullable().optional(),
+  refusal_reason:     nullableEnumInput(FLEX_REFUSAL_REASONS).optional(),
   refusal_explanation: z.string().max(5000).nullable().optional(),
   approved_pattern:   z.string().max(500).nullable().optional(),
   approved_effective_date: dateSchema.nullable().optional(),

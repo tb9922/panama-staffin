@@ -10,7 +10,8 @@ import StickyTable from '../components/StickyTable.jsx';
 import {
   getCurrentHome, getFinanceResidents, createFinanceResident, updateFinanceResident,
   getFinanceFeeHistory, getFinanceInvoices, createFinanceInvoice, updateFinanceInvoice,
-  recordFinancePayment, } from '../lib/api.js';
+  recordFinancePayment, voidFinanceInvoice, creditFinanceInvoice,
+} from '../lib/api.js';
 import {
   FUNDING_TYPES, CARE_TYPES, RESIDENT_STATUSES, INVOICE_STATUSES, PAYER_TYPES,
   PAYMENT_METHODS, LINE_TYPES, getStatusBadge, getLabel, formatCurrency,
@@ -21,6 +22,7 @@ import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { todayLocalISO } from '../lib/localDates.js';
+import { useConfirm } from '../hooks/useConfirm.jsx';
 
 const TABS = [
   { id: 'residents', label: 'Residents' },
@@ -368,6 +370,7 @@ function ResidentsTab({ home, canEdit }) {
 function InvoicesTab({ home, canEdit }) {
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { showToast } = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [invoices, setInvoices] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -475,6 +478,42 @@ function InvoicesTab({ home, canEdit }) {
     finally { setSaving(false); }
   }
 
+  async function handleVoidInvoice() {
+    if (!editing?.id || saving) return;
+    if (!await confirm(`Void invoice ${editing.invoice_number || editing.id}?`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await voidFinanceInvoice(home, editing.id);
+      showNotice('Invoice voided.');
+      showToast({ title: 'Invoice voided', message: editing.invoice_number || editing.payer_name });
+      closeModal();
+      await load();
+    } catch (e) {
+      setError(normalizeFinanceError(e.message));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreditInvoice() {
+    if (!editing?.id || saving) return;
+    if (!await confirm(`Issue a credit note for invoice ${editing.invoice_number || editing.id}?`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await creditFinanceInvoice(home, editing.id);
+      showNotice('Credit note issued.');
+      showToast({ title: 'Credit note created', message: editing.invoice_number || editing.payer_name });
+      closeModal();
+      await load();
+    } catch (e) {
+      setError(normalizeFinanceError(e.message));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const selectedResident = useMemo(
     () => residents.find(r => r.id === form.resident_id) || null,
@@ -521,6 +560,7 @@ function InvoicesTab({ home, canEdit }) {
 
   return (
     <>
+      {ConfirmDialog}
       {notice && (
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
           {notice.content}
@@ -626,7 +666,7 @@ function InvoicesTab({ home, canEdit }) {
                   <input type="date" value={form.due_date || ''} onChange={e => set('due_date', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>Status</label>
                   <select value={form.status || 'draft'} onChange={e => set('status', e.target.value)} className={INPUT.select}>
-                    {INVOICE_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    {INVOICE_STATUSES.filter(s => ['draft', 'sent'].includes(s.id)).map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select></div>
                 <div><label className={INPUT.label}>Adjustments</label>
                   <input type="number" step="0.01" value={form.adjustments ?? ''} onChange={e => set('adjustments', e.target.value)} className={INPUT.base} /></div>
@@ -690,6 +730,20 @@ function InvoicesTab({ home, canEdit }) {
                     {canEdit && <div className="col-span-2">
                       <button onClick={handlePayment} disabled={saving} className={BTN.success}>{saving ? 'Recording...' : 'Record Payment'}</button>
                     </div>}
+                  </div>
+                )}
+                {canEdit && editing.amount_paid <= 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {['draft', 'sent', 'overdue'].includes(editing.status) && (
+                      <button onClick={handleVoidInvoice} disabled={saving} className={BTN.secondary}>
+                        {saving ? 'Working...' : 'Void Invoice'}
+                      </button>
+                    )}
+                    {['sent', 'overdue'].includes(editing.status) && (
+                      <button onClick={handleCreditInvoice} disabled={saving} className={BTN.secondary}>
+                        {saving ? 'Working...' : 'Issue Credit Note'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
