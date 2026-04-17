@@ -13,12 +13,17 @@ import { pool } from './db.js';
 import logger from './logger.js';
 import { metricsContentType, recordHttpRequestMetrics, renderMetrics } from './metrics.js';
 import { runWithRequestContext } from './requestContext.js';
+import { scrubSentryEvent } from './shared/sentryScrubber.js';
 
 if (config.sentryDsn) {
   Sentry.init({
     dsn: config.sentryDsn,
     environment: config.nodeEnv,
     tracesSampleRate: config.sentryTracesSampleRate,
+    sendDefaultPii: false,
+    beforeSend(event) {
+      return scrubSentryEvent(event);
+    },
   });
   logger.info('Sentry error tracking enabled');
 }

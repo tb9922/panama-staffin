@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/react'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './index.css'
 import App from './App.jsx'
+import { scrubSentryEvent } from '../shared/sentryScrubber.js'
 
 // VITE_SENTRY_DSN is set at build time via .env — omit to disable frontend tracking
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -12,6 +13,10 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.MODE,
     tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || 0),
+    sendDefaultPii: false,
+    beforeSend(event) {
+      return scrubSentryEvent(event)
+    },
   });
 }
 

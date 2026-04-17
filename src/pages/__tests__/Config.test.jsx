@@ -21,6 +21,11 @@ vi.mock('../../lib/api.js', async (importActual) => {
 });
 
 vi.mock('../../lib/bankHolidays.js', () => ({
+  BANK_HOLIDAY_REGIONS: [
+    { value: 'england-and-wales', label: 'England & Wales' },
+    { value: 'scotland', label: 'Scotland' },
+    { value: 'northern-ireland', label: 'Northern Ireland' },
+  ],
   syncBankHolidays: vi.fn(),
 }));
 
@@ -44,6 +49,7 @@ vi.mock('../../lib/design.js', async (importActual) => {
 // ---------------------------------------------------------------------------
 
 import { getSchedulingData, saveConfig, getLoggedInUser } from '../../lib/api.js';
+import { syncBankHolidays } from '../../lib/bankHolidays.js';
 
 function setupAdminMocks() {
   getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
@@ -155,6 +161,24 @@ describe('Config', () => {
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
 
     expect(screen.getByRole('button', { name: /Sync UK Bank Holidays/i })).toBeInTheDocument();
+  });
+
+  it('passes the configured bank holiday region to sync', async () => {
+    syncBankHolidays.mockResolvedValue({
+      holidays: MOCK_CONFIG.bank_holidays || [],
+      added: 0,
+      source: 'GOV.UK API',
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Config />);
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Bank Holiday Region'), 'scotland');
+    await user.click(screen.getByRole('button', { name: /Sync UK Bank Holidays/i }));
+
+    await waitFor(() => {
+      expect(syncBankHolidays).toHaveBeenCalledWith(expect.any(Array), 'scotland');
+    });
   });
 
   it('shows current leave year date range under Leave Year Start selector', async () => {

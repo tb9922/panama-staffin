@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useMemo, useRef, useState } from 'react';
 import Modal from '../components/Modal.jsx';
 import { BTN, MODAL } from '../lib/design.js';

@@ -1,4 +1,8 @@
-// UK Bank Holidays (England & Wales) — hardcoded baseline + generated fallback
+export const BANK_HOLIDAY_REGIONS = [
+  { value: 'england-and-wales', label: 'England & Wales' },
+  { value: 'scotland', label: 'Scotland' },
+  { value: 'northern-ireland', label: 'Northern Ireland' },
+];
 
 const UK_BANK_HOLIDAYS = [
   { date: '2024-01-01', name: "New Year's Day" },
@@ -124,15 +128,18 @@ function generateFallbackBankHolidays(year) {
 }
 
 export function getHardcodedBankHolidays(yearFrom, yearTo) {
-  return UK_BANK_HOLIDAYS.filter(bh => {
-    const y = parseInt(bh.date.substring(0, 4), 10);
-    return y >= yearFrom && y <= yearTo;
+  return UK_BANK_HOLIDAYS.filter((holiday) => {
+    const year = parseInt(holiday.date.substring(0, 4), 10);
+    return year >= yearFrom && year <= yearTo;
   });
 }
 
-export function getFallbackBankHolidays(yearFrom, yearTo) {
+export function getFallbackBankHolidays(yearFrom, yearTo, region = 'england-and-wales') {
+  if (region !== 'england-and-wales') {
+    throw new Error(`Fallback bank holidays are only available for England & Wales; ${region} must sync from GOV.UK`);
+  }
   const holidays = [...getHardcodedBankHolidays(yearFrom, yearTo)];
-  const coveredYears = new Set(holidays.map(bh => parseInt(bh.date.substring(0, 4), 10)));
+  const coveredYears = new Set(holidays.map((holiday) => parseInt(holiday.date.substring(0, 4), 10)));
   for (let year = yearFrom; year <= yearTo; year += 1) {
     if (!coveredYears.has(year)) {
       holidays.push(...generateFallbackBankHolidays(year));
@@ -141,33 +148,34 @@ export function getFallbackBankHolidays(yearFrom, yearTo) {
   return holidays.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function fetchGovUKBankHolidays() {
-  const res = await fetch('/api/bank-holidays');
+export async function fetchGovUKBankHolidays(region = 'england-and-wales') {
+  const res = await fetch(`/api/bank-holidays?region=${encodeURIComponent(region)}`);
   if (!res.ok) throw new Error('Failed to fetch from GOV.UK');
   return res.json();
 }
 
 export function mergeBankHolidays(existing, newHolidays) {
-  const dateSet = new Set((existing || []).map(bh => bh.date));
+  const dateSet = new Set((existing || []).map((holiday) => holiday.date));
   const merged = [...(existing || [])];
-  for (const bh of newHolidays) {
-    if (!dateSet.has(bh.date)) {
-      merged.push(bh);
-      dateSet.add(bh.date);
+  for (const holiday of newHolidays) {
+    if (!dateSet.has(holiday.date)) {
+      merged.push(holiday);
+      dateSet.add(holiday.date);
     }
   }
   return merged.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function syncBankHolidays(existing) {
+export async function syncBankHolidays(existing, region = 'england-and-wales') {
   let source = 'fallback';
   let holidays;
   try {
-    holidays = await fetchGovUKBankHolidays();
+    holidays = await fetchGovUKBankHolidays(region);
     source = 'GOV.UK API';
-  } catch {
+  } catch (err) {
+    if (region !== 'england-and-wales') throw err;
     const now = new Date();
-    holidays = getFallbackBankHolidays(now.getUTCFullYear(), now.getUTCFullYear() + 6);
+    holidays = getFallbackBankHolidays(now.getUTCFullYear(), now.getUTCFullYear() + 6, region);
     source = 'generated fallback (API unavailable)';
   }
   const merged = mergeBankHolidays(existing, holidays);

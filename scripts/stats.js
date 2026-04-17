@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
 const ROOT = process.cwd();
@@ -53,7 +53,6 @@ const isRouteFile = all(inDir('routes'), hasExtension('.js'));
 const isRepoFile = all(inDir('repositories'), hasExtension('.js'));
 const isServiceFile = all(inDir('services'), hasExtension('.js'));
 const isMigrationFile = all(inDir('migrations'), hasExtension('.sql'));
-const isPageFile = all(inDir('src/pages'), hasExtension('.jsx'));
 const isTestFile = (filePath) => {
   const rel = relative(ROOT, filePath).replace(/\\/g, '/');
   return rel.includes('/__tests__/') || /\.(test|spec)\.(js|jsx)$/.test(rel) || rel.endsWith('/auth.setup.js');

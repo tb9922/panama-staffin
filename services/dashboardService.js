@@ -1,24 +1,11 @@
 import logger from '../logger.js';
 import * as dashboardRepo from '../repositories/dashboardRepo.js';
 
-// ── In-memory TTL cache ──────────────────────────────────────────────────────
-// Dashboard data is identical for all users viewing the same home within a short
-// window. Caching for 10s reduces 23 parallel DB queries to 1 cache lookup on
-// cache hit — critical at 24 homes with concurrent managers.
-
-const CACHE_TTL_MS = 10_000;
-const cache = new Map(); // homeId → { data, expiresAt }
-
-/** Invalidate cached dashboard for a home (call after any mutation to that home). */
 export function invalidateDashboardCache(homeId) {
-  cache.delete(homeId);
+  void homeId;
 }
 
-// ── Alert priority ordering ─────────────────────────────────────────────────
-
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
-
-// ── Alert builders ──────────────────────────────────────────────────────────
 
 function pushIf(alerts, condition, type, module, message, link, priority = 1, dueDate = null) {
   if (condition) alerts.push({ type, module, message, link, priority, dueDate });
@@ -29,13 +16,11 @@ function buildAlerts(m) {
   const n = (obj, key) => (obj && typeof obj[key] === 'number') ? obj[key] : 0;
   const b = (obj, key) => !!(obj && obj[key]);
 
-  // Priority 5 — Regulatory deadline breach (CQC enforcement risk)
   pushIf(alerts, n(m.incidents, 'cqcOverdue') > 0, 'error', 'incidents',
     `${n(m.incidents, 'cqcOverdue')} CQC notification(s) overdue`, '/incidents', 5);
   pushIf(alerts, n(m.incidents, 'riddorOverdue') > 0, 'error', 'incidents',
     `${n(m.incidents, 'riddorOverdue')} RIDDOR report(s) overdue`, '/incidents', 5);
 
-  // Priority 4 — Serious compliance/safety concern
   pushIf(alerts, n(m.incidents, 'docOverdue') > 0, 'error', 'incidents',
     `${n(m.incidents, 'docOverdue')} Duty of Candour notification(s) overdue`, '/incidents', 4);
   pushIf(alerts, n(m.risks, 'critical') > 0, 'error', 'risks',
@@ -43,9 +28,8 @@ function buildAlerts(m) {
   pushIf(alerts, n(m.whistleblowing, 'unacknowledged') > 0, 'error', 'whistleblowing',
     `${n(m.whistleblowing, 'unacknowledged')} unacknowledged whistleblowing concern(s)`, '/speak-up', 4);
   pushIf(alerts, m.beds?.occupancyRate < 80, 'error', 'beds',
-    `Occupancy at ${n(m.beds, 'occupancyRate')}% — significant revenue risk`, '/beds', 4);
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% - significant revenue risk`, '/beds', 4);
 
-  // Priority 3 — Overdue actions requiring attention
   pushIf(alerts, n(m.incidents, 'open') > 0, 'warning', 'incidents',
     `${n(m.incidents, 'open')} open investigation(s)`, '/incidents', 3);
   pushIf(alerts, n(m.incidents, 'overdueActions') > 0, 'warning', 'incidents',
@@ -95,11 +79,10 @@ function buildAlerts(m) {
   pushIf(alerts, n(m.whistleblowing, 'open') > 0, 'warning', 'whistleblowing',
     `${n(m.whistleblowing, 'open')} open whistleblowing concern(s)`, '/speak-up', 3);
   pushIf(alerts, m.ipc?.latestScore != null && m.ipc.latestScore < 70, 'warning', 'ipc',
-    `Latest IPC audit score is ${m.ipc.latestScore}% — below 70% threshold`, '/ipc', 3);
+    `Latest IPC audit score is ${m.ipc.latestScore}% - below 70% threshold`, '/ipc', 3);
 
-  // Priority 2 — Approaching deadlines (not yet overdue)
   pushIf(alerts, m.beds?.occupancyRate >= 80 && m.beds?.occupancyRate < 90, 'warning', 'beds',
-    `Occupancy at ${n(m.beds, 'occupancyRate')}% — below 90% target`, '/beds', 2);
+    `Occupancy at ${n(m.beds, 'occupancyRate')}% - below 90% target`, '/beds', 2);
   pushIf(alerts, n(m.training, 'expiringSoon') > 0, 'info', 'training',
     `${n(m.training, 'expiringSoon')} training record(s) expiring in 30 days`, '/training', 2);
   pushIf(alerts, n(m.maintenance, 'dueSoon') > 0, 'info', 'maintenance',
@@ -109,22 +92,16 @@ function buildAlerts(m) {
   pushIf(alerts, n(m.policies, 'dueSoon') > 0, 'info', 'policies',
     `${n(m.policies, 'dueSoon')} policy review(s) due soon`, '/policies', 2);
 
-  // Priority 1 — Informational
   pushIf(alerts, n(m.fireDrills, 'drillsThisYear') < 4 && !b(m.fireDrills, 'overdue'), 'info', 'fireDrills',
-    `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year — 4 required`, '/training', 1);
+    `Only ${n(m.fireDrills, 'drillsThisYear')} fire drill(s) this year - 4 required`, '/training', 1);
   pushIf(alerts, n(m.beds, 'available') > 0 && m.beds?.occupancyRate >= 90, 'info', 'beds',
     `${n(m.beds, 'available')} bed(s) available`, '/beds', 1);
 
-  // Stable sort: highest priority first, then errors before warnings before info
   alerts.sort((a, b) => (b.priority - a.priority) || (TYPE_ORDER[a.type] - TYPE_ORDER[b.type]));
-
   return alerts;
 }
 
-// Exported for unit testing (pure function — no DB, no side effects)
 export { buildAlerts as _buildAlerts };
-
-// ── Default zero-value objects per module ──────────────────────────────────
 
 const DEFAULTS = {
   incidents:       { open: 0, cqcOverdue: 0, riddorOverdue: 0, docOverdue: 0, overdueActions: 0 },
@@ -147,15 +124,7 @@ const DEFAULTS = {
 
 const MODULE_KEYS = Object.keys(DEFAULTS);
 
-// ── Main export ─────────────────────────────────────────────────────────────
-
 export async function getDashboardSummary(homeId) {
-  // Return cached result if still fresh
-  const cached = cache.get(homeId);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.data;
-  }
-
   const today = new Date().toISOString().slice(0, 10);
 
   const results = await Promise.allSettled([
@@ -188,18 +157,12 @@ export async function getDashboardSummary(homeId) {
   });
 
   const alerts = buildAlerts(modules);
+  const weekActions = alerts.filter((alert) => alert.priority >= 3);
 
-  // "Action This Week" — priority 3+ items (all are currently overdue/actionable)
-  const weekActions = alerts.filter(a => a.priority >= 3);
+  logger.info(
+    { homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate },
+    'Dashboard summary generated',
+  );
 
-  logger.info({ homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate }, 'Dashboard summary generated');
-
-  const result = { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
-
-  // Only cache successful (non-degraded) results — degraded results should retry on next request
-  if (!result._degraded) {
-    cache.set(homeId, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-  }
-
-  return result;
+  return { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
 }

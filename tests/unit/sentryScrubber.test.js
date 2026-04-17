@@ -7,6 +7,7 @@ describe('scrubSentryEvent', () => {
       request: {
         data: { password: 'super-secret' },
         cookies: { panama_token: 'jwt' },
+        url: 'https://panama.local/dashboard?home=amberwood&date=2026-04-16',
         headers: {
           Authorization: 'Bearer abc',
           Cookie: 'panama_token=jwt',
@@ -20,6 +21,8 @@ describe('scrubSentryEvent', () => {
       extra: {
         resident_name: 'Jane Smith',
         nested: { notes: 'confidential' },
+        ni: 'AB123456C',
+        emailText: 'alice@example.com',
       },
     })
 
@@ -28,9 +31,12 @@ describe('scrubSentryEvent', () => {
     expect(scrubbed.request.headers.Authorization).toBe('[REDACTED]')
     expect(scrubbed.request.headers.Cookie).toBe('[REDACTED]')
     expect(scrubbed.request.headers['x-trace-id']).toBe('trace-1')
+    expect(scrubbed.request.url).toBe('https://panama.local/dashboard?home=[REDACTED]&date=[REDACTED]')
     expect(scrubbed.user.username).toBe('[REDACTED]')
     expect(scrubbed.user.email).toBe('[REDACTED]')
     expect(scrubbed.extra.resident_name).toBe('[REDACTED]')
     expect(scrubbed.extra.nested.notes).toBe('[REDACTED]')
+    expect(scrubbed.extra.ni).toBe('[REDACTED]')
+    expect(scrubbed.extra.emailText).toBe('[REDACTED]')
   })
 })

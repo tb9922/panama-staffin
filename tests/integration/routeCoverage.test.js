@@ -305,6 +305,9 @@ describe('bank holidays route', () => {
           'england-and-wales': {
             events: [{ date: '2026-12-25', title: 'Christmas Day' }],
           },
+          scotland: {
+            events: [{ date: '2026-11-30', title: "St Andrew's Day" }],
+          },
         }),
       });
 
@@ -320,5 +323,16 @@ describe('bank holidays route', () => {
     const staleRes = await authGet('/api/bank-holidays', viewerToken).expect(200);
     expect(staleRes.body).toEqual([{ date: '2026-12-25', name: 'Christmas Day' }]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    __resetBankHolidayCacheForTests();
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({
+        'england-and-wales': { events: [] },
+        scotland: { events: [{ date: '2026-11-30', title: "St Andrew's Day" }] },
+      }),
+    });
+
+    const scotlandRes = await authGet('/api/bank-holidays?region=scotland', viewerToken).expect(200);
+    expect(scotlandRes.body).toEqual([{ date: '2026-11-30', name: "St Andrew's Day" }]);
   });
 });

@@ -9,3 +9,6 @@ CREATE TABLE IF NOT EXISTS user_notification_reads (
 
 CREATE INDEX IF NOT EXISTS idx_user_notification_reads_user_home
   ON user_notification_reads(user_id, home_id, read_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_user_notification_reads_home
+  ON user_notification_reads(home_id);

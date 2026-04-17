@@ -30,6 +30,8 @@ const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '.
 const MIGRATION_ALIASES = new Map([
   ['153_staff_unique_active_name_start.sql', ['124_staff_unique_active_name_start.sql']],
   ['154_create_onboarding_history.sql', ['133_create_onboarding_history.sql']],
+  ['160_create_rate_limit_buckets.sql', ['145_create_rate_limit_buckets.sql']],
+  ['161_create_notification_reads.sql', ['144_create_notification_reads.sql', '147_create_notification_reads.sql']],
 ]);
 
 // Load .env manually (same logic as config.js — keeps scripts self-contained)

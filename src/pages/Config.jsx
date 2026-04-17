@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { syncBankHolidays } from '../lib/bankHolidays.js';
+import { BANK_HOLIDAY_REGIONS, syncBankHolidays } from '../lib/bankHolidays.js';
 import { isCareRole } from '../lib/rotation.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
@@ -375,7 +375,8 @@ export default function Config() {
           <button onClick={async () => {
             setSyncStatus({ loading: true });
             try {
-              const result = await syncBankHolidays(config.bank_holidays);
+              const region = config.bank_holiday_region || 'england-and-wales';
+              const result = await syncBankHolidays(config.bank_holidays, region);
               handleChange('bank_holidays', result.holidays);
               setSyncStatus({ success: true, msg: `Synced via ${result.source} — ${result.added} new holidays added (${result.holidays.length} total)` });
               setTimeout(() => setSyncStatus(null), 5000);
@@ -387,6 +388,19 @@ export default function Config() {
             className={`${BTN.primary} ${BTN.sm} !bg-purple-600 hover:!bg-purple-700 active:!bg-purple-800`}>
             {syncStatus?.loading ? 'Syncing...' : 'Sync UK Bank Holidays'}
           </button>
+        </div>
+        <div className="mb-4 max-w-sm">
+          <label className={INPUT.label}>Bank Holiday Region</label>
+          <select
+            aria-label="Bank Holiday Region"
+            value={config.bank_holiday_region || 'england-and-wales'}
+            onChange={(e) => handleChange('bank_holiday_region', e.target.value)}
+            className={INPUT.select}
+          >
+            {BANK_HOLIDAY_REGIONS.map((region) => (
+              <option key={region.value} value={region.value}>{region.label}</option>
+            ))}
+          </select>
         </div>
         {syncStatus && !syncStatus.loading && (
           <InlineNotice

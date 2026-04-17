@@ -4,6 +4,7 @@ Care home staff scheduling app using the Panama 2-2-3 rotation pattern. Built fo
 
 Latest platform baseline note:
 - `docs/HARDENING_SUMMARY_2026-03-29.md` - summary of the recent auth, scheduling, payroll, GDPR, ops, and test hardening work
+- `npm run stats` current snapshot - routes `52`, repositories `75`, services `24`, migrations `160`, pages `67`, tests `190`
 
 ## Engineering Standards — Always Active
 

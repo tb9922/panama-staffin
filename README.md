@@ -14,6 +14,7 @@ Current verified local baseline:
 - `npm run build`: passed
 - `npm run audit:routes`: passed
 - `npm audit --omit=dev --json`: 0 vulnerabilities
+- `npm run stats`: routes `52`, repositories `75`, services `24`, migrations `160`, pages `67`, tests `190`
 
 Recent hardening work covered:
 
