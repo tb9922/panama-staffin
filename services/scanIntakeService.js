@@ -12,6 +12,9 @@ import * as maintenanceRepo from '../repositories/maintenanceRepo.js';
 import * as financeRepo from '../repositories/financeRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
+import * as hrRepo from '../repositories/hrRepo.js';
+import * as trainingAttachmentsRepo from '../repositories/trainingAttachments.js';
+import * as handoverRepo from '../repositories/handoverRepo.js';
 import * as supplierService from './supplierService.js';
 import { extractDocument } from './ocrService.js';
 import { encrypt, decrypt } from './encryptionService.js';
@@ -131,11 +134,36 @@ function moveIntoCqcStore({ homeId, intakeItem, evidenceId }) {
   return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
 }
 
+function moveIntoHrStore({ homeId, intakeItem, caseType, caseId }) {
+  const ext = extnameSafe(intakeItem.original_name);
+  const storedName = `${randomUUID()}${ext}`;
+  const destinationDir = path.join(config.upload.dir, String(homeId), String(caseType), String(caseId));
+  ensureDir(destinationDir);
+  const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
+  const destinationPath = path.join(destinationDir, storedName);
+  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+}
+
+function moveIntoTrainingStore({ homeId, intakeItem, staffId, typeId }) {
+  const ext = extnameSafe(intakeItem.original_name);
+  const storedName = `${randomUUID()}${ext}`;
+  const destinationDir = path.join(config.upload.dir, String(homeId), 'training', String(staffId), String(typeId));
+  ensureDir(destinationDir);
+  const sourcePath = buildIntakePath(homeId, intakeItem.stored_name);
+  const destinationPath = path.join(destinationDir, storedName);
+  return rename(sourcePath, destinationPath).then(() => ({ stored_name: storedName }));
+}
+
 async function confirmMaintenance(client, homeId, intakeItem, body, username) {
-  const check = await maintenanceRepo.findById(body.record_id, homeId);
+  let check = null;
+  if (body.target_type === 'create_check') {
+    check = await maintenanceRepo.upsert(homeId, body.create_check || {}, client);
+  } else {
+    check = await maintenanceRepo.findById(body.record_id, homeId, client);
+  }
   if (!check) throw Object.assign(new Error('Maintenance check not found'), { statusCode: 404 });
-  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: body.record_id });
-  const attachment = await recordAttachmentsRepo.create(homeId, 'maintenance', String(body.record_id), {
+  const moved = await moveIntoRecordAttachmentStore({ homeId, intakeItem, moduleId: 'maintenance', recordId: check.id });
+  const attachment = await recordAttachmentsRepo.create(homeId, 'maintenance', String(check.id), {
     original_name: intakeItem.original_name,
     stored_name: moved.stored_name,
     mime_type: intakeItem.mime_type,
@@ -143,12 +171,14 @@ async function confirmMaintenance(client, homeId, intakeItem, body, username) {
     description: body.description || null,
     uploaded_by: username,
   }, client);
-  return {
+  const result = {
     routed_module: 'maintenance',
-    routed_record_id: String(body.record_id),
+    routed_record_id: String(check.id),
     routed_attachment_id: String(attachment.id),
     attachment,
   };
+  if (body.target_type === 'create_check') result.created_check = check;
+  return result;
 }
 
 async function confirmFinance(client, homeId, intakeItem, body, username) {
@@ -289,6 +319,107 @@ async function confirmCqc(client, homeId, intakeItem, body, username) {
   };
 }
 
+async function confirmRecordAttachment(client, homeId, intakeItem, body, username) {
+  const moved = await moveIntoRecordAttachmentStore({
+    homeId,
+    intakeItem,
+    moduleId: body.module,
+    recordId: body.record_id,
+  });
+  const attachment = await recordAttachmentsRepo.create(homeId, body.module, String(body.record_id), {
+    original_name: intakeItem.original_name,
+    stored_name: moved.stored_name,
+    mime_type: intakeItem.mime_type,
+    size_bytes: intakeItem.size_bytes,
+    description: body.description || null,
+    uploaded_by: username,
+  }, client);
+  return {
+    routed_module: body.module,
+    routed_record_id: String(body.record_id),
+    routed_attachment_id: String(attachment.id),
+    attachment,
+  };
+}
+
+async function confirmHrAttachment(client, homeId, intakeItem, body, username) {
+  const moved = await moveIntoHrStore({
+    homeId,
+    intakeItem,
+    caseType: body.case_type,
+    caseId: body.case_id,
+  });
+  const attachment = await hrRepo.createAttachment(homeId, body.case_type, body.case_id, {
+    original_name: intakeItem.original_name,
+    stored_name: moved.stored_name,
+    mime_type: intakeItem.mime_type,
+    size_bytes: intakeItem.size_bytes,
+    description: body.description || null,
+    uploaded_by: username,
+  }, client);
+  return {
+    routed_module: 'hr_attachment',
+    routed_record_id: `${body.case_type}:${body.case_id}`,
+    routed_attachment_id: String(attachment.id),
+    attachment,
+  };
+}
+
+async function confirmTraining(client, homeId, intakeItem, body, username) {
+  const moved = await moveIntoTrainingStore({
+    homeId,
+    intakeItem,
+    staffId: body.staff_id,
+    typeId: body.type_id,
+  });
+  const attachment = await trainingAttachmentsRepo.create(homeId, body.staff_id, body.type_id, {
+    original_name: intakeItem.original_name,
+    stored_name: moved.stored_name,
+    mime_type: intakeItem.mime_type,
+    size_bytes: intakeItem.size_bytes,
+    description: body.description || null,
+    uploaded_by: username,
+  }, client);
+  return {
+    routed_module: 'training',
+    routed_record_id: `${body.staff_id}:${body.type_id}`,
+    routed_attachment_id: String(attachment.id),
+    attachment,
+  };
+}
+
+async function confirmHandover(client, homeId, intakeItem, body, username) {
+  const entry = await handoverRepo.createEntry(homeId, {
+    entry_date: body.entry_date,
+    shift: body.shift,
+    category: body.category,
+    priority: body.priority,
+    content: body.content,
+    incident_id: body.incident_id || null,
+  }, username, client);
+  const moved = await moveIntoRecordAttachmentStore({
+    homeId,
+    intakeItem,
+    moduleId: 'handover_entry',
+    recordId: entry.id,
+  });
+  const attachment = await recordAttachmentsRepo.create(homeId, 'handover_entry', String(entry.id), {
+    original_name: intakeItem.original_name,
+    stored_name: moved.stored_name,
+    mime_type: intakeItem.mime_type,
+    size_bytes: intakeItem.size_bytes,
+    description: body.description || null,
+    uploaded_by: username,
+  }, client);
+  return {
+    routed_module: 'handover_entry',
+    routed_record_id: String(entry.id),
+    routed_attachment_id: String(attachment.id),
+    attachment,
+    created_entry: entry,
+  };
+}
+
 export async function confirmScanIntake(homeId, intakeId, body, username) {
   return withTransaction(async (client) => {
     const intakeItem = await documentIntakeRepo.findById(intakeId, homeId, client, { forUpdate: true });
@@ -298,14 +429,22 @@ export async function confirmScanIntake(homeId, intakeId, body, username) {
     }
 
     let result;
-    if (body.target === 'maintenance') {
+    if (body.target === 'record_attachment') {
+      result = await confirmRecordAttachment(client, homeId, intakeItem, body.record_attachment, username);
+    } else if (body.target === 'maintenance') {
       result = await confirmMaintenance(client, homeId, intakeItem, body.maintenance, username);
     } else if (body.target === 'finance_ap') {
       result = await confirmFinance(client, homeId, intakeItem, body.finance_ap, username);
+    } else if (body.target === 'hr_attachment') {
+      result = await confirmHrAttachment(client, homeId, intakeItem, body.hr_attachment, username);
     } else if (body.target === 'onboarding') {
       result = await confirmOnboarding(client, homeId, intakeItem, body.onboarding, username);
+    } else if (body.target === 'training') {
+      result = await confirmTraining(client, homeId, intakeItem, body.training, username);
     } else if (body.target === 'cqc') {
       result = await confirmCqc(client, homeId, intakeItem, body.cqc, username);
+    } else if (body.target === 'handover') {
+      result = await confirmHandover(client, homeId, intakeItem, body.handover, username);
     } else {
       throw Object.assign(new Error('Unsupported target'), { statusCode: 400 });
     }

@@ -1,6 +1,7 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import MaintenanceTracker from '../MaintenanceTracker.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
+import { useData } from '../../contexts/DataContext.jsx';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -14,6 +15,10 @@ vi.mock('../../lib/api.js', async () => {
     createMaintenanceCheck: vi.fn(),
     updateMaintenanceCheck: vi.fn(),
     deleteMaintenanceCheck: vi.fn(),
+    getRecordAttachments: vi.fn().mockResolvedValue([]),
+    uploadRecordAttachment: vi.fn(),
+    deleteRecordAttachment: vi.fn(),
+    downloadRecordAttachment: vi.fn(),
   };
 });
 
@@ -162,6 +167,26 @@ describe('MaintenanceTracker', () => {
     });
   });
 
+  it('uses compliance write access for maintenance editing controls', async () => {
+    useData.mockReturnValue({
+      canRead: () => true,
+      canWrite: (moduleId) => moduleId === 'compliance',
+      homeRole: 'home_manager',
+      staffId: null,
+      scanIntakeEnabled: true,
+      scanIntakeTargets: ['maintenance', 'record_attachment'],
+      isScanTargetEnabled: () => true,
+    });
+
+    renderWithProviders(<MaintenanceTracker />, {
+      user: { username: 'manager', role: 'admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Add Check/i })).toBeInTheDocument();
+    });
+  });
+
   it('viewer does NOT see the Add Check button', async () => {
     renderViewer();
     await waitFor(() => {
@@ -183,5 +208,20 @@ describe('MaintenanceTracker', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Export Excel/i })).toBeInTheDocument();
     });
+  });
+
+  it('shows maintenance attachments and scan controls in the edit modal', async () => {
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /Edit/i }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Edit/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Maintenance Documents')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /Scan into this check/i })).toBeInTheDocument();
+    expect(screen.getByText('No certificates or service documents attached yet.')).toBeInTheDocument();
   });
 });

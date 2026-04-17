@@ -16,9 +16,12 @@ import {
 } from '../lib/maintenance.js';
 import {
   getCurrentHome, getMaintenance, createMaintenanceCheck, updateMaintenanceCheck, deleteMaintenanceCheck,
+  getRecordAttachments, uploadRecordAttachment, deleteRecordAttachment, downloadRecordAttachment,
 } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
+import FileAttachments from '../components/FileAttachments.jsx';
+import ScanDocumentLink from '../components/ScanDocumentLink.jsx';
 
 const EMPTY_FORM = {
   category: '', category_name: '', description: '', frequency: 'annual',
@@ -28,8 +31,8 @@ const EMPTY_FORM = {
 };
 
 export default function MaintenanceTracker() {
-  const { canWrite } = useData();
-  const canEdit = canWrite('governance');
+  const { canWrite, isScanTargetEnabled } = useData();
+  const canEdit = canWrite('compliance');
   const { confirm, ConfirmDialog } = useConfirm();
   const [checks, setChecks] = useState([]);
   const [maintenanceCategories, setMaintenanceCategories] = useState([]);
@@ -183,6 +186,7 @@ export default function MaintenanceTracker() {
         <h1 className={PAGE.title}>Maintenance & Environment</h1>
         <div className="flex gap-2">
           <button onClick={handleExport} className={`${BTN.secondary} ${BTN.sm}`}>Export Excel</button>
+          {canEdit && isScanTargetEnabled('maintenance') && <ScanDocumentLink context={{ target: 'maintenance' }} label="Scan to Maintenance" />}
           {canEdit && <button onClick={openAdd} className={`${BTN.primary} ${BTN.sm}`}>Add Check</button>}
         </div>
       </div>
@@ -376,6 +380,23 @@ export default function MaintenanceTracker() {
                   </div>
                 ) : null;
               })()}
+
+              <div className="border-t border-gray-200 pt-3">
+                <FileAttachments
+                  caseType="maintenance"
+                  caseId={editingId}
+                  readOnly={!canEdit}
+                  getFiles={(caseType, caseId) => getRecordAttachments(caseType, caseId)}
+                  uploadFile={(caseType, caseId, file, description) => uploadRecordAttachment(caseType, caseId, file, description)}
+                  deleteFile={(id) => deleteRecordAttachment(id)}
+                  downloadFile={(id, originalName) => downloadRecordAttachment(id, originalName)}
+                  title="Maintenance Documents"
+                  emptyText="No certificates or service documents attached yet."
+                  saveFirstMessage="Save the maintenance check first to upload or scan documents into it."
+                  scanLabel="Scan into this check"
+                  scanHelperText="Scan a certificate, report, or service sheet directly into this maintenance check."
+                />
+              </div>
             </div>
 
             <div className={MODAL.footer}>

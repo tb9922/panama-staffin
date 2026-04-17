@@ -296,6 +296,9 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
     if (!idParsed.success) return res.status(400).json({ error: 'Invalid scan item ID' });
     const parsed = confirmBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid confirm payload' });
+    if (parsed.data.target === 'record_attachment' && !parsed.data.record_attachment) {
+      return res.status(400).json({ error: 'Record attachment confirm data is required' });
+    }
     if (parsed.data.target === 'maintenance') {
       const maintenanceBody = parsed.data.maintenance;
       if (!maintenanceBody) return res.status(400).json({ error: 'Maintenance confirm data is required' });
@@ -305,6 +308,21 @@ router.post('/:id/confirm', writeRateLimiter, requireAuth, requireHomeAccess, re
       if (maintenanceBody.target_type === 'create_check' && !maintenanceBody.create_check) {
         return res.status(400).json({ error: 'New maintenance check details are required' });
       }
+    }
+    if (parsed.data.target === 'finance_ap' && !parsed.data.finance_ap) {
+      return res.status(400).json({ error: 'Finance confirm data is required' });
+    }
+    if (parsed.data.target === 'hr_attachment' && !parsed.data.hr_attachment) {
+      return res.status(400).json({ error: 'HR attachment confirm data is required' });
+    }
+    if (parsed.data.target === 'onboarding' && !parsed.data.onboarding) {
+      return res.status(400).json({ error: 'Onboarding confirm data is required' });
+    }
+    if (parsed.data.target === 'training' && !parsed.data.training) {
+      return res.status(400).json({ error: 'Training confirm data is required' });
+    }
+    if (parsed.data.target === 'cqc' && !parsed.data.cqc) {
+      return res.status(400).json({ error: 'CQC confirm data is required' });
     }
     if (parsed.data.target === 'handover' && !parsed.data.handover) {
       return res.status(400).json({ error: 'Handover confirm data is required' });
