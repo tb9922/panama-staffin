@@ -50,6 +50,34 @@ export class ConflictError extends AppError {
   }
 }
 
+function coerceStatusCode(value) {
+  const statusCode = Number.parseInt(value, 10);
+  if (!Number.isInteger(statusCode)) return null;
+  if (statusCode < 400 || statusCode > 599) return null;
+  return statusCode;
+}
+
+export function getHttpErrorResponse(err) {
+  if (err instanceof AppError) {
+    return {
+      statusCode: err.statusCode,
+      message: err.message,
+      code: err.code ?? null,
+    };
+  }
+
+  const statusCode = coerceStatusCode(err?.statusCode);
+  if (statusCode) {
+    return {
+      statusCode,
+      message: typeof err?.message === 'string' && err.message ? err.message : 'Request failed',
+      code: err?.code ?? null,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Send a sanitized 400 response for Zod validation failures.
  * Returns only path + message per issue — never raw Zod internals.

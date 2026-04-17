@@ -13,6 +13,7 @@ import {
   getDolsStatus, getMcaStatus, getDolsStats,
   APPLICATION_TYPES, DOLS_STATUSES, MCA_STATUSES,
 } from '../lib/dols.js';
+import { getDolsMaxExpiryDate, validateDolsAuthorisationWindow } from '../lib/dolsValidation.js';
 import { clickableRowProps } from '../lib/a11y.js';
 import { useData } from '../contexts/DataContext.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
@@ -123,6 +124,16 @@ export default function DolsTracker() {
     return missing;
   }, [form.assessment_date, form.resident_name]);
 
+  const dolsMaxExpiryDate = useMemo(
+    () => getDolsMaxExpiryDate(form.authorisation_date),
+    [form.authorisation_date],
+  );
+
+  const dolsWindowError = useMemo(
+    () => viewMode === 'dols' ? validateDolsAuthorisationWindow(form) : null,
+    [form, viewMode],
+  );
+
   // ── DoLS CRUD ──────────────────────────────────────────────────────────────
 
   function openAddDols() {
@@ -164,6 +175,10 @@ export default function DolsTracker() {
 
   async function handleSaveDols() {
     if (!form.resident_name || !form.application_date) return;
+    if (dolsWindowError) {
+      setSaveError(dolsWindowError);
+      return;
+    }
     setSaveError(null);
     try {
       if (editingId) {
@@ -561,7 +576,11 @@ export default function DolsTracker() {
                     <div>
                       <label className={INPUT.label}>Expiry Date</label>
                       <input type="date" className={INPUT.base} value={form.expiry_date}
+                        max={dolsMaxExpiryDate || undefined}
                         onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
+                      {dolsMaxExpiryDate && (
+                        <p className="mt-1 text-xs text-gray-500">Maximum expiry: {dolsMaxExpiryDate}</p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -641,11 +660,12 @@ export default function DolsTracker() {
               {missingDolsFields.length > 0 && (
                 <p className="text-sm text-amber-700 mr-auto">Missing: {missingDolsFields.join(', ')}</p>
               )}
+              {!saveError && dolsWindowError && <p className="text-sm text-red-600 mr-auto">{dolsWindowError}</p>}
               {saveError && <p className="text-sm text-red-600 mr-auto">{saveError}</p>}
               <button onClick={() => setShowModal(false)} className={BTN.ghost}>Cancel</button>
               {canEdit && (
                 <button onClick={handleSaveDols}
-                  disabled={!form.resident_name || !form.application_date}
+                  disabled={!form.resident_name || !form.application_date || Boolean(dolsWindowError)}
                   className={BTN.primary}>
                   {editingId ? 'Update' : 'Save'}
                 </button>

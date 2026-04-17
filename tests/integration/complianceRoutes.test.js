@@ -157,6 +157,24 @@ describe('Compliance route create flows', () => {
     expect(listRes.body.dols.some(record => record.id === createRes.body.id)).toBe(true);
   });
 
+  it('rejects DoLS authorisations longer than 12 months', async () => {
+    const res = await request(app)
+      .post('/api/dols')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        resident_name: 'Overlong Authorisation Resident',
+        application_type: 'dols',
+        application_date: '2026-03-25',
+        authorised: true,
+        authorisation_date: '2026-03-25',
+        expiry_date: '2027-03-26',
+      })
+      .expect(400);
+
+    expect(res.body.error).toContain('12 months');
+  });
+
   it('accepts onboarding section-specific keys from the tracker UI', async () => {
     const saveRes = await request(app)
       .put(`/api/onboarding/${STAFF_ID}/contract`)
@@ -174,7 +192,7 @@ describe('Compliance route create flows', () => {
     expect(saveRes.body.contract.document_type).toBe('written_statement');
   });
 
-  it('normalizes legacy IPC outbreak status values on update', async () => {
+  it('rejects legacy IPC outbreak status values that would backtrack a confirmed outbreak', async () => {
     const createRes = await request(app)
       .post('/api/ipc')
       .query({ home: HOME_SLUG })
@@ -202,8 +220,8 @@ describe('Compliance route create flows', () => {
           status: 'open',
         },
       })
-      .expect(200);
+      .expect(400);
 
-    expect(updateRes.body.outbreak.status).toBe('suspected');
+    expect(updateRes.body.error).toContain('cannot move');
   });
 });

@@ -24,7 +24,7 @@ let homeId;
 
 beforeAll(async () => {
   await pool.query(`DELETE FROM clock_ins WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
-  await pool.query(`DELETE FROM timesheets WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
+  await pool.query(`DELETE FROM timesheet_entries WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]);
 
@@ -52,14 +52,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query(`DELETE FROM clock_ins WHERE home_id = $1`, [homeId]);
-  await pool.query(`DELETE FROM timesheets WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM homes WHERE id = $1`, [homeId]);
 });
 
 beforeEach(async () => {
   await pool.query(`DELETE FROM clock_ins WHERE home_id = $1`, [homeId]);
-  await pool.query(`DELETE FROM timesheets WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1`, [homeId]);
 });
 
 describe('Geofence boundary math', () => {
@@ -135,7 +135,7 @@ describe('Audit + state', () => {
       payload: { clockType: 'in', lat: HOME_LAT, lng: HOME_LNG, accuracyM: 10 },
     });
     const { rows } = await pool.query(
-      `SELECT * FROM audit_log WHERE event_type = 'clock_in_recorded' ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM audit_log WHERE action = 'clock_in_recorded' ORDER BY id DESC LIMIT 1`,
     );
     expect(rows.length).toBe(1);
   });
@@ -173,7 +173,7 @@ describe('Pairing in/out → timesheet feed', () => {
     });
 
     const { rows: tsRows } = await pool.query(
-      `SELECT * FROM timesheets WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
+      `SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
       [homeId, STAFF_ID, today],
     );
     expect(tsRows.length).toBe(1);
@@ -195,7 +195,7 @@ describe('Pairing in/out → timesheet feed', () => {
       homeId, id: outRow.id, approvedBy: 'manager', note: null,
     });
     const { rows } = await pool.query(
-      `SELECT * FROM timesheets WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
+      `SELECT * FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2 AND date = $3`,
       [homeId, STAFF_ID, today],
     );
     expect(rows.length).toBe(0);
@@ -221,7 +221,7 @@ describe('Manual clock-in (manager-recorded)', () => {
       note: 'Test', actor: 'manager',
     });
     const { rows } = await pool.query(
-      `SELECT * FROM audit_log WHERE event_type = 'clock_in_manual' ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM audit_log WHERE action = 'clock_in_manual' ORDER BY id DESC LIMIT 1`,
     );
     expect(rows.length).toBe(1);
   });

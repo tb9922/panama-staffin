@@ -744,12 +744,12 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     // Scoped to this home's slug to prevent cross-tenant collateral redaction
     // (common names like "John Smith" must not redact audit entries at other homes).
     if (originalName) {
-      await client.query(
-        `UPDATE audit_log SET details = REPLACE(details, $1, $2)
-         WHERE (home_slug = $3 OR (home_slug IS NULL AND $3 IS NULL))
-           AND details LIKE '%' || $1 || '%'`,
-        [originalName, anon, homeSlug || null]
-      );
+      await auditRepo.replaceInDetails({
+        homeSlug: homeSlug || null,
+        findText: originalName,
+        replacement: anon,
+        client,
+      });
     }
 
     // Clear webhook delivery payloads that may reference this staff member.

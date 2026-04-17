@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { pool } from '../../db.js';
+import { pool, withTransaction } from '../../db.js';
 import * as dashboardService from '../../services/dashboardService.js';
 import * as homeService from '../../services/homeService.js';
 import * as auditService from '../../services/auditService.js';
@@ -316,6 +316,45 @@ describe('auditService', () => {
 
     const deleted = await auditService.purgeOlderThan(30, SLUG);
     expect(deleted).toBeGreaterThanOrEqual(1);
+  });
+
+  it('blocks direct audit_log updates outside the privileged repo path', async () => {
+    await pool.query(
+      `INSERT INTO audit_log (action, home_slug, user_name, details)
+       VALUES ('tamper_test_update', $1, 'test', 'original details')`,
+      [SLUG],
+    );
+
+    await expect(
+      pool.query(
+        `UPDATE audit_log SET details = 'tampered'
+         WHERE action = 'tamper_test_update' AND home_slug = $1`,
+        [SLUG],
+      ),
+    ).rejects.toThrow(/append-only/i);
+  });
+
+  it('blocks direct audit_log deletes when the session flag is explicitly disabled', async () => {
+    await pool.query(
+      `INSERT INTO audit_log (action, home_slug, user_name, details)
+       VALUES ('tamper_test_delete', $1, 'test', 'delete me')`,
+      [SLUG],
+    );
+
+    await expect(
+      withTransaction(async (client) => {
+        await client.query(`SELECT set_config('app.audit_log_allow_delete', 'off', true)`);
+        await client.query(
+          `DELETE FROM audit_log WHERE action = 'tamper_test_delete' AND home_slug = $1`,
+          [SLUG],
+        );
+      }),
+    ).rejects.toThrow(/append-only/i);
+
+    await pool.query(
+      `DELETE FROM audit_log WHERE action = 'tamper_test_delete' AND home_slug = $1`,
+      [SLUG],
+    );
   });
 
   it('log swallows errors silently', async () => {

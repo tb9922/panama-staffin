@@ -20,6 +20,20 @@ import {
 } from '../shared/rotation.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
 
+const PROFILE_ALLOWLIST = new Set(['phone', 'address', 'emergency_contact']);
+
+function shapeOwnProfile(staff) {
+  return {
+    id: staff.id,
+    name: staff.name,
+    role: staff.role,
+    team: staff.team,
+    phone: staff.phone || '',
+    address: staff.address || '',
+    emergency_contact: staff.emergency_contact || '',
+  };
+}
+
 export async function getStaffScheduleWindow({ homeId, staffId, from, to }) {
   const [home, staff, overrides] = await Promise.all([
     homeRepo.findById(homeId),
@@ -151,15 +165,7 @@ export async function acknowledgeTrainingByStaff({ homeId, staffId, typeId }) {
 export async function getOwnProfile({ homeId, staffId }) {
   const staff = await staffRepo.findById(homeId, staffId);
   if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-  return {
-    id: staff.id,
-    name: staff.name,
-    role: staff.role,
-    team: staff.team,
-    phone: staff.phone || '',
-    address: staff.address || '',
-    emergency_contact: staff.emergency_contact || '',
-  };
+  return shapeOwnProfile(staff);
 }
 
 export async function updateOwnProfile({ homeId, staffId, patch, actorUsername }) {
@@ -170,20 +176,18 @@ export async function updateOwnProfile({ homeId, staffId, patch, actorUsername }
     ]);
     if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
     if (!existing || existing.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-    const updated = await staffRepo.updateOne(homeId, staffId, patch, undefined, client);
+    const safePatch = Object.fromEntries(
+      Object.entries(patch || {}).filter(([key]) => PROFILE_ALLOWLIST.has(key)),
+    );
+    if (Object.keys(safePatch).length === 0) {
+      return shapeOwnProfile(existing);
+    }
+    const updated = await staffRepo.updateOne(homeId, staffId, safePatch, undefined, client);
     await auditService.log('staff_profile_updated_by_self', home.slug, actorUsername || existing.name, {
       staff_id: staffId,
-      changed_fields: Object.keys(patch),
+      changed_fields: Object.keys(safePatch),
     }, client);
-    return {
-      id: updated.id,
-      name: updated.name,
-      role: updated.role,
-      team: updated.team,
-      phone: updated.phone || '',
-      address: updated.address || '',
-      emergency_contact: updated.emergency_contact || '',
-    };
+    return shapeOwnProfile(updated);
   });
 }
 
@@ -200,9 +204,7 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
     // without re-emitting webhook + audit. Otherwise repeated submits (double-click,
     // network retry, second-tab) would double-count and confuse downstream listeners.
     const existingOverrides = await overrideRepo.findByHome(homeId, date, date, client);
-    const alreadySick = (existingOverrides || []).some(
-      (o) => o.staff_id === staffId && o.shift === 'SICK',
-    );
+    const alreadySick = existingOverrides?.[date]?.[staffId]?.shift === 'SICK';
     const activePeriod = await sspRepo.getActiveSickPeriod(homeId, staffId, date, date, client);
     if (alreadySick && activePeriod) {
       return { ok: true, sickPeriod: activePeriod, alreadyRecorded: true };

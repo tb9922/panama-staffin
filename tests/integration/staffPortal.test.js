@@ -16,6 +16,7 @@ import * as staffAuthService from '../../services/staffAuthService.js';
 import * as staffPortalService from '../../services/staffPortalService.js';
 import * as overrideRequestService from '../../services/overrideRequestService.js';
 import * as overrideRequestRepo from '../../repositories/overrideRequestRepo.js';
+import { addDays, formatDate, getALDeductionHours, parseDate } from '../../shared/rotation.js';
 
 const HOME_SLUG = 'staffportal-test-home';
 const STAFF_A = 'SPORT-001';
@@ -24,12 +25,38 @@ const STAFF_B = 'SPORT-002';
 const STAFF_B_NAME = 'Bob Carer';
 const STAFF_A_USER = 'staffportal-alice';
 const PASSWORD = 'P0rtalP4ss!23';
+const HOME_CONFIG = {
+  cycle_start_date: '2025-01-06',
+  shifts: {
+    E: { hours: 8, start: '06:30', end: '14:30' },
+    L: { hours: 8, start: '14:00', end: '22:00' },
+    EL: { hours: 12, start: '06:30', end: '18:30' },
+    N: { hours: 10, start: '21:30', end: '07:30' },
+  },
+  leave_year_start: '04-01',
+};
 
 let homeId;
+let staffARecord;
+
+function getWorkingDate(startDate, offset = 0) {
+  let cursor = parseDate(startDate);
+  let found = 0;
+  for (let i = 0; i < 90; i += 1) {
+    const date = formatDate(cursor);
+    if (getALDeductionHours(staffARecord, date, HOME_CONFIG) > 0) {
+      if (found === offset) return date;
+      found += 1;
+    }
+    cursor = addDays(cursor, 1);
+  }
+  throw new Error('Unable to find a working day for the annual leave tests');
+}
 
 beforeAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
+  await pool.query(`DELETE FROM sick_periods WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
@@ -38,11 +65,7 @@ beforeAll(async () => {
 
   const { rows: [home] } = await pool.query(
     `INSERT INTO homes (slug, name, config) VALUES ($1, $2, $3) RETURNING id`,
-    [HOME_SLUG, 'Staff Portal Test Home', {
-      cycle_start_date: '2025-01-06',
-      shifts: { E: { hours: 8, start: '06:30', end: '14:30' }, L: { hours: 8, start: '14:00', end: '22:00' }, EL: { hours: 12, start: '06:30', end: '18:30' }, N: { hours: 10, start: '21:30', end: '07:30' } },
-      leave_year_start: '04-01',
-    }],
+    [HOME_SLUG, 'Staff Portal Test Home', HOME_CONFIG],
   );
   homeId = home.id;
 
@@ -54,6 +77,11 @@ beforeAll(async () => {
     );
   }
 
+  ({ rows: [staffARecord] } = await pool.query(
+    `SELECT * FROM staff WHERE home_id = $1 AND id = $2`,
+    [homeId, STAFF_A],
+  ));
+
   const invite = await staffAuthService.createInvite({ homeId, staffId: STAFF_A, createdBy: 'admin' });
   await staffAuthService.consumeInvite({ token: invite.token, username: STAFF_A_USER, password: PASSWORD });
 });
@@ -61,6 +89,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM sick_periods WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]);
@@ -71,14 +100,12 @@ afterAll(async () => {
 beforeEach(async () => {
   await pool.query(`DELETE FROM override_requests WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM sick_periods WHERE home_id = $1`, [homeId]);
 });
 
 describe('AL request flow', () => {
   it('creates a pending AL request for an own working day', async () => {
-    // Pick a date that's a working day for Day A based on cycle_start_date
-    // Cycle starts 2025-01-06 (Monday); Day A pattern works days 0,1,4,5,6,9,10
-    // Use a date many cycles ahead to be safe
-    const date = '2026-06-22'; // safe future date
+    const date = getWorkingDate('2026-06-22', 0);
     const req = await overrideRequestService.submitALRequest({
       homeId, staffId: STAFF_A, date, reason: 'Holiday',
     });
@@ -91,7 +118,7 @@ describe('AL request flow', () => {
   });
 
   it('rejects a duplicate pending AL on the same date', async () => {
-    const date = '2026-06-23';
+    const date = getWorkingDate('2026-06-22', 1);
     await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date }).catch(() => {});
     await expect(overrideRequestService.submitALRequest({
       homeId, staffId: STAFF_A, date,
@@ -107,7 +134,7 @@ describe('AL request flow', () => {
   });
 
   it('manager approval writes the AL override atomically', async () => {
-    const date = '2026-06-24';
+    const date = getWorkingDate('2026-06-22', 2);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     const decided = await overrideRequestService.decideRequest({
       homeId, id: req.id, status: 'approved',
@@ -124,7 +151,7 @@ describe('AL request flow', () => {
   });
 
   it('manager rejection does not write any override', async () => {
-    const date = '2026-06-25';
+    const date = getWorkingDate('2026-06-22', 3);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     await overrideRequestService.decideRequest({
       homeId, id: req.id, status: 'rejected',
@@ -138,7 +165,7 @@ describe('AL request flow', () => {
   });
 
   it('version conflict on decide returns 409', async () => {
-    const date = '2026-06-26';
+    const date = getWorkingDate('2026-06-22', 4);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     await overrideRequestService.decideRequest({
       homeId, id: req.id, status: 'approved',
@@ -152,7 +179,7 @@ describe('AL request flow', () => {
   });
 
   it('staff can cancel own pending request', async () => {
-    const date = '2026-06-27';
+    const date = getWorkingDate('2026-06-22', 5);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     const cancelled = await overrideRequestService.cancelByStaff({
       homeId, staffId: STAFF_A, id: req.id, expectedVersion: req.version,
@@ -161,7 +188,7 @@ describe('AL request flow', () => {
   });
 
   it('staff cannot cancel after manager decided', async () => {
-    const date = '2026-06-28';
+    const date = getWorkingDate('2026-06-22', 6);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     await overrideRequestService.decideRequest({
       homeId, id: req.id, status: 'approved',
@@ -173,7 +200,7 @@ describe('AL request flow', () => {
   });
 
   it('staff B cannot cancel staff A request', async () => {
-    const date = '2026-06-29';
+    const date = getWorkingDate('2026-06-22', 7);
     const req = await overrideRequestService.submitALRequest({ homeId, staffId: STAFF_A, date });
     await expect(overrideRequestService.cancelByStaff({
       homeId, staffId: STAFF_B, id: req.id, expectedVersion: req.version,
@@ -203,7 +230,7 @@ describe('Sick self-report', () => {
       actorUsername: STAFF_A_USER,
     });
     const { rows } = await pool.query(
-      `SELECT * FROM audit_log WHERE event_type = 'sick_self_reported' ORDER BY id DESC LIMIT 1`,
+      `SELECT * FROM audit_log WHERE action = 'sick_self_reported' ORDER BY id DESC LIMIT 1`,
     );
     expect(rows.length).toBe(1);
   });
@@ -233,8 +260,7 @@ describe('Profile (own data only)', () => {
     expect(parseFloat(rows[0].hourly_rate)).toBe(13.00);
   });
 
-  it('PATCH rejects forbidden field changes silently', async () => {
-    // Should not throw — the schema strips unknown fields, hourly_rate stays at 13.00
+  it('PATCH ignores forbidden field changes silently', async () => {
     await staffPortalService.updateOwnProfile({
       homeId, staffId: STAFF_A,
       patch: { phone: '07700900998', hourly_rate: 99 },

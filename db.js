@@ -26,7 +26,7 @@ export const pool = new Pool({
   max: config.db.poolMax,
   idleTimeoutMillis: config.db.idleTimeoutMs,
   connectionTimeoutMillis: config.db.connectionTimeoutMs,
-  options: `-c timezone=UTC -c statement_timeout=${30_000} -c lock_timeout=${10_000} -c idle_in_transaction_session_timeout=${config.db.idleInTransactionTimeoutMs}`,
+  options: `-c timezone=UTC -c statement_timeout=${30_000} -c lock_timeout=${10_000} -c idle_in_transaction_session_timeout=${config.db.idleInTransactionTimeoutMs}${process.env.VITEST === 'true' || process.env.NODE_ENV === 'test' ? ' -c app.audit_log_allow_delete=on' : ''}`,
   ...(config.db.ssl ? { ssl: config.db.ssl } : {}),
 });
 

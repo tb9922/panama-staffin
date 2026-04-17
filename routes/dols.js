@@ -10,6 +10,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import { validateDolsReviewStatusChange } from '../lib/statusTransitions.js';
+import { validateDolsAuthorisationWindow } from '../shared/dolsValidation.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);
@@ -77,6 +78,8 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
   try {
     const parsed = dolsBodySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    const windowError = validateDolsAuthorisationWindow(parsed.data);
+    if (windowError) return res.status(400).json({ error: windowError });
     const record = await dolsRepo.upsertDols(req.home.id, parsed.data);
     await auditService.log('dols_create', req.home.slug, req.user.username, { id: record?.id });
     res.status(201).json(record);
@@ -95,6 +98,8 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     const statusError = validateDolsReviewStatusChange(existing, parsed.data);
     if (statusError) return res.status(400).json({ error: statusError });
     const { version, payload } = splitVersion(parsed.data);
+    const windowError = validateDolsAuthorisationWindow({ ...existing, ...payload });
+    if (windowError) return res.status(400).json({ error: windowError });
     const record = await dolsRepo.updateDols(idParsed.data, req.home.id, payload, version);
     if (record === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });

@@ -1,4 +1,8 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
+
+async function setAuditMutationFlag(client, settingName) {
+  await client.query(`SELECT set_config($1, 'on', true)`, [settingName]);
+}
 
 export async function log(action, homeSlug, username, details, client) {
   const conn = client || pool;
@@ -35,14 +39,35 @@ export async function countOlderThan(days, homeSlug) {
 }
 
 export async function purgeOlderThan(days, homeSlug, client) {
-  const conn = client || pool;
+  if (!client) {
+    return withTransaction((tx) => purgeOlderThan(days, homeSlug, tx));
+  }
+
+  await setAuditMutationFlag(client, 'app.audit_log_allow_delete');
   const { rowCount } = homeSlug
-    ? await conn.query(
+    ? await client.query(
         `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1 AND home_slug = $2`,
         [days, homeSlug])
-    : await conn.query(
+    : await client.query(
         `DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '1 day' * $1`,
         [days]);
+  return rowCount;
+}
+
+export async function replaceInDetails({ homeSlug = null, findText, replacement, client }) {
+  if (!findText) return 0;
+  if (!client) {
+    return withTransaction((tx) => replaceInDetails({ homeSlug, findText, replacement, client: tx }));
+  }
+
+  await setAuditMutationFlag(client, 'app.audit_log_allow_update');
+  const { rowCount } = await client.query(
+    `UPDATE audit_log
+        SET details = REPLACE(details, $1, $2)
+      WHERE (home_slug = $3 OR (home_slug IS NULL AND $3 IS NULL))
+        AND details LIKE '%' || $1 || '%'`,
+    [findText, replacement, homeSlug || null],
+  );
   return rowCount;
 }
 

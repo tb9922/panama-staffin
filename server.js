@@ -8,7 +8,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
-import { AppError } from './errors.js';
+import { getHttpErrorResponse } from './errors.js';
 import { pool } from './db.js';
 import logger from './logger.js';
 import { metricsContentType, recordHttpRequestMetrics, renderMetrics } from './metrics.js';
@@ -239,13 +239,14 @@ if (config.sentryDsn) Sentry.setupExpressErrorHandler(app);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  if (err instanceof AppError) {
-    if (err.statusCode >= 500) {
-      logger.error({ reqId: req.id, err: err.message, code: err.code }, 'server error');
+  const httpError = getHttpErrorResponse(err);
+  if (httpError) {
+    if (httpError.statusCode >= 500) {
+      logger.error({ reqId: req.id, err: httpError.message, code: httpError.code }, 'server error');
     } else {
-      logger.warn({ reqId: req.id, err: err.message, code: err.code, status: err.statusCode }, 'client error');
+      logger.warn({ reqId: req.id, err: httpError.message, code: httpError.code, status: httpError.statusCode }, 'client error');
     }
-    return res.status(err.statusCode).json({ error: err.message });
+    return res.status(httpError.statusCode).json({ error: httpError.message });
   }
 
   if (err?.name === 'ZodError') {
