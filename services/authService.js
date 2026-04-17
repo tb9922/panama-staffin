@@ -5,7 +5,43 @@ import { config } from '../config.js';
 import { AuthenticationError } from '../errors.js';
 import * as authRepo from '../repositories/authRepo.js';
 import * as userRepo from '../repositories/userRepo.js';
+import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import logger from '../logger.js';
+
+const STAFF_LOCKOUT_MINUTES = 15;
+const DUMMY_BCRYPT_HASH = '$2a$10$7EqJtq98hPqEX7fNZaFWoOHi6V7z8N2N4dAJE1lghYzBL2cJlgKiW';
+
+export function issueToken(payload) {
+  const jti = randomUUID();
+  const token = jwt.sign(
+    { ...payload, jti },
+    config.jwtSecret,
+    { expiresIn: config.jwtExpiresIn },
+  );
+  return { token, jti };
+}
+
+export function issueUserToken(dbUser) {
+  return issueToken({
+    username: dbUser.username,
+    role: dbUser.role,
+    is_platform_admin: !!dbUser.is_platform_admin,
+    session_version: dbUser.session_version || 0,
+  });
+}
+
+export function issueStaffToken(credentials) {
+  return issueToken({
+    username: credentials.username,
+    role: 'staff_member',
+    is_platform_admin: false,
+    auth_type: 'staff',
+    home_id: credentials.homeId,
+    home_slug: credentials.homeSlug,
+    staff_id: credentials.staffId,
+    session_version: credentials.sessionVersion || 0,
+  });
+}
 
 /**
  * Verify deny-list table is reachable on startup.
@@ -54,22 +90,46 @@ export async function login(username, password) {
     await userRepo.resetFailedLogin(username);
     await authRepo.clearForUser(username);
     userRepo.updateLastLogin(username).catch(() => {});
-    const jti = randomUUID();
-    const token = jwt.sign(
-      {
-        username: dbUser.username,
-        role: dbUser.role,
-        is_platform_admin: !!dbUser.is_platform_admin,
-        session_version: dbUser.session_version || 0,
-        jti,
-      },
-      config.jwtSecret,
-      { expiresIn: config.jwtExpiresIn }
-    );
+    const { token } = issueUserToken(dbUser);
     return { username: dbUser.username, role: dbUser.role, token, displayName: dbUser.display_name || '', isPlatformAdmin: !!dbUser.is_platform_admin };
   }
 
-  if (usersTableExists) throw new AuthenticationError('Invalid credentials');
+  if (usersTableExists && config.enableStaffPortal) {
+    const creds = await staffAuthRepo.findByUsername(username);
+    if (!creds || !creds.staffActive) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+      throw new AuthenticationError('Invalid credentials');
+    }
+    if (creds.lockedUntil && new Date(creds.lockedUntil) > new Date()) {
+      const err = new AuthenticationError('Account locked — contact admin');
+      err.statusCode = 423;
+      throw err;
+    }
+    const valid = await bcrypt.compare(password, creds.passwordHash);
+    if (!valid) {
+      await staffAuthRepo.recordFailedLogin(creds.homeId, creds.staffId);
+      if ((creds.failedLoginCount + 1) >= 5) {
+        await staffAuthRepo.lockAccount(creds.homeId, creds.staffId, STAFF_LOCKOUT_MINUTES);
+      }
+      throw new AuthenticationError('Invalid credentials');
+    }
+
+    await authRepo.clearForUser(creds.username);
+    await staffAuthRepo.recordSuccessfulLogin(creds.homeId, creds.staffId);
+    const freshCreds = await staffAuthRepo.findByStaff(creds.homeId, creds.staffId);
+    const { token } = issueStaffToken(freshCreds || creds);
+    return {
+      username: creds.username,
+      role: 'staff_member',
+      token,
+      displayName: creds.staffName || '',
+      isPlatformAdmin: false,
+    };
+  }
+  if (usersTableExists) {
+    await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+    throw new AuthenticationError('Invalid credentials');
+  }
   if (!allowLegacyEnvAuth) {
     logger.error('Legacy env-var authentication is disabled because the users table is unavailable');
     throw new AuthenticationError('Login unavailable until database migrations are applied');
@@ -80,12 +140,7 @@ export async function login(username, password) {
   if (!envUser) throw new AuthenticationError('Invalid credentials');
   const valid = await bcrypt.compare(password, envUser.hash);
   if (!valid) throw new AuthenticationError('Invalid credentials');
-  const jti = randomUUID();
-  const token = jwt.sign(
-    { username: envUser.username, role: envUser.role, session_version: 0, jti },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn }
-  );
+  const { token } = issueToken({ username: envUser.username, role: envUser.role, session_version: 0 });
   return { username: envUser.username, role: envUser.role, token, isPlatformAdmin: false };
 }
 

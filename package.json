@@ -12,6 +12,7 @@
     "stats": "node scripts/stats.js",
     "preview": "vite preview",
     "audit:routes": "node scripts/audit-routes.js",
+    "invite:staff": "node scripts/invite-staff.js",
     "test": "vitest run --retry 1",
     "test:watch": "vitest",
     "test:integration": "bash scripts/test-integration.sh",

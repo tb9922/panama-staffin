@@ -8,8 +8,10 @@ export default defineConfig({
     testTimeout: 10000,
     include: [
       'src/pages/__tests__/**/*.test.{js,jsx}',
-      'src/components/__tests__/**/*.test.{js,jsx}',
+      'src/components/**/__tests__/**/*.test.{js,jsx}',
       'src/hooks/__tests__/**/*.test.{js,jsx}',
+      'src/lib/__tests__/**/*.test.{js,jsx}',
+      'src/staff/**/__tests__/**/*.test.{js,jsx}',
     ],
     setupFiles: ['src/test/setup.js'],
     globals: true,

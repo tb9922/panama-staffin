@@ -243,3 +243,39 @@ export async function approveByStaffRange(homeId, staffId, start, end, approvedB
   );
   return rowCount;
 }
+
+/**
+ * Upsert a pending timesheet entry derived from approved clock-in / clock-out events.
+ * Keeps the existing (home_id, staff_id, date) uniqueness model and does not auto-approve.
+ */
+export async function upsertFromClockIn({
+  homeId,
+  staffId,
+  date,
+  scheduledStart = null,
+  scheduledEnd = null,
+  actualStart,
+  actualEnd,
+  breakMinutes = 0,
+  payableHours,
+  note = null,
+}, client) {
+  const conn = client || pool;
+  const entry = {
+    staff_id: staffId,
+    date,
+    scheduled_start: scheduledStart,
+    scheduled_end: scheduledEnd,
+    actual_start: actualStart,
+    actual_end: actualEnd,
+    snapped_start: null,
+    snapped_end: null,
+    snap_applied: false,
+    snap_minutes_saved: 0,
+    break_minutes: breakMinutes,
+    payable_hours: payableHours,
+    status: 'pending',
+    notes: note,
+  };
+  return upsert(homeId, entry, conn);
+}

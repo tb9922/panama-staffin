@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE training_records
+  ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS acknowledged_by_staff BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMIT;

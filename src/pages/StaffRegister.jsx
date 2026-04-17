@@ -6,7 +6,14 @@ import Modal from '../components/Modal.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { downloadXLSX } from '../lib/excel.js';
-import { getCurrentHome, getSchedulingData, createStaff, updateStaffMember, deleteStaffMember } from '../lib/api.js';
+import {
+  getCurrentHome,
+  getSchedulingData,
+  createStaff,
+  updateStaffMember,
+  deleteStaffMember,
+  createStaffInvite,
+} from '../lib/api.js';
 import { DEFAULT_NLW_RATE, getConfiguredNlwRate, getMinimumWageRate } from '../../shared/nmw.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { todayLocalISO } from '../lib/localDates.js';
@@ -62,6 +69,9 @@ export default function StaffRegister() {
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  const [inviteModal, setInviteModal] = useState(null);
+  const [inviteBusyId, setInviteBusyId] = useState(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   useDirtyGuard(!!editing || showAdd);
 
@@ -220,6 +230,34 @@ export default function StaffRegister() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleInviteStaff(staffMember) {
+    setInviteBusyId(staffMember.id);
+    setRowError(null);
+    try {
+      const invite = await createStaffInvite(homeSlug, staffMember.id);
+      const absoluteUrl = invite?.inviteUrl?.startsWith('http')
+        ? invite.inviteUrl
+        : `${window.location.origin}${invite?.inviteUrl || ''}`;
+      setInviteModal({
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        expiresAt: invite?.expiresAt || null,
+        inviteUrl: absoluteUrl,
+      });
+      setInviteCopied(false);
+    } catch (e) {
+      setRowError({ id: staffMember.id, msg: e.message });
+    } finally {
+      setInviteBusyId(null);
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!inviteModal?.inviteUrl) return;
+    await navigator.clipboard.writeText(inviteModal.inviteUrl);
+    setInviteCopied(true);
   }
 
   const teamCounts = useMemo(() => {
@@ -447,6 +485,43 @@ export default function StaffRegister() {
             </div>
       </Modal>
 
+      <Modal
+        isOpen={!!inviteModal}
+        onClose={() => {
+          setInviteModal(null);
+          setInviteCopied(false);
+        }}
+        title={inviteModal ? `Portal Invite for ${inviteModal.staffName}` : 'Portal Invite'}
+        size="md"
+      >
+        {inviteModal && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Share this link with {inviteModal.staffName} so they can set up their staff portal sign-in.
+            </p>
+            <div>
+              <label htmlFor="staff-invite-url" className={INPUT.label}>Invite link</label>
+              <textarea
+                id="staff-invite-url"
+                className={INPUT.base}
+                rows={4}
+                value={inviteModal.inviteUrl}
+                readOnly
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Expires {inviteModal.expiresAt ? new Date(inviteModal.expiresAt).toLocaleString('en-GB') : 'soon'}.
+            </p>
+            <div className={MODAL.footer}>
+              <button type="button" className={BTN.ghost} onClick={() => setInviteModal(null)}>Close</button>
+              <button type="button" className={BTN.primary} onClick={() => { void copyInviteLink(); }}>
+                {inviteCopied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Table */}
       <StickyTable className={CARD.flush}>
         <table className={TABLE.table + ' min-w-[1100px]'}>
@@ -666,7 +741,18 @@ export default function StaffRegister() {
                             <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 text-xs transition-colors">Cancel</button>
                           </>
                         ) : (
-                          <button onClick={() => startEditing(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
+                          <>
+                            <button onClick={() => startEditing(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
+                            {s.active !== false && (
+                              <button
+                                onClick={() => { void handleInviteStaff(s); }}
+                                disabled={inviteBusyId === s.id}
+                                className="text-emerald-600 hover:text-emerald-700 text-xs transition-colors disabled:opacity-50"
+                              >
+                                {inviteBusyId === s.id ? 'Inviting...' : 'Invite'}
+                              </button>
+                            )}
+                          </>
                         )}
                         <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
                       </div>

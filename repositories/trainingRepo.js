@@ -36,6 +36,36 @@ export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}) {
   return { rows: result, total };
 }
 
+export async function findByStaff(homeId, staffId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT id, home_id, staff_id, training_type_id, completed, expiry,
+            trainer, method, certificate_ref, evidence_ref, level, notes,
+            acknowledged_at, acknowledged_by_staff, updated_at
+       FROM training_records
+      WHERE home_id = $1
+        AND staff_id = $2
+        AND deleted_at IS NULL
+      ORDER BY training_type_id`,
+    [homeId, staffId],
+  );
+  return rows.map((row) => ({
+    staff_id: row.staff_id,
+    training_type_id: row.training_type_id,
+    completed: toDateStr(row.completed),
+    expiry: toDateStr(row.expiry),
+    trainer: row.trainer ?? undefined,
+    method: row.method ?? undefined,
+    certificate_ref: row.certificate_ref ?? undefined,
+    evidence_ref: row.evidence_ref ?? undefined,
+    level: row.level ?? undefined,
+    notes: row.notes ?? undefined,
+    acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : row.acknowledged_at,
+    acknowledged_by_staff: row.acknowledged_by_staff === true,
+    updated_at: row.updated_at ? row.updated_at.toISOString() : undefined,
+  }));
+}
+
 /**
  * Sync training records. Upserts all incoming records by (home_id, staff_id, training_type_id).
  * Training records are not deleted — they accumulate over time.
@@ -179,4 +209,21 @@ export async function removeRecord(homeId, staffId, typeId, client) {
     'UPDATE training_records SET deleted_at=NOW() WHERE home_id=$1 AND staff_id=$2 AND training_type_id=$3 AND deleted_at IS NULL',
     [homeId, staffId, typeId]
   );
+}
+
+export async function acknowledgeByStaff(homeId, staffId, typeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `UPDATE training_records
+        SET acknowledged_at = NOW(),
+            acknowledged_by_staff = TRUE,
+            updated_at = NOW()
+      WHERE home_id = $1
+        AND staff_id = $2
+        AND training_type_id = $3
+        AND deleted_at IS NULL
+      RETURNING id`,
+    [homeId, staffId, typeId],
+  );
+  return rows.length > 0;
 }

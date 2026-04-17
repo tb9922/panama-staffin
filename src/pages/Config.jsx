@@ -276,6 +276,42 @@ export default function Config() {
         </div>
       </section>
 
+      {/* Staff Portal & Clock-In */}
+      <section className={`${CARD.padded} mb-5`}>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Staff Portal & Clock-In</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1.2fr] gap-6">
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!config.clock_in_required}
+                onChange={(e) => handleChange('clock_in_required', e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                <span className="block font-medium text-gray-900">Enable staff clock-in for this home</span>
+                <span className="mt-1 block text-xs text-gray-500">
+                  Staff can use the staff portal to clock in and out. GPS auto-approval only works when the geofence is set below.
+                </span>
+              </span>
+            </label>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              Staff portal access itself is controlled by the server-side <code>ENABLE_STAFF_PORTAL</code> flag.
+              These settings only control this home&apos;s clock-in behaviour.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <Field label="Geofence Latitude" path="geofence_lat" step={0.000001} />
+            <Field label="Geofence Longitude" path="geofence_lng" step={0.000001} />
+            <Field label="Geofence Radius" path="geofence_radius_m" unit="m" />
+            <Field label="Early Clock-In Window" path="clock_in_early_min" unit="min" />
+            <Field label="Late Clock-In Window" path="clock_in_late_min" unit="min" />
+          </div>
+        </div>
+      </section>
+
       {/* Annual Leave */}
       <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Annual Leave</h2>

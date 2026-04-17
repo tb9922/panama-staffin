@@ -244,7 +244,9 @@ describe('CQCEvidence', () => {
       expect(screen.getByText('Readiness')).toBeInTheDocument();
     });
     expect(screen.getByText('Readiness Gaps')).toBeInTheDocument();
-    expect(api.getCqcReadiness).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(api.getCqcReadiness).toHaveBeenCalled();
+    });
   });
 
   it('displays Training Compliance and Staffing Fill Rate KPI cards', async () => {

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { verifyToken, isTokenDenied } from '../services/authService.js';
 import * as homeRepo from '../repositories/homeRepo.js';
+import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import { getHomeRole } from '../repositories/userHomeRepo.js';
 import { findByUsername as findUserByUsername } from '../repositories/userRepo.js';
 import { hasModuleAccess, ROLES, isOwnDataOnly } from '../shared/roles.js';
@@ -22,6 +23,10 @@ function csrfTokensMatch(cookieToken, headerToken) {
 }
 
 async function getAuthDbUser(req) {
+  if (req.user?.auth_type === 'staff') {
+    req.authDbUser = null;
+    return null;
+  }
   if (Object.prototype.hasOwnProperty.call(req, 'authDbUser')) {
     return req.authDbUser;
   }
@@ -85,11 +90,20 @@ export async function requireAuth(req, res, next) {
   }
 
   try {
-    const dbUser = await findUserByUsername(decoded.username);
-    req.authDbUser = dbUser || null;
-    if (dbUser) {
-      if (!dbUser.active || (dbUser.session_version || 0) !== (decoded.session_version || 0)) {
+    if (decoded.auth_type === 'staff') {
+      const creds = await staffAuthRepo.findByStaff(decoded.home_id, decoded.staff_id);
+      req.authDbUser = null;
+      req.authStaffUser = creds || null;
+      if (!creds || !creds.staffActive || (creds.sessionVersion || 0) !== (decoded.session_version || 0)) {
         return res.status(401).json({ error: 'Token has been revoked' });
+      }
+    } else {
+      const dbUser = await findUserByUsername(decoded.username);
+      req.authDbUser = dbUser || null;
+      if (dbUser) {
+        if (!dbUser.active || (dbUser.session_version || 0) !== (decoded.session_version || 0)) {
+          return res.status(401).json({ error: 'Token has been revoked' });
+        }
       }
     }
   } catch {
@@ -158,6 +172,17 @@ export async function requireHomeAccess(req, res, next) {
     req.user.is_platform_admin = false;
   }
 
+  if (req.user.auth_type === 'staff') {
+    if (req.user.home_id !== home.id || req.user.home_slug !== home.slug) {
+      return res.status(403).json({ error: 'You do not have access to this home' });
+    }
+    req.home = home;
+    req.homeRole = 'staff_member';
+    req.staffId = req.user.staff_id || null;
+    setRequestContext({ homeSlug: home.slug });
+    return next();
+  }
+
   // Resolve per-home role from user_home_roles.
   const assignment = await getHomeRole(req.user.username, home.id);
   if (!assignment) {
@@ -208,6 +233,18 @@ export function requireHomeManager(req, res, next) {
   const role = ROLES[req.homeRole];
   if (!role?.canManageUsers) {
     return res.status(403).json({ error: 'Home Manager role required' });
+  }
+  next();
+}
+
+export function requireStaffSelf(req, res, next) {
+  if (req.user?.role !== 'staff_member' || req.user?.auth_type !== 'staff') {
+    return res.status(403).json({ error: 'Staff endpoint only' });
+  }
+  req.staffId = req.user.staff_id || null;
+  req.homeId = req.user.home_id || null;
+  if (!req.staffId || !req.homeId) {
+    return res.status(403).json({ error: 'No staff link configured' });
   }
   next();
 }

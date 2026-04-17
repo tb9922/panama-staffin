@@ -1,0 +1,123 @@
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
+import { withTransaction } from '../db.js';
+import { AppError, ConflictError, ForbiddenError, ValidationError } from '../errors.js';
+import * as authRepo from '../repositories/authRepo.js';
+import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
+import * as staffRepo from '../repositories/staffRepo.js';
+import * as userRepo from '../repositories/userRepo.js';
+import * as auditService from './auditService.js';
+
+const INVITE_TTL_HOURS = 72;
+
+function ensureStrongPassword(password) {
+  if (typeof password !== 'string' || password.length < 10) {
+    throw new ValidationError('Password must be at least 10 characters');
+  }
+}
+
+export async function createInvite({ homeId, staffId, createdBy }) {
+  return withTransaction(async (client) => {
+    const staff = await staffRepo.findById(homeId, staffId, client);
+    if (!staff || staff.active === false) {
+      throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
+    }
+
+    const existing = await staffAuthRepo.findByStaff(homeId, staffId, client);
+    if (existing) {
+      throw new ConflictError('This staff member already has sign-in credentials', 'STAFF_AUTH_EXISTS');
+    }
+
+    await staffAuthRepo.revokeOpenInvites(homeId, staffId, client);
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000);
+    const invite = await staffAuthRepo.createInviteToken({ token, homeId, staffId, createdBy, expiresAt }, client);
+
+    await auditService.log('staff_invite_created', invite.homeSlug, createdBy, {
+      staff_id: staffId,
+      expires_at: invite.expiresAt,
+    }, client);
+
+    return {
+      ...invite,
+      inviteUrl: `/staff/setup?token=${token}`,
+    };
+  });
+}
+
+export async function consumeInvite({ token, username, password }) {
+  ensureStrongPassword(password);
+
+  return withTransaction(async (client) => {
+    const invite = await staffAuthRepo.findInviteToken(token, client);
+    if (!invite) throw new AppError('Invite token not found', 404, 'INVITE_NOT_FOUND');
+    if (invite.consumedAt) throw new ConflictError('Invite token has already been used', 'INVITE_CONSUMED');
+    if (new Date(invite.expiresAt) <= new Date()) throw new AppError('Invite token has expired', 410, 'INVITE_EXPIRED');
+    if (!invite.staffActive) throw new ForbiddenError('Staff member is not active');
+
+    const existingStaffCredentials = await staffAuthRepo.findByUsername(username, client);
+    if (existingStaffCredentials) {
+      throw new ConflictError('Username is already in use', 'USERNAME_TAKEN');
+    }
+    const existingUser = await userRepo.findByUsername(username).catch((err) => {
+      if (err.code === '42P01') return null;
+      throw err;
+    });
+    if (existingUser) {
+      throw new ConflictError('Username is already in use', 'USERNAME_TAKEN');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const credentials = await staffAuthRepo.createCredentials({
+      homeId: invite.homeId,
+      staffId: invite.staffId,
+      username,
+      passwordHash,
+    }, client);
+    await staffAuthRepo.consumeInviteToken(token, client);
+    await authRepo.clearForUser(username);
+
+    await auditService.log('staff_invite_consumed', invite.homeSlug, username, {
+      staff_id: invite.staffId,
+    }, client);
+
+    return {
+      username,
+      role: 'staff_member',
+      displayName: credentials.staffName || '',
+      isPlatformAdmin: false,
+    };
+  });
+}
+
+export async function changePassword({ homeId, staffId, currentPassword, newPassword, actorUsername }) {
+  ensureStrongPassword(newPassword);
+  return withTransaction(async (client) => {
+    const creds = await staffAuthRepo.findByStaff(homeId, staffId, client);
+    if (!creds) throw new AppError('Credentials not found', 404, 'STAFF_AUTH_NOT_FOUND');
+
+    const valid = await bcrypt.compare(currentPassword, creds.passwordHash);
+    if (!valid) throw new ForbiddenError('Current password is incorrect', 'INVALID_CURRENT_PASSWORD');
+
+    const nextHash = await bcrypt.hash(newPassword, 10);
+    const updated = await staffAuthRepo.updatePassword(homeId, staffId, nextHash, client);
+    await authRepo.revokeAllForUser(updated.username, 'user', client);
+    await auditService.log('staff_password_changed', updated.homeSlug, actorUsername || updated.username, {
+      staff_id: staffId,
+    }, client);
+    return updated;
+  });
+}
+
+export async function revokeStaffSessions({ homeId, staffId, actor }) {
+  return withTransaction(async (client) => {
+    const creds = await staffAuthRepo.bumpSessionVersion(homeId, staffId, client);
+    if (!creds) throw new AppError('Credentials not found', 404, 'STAFF_AUTH_NOT_FOUND');
+    await authRepo.revokeAllForUser(creds.username, 'admin', client);
+    await auditService.log('staff_sessions_revoked', creds.homeSlug, actor, {
+      staff_id: staffId,
+      username: creds.username,
+    }, client);
+    return creds;
+  });
+}

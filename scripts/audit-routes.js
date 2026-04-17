@@ -17,6 +17,8 @@ const rootDir = path.join(__dirname, '..');
 
 const PUBLIC_ROUTES = new Set([
   'POST /api/login',
+  'GET /api/staff-auth/invite/:token',
+  'POST /api/staff-auth/invite/consume',
   'GET /health',
   'GET /readiness',
   'GET *',
@@ -29,6 +31,7 @@ const TOKEN_GATED_ROUTES = new Set([
 
 const SELF_SERVICE_ROUTES = new Set([
   'POST /api/login/logout',
+  'POST /api/staff-auth/change-password',
   'POST /api/users/change-password',
   'GET /api/homes',
   'GET /api/bank-holidays',
@@ -43,6 +46,8 @@ const AUTH_Z_PATTERNS = [
   'requireHomeAccess',
   'requireModule',
   'requireHomeManager',
+  'staffReadChain',
+  'staffWriteChain',
 ];
 
 const serverSource = readFileSync(path.join(rootDir, 'server.js'), 'utf-8');
@@ -106,7 +111,9 @@ let pass = true;
 const results = [];
 
 for (const { key, middlewareStr, file } of allRoutes) {
-  const hasRequireAuth = middlewareStr.includes('requireAuth');
+  const hasRequireAuth = middlewareStr.includes('requireAuth')
+    || middlewareStr.includes('staffReadChain')
+    || middlewareStr.includes('staffWriteChain');
   const hasAuthZ = AUTH_Z_PATTERNS.some((pattern) => middlewareStr.includes(pattern));
   const isPublic = PUBLIC_ROUTES.has(key);
   const isTokenGated = TOKEN_GATED_ROUTES.has(key);

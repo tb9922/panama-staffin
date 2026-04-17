@@ -85,6 +85,7 @@ export const config = {
   // Authentication
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '4h',
+  enableStaffPortal: process.env.ENABLE_STAFF_PORTAL === '1' || process.env.NODE_ENV !== 'production',
 
   // Env-var users are a temporary fallback for pre-migration compatibility.
   users: [

@@ -1964,3 +1964,196 @@ export async function deleteWebhook(homeSlug, id) {
 export async function getWebhookDeliveries(homeSlug, id) {
   return apiFetch(`${API_BASE}/webhooks/${id}/deliveries?home=${h(homeSlug)}`, { headers: authHeaders() });
 }
+
+// Staff auth / staff portal / clock-in
+
+export async function getStaffInvite(token) {
+  return apiFetch(`${API_BASE}/staff-auth/invite/${encodeURIComponent(token)}`);
+}
+
+export async function consumeStaffInvite(payload) {
+  const res = await fetch(`${API_BASE}/staff-auth/invite/consume`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.error || `Invite setup failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  localStorage.setItem('user', JSON.stringify({
+    username: body.username,
+    role: body.role,
+    displayName: body.displayName || '',
+    isPlatformAdmin: false,
+  }));
+  return body;
+}
+
+export async function createStaffInvite(homeSlug, staffId) {
+  return apiFetch(`${API_BASE}/staff-auth/invite?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ staffId }),
+  });
+}
+
+export async function revokeStaffSessions(homeSlug, staffId) {
+  return apiFetch(`${API_BASE}/staff-auth/revoke?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ staffId }),
+  });
+}
+
+export async function staffChangePassword(currentPassword, newPassword) {
+  return apiFetch(`${API_BASE}/staff-auth/change-password`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export async function getMyDashboard() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/dashboard?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function getMySchedule({ from, to } = {}) {
+  const home = getCurrentHome();
+  const params = new URLSearchParams({ home });
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  return apiFetch(`${API_BASE}/me/schedule?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getMyAccrual(asOfDate) {
+  const home = getCurrentHome();
+  const params = new URLSearchParams({ home });
+  if (asOfDate) params.set('asOfDate', asOfDate);
+  return apiFetch(`${API_BASE}/me/accrual?${params.toString()}`, { headers: authHeaders() });
+}
+
+export async function getMyOverrideRequests() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/requests?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function createMyLeaveRequest(data) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/leave-requests?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function cancelMyOverrideRequest(id, expectedVersion) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/requests/${id}/cancel?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ expectedVersion }),
+  });
+}
+
+export async function getMyPayslips() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/payslips?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export function getMyPayslipDownloadUrl(runId, staffId) {
+  const home = getCurrentHome();
+  return `${API_BASE}/payroll/runs/${runId}/payslips/${encodeURIComponent(staffId)}?home=${h(home)}`;
+}
+
+export async function getMyTraining() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/training?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function acknowledgeMyTraining(typeId) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/training/${encodeURIComponent(typeId)}/acknowledge?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
+
+export async function getMyProfile() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/profile?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function updateMyProfile(patch) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/profile?home=${h(home)}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function reportMySick(data) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/me/report-sick?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getClockInState() {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/clock-in/state?home=${h(home)}`, { headers: authHeaders() });
+}
+
+export async function recordClockIn(data) {
+  const home = getCurrentHome();
+  return apiFetch(`${API_BASE}/clock-in?home=${h(home)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getClockInUnapproved(homeSlug = getCurrentHome()) {
+  return apiFetch(`${API_BASE}/clock-in/unapproved?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function getClockInsByDate(homeSlug, date) {
+  return apiFetch(`${API_BASE}/clock-in/day?home=${h(homeSlug)}&date=${encodeURIComponent(date)}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function createManualClockIn(homeSlug, data) {
+  return apiFetch(`${API_BASE}/clock-in/manual?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
+export async function approveClockIn(homeSlug, id, note = '') {
+  return apiFetch(`${API_BASE}/clock-in/${id}/approve?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function getPendingOverrideRequests(homeSlug = getCurrentHome()) {
+  return apiFetch(`${API_BASE}/staff/override-requests?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+
+export async function decideOverrideRequest(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/staff/override-requests/${id}/decision?home=${h(homeSlug)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}

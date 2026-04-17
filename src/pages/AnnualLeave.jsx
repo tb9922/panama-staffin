@@ -14,6 +14,7 @@ import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import OverrideRequestReview from '../components/staff/OverrideRequestReview.jsx';
 
 function getMonthDates(year, month) {
   const dates = [];
@@ -520,6 +521,12 @@ export default function AnnualLeave() {
             </div>
           )}
         </div>
+
+        {canEdit && (
+          <div className="lg:col-span-3">
+            <OverrideRequestReview />
+          </div>
+        )}
       </div>
     </div>
   );

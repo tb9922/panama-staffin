@@ -17,6 +17,7 @@ vi.mock('../../lib/api.js', async () => {
     createStaff: vi.fn(),
     updateStaffMember: vi.fn(),
     deleteStaffMember: vi.fn(),
+    createStaffInvite: vi.fn(),
   };
 });
 
@@ -48,6 +49,10 @@ beforeEach(() => {
   // Default: successful load with mock scheduling data
   api.getLoggedInUser.mockReturnValue({ username: 'admin', role: 'admin' });
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
+  api.createStaffInvite.mockResolvedValue({
+    inviteUrl: '/staff/setup?token=test-token',
+    expiresAt: '2026-04-20T12:00:00.000Z',
+  });
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -155,6 +160,23 @@ describe('StaffRegister', () => {
       expect(screen.getByText('Staff Database')).toBeInTheDocument();
     });
     expect(screen.queryByText('Rate')).not.toBeInTheDocument();
+  });
+
+  it('creates a portal invite from the staff row actions', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+
+    const inviteButtons = screen.getAllByRole('button', { name: 'Invite' });
+    await user.click(inviteButtons[0]);
+
+    await waitFor(() => {
+      expect(api.createStaffInvite).toHaveBeenCalledWith('test-home', 'S001');
+    });
+    expect(screen.getByLabelText('Invite link').value).toContain('/staff/setup?token=test-token');
   });
 
   it('shows NLW badge for staff below minimum wage (care role)', async () => {

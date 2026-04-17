@@ -33,6 +33,7 @@ const PayRatesConfig = lazy(() => import('../pages/PayRatesConfig.jsx'));
 const TimesheetManager = lazy(() => import('../pages/TimesheetManager.jsx'));
 const MonthlyTimesheet = lazy(() => import('../pages/MonthlyTimesheet.jsx'));
 const PayrollDashboard = lazy(() => import('../pages/PayrollDashboard.jsx'));
+const ClockInAudit = lazy(() => import('../pages/ClockInAudit.jsx'));
 const PayrollDetail = lazy(() => import('../pages/PayrollDetail.jsx'));
 const AgencyTracker = lazy(() => import('../pages/AgencyTracker.jsx'));
 const TaxCodeManager = lazy(() => import('../pages/TaxCodeManager.jsx'));
@@ -124,6 +125,7 @@ export default function AppRoutes() {
 
       {/* Payroll */}
       <Route path="/payroll/rates"      element={<RouteErrorBoundary><RequireModule module="payroll"><PayRatesConfig /></RequireModule></RouteErrorBoundary>} />
+      <Route path="/payroll/clock-ins"  element={<RouteErrorBoundary><RequireModule module="payroll"><ClockInAudit /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/timesheets" element={<RouteErrorBoundary><RequireModule module="payroll"><TimesheetManager /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/monthly-timesheet/:staffId?" element={<RouteErrorBoundary><RequireModule module="payroll"><MonthlyTimesheet /></RequireModule></RouteErrorBoundary>} />
       <Route path="/payroll/agency"     element={<RouteErrorBoundary><RequireModule module="payroll"><AgencyTracker /></RequireModule></RouteErrorBoundary>} />

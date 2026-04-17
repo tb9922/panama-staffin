@@ -19,6 +19,23 @@ const configBodySchema = z.object({
 // GET /api/homes — list homes the user can access, with per-home roleId
 router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
+    if (req.user.auth_type === 'staff') {
+      const home = await homeRepo.findById(req.user.home_id);
+      if (!home) return res.json([]);
+      return res.json([{
+        id: home.slug,
+        name: home.config?.home_name || home.name,
+        beds: home.config?.registered_beds,
+        type: home.config?.care_type,
+        clockInRequired: Boolean(home.config?.clock_in_required),
+        scanIntakeEnabled: Boolean(home.config?.scan_intake_enabled),
+        scanIntakeTargets: Array.isArray(home.config?.scan_intake_targets) ? home.config.scan_intake_targets : [],
+        scanOcrEngine: home.config?.scan_ocr_engine || 'paddleocr',
+        roleId: 'staff_member',
+        staffId: req.user.staff_id || null,
+      }]);
+    }
+
     // Platform admins see all homes with home_manager access
     // Re-verify from DB — JWT claim may be stale (admin demoted after last login)
     if (req.user.is_platform_admin) {
@@ -38,6 +55,7 @@ router.get('/', readRateLimiter, requireAuth, async (req, res, next) => {
       name: r.config?.home_name || r.name,
       beds: r.config?.registered_beds,
       type: r.config?.care_type,
+      clockInRequired: Boolean(r.config?.clock_in_required),
       scanIntakeEnabled: Boolean(r.config?.scan_intake_enabled),
       scanIntakeTargets: Array.isArray(r.config?.scan_intake_targets) ? r.config.scan_intake_targets : [],
       scanOcrEngine: r.config?.scan_ocr_engine || 'paddleocr',

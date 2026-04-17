@@ -5,6 +5,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
+import * as overrideRequestService from '../services/overrideRequestService.js';
 import { withTransaction } from '../db.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -41,6 +42,11 @@ const staffBodySchema = z.object({
 });
 const staffUpdateSchema = staffBodySchema.partial().extend({
   _version: z.number().int().nonnegative().optional(),
+});
+const overrideRequestDecisionSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  decisionNote: z.string().max(1000).optional(),
+  expectedVersion: z.number().int().nonnegative(),
 });
 
 // POST /api/staff?home=X — create a new staff member
@@ -103,6 +109,39 @@ router.delete('/:staffId', writeRateLimiter, requireAuth, requireHomeAccess, req
     res.json({ ok: true });
   } catch (err) {
     if (err.status === 404) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/staff/override-requests?home=X — pending staff self-service requests for manager review
+router.get('/override-requests', requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+  try {
+    const rows = await overrideRequestService.findPending({ homeId: req.home.id });
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/staff/override-requests/:id/decision?home=X — approve / reject a pending request
+router.post('/override-requests/:id/decision', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'write'), async (req, res, next) => {
+  try {
+    const id = staffIdSchema.transform((value) => Number.parseInt(value, 10)).safeParse(req.params.id);
+    if (!id.success || !Number.isInteger(id.data) || id.data <= 0) {
+      return res.status(400).json({ error: 'Invalid request ID' });
+    }
+    const parsed = overrideRequestDecisionSchema.safeParse(req.body || {});
+    if (!parsed.success) return zodError(res, parsed);
+    const request = await overrideRequestService.decideRequest({
+      homeId: req.home.id,
+      id: id.data,
+      status: parsed.data.status,
+      decidedBy: req.user.username,
+      decisionNote: parsed.data.decisionNote,
+      expectedVersion: parsed.data.expectedVersion,
+    });
+    res.json(request);
+  } catch (err) {
     next(err);
   }
 });
