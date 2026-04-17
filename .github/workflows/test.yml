@@ -190,17 +190,23 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
+            export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+              nvm use 22 >/dev/null || true
+            fi
+            export PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
             cd /var/www/panama-staffing
             PREV_COMMIT=$(git rev-parse HEAD)
-            git pull origin main
-            npm ci --omit=dev
+            git pull --ff-only origin main
+            npm ci
             npm run build
-            ./scripts/backup-db.sh
+            bash ./scripts/backup-db.sh
             pm2 stop panama || true
             if ! node scripts/migrate.js; then
               echo "Migration failed — rolling back code to $PREV_COMMIT"
               git checkout "$PREV_COMMIT"
-              npm ci --omit=dev
+              npm ci
               npm run build
               pm2 start panama --update-env || pm2 restart panama --update-env
               exit 1
