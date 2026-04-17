@@ -93,10 +93,12 @@ export default function Config() {
         {type === 'number' ? (
           <input type="number" step={step || 1} value={getVal(path)}
             onChange={e => handleChange(path, e.target.value === '' ? '' : parseFloat(e.target.value))}
+            disabled={!canEdit}
             className={INPUT.sm} />
         ) : (
           <input type={type} value={getVal(path)}
             onChange={e => handleChange(path, e.target.value)}
+            disabled={!canEdit}
             className={INPUT.sm} />
         )}
         {unit && <span className="text-xs text-gray-400 whitespace-nowrap">{unit}</span>}
@@ -281,12 +283,13 @@ export default function Config() {
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Staff Portal & Clock-In</h2>
         <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1.2fr] gap-6">
           <div className="space-y-3">
-            <label className="flex items-start gap-3 text-sm text-gray-700 cursor-pointer">
+            <label className={`flex items-start gap-3 text-sm text-gray-700 ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
               <input
                 type="checkbox"
                 checked={!!config.clock_in_required}
                 onChange={(e) => handleChange('clock_in_required', e.target.checked)}
-                className="mt-0.5 accent-blue-600"
+                disabled={!canEdit}
+                className="mt-0.5 accent-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <span>
                 <span className="block font-medium text-gray-900">Enable staff clock-in for this home</span>

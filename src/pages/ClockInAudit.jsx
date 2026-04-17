@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BADGE, BTN, INPUT, PAGE } from '../lib/design.js';
 import { approveClockIn, createManualClockIn, getClockInUnapproved, getClockInsByDate, getCurrentHome } from '../lib/api.js';
+import { useData } from '../contexts/DataContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import InlineNotice from '../components/InlineNotice.jsx';
 
 export default function ClockInAudit() {
+  const { canWrite } = useData();
+  const canEdit = canWrite('payroll');
   const homeSlug = getCurrentHome();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,6 +47,7 @@ export default function ClockInAudit() {
   }, [load]);
 
   async function handleApprove(item) {
+    if (!canEdit) return;
     try {
       await approveClockIn(homeSlug, item.id);
       await load();
@@ -53,11 +58,17 @@ export default function ClockInAudit() {
 
   async function handleManual(event) {
     event.preventDefault();
+    if (!canEdit) return;
     setSubmitting(true);
     setError('');
     try {
       await createManualClockIn(homeSlug, manual);
-      setManual((current) => ({ ...current, note: '' }));
+      setManual({
+        staffId: '',
+        clockType: 'in',
+        shiftDate: new Date().toISOString().slice(0, 10),
+        note: '',
+      });
       await load();
     } catch (err) {
       setError(err.message);
@@ -80,6 +91,11 @@ export default function ClockInAudit() {
       </div>
 
       {error && <ErrorState title="Clock-in audit error" message={error} className="mb-4" />}
+      {!canEdit && (
+        <InlineNotice variant="info" className="mb-4">
+          Read-only — you do not have payroll write access. Approve and manual clock-in actions are disabled.
+        </InlineNotice>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -99,11 +115,14 @@ export default function ClockInAudit() {
                     <p className="mt-1 text-sm text-slate-600">
                       {item.withinGeofence == null ? 'Manual / no GPS' : item.withinGeofence ? 'Inside geofence' : 'Outside geofence'}
                       {item.distanceM != null ? ` • ${Math.round(item.distanceM)}m` : ''}
+                      {item.accuracyM != null ? ` • ±${Math.round(item.accuracyM)}m accuracy` : ''}
                     </p>
                   </div>
-                  <button type="button" className={`${BTN.primary} ${BTN.sm}`} onClick={() => void handleApprove(item)}>
-                    Approve
-                  </button>
+                  {canEdit && (
+                    <button type="button" className={`${BTN.success} ${BTN.sm}`} onClick={() => void handleApprove(item)}>
+                      Approve
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -111,35 +130,37 @@ export default function ClockInAudit() {
         </section>
 
         <section className="space-y-6">
-          <form onSubmit={handleManual} className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-lg font-semibold text-slate-900">Manual clock-in</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className={INPUT.label}>Staff ID</label>
-                <input className={INPUT.base} value={manual.staffId} onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))} required />
+          {canEdit && (
+            <form onSubmit={handleManual} className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold text-slate-900">Manual clock-in</h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className={INPUT.label}>Staff ID</label>
+                  <input className={INPUT.base} value={manual.staffId} onChange={(e) => setManual((current) => ({ ...current, staffId: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Type</label>
+                  <select className={INPUT.select} value={manual.clockType} onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}>
+                    <option value="in">Clock in</option>
+                    <option value="out">Clock out</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={INPUT.label}>Shift date</label>
+                  <input type="date" className={INPUT.base} value={manual.shiftDate} onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className={INPUT.label}>Note</label>
+                  <input className={INPUT.base} value={manual.note} onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))} />
+                </div>
               </div>
-              <div>
-                <label className={INPUT.label}>Type</label>
-                <select className={INPUT.select} value={manual.clockType} onChange={(e) => setManual((current) => ({ ...current, clockType: e.target.value }))}>
-                  <option value="in">Clock in</option>
-                  <option value="out">Clock out</option>
-                </select>
+              <div className="mt-5 flex justify-end">
+                <button type="submit" className={BTN.secondary} disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Add manual entry'}
+                </button>
               </div>
-              <div>
-                <label className={INPUT.label}>Shift date</label>
-                <input type="date" className={INPUT.base} value={manual.shiftDate} onChange={(e) => setManual((current) => ({ ...current, shiftDate: e.target.value }))} required />
-              </div>
-              <div>
-                <label className={INPUT.label}>Note</label>
-                <input className={INPUT.base} value={manual.note} onChange={(e) => setManual((current) => ({ ...current, note: e.target.value }))} />
-              </div>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button type="submit" className={BTN.secondary} disabled={submitting}>
-                {submitting ? 'Saving...' : 'Add manual entry'}
-              </button>
-            </div>
-          </form>
+            </form>
+          )}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between gap-3">
@@ -155,6 +176,11 @@ export default function ClockInAudit() {
                     <div>
                       <p className="font-medium text-slate-900">Staff {item.staffId}</p>
                       <p className="text-sm text-slate-500">{new Date(item.serverTime).toLocaleString('en-GB')}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.withinGeofence == null ? 'Manual / no GPS' : item.withinGeofence ? 'Inside geofence' : 'Outside geofence'}
+                        {item.distanceM != null ? ` • ${Math.round(item.distanceM)}m` : ''}
+                        {item.accuracyM != null ? ` • ±${Math.round(item.accuracyM)}m accuracy` : ''}
+                      </p>
                     </div>
                     <span className={item.approved ? BADGE.green : BADGE.amber}>{item.approved ? 'approved' : 'pending'}</span>
                   </div>

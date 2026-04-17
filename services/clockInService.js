@@ -91,6 +91,23 @@ function roundHours(minutes) {
   return Math.round((minutes / 60) * 100) / 100;
 }
 
+function formatLondonHHMM(value) {
+  if (value == null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  // Render HH:MM in Europe/London — handles BST/GMT transitions correctly.
+  // Cannot use `serverTime.slice(11, 16)` because that is UTC; payroll + roster
+  // are all London-local, so a clock-in at 06:35 BST would otherwise persist as 05:35.
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: LONDON_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.hour}:${map.minute}`;
+}
+
 async function feedTimesheet(home, staffId, clockOutRecord, client) {
   if (clockOutRecord.clockType !== 'out' || !clockOutRecord.approved) return null;
 
@@ -116,8 +133,8 @@ async function feedTimesheet(home, staffId, clockOutRecord, client) {
     date: clockOutRecord.shiftDate,
     scheduledStart,
     scheduledEnd,
-    actualStart: clockInRecord.serverTime.slice(11, 16),
-    actualEnd: clockOutRecord.serverTime.slice(11, 16),
+    actualStart: formatLondonHHMM(clockInRecord.serverTime),
+    actualEnd: formatLondonHHMM(clockOutRecord.serverTime),
     payableHours,
     note: `Clock-in generated from #${clockInRecord.id} and #${clockOutRecord.id}`,
   }, client);
