@@ -2,15 +2,23 @@ import { useState } from 'react';
 import { BTN, INPUT } from '../../lib/design.js';
 import { reportMySick } from '../../lib/api.js';
 import ErrorState from '../../components/ErrorState.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function ReportSick() {
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: TODAY,
     reason: '',
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  // Reason text or non-default date counts as dirty — once submitted the form
+  // resets and the guard releases. Don't guard on the default date alone or
+  // we'd warn on every navigation.
+  useDirtyGuard(Boolean(form.reason || (form.date && form.date !== TODAY)));
 
   async function handleSubmit(event) {
     event.preventDefault();

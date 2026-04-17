@@ -4,14 +4,18 @@ import { cancelMyOverrideRequest, createMyLeaveRequest, getMyAccrual, getMyOverr
 import LoadingState from '../../components/LoadingState.jsx';
 import ErrorState from '../../components/ErrorState.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 export default function MyAnnualLeave() {
   const [summary, setSummary] = useState(null);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cancellingId, setCancellingId] = useState(null);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ date: '', reason: '' });
+
+  useDirtyGuard(Boolean(form.date || form.reason));
 
   async function load() {
     try {
@@ -47,12 +51,16 @@ export default function MyAnnualLeave() {
   }
 
   async function handleCancel(item) {
+    if (cancellingId) return;     // Prevent double-fire while another cancel is in flight
+    setCancellingId(item.id);
+    setError('');
     try {
-      setError('');
       await cancelMyOverrideRequest(item.id, item.version);
       await load();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setCancellingId(null);
     }
   }
 
@@ -115,8 +123,13 @@ export default function MyAnnualLeave() {
                       {item.status}
                     </span>
                     {item.status === 'pending' && (
-                      <button type="button" className={`${BTN.secondary} ${BTN.sm}`} onClick={() => void handleCancel(item)}>
-                        Cancel
+                      <button
+                        type="button"
+                        className={`${BTN.secondary} ${BTN.sm}`}
+                        onClick={() => void handleCancel(item)}
+                        disabled={cancellingId === item.id}
+                      >
+                        {cancellingId === item.id ? 'Cancelling…' : 'Cancel'}
                       </button>
                     )}
                   </div>

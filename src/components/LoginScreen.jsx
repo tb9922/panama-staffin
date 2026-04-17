@@ -55,12 +55,14 @@ export default function LoginScreen({ onLogin }) {
           <div>
             <label htmlFor="login-username" className={INPUT.label}>Username</label>
             <input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)}
-              className={INPUT.base} placeholder="Enter username" autoFocus aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
+              className={INPUT.base} placeholder="Enter username" autoFocus autoComplete="username"
+              aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
           </div>
           <div>
             <label htmlFor="login-password" className={INPUT.label}>Password</label>
             <input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className={INPUT.base} placeholder="Enter password" aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
+              className={INPUT.base} placeholder="Enter password" autoComplete="current-password"
+              aria-describedby={error ? 'login-error' : undefined} aria-invalid={!!error} />
           </div>
           <button type="submit" className={`${BTN.primary} w-full`}>Sign In</button>
         </div>

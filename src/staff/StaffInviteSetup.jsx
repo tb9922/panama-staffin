@@ -100,6 +100,7 @@ export default function StaffInviteSetup({ onLogin }) {
               className={INPUT.base}
               value={form.username}
               onChange={(e) => setForm((current) => ({ ...current, username: e.target.value }))}
+              autoComplete="username"
               autoFocus
             />
           </div>
@@ -111,6 +112,7 @@ export default function StaffInviteSetup({ onLogin }) {
               className={INPUT.base}
               value={form.password}
               onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
+              autoComplete="new-password"
             />
           </div>
           <div>
@@ -121,6 +123,7 @@ export default function StaffInviteSetup({ onLogin }) {
               className={INPUT.base}
               value={form.confirmPassword}
               onChange={(e) => setForm((current) => ({ ...current, confirmPassword: e.target.value }))}
+              autoComplete="new-password"
             />
             <p className="mt-1 text-xs text-slate-500">Use at least 10 characters.</p>
           </div>

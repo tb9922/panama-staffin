@@ -34,9 +34,26 @@ export default function ClockInButton() {
     void load();
   }, [clockInRequired]);
 
+  function geolocationErrorMessage(err) {
+    // Browsers expose GeolocationPositionError with code 1/2/3. The plain
+    // err.message is too cryptic for staff ("User denied Geolocation"). Branch
+    // here so we can give actionable copy + offer the manager-fallback hint.
+    const code = err?.code;
+    if (code === 1 /* PERMISSION_DENIED */) {
+      return 'Location permission was denied. Enable location access in your browser settings, or ask your manager to record this clock-in manually.';
+    }
+    if (code === 2 /* POSITION_UNAVAILABLE */) {
+      return 'Cannot get a location fix right now. If you are inside the building, try moving near a window — or ask your manager to record this clock-in manually.';
+    }
+    if (code === 3 /* TIMEOUT */) {
+      return 'Location is taking too long. Check that location services are on for this browser, then try again.';
+    }
+    return err?.message || 'Clock-in failed.';
+  }
+
   async function handleClock() {
     if (!navigator.geolocation) {
-      setError('This device does not support location-based clock-in.');
+      setError('This device does not support location-based clock-in. Ask your manager to record this clock-in manually.');
       return;
     }
     setSubmitting(true);
@@ -58,7 +75,8 @@ export default function ClockInButton() {
       });
       await load();
     } catch (err) {
-      setError(err?.message || 'Clock-in failed.');
+      // GeolocationPositionError has `code` but not always `message`; API errors have `message`.
+      setError(typeof err?.code === 'number' ? geolocationErrorMessage(err) : (err?.message || 'Clock-in failed.'));
     } finally {
       setSubmitting(false);
     }

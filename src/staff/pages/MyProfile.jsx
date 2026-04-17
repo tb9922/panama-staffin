@@ -3,9 +3,11 @@ import { BTN, INPUT } from '../../lib/design.js';
 import { getMyProfile, staffChangePassword, updateMyProfile } from '../../lib/api.js';
 import LoadingState from '../../components/LoadingState.jsx';
 import ErrorState from '../../components/ErrorState.jsx';
+import useDirtyGuard from '../../hooks/useDirtyGuard.js';
 
 export default function MyProfile() {
   const [profile, setProfile] = useState(null);
+  const [loadedProfile, setLoadedProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -14,13 +16,29 @@ export default function MyProfile() {
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
+    confirmPassword: '',
   });
+
+  // Dirty if profile fields differ from server snapshot OR password form has any input.
+  const dirty = Boolean(
+    (profile && loadedProfile && (
+      (profile.phone || '') !== (loadedProfile.phone || '')
+      || (profile.address || '') !== (loadedProfile.address || '')
+      || (profile.emergency_contact || '') !== (loadedProfile.emergency_contact || '')
+    ))
+    || passwordForm.currentPassword
+    || passwordForm.newPassword
+    || passwordForm.confirmPassword,
+  );
+  useDirtyGuard(dirty);
 
   async function load() {
     try {
       setLoading(true);
       setError('');
-      setProfile(await getMyProfile());
+      const fresh = await getMyProfile();
+      setProfile(fresh);
+      setLoadedProfile(fresh);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -44,6 +62,7 @@ export default function MyProfile() {
         emergency_contact: profile.emergency_contact || '',
       });
       setProfile(updated);
+      setLoadedProfile(updated);
       setMessage('Profile updated.');
     } catch (err) {
       setError(err.message);
@@ -54,12 +73,20 @@ export default function MyProfile() {
 
   async function handlePasswordChange(event) {
     event.preventDefault();
-    setPasswordSaving(true);
     setError('');
     setMessage('');
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+    if (passwordForm.newPassword.length < 10) {
+      setError('Password must be at least 10 characters.');
+      return;
+    }
+    setPasswordSaving(true);
     try {
       await staffChangePassword(passwordForm.currentPassword, passwordForm.newPassword);
-      setPasswordForm({ currentPassword: '', newPassword: '' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setMessage('Password changed.');
     } catch (err) {
       setError(err.message);
@@ -109,14 +136,28 @@ export default function MyProfile() {
 
       <form onSubmit={handlePasswordChange} className="rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="text-lg font-semibold text-slate-900">Change password</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div>
             <label htmlFor="profile-current-password" className={INPUT.label}>Current password</label>
-            <input id="profile-current-password" type="password" className={INPUT.base} value={passwordForm.currentPassword} onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))} />
+            <input id="profile-current-password" type="password" className={INPUT.base}
+              autoComplete="current-password"
+              value={passwordForm.currentPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))} />
           </div>
           <div>
             <label htmlFor="profile-new-password" className={INPUT.label}>New password</label>
-            <input id="profile-new-password" type="password" className={INPUT.base} value={passwordForm.newPassword} onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))} />
+            <input id="profile-new-password" type="password" className={INPUT.base}
+              autoComplete="new-password" minLength={10}
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))} />
+            <p className="mt-1 text-xs text-slate-500">At least 10 characters.</p>
+          </div>
+          <div>
+            <label htmlFor="profile-confirm-password" className={INPUT.label}>Confirm new password</label>
+            <input id="profile-confirm-password" type="password" className={INPUT.base}
+              autoComplete="new-password"
+              value={passwordForm.confirmPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, confirmPassword: e.target.value }))} />
           </div>
         </div>
         <div className="mt-5 flex justify-end">
