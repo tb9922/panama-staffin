@@ -753,7 +753,7 @@ export default function DailyStatus() {
               <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Agency</button>
               <button onClick={() => withLockCheck(() => setModal('training'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Training</button>
               <button onClick={() => withLockCheck(() => setModal('sleepIn'))} disabled={saving} className={`${BADGE.purple} cursor-pointer transition-colors duration-150 hover:bg-purple-100 disabled:opacity-50`}>+Sleep In</button>
-              <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>Swap</button>
+              <button onClick={() => withLockCheck(() => setModal('swap'))} disabled={saving} className={`${BADGE.blue} cursor-pointer transition-colors duration-150 hover:bg-blue-100 disabled:opacity-50`}>+Swap</button>
             </div>}
           </div>
 

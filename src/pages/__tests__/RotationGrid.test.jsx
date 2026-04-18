@@ -112,9 +112,7 @@ describe('RotationGrid', () => {
 
   it('renders Print button', async () => {
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('button', { name: 'Print' })).toBeInTheDocument();
   });
 
   it('renders Export CSV button', async () => {

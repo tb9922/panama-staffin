@@ -118,11 +118,11 @@ export default function Residents() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center mb-4">
-        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} aria-label="Filter residents by status">
           <option value="">All Statuses</option>
           {RESIDENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterFunding} onChange={e => setFilterFunding(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterFunding} onChange={e => setFilterFunding(e.target.value)} aria-label="Filter residents by funding type">
           <option value="">All Funding</option>
           {FUNDING_TYPES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
         </select>
@@ -130,13 +130,14 @@ export default function Residents() {
           <input
             type="text" className={`${INPUT.sm} w-56 pr-10`}
             placeholder="Search by name (Enter)"
+            aria-label="Search residents by name"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={handleSearchKeyDown}
           />
           <button
             type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
             onClick={handleSearchClick}
             title="Search"
             aria-label="Search residents"

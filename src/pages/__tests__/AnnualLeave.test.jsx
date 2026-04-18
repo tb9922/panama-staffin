@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import { MOCK_SCHEDULING_DATA, MOCK_STAFF, MOCK_CONFIG } from '../../test/fixtures/schedulingData.js';
 import AnnualLeave from '../AnnualLeave.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
 import { addDays, formatDate, parseDate } from '../../lib/rotation.js';
+import { bulkUpsertOverrides } from '../../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -112,10 +114,7 @@ describe('AnnualLeave', () => {
 
   it('smoke test — renders without crashing', async () => {
     renderWithProviders(<AnnualLeave />);
-    // Wait for loading to finish
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: 3000 });
-    // Page heading is present
-    await waitFor(() => expect(screen.getByText('Annual Leave')).toBeInTheDocument());
+    expect(await screen.findByRole('heading', { name: 'Annual Leave' })).toBeInTheDocument();
   });
 
   it('shows loading spinner initially', () => {
@@ -294,5 +293,29 @@ describe('AnnualLeave', () => {
     await waitFor(() => expect(screen.getByText('Annual Leave')).toBeInTheDocument());
 
     expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
+  });
+
+  it('booking failure keeps the form mounted and shows error inline', async () => {
+    const failure = Object.assign(new Error('Server rejected booking: max AL reached'), { status: 400 });
+    bulkUpsertOverrides.mockRejectedValue(failure);
+
+    const user = userEvent.setup();
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByText('Book Leave')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Staff'), 'S001');
+    await user.type(screen.getByLabelText('From'), '2026-03-10');
+    await user.type(screen.getByLabelText('To'), '2026-03-10');
+
+    const bookBtn = screen.getByRole('button', { name: /Book Annual Leave/i });
+    await waitFor(() => expect(bookBtn).not.toBeDisabled());
+    await user.click(bookBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Server rejected booking: max AL reached')).toBeInTheDocument();
+    });
+    // Critical: Book Leave panel must remain mounted — no ErrorState page replacement
+    expect(screen.getByText('Book Leave')).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load annual leave')).not.toBeInTheDocument();
   });
 });

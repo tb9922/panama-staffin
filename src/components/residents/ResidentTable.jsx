@@ -1,28 +1,27 @@
 import { BTN, CARD, TABLE, BADGE } from '../../lib/design.js';
 import { FUNDING_TYPES, RESIDENT_STATUSES, getLabel, getStatusBadge, formatCurrency } from '../../lib/finance.js';
 import { parseLocalDate, todayLocalISO } from '../../lib/localDates.js';
-import { clickableRowProps } from '../../lib/a11y.js';
 import EmptyState from '../EmptyState.jsx';
 
 function renderBedCell(r) {
   if (!r.bed) {
-    if (r.status === 'active') return <span className="text-amber-600 font-medium">No bed</span>;
-    return <span className="text-gray-400">{'\u2014'}</span>;
+    if (r.status === 'active') return <span className="text-amber-700 font-medium">No bed</span>;
+    return <span className="text-gray-500">{'\u2014'}</span>;
   }
   if (r.bed.status === 'hospital_hold') {
-    return <span>{r.bed.room_number} <span className="text-amber-600" title="In hospital">&#127973;</span></span>;
+    return <span>{r.bed.room_number} <span className="text-amber-700" title="In hospital">&#127973;</span></span>;
   }
   return <span>{r.bed.room_number}</span>;
 }
 
 function renderFeeReview(r) {
-  if (!r.next_fee_review) return <span className="text-gray-400">{'\u2014'}</span>;
+  if (!r.next_fee_review) return <span className="text-gray-500">{'\u2014'}</span>;
   const reviewDate = parseLocalDate(r.next_fee_review);
   const today = parseLocalDate(todayLocalISO());
   const daysUntil = reviewDate && today
     ? Math.floor((reviewDate.getTime() - today.getTime()) / 86400000)
     : null;
-  const color = daysUntil < 0 ? 'text-red-600 font-medium' : daysUntil <= 30 ? 'text-amber-600' : '';
+  const color = daysUntil < 0 ? 'text-red-700 font-medium' : daysUntil <= 30 ? 'text-amber-700' : '';
   return <span className={color}>{r.next_fee_review}</span>;
 }
 
@@ -83,12 +82,17 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
           </thead>
           <tbody>
             {residents.map(r => (
-              <tr
-                key={r.id}
-                className={TABLE.tr + ' cursor-pointer'}
-                {...clickableRowProps(() => onEdit(r), { label: `Open resident ${r.resident_name}` })}
-              >
-                <td className={TABLE.td + ' font-medium'}>{r.resident_name}</td>
+              <tr key={r.id} className={TABLE.tr}>
+                <td className={TABLE.td}>
+                  <button
+                    type="button"
+                    className="text-left font-medium transition-colors hover:text-blue-700"
+                    onClick={() => onEdit(r)}
+                    aria-label={`Open resident ${r.resident_name}`}
+                  >
+                    {r.resident_name}
+                  </button>
+                </td>
                 <td className={TABLE.td}>{renderBedCell(r)}</td>
                 <td className={TABLE.td}>{getLabel(r.funding_type, FUNDING_TYPES)}</td>
                 <td className={TABLE.tdMono + ' text-right'}>{formatCurrency(r.weekly_fee)}</td>
@@ -96,19 +100,19 @@ export default function ResidentTable({ residents, canEdit, onEdit, onDischarge,
                 <td className={TABLE.td}>{renderFeeReview(r)}</td>
                 <td className={TABLE.tdMono + ' text-right'}>
                   {r.outstanding_balance > 0
-                    ? <span className="text-amber-600 font-medium">{formatCurrency(r.outstanding_balance)}</span>
-                    : <span className="text-green-600">{formatCurrency(0)}</span>}
+                    ? <span className="text-amber-700 font-medium">{formatCurrency(r.outstanding_balance)}</span>
+                    : <span className="text-emerald-700">{formatCurrency(0)}</span>}
                 </td>
                 <td className={TABLE.td}>
                   {r.last_payment_date
-                    ? <div><span>{r.last_payment_date}</span>{r.last_payment_amount != null && <span className="text-xs text-gray-400 ml-1">({formatCurrency(r.last_payment_amount)})</span>}</div>
-                    : <span className="text-gray-400">{'\u2014'}</span>}
+                    ? <div><span>{r.last_payment_date}</span>{r.last_payment_amount != null && <span className="text-xs text-gray-500 ml-1">({formatCurrency(r.last_payment_amount)})</span>}</div>
+                    : <span className="text-gray-500">{'\u2014'}</span>}
                 </td>
                 <td className={TABLE.td}>
                   <span className={BADGE[getStatusBadge(r.status, RESIDENT_STATUSES)]}>{getLabel(r.status, RESIDENT_STATUSES)}</span>
                 </td>
                 {canEdit && (
-                  <td className={TABLE.td} onClick={e => e.stopPropagation()}>
+                  <td className={TABLE.td}>
                     {r.status === 'active' && (
                       <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => onDischarge(r)}>Discharge</button>
                     )}

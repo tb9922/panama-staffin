@@ -107,12 +107,12 @@ export default function MyProfile() {
         <p className="mt-2 text-sm text-slate-600">Update the contact details the home should use for you.</p>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
-            <label className={INPUT.label}>Name</label>
-            <input className={`${INPUT.base} bg-slate-50`} value={profile?.name || ''} disabled />
+            <label htmlFor="profile-name" className={INPUT.label}>Name</label>
+            <input id="profile-name" className={`${INPUT.base} bg-slate-50`} value={profile?.name || ''} disabled />
           </div>
           <div>
-            <label className={INPUT.label}>Role</label>
-            <input className={`${INPUT.base} bg-slate-50`} value={profile?.role || ''} disabled />
+            <label htmlFor="profile-role" className={INPUT.label}>Role</label>
+            <input id="profile-role" className={`${INPUT.base} bg-slate-50`} value={profile?.role || ''} disabled />
           </div>
           <div>
             <label htmlFor="profile-phone" className={INPUT.label}>Phone</label>

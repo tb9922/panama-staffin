@@ -14,6 +14,39 @@ import {
   getCqcNotificationDeadline,
 } from '../../lib/incidents.js';
 
+const INCIDENT_FIELD_IDS = {
+  time: 'incident-time',
+  location: 'incident-location',
+  personAffected: 'incident-person-affected',
+  personName: 'incident-person-name',
+  description: 'incident-description',
+  immediateAction: 'incident-immediate-action',
+  cqcDeadline: 'incident-cqc-deadline',
+  cqcNotifiedDate: 'incident-cqc-notified-date',
+  cqcNotifiedTime: 'incident-cqc-notified-time',
+  cqcReference: 'incident-cqc-reference',
+  riddorReportedDate: 'incident-riddor-reported-date',
+  riddorReportedTime: 'incident-riddor-reported-time',
+  riddorReference: 'incident-riddor-reference',
+  safeguardingTo: 'incident-safeguarding-to',
+  safeguardingReference: 'incident-safeguarding-reference',
+  safeguardingDate: 'incident-safeguarding-date',
+  mspOutcomePreferences: 'incident-msp-outcome-preferences',
+  candourRecipient: 'incident-candour-recipient',
+  candourNotificationDate: 'incident-candour-notification-date',
+  candourLetterSentDate: 'incident-candour-letter-sent-date',
+  policeReference: 'incident-police-reference',
+  policeContactDate: 'incident-police-contact-date',
+  investigationStatus: 'incident-investigation-status',
+  investigationStartDate: 'incident-investigation-start-date',
+  investigationLead: 'incident-investigation-lead',
+  investigationClosedDate: 'incident-investigation-closed-date',
+  investigationReviewDate: 'incident-investigation-review-date',
+  rootCause: 'incident-root-cause',
+  lessonsLearned: 'incident-lessons-learned',
+  addendum: 'incident-addendum',
+};
+
 function getCqcCountdown(form, nowMs) {
   if (!form.cqc_notifiable || form.cqc_notified || !form.cqc_notification_deadline || !form.date) {
     return null;
@@ -104,12 +137,12 @@ export default function IncidentTrackerModal({
               <input id="incident-date" type="date" className={INPUT.base} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
             </div>
             <div>
-              <label className={INPUT.label}>Time</label>
-              <input type="time" className={INPUT.base} value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} />
+              <label htmlFor={INCIDENT_FIELD_IDS.time} className={INPUT.label}>Time</label>
+              <input id={INCIDENT_FIELD_IDS.time} type="time" className={INPUT.base} value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} />
             </div>
             <div>
-              <label className={INPUT.label}>Location</label>
-              <select className={INPUT.select} value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}>
+              <label htmlFor={INCIDENT_FIELD_IDS.location} className={INPUT.label}>Location</label>
+              <select id={INCIDENT_FIELD_IDS.location} className={INPUT.select} value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}>
                 <option value="">Select...</option>
                 {LOCATIONS.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}
               </select>
@@ -144,8 +177,8 @@ export default function IncidentTrackerModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={INPUT.label}>Person Affected</label>
-              <select className={INPUT.select} value={form.person_affected} onChange={e => setForm({ ...form, person_affected: e.target.value, resident_id: null })}>
+              <label htmlFor={INCIDENT_FIELD_IDS.personAffected} className={INPUT.label}>Person Affected</label>
+              <select id={INCIDENT_FIELD_IDS.personAffected} className={INPUT.select} value={form.person_affected} onChange={e => setForm({ ...form, person_affected: e.target.value, resident_id: null })}>
                 {PERSON_AFFECTED_TYPES.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
             </div>
@@ -158,8 +191,8 @@ export default function IncidentTrackerModal({
                 />
               ) : (
                 <>
-                  <label className={INPUT.label}>Person Name</label>
-                  <input type="text" className={INPUT.base} value={form.person_affected_name} onChange={e => setForm({ ...form, person_affected_name: e.target.value })} />
+                  <label htmlFor={INCIDENT_FIELD_IDS.personName} className={INPUT.label}>Person Name</label>
+                  <input id={INCIDENT_FIELD_IDS.personName} type="text" className={INPUT.base} value={form.person_affected_name} onChange={e => setForm({ ...form, person_affected_name: e.target.value })} />
                 </>
               )}
             </div>
@@ -171,19 +204,19 @@ export default function IncidentTrackerModal({
               {activeStaff.map(staff => (
                 <label key={staff.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 px-1 rounded">
                   <input type="checkbox" checked={form.staff_involved.includes(staff.id)} onChange={() => toggleStaff(staff.id)} className="accent-blue-600" />
-                  {staff.name} <span className="text-xs text-gray-400">({staff.role})</span>
+                  {staff.name} <span className="text-xs text-gray-600">({staff.role})</span>
                 </label>
               ))}
             </div>
           </fieldset>
 
           <div>
-            <label className={INPUT.label}>Description</label>
-            <textarea className={`${INPUT.base} h-20`} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <label htmlFor={INCIDENT_FIELD_IDS.description} className={INPUT.label}>Description</label>
+            <textarea id={INCIDENT_FIELD_IDS.description} className={`${INPUT.base} h-20`} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
           <div>
-            <label className={INPUT.label}>Immediate Action Taken</label>
-            <textarea className={`${INPUT.base} h-16`} value={form.immediate_action} onChange={e => setForm({ ...form, immediate_action: e.target.value })} />
+            <label htmlFor={INCIDENT_FIELD_IDS.immediateAction} className={INPUT.label}>Immediate Action Taken</label>
+            <textarea id={INCIDENT_FIELD_IDS.immediateAction} className={`${INPUT.base} h-16`} value={form.immediate_action} onChange={e => setForm({ ...form, immediate_action: e.target.value })} />
           </div>
 
           <fieldset>
@@ -202,7 +235,7 @@ export default function IncidentTrackerModal({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className={INPUT.label}>Witnesses</label>
+              <p className={INPUT.label}>Witnesses</p>
               <button
                 type="button"
                 className={`${BTN.ghost} ${BTN.xs}`}
@@ -211,7 +244,7 @@ export default function IncidentTrackerModal({
                 + Add Witness
               </button>
             </div>
-            {form.witnesses.length === 0 && <p className="text-xs text-gray-400">No witnesses recorded</p>}
+            {form.witnesses.length === 0 && <p className="text-xs text-gray-600">No witnesses recorded</p>}
             {form.witnesses.map((witness, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
                 <div className="flex gap-2">
@@ -219,6 +252,7 @@ export default function IncidentTrackerModal({
                     type="text"
                     className={INPUT.sm}
                     placeholder="Name"
+                    aria-label={`Witness ${index + 1} name`}
                     value={witness.name}
                     onChange={e => {
                       const witnesses = [...form.witnesses];
@@ -230,6 +264,7 @@ export default function IncidentTrackerModal({
                     type="text"
                     className={`${INPUT.sm} w-32`}
                     placeholder="Role"
+                    aria-label={`Witness ${index + 1} role`}
                     value={witness.role}
                     onChange={e => {
                       const witnesses = [...form.witnesses];
@@ -237,13 +272,14 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, witnesses });
                     }}
                   />
-                  <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, witnesses: form.witnesses.filter((_, witnessIndex) => witnessIndex !== index) })}>
+                  <button type="button" aria-label={`Remove witness ${index + 1}`} className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, witnesses: form.witnesses.filter((_, witnessIndex) => witnessIndex !== index) })}>
                     Remove
                   </button>
                 </div>
                 <textarea
                   className={`${INPUT.sm} h-12`}
                   placeholder="Statement summary..."
+                  aria-label={`Witness ${index + 1} statement summary`}
                   value={witness.statement_summary}
                   onChange={e => {
                     const witnesses = [...form.witnesses];
@@ -284,8 +320,9 @@ export default function IncidentTrackerModal({
                     </select>
                   </div>
                   <div>
-                    <label className={INPUT.label}>Deadline</label>
+                    <label htmlFor={INCIDENT_FIELD_IDS.cqcDeadline} className={INPUT.label}>Deadline</label>
                     <input
+                      id={INCIDENT_FIELD_IDS.cqcDeadline}
                       type="text"
                       className={INPUT.base}
                       readOnly
@@ -304,17 +341,17 @@ export default function IncidentTrackerModal({
                 </label>
                 {form.cqc_notified && (
                   <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className={INPUT.label}>Date Notified</label>
-                      <input type="date" className={INPUT.base} value={form.cqc_notified_date} onChange={e => setForm({ ...form, cqc_notified_date: e.target.value })} />
+                  <div>
+                      <label htmlFor={INCIDENT_FIELD_IDS.cqcNotifiedDate} className={INPUT.label}>Date Notified</label>
+                      <input id={INCIDENT_FIELD_IDS.cqcNotifiedDate} type="date" className={INPUT.base} value={form.cqc_notified_date} onChange={e => setForm({ ...form, cqc_notified_date: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Time Notified</label>
-                      <input type="time" className={INPUT.base} value={form.cqc_notified_time} onChange={e => setForm({ ...form, cqc_notified_time: e.target.value })} />
+                      <label htmlFor={INCIDENT_FIELD_IDS.cqcNotifiedTime} className={INPUT.label}>Time Notified</label>
+                      <input id={INCIDENT_FIELD_IDS.cqcNotifiedTime} type="time" className={INPUT.base} value={form.cqc_notified_time} onChange={e => setForm({ ...form, cqc_notified_time: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>CQC Reference</label>
-                      <input type="text" className={INPUT.base} value={form.cqc_reference} onChange={e => setForm({ ...form, cqc_reference: e.target.value })} />
+                      <label htmlFor={INCIDENT_FIELD_IDS.cqcReference} className={INPUT.label}>CQC Reference</label>
+                      <input id={INCIDENT_FIELD_IDS.cqcReference} type="text" className={INPUT.base} value={form.cqc_reference} onChange={e => setForm({ ...form, cqc_reference: e.target.value })} />
                     </div>
                   </div>
                 )}
@@ -343,17 +380,17 @@ export default function IncidentTrackerModal({
                 </label>
                 {form.riddor_reported && (
                   <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className={INPUT.label}>Date Reported</label>
-                      <input type="date" className={INPUT.base} value={form.riddor_reported_date} onChange={e => setForm({ ...form, riddor_reported_date: e.target.value })} />
+                  <div>
+                      <label htmlFor={INCIDENT_FIELD_IDS.riddorReportedDate} className={INPUT.label}>Date Reported</label>
+                      <input id={INCIDENT_FIELD_IDS.riddorReportedDate} type="date" className={INPUT.base} value={form.riddor_reported_date} onChange={e => setForm({ ...form, riddor_reported_date: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>Time Reported</label>
-                      <input type="time" className={INPUT.base} value={form.riddor_reported_time} onChange={e => setForm({ ...form, riddor_reported_time: e.target.value })} />
+                      <label htmlFor={INCIDENT_FIELD_IDS.riddorReportedTime} className={INPUT.label}>Time Reported</label>
+                      <input id={INCIDENT_FIELD_IDS.riddorReportedTime} type="time" className={INPUT.base} value={form.riddor_reported_time} onChange={e => setForm({ ...form, riddor_reported_time: e.target.value })} />
                     </div>
                     <div>
-                      <label className={INPUT.label}>HSE F2508 Reference</label>
-                      <input type="text" className={INPUT.base} value={form.riddor_reference} onChange={e => setForm({ ...form, riddor_reference: e.target.value })} />
+                      <label htmlFor={INCIDENT_FIELD_IDS.riddorReference} className={INPUT.label}>HSE F2508 Reference</label>
+                      <input id={INCIDENT_FIELD_IDS.riddorReference} type="text" className={INPUT.base} value={form.riddor_reference} onChange={e => setForm({ ...form, riddor_reference: e.target.value })} />
                     </div>
                   </div>
                 )}
@@ -371,16 +408,16 @@ export default function IncidentTrackerModal({
               <div className="ml-6 space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className={INPUT.label}>Referred To</label>
-                    <input type="text" className={INPUT.base} placeholder="e.g. Local Authority" value={form.safeguarding_to} onChange={e => setForm({ ...form, safeguarding_to: e.target.value })} />
+                    <label htmlFor={INCIDENT_FIELD_IDS.safeguardingTo} className={INPUT.label}>Referred To</label>
+                    <input id={INCIDENT_FIELD_IDS.safeguardingTo} type="text" className={INPUT.base} placeholder="e.g. Local Authority" value={form.safeguarding_to} onChange={e => setForm({ ...form, safeguarding_to: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Reference</label>
-                    <input type="text" className={INPUT.base} value={form.safeguarding_reference} onChange={e => setForm({ ...form, safeguarding_reference: e.target.value })} />
+                    <label htmlFor={INCIDENT_FIELD_IDS.safeguardingReference} className={INPUT.label}>Reference</label>
+                    <input id={INCIDENT_FIELD_IDS.safeguardingReference} type="text" className={INPUT.base} value={form.safeguarding_reference} onChange={e => setForm({ ...form, safeguarding_reference: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Date</label>
-                    <input type="date" className={INPUT.base} value={form.safeguarding_date} onChange={e => setForm({ ...form, safeguarding_date: e.target.value })} />
+                    <label htmlFor={INCIDENT_FIELD_IDS.safeguardingDate} className={INPUT.label}>Date</label>
+                    <input id={INCIDENT_FIELD_IDS.safeguardingDate} type="date" className={INPUT.base} value={form.safeguarding_date} onChange={e => setForm({ ...form, safeguarding_date: e.target.value })} />
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-2">
@@ -395,8 +432,8 @@ export default function IncidentTrackerModal({
                   </label>
                   {form.msp_wishes_recorded && (
                     <div>
-                      <label className={INPUT.label}>Outcome Preferences</label>
-                      <textarea className={`${INPUT.base} h-14`} placeholder="What outcome does the person want?" value={form.msp_outcome_preferences} onChange={e => setForm({ ...form, msp_outcome_preferences: e.target.value })} />
+                      <label htmlFor={INCIDENT_FIELD_IDS.mspOutcomePreferences} className={INPUT.label}>Outcome Preferences</label>
+                      <textarea id={INCIDENT_FIELD_IDS.mspOutcomePreferences} className={`${INPUT.base} h-14`} placeholder="What outcome does the person want?" value={form.msp_outcome_preferences} onChange={e => setForm({ ...form, msp_outcome_preferences: e.target.value })} />
                     </div>
                   )}
                 </div>
@@ -413,17 +450,17 @@ export default function IncidentTrackerModal({
             {form.duty_of_candour_applies && (
               <div className="ml-6 space-y-2">
                 <div>
-                  <label className={INPUT.label}>Recipient (Person / Family)</label>
-                  <input type="text" className={INPUT.base} placeholder="Name of person or family notified" value={form.candour_recipient} onChange={e => setForm({ ...form, candour_recipient: e.target.value })} />
+                  <label htmlFor={INCIDENT_FIELD_IDS.candourRecipient} className={INPUT.label}>Recipient (Person / Family)</label>
+                  <input id={INCIDENT_FIELD_IDS.candourRecipient} type="text" className={INPUT.base} placeholder="Name of person or family notified" value={form.candour_recipient} onChange={e => setForm({ ...form, candour_recipient: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={INPUT.label}>Verbal Notification Date</label>
-                    <input type="date" className={INPUT.base} value={form.candour_notification_date} onChange={e => setForm({ ...form, candour_notification_date: e.target.value })} />
+                    <label htmlFor={INCIDENT_FIELD_IDS.candourNotificationDate} className={INPUT.label}>Verbal Notification Date</label>
+                    <input id={INCIDENT_FIELD_IDS.candourNotificationDate} type="date" className={INPUT.base} value={form.candour_notification_date} onChange={e => setForm({ ...form, candour_notification_date: e.target.value })} />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Written Follow-up Sent</label>
-                    <input type="date" className={INPUT.base} value={form.candour_letter_sent_date} onChange={e => setForm({ ...form, candour_letter_sent_date: e.target.value })} />
+                    <label htmlFor={INCIDENT_FIELD_IDS.candourLetterSentDate} className={INPUT.label}>Written Follow-up Sent</label>
+                    <input id={INCIDENT_FIELD_IDS.candourLetterSentDate} type="date" className={INPUT.base} value={form.candour_letter_sent_date} onChange={e => setForm({ ...form, candour_letter_sent_date: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -439,12 +476,12 @@ export default function IncidentTrackerModal({
             {form.police_involved && (
               <div className="ml-6 grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Crime / Incident Reference</label>
-                  <input type="text" className={INPUT.base} value={form.police_reference} onChange={e => setForm({ ...form, police_reference: e.target.value })} />
+                  <label htmlFor={INCIDENT_FIELD_IDS.policeReference} className={INPUT.label}>Crime / Incident Reference</label>
+                  <input id={INCIDENT_FIELD_IDS.policeReference} type="text" className={INPUT.base} value={form.police_reference} onChange={e => setForm({ ...form, police_reference: e.target.value })} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Date Contacted</label>
-                  <input type="date" className={INPUT.base} value={form.police_contact_date} onChange={e => setForm({ ...form, police_contact_date: e.target.value })} />
+                  <label htmlFor={INCIDENT_FIELD_IDS.policeContactDate} className={INPUT.label}>Date Contacted</label>
+                  <input id={INCIDENT_FIELD_IDS.policeContactDate} type="date" className={INPUT.base} value={form.police_contact_date} onChange={e => setForm({ ...form, police_contact_date: e.target.value })} />
                 </div>
               </div>
             )}
@@ -456,39 +493,39 @@ export default function IncidentTrackerModal({
         <fieldset disabled={isFrozen} className="space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className={INPUT.label}>Status</label>
-              <select className={INPUT.select} value={form.investigation_status} onChange={e => setForm({ ...form, investigation_status: e.target.value })}>
+              <label htmlFor={INCIDENT_FIELD_IDS.investigationStatus} className={INPUT.label}>Status</label>
+              <select id={INCIDENT_FIELD_IDS.investigationStatus} className={INPUT.select} value={form.investigation_status} onChange={e => setForm({ ...form, investigation_status: e.target.value })}>
                 {INVESTIGATION_STATUSES.map(status => <option key={status.id} value={status.id}>{status.name}</option>)}
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Start Date</label>
-              <input type="date" className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
+              <label htmlFor={INCIDENT_FIELD_IDS.investigationStartDate} className={INPUT.label}>Start Date</label>
+              <input id={INCIDENT_FIELD_IDS.investigationStartDate} type="date" className={INPUT.base} value={form.investigation_start_date} onChange={e => setForm({ ...form, investigation_start_date: e.target.value })} />
             </div>
             <div>
-              <label className={INPUT.label}>Investigation Lead</label>
-              <input type="text" className={INPUT.base} placeholder="Name" value={form.investigation_lead} onChange={e => setForm({ ...form, investigation_lead: e.target.value })} />
+              <label htmlFor={INCIDENT_FIELD_IDS.investigationLead} className={INPUT.label}>Investigation Lead</label>
+              <input id={INCIDENT_FIELD_IDS.investigationLead} type="text" className={INPUT.base} placeholder="Name" value={form.investigation_lead} onChange={e => setForm({ ...form, investigation_lead: e.target.value })} />
             </div>
             {form.investigation_status === 'closed' ? (
               <div>
-                <label className={INPUT.label}>Closed Date</label>
-                <input type="date" className={INPUT.base} value={form.investigation_closed_date} onChange={e => setForm({ ...form, investigation_closed_date: e.target.value })} />
+                <label htmlFor={INCIDENT_FIELD_IDS.investigationClosedDate} className={INPUT.label}>Closed Date</label>
+                <input id={INCIDENT_FIELD_IDS.investigationClosedDate} type="date" className={INPUT.base} value={form.investigation_closed_date} onChange={e => setForm({ ...form, investigation_closed_date: e.target.value })} />
               </div>
             ) : (
               <div>
-                <label className={INPUT.label}>Review Date</label>
-                <input type="date" className={INPUT.base} value={form.investigation_review_date} onChange={e => setForm({ ...form, investigation_review_date: e.target.value })} />
+                <label htmlFor={INCIDENT_FIELD_IDS.investigationReviewDate} className={INPUT.label}>Review Date</label>
+                <input id={INCIDENT_FIELD_IDS.investigationReviewDate} type="date" className={INPUT.base} value={form.investigation_review_date} onChange={e => setForm({ ...form, investigation_review_date: e.target.value })} />
               </div>
             )}
           </div>
           <div>
-            <label className={INPUT.label}>Root Cause Analysis</label>
-            <textarea className={`${INPUT.base} h-20`} placeholder="What was the root cause?" value={form.root_cause} onChange={e => setForm({ ...form, root_cause: e.target.value })} />
+            <label htmlFor={INCIDENT_FIELD_IDS.rootCause} className={INPUT.label}>Root Cause Analysis</label>
+            <textarea id={INCIDENT_FIELD_IDS.rootCause} className={`${INPUT.base} h-20`} placeholder="What was the root cause?" value={form.root_cause} onChange={e => setForm({ ...form, root_cause: e.target.value })} />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className={INPUT.label}>Corrective Actions</label>
+              <p className={INPUT.label}>Corrective Actions</p>
               <button
                 type="button"
                 className={`${BTN.ghost} ${BTN.xs}`}
@@ -497,7 +534,7 @@ export default function IncidentTrackerModal({
                 + Add Action
               </button>
             </div>
-            {form.corrective_actions.length === 0 && <p className="text-xs text-gray-400">No corrective actions recorded</p>}
+            {form.corrective_actions.length === 0 && <p className="text-xs text-gray-600">No corrective actions recorded</p>}
             {form.corrective_actions.map((action, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-2 mb-2 space-y-1.5">
                 <div className="flex gap-2">
@@ -505,6 +542,7 @@ export default function IncidentTrackerModal({
                     type="text"
                     className={`${INPUT.sm} flex-1`}
                     placeholder="Action description"
+                    aria-label={`Corrective action ${index + 1} description`}
                     value={action.description}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -512,7 +550,7 @@ export default function IncidentTrackerModal({
                       setForm({ ...form, corrective_actions: actions });
                     }}
                   />
-                  <button type="button" className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
+                  <button type="button" aria-label={`Remove corrective action ${index + 1}`} className="text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setForm({ ...form, corrective_actions: form.corrective_actions.filter((_, actionIndex) => actionIndex !== index) })}>
                     Remove
                   </button>
                 </div>
@@ -521,6 +559,7 @@ export default function IncidentTrackerModal({
                     type="text"
                     className={INPUT.sm}
                     placeholder="Assigned to"
+                    aria-label={`Corrective action ${index + 1} assigned to`}
                     value={action.assigned_to}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -532,6 +571,7 @@ export default function IncidentTrackerModal({
                     type="date"
                     className={INPUT.sm}
                     title="Due date"
+                    aria-label={`Corrective action ${index + 1} due date`}
                     value={action.due_date}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -543,6 +583,7 @@ export default function IncidentTrackerModal({
                     type="date"
                     className={INPUT.sm}
                     title="Completed date"
+                    aria-label={`Corrective action ${index + 1} completed date`}
                     value={action.completed_date}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -552,6 +593,7 @@ export default function IncidentTrackerModal({
                   />
                   <select
                     className={INPUT.sm}
+                    aria-label={`Corrective action ${index + 1} status`}
                     value={action.status}
                     onChange={e => {
                       const actions = [...form.corrective_actions];
@@ -569,28 +611,28 @@ export default function IncidentTrackerModal({
           </div>
 
           <div>
-            <label className={INPUT.label}>Lessons Learned</label>
-            <textarea className={`${INPUT.base} h-16`} placeholder="Key learnings..." value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })} />
+            <label htmlFor={INCIDENT_FIELD_IDS.lessonsLearned} className={INPUT.label}>Lessons Learned</label>
+            <textarea id={INCIDENT_FIELD_IDS.lessonsLearned} className={`${INPUT.base} h-16`} placeholder="Key learnings..." value={form.lessons_learned} onChange={e => setForm({ ...form, lessons_learned: e.target.value })} />
           </div>
         </fieldset>
       )}
 
       {activeTab === 'addenda' && (
         <div className="space-y-3">
-          {addenda.length === 0 && <p className="text-xs text-gray-400">No addenda recorded</p>}
+          {addenda.length === 0 && <p className="text-xs text-gray-600">No addenda recorded</p>}
           {addenda.map(addendum => (
             <div key={addendum.id} className="border border-gray-200 rounded-lg p-3">
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
-                <span className="font-medium text-gray-600">{addendum.author}</span>
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span className="font-medium text-gray-700">{addendum.author}</span>
                 <span>{addendum.created_at ? new Date(addendum.created_at).toLocaleString('en-GB') : ''}</span>
               </div>
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{addendum.content}</p>
             </div>
           ))}
           <div>
-            <label className={INPUT.label}>Add Note</label>
-            <textarea className={`${INPUT.base} h-20`} placeholder="Post-event note, update, or correction..." value={addendumText} onChange={e => setAddendumText(e.target.value)} />
-            <button onClick={handleAddAddendum} disabled={saving || !addendumText.trim()} className={`${BTN.primary} ${BTN.sm} mt-2`}>Add Note</button>
+            <label htmlFor={INCIDENT_FIELD_IDS.addendum} className={INPUT.label}>Add Note</label>
+            <textarea id={INCIDENT_FIELD_IDS.addendum} className={`${INPUT.base} h-20`} placeholder="Post-event note, update, or correction..." value={addendumText} onChange={e => setAddendumText(e.target.value)} />
+            <button type="button" onClick={handleAddAddendum} disabled={saving || !addendumText.trim()} className={`${BTN.primary} ${BTN.sm} mt-2`}>Add Note</button>
           </div>
         </div>
       )}

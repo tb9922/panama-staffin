@@ -225,7 +225,7 @@ export default function RotationGridModals({
                       <div className="text-xs space-y-0.5">
                         <div className="flex justify-between">
                           <span className="text-gray-500">Hours:</span>
-                          <span className="font-medium">{impact.statsBefore.totalHours.toFixed(1)}{' -> '}{impact.statsAfter.totalHours.toFixed(1)}</span>
+                          <span className="font-medium">{impact.statsBefore.paidHours.toFixed(1)}{' -> '}{impact.statsAfter.paidHours.toFixed(1)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Pay:</span>

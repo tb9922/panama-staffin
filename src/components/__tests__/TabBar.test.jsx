@@ -50,11 +50,11 @@ describe('TabBar', () => {
     expect(tabs[2]).toHaveAttribute('tabindex', '-1');
   });
 
-  it('each tab has aria-controls pointing to panel id', () => {
+  it('assigns an id to each tab button', () => {
     renderTabBar();
     const tabs = screen.getAllByRole('tab');
     tabs.forEach(tab => {
-      expect(tab.getAttribute('aria-controls')).toBeTruthy();
+      expect(tab.getAttribute('id')).toBeTruthy();
     });
   });
 

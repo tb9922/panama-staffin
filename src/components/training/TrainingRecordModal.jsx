@@ -28,6 +28,7 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
   const certificateRefId = useId();
   const evidenceRefId = useId();
   const notesId = useId();
+  const expiryDateId = useId();
 
   // Reset form when modal opens for a different cell
   useEffect(() => { if (isOpen) setForm(initForm()); }, [isOpen, staffId, typeId]); // eslint-disable-line react-hooks/exhaustive-deps -- initForm derives from existing+today which are stable per open
@@ -89,11 +90,11 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={INPUT.label}>Staff Member</label>
+            <p className={INPUT.label}>Staff Member</p>
             <p className="text-sm text-gray-800 font-medium">{staffName}</p>
           </div>
           <div>
-            <label className={INPUT.label}>Training Type</label>
+            <p className={INPUT.label}>Training Type</p>
             <p className="text-sm text-gray-800 font-medium">{typeName}</p>
           </div>
         </div>
@@ -103,8 +104,8 @@ export default function TrainingRecordModal({ isOpen, onClose, staffId, staffNam
             <input id={completedId} type="date" value={form.completed} onChange={e => setForm({ ...form, completed: e.target.value })} className={INPUT.base} disabled={readOnly} />
           </div>
           <div>
-            <label className={INPUT.label}>Expiry Date (auto)</label>
-            <input type="date" value={modalExpiry} disabled className={`${INPUT.base} bg-gray-50 text-gray-500`} />
+            <label htmlFor={expiryDateId} className={INPUT.label}>Expiry Date (auto)</label>
+            <input id={expiryDateId} type="date" value={modalExpiry} disabled className={`${INPUT.base} bg-gray-50 text-gray-500`} />
             {type && <p className="text-[10px] text-gray-400 mt-0.5">{type.refresher_months} months from completion</p>}
           </div>
         </div>

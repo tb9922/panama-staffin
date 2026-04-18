@@ -45,6 +45,20 @@ const EMPTY_STAFF = {
   contract_hours: null, al_entitlement: null, al_carryover: 0, date_of_birth: null,
 };
 
+const NEW_STAFF_FIELD_IDS = {
+  role: 'staff-register-new-role',
+  team: 'staff-register-new-team',
+  pref: 'staff-register-new-pref',
+  skill: 'staff-register-new-skill',
+  rate: 'staff-register-new-rate',
+  contractHours: 'staff-register-new-contract-hours',
+  startDate: 'staff-register-new-start-date',
+  dateOfBirth: 'staff-register-new-date-of-birth',
+  notes: 'staff-register-new-notes',
+  alEntitlement: 'staff-register-new-al-entitlement',
+  alCarryover: 'staff-register-new-al-carryover',
+};
+
 export default function StaffRegister() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
@@ -348,10 +362,10 @@ export default function StaffRegister() {
               return canEdit
                 ? [s.id, s.name, s.role, s.team, s.pref, s.skill, s.hourly_rate?.toFixed(2),
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                  s.notes || '', stats ? stats.totalHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : '']
+                  s.notes || '', stats ? stats.paidHours.toFixed(1) : '', stats ? stats.totalPay.toFixed(0) : '']
                 : [s.id, s.name, s.role, s.team, s.pref, s.skill,
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
-                  s.notes || '', stats ? stats.totalHours.toFixed(1) : ''];
+                  s.notes || '', stats ? stats.paidHours.toFixed(1) : ''];
             });
             downloadCSV('staff_register.csv', headers, rows);
           }} className={BTN.secondary}>Export CSV</button>
@@ -366,12 +380,12 @@ export default function StaffRegister() {
                   s.hourly_rate != null ? parseFloat(s.hourly_rate.toFixed(2)) : '',
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
                   s.notes || '',
-                  stats ? parseFloat(stats.totalHours.toFixed(1)) : '',
+                  stats ? parseFloat(stats.paidHours.toFixed(1)) : '',
                   stats ? parseFloat(stats.totalPay.toFixed(0)) : '']
                 : [s.id, s.name, s.role, s.team, s.pref, s.skill,
                   s.start_date || '', s.leaving_date || '', s.wtr_opt_out ? 'Y' : 'N', s.active !== false ? 'Y' : 'N',
                   s.notes || '',
-                  stats ? parseFloat(stats.totalHours.toFixed(1)) : ''];
+                  stats ? parseFloat(stats.paidHours.toFixed(1)) : ''];
             });
             downloadXLSX('staff_register', [{ name: 'Staff Register', headers, rows }]);
           }} className={BTN.secondary}>Export Excel</button>
@@ -389,12 +403,12 @@ export default function StaffRegister() {
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap print:hidden">
         <input type="text" placeholder="Search name or ID..." value={search} onChange={e => setSearch(e.target.value)}
-          className={`${INPUT.sm} w-48`} />
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
+          className={`${INPUT.sm} w-48`} aria-label="Search staff by name or ID" />
+        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter staff by team">
           <option value="All">All Teams</option>
           {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterActive} onChange={e => setFilterActive(e.target.value)} className={`${INPUT.select} w-auto`}>
+        <select value={filterActive} onChange={e => setFilterActive(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter staff by active status">
           <option value="active">Active Only</option>
           <option value="inactive">Inactive Only</option>
           <option value="all">All</option>
@@ -422,15 +436,15 @@ export default function StaffRegister() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Role</label>
-                  <select value={newStaff.role} onChange={e => setNewStaff({ ...newStaff, role: e.target.value })}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.role} className={INPUT.label}>Role</label>
+                  <select id={NEW_STAFF_FIELD_IDS.role} value={newStaff.role} onChange={e => setNewStaff({ ...newStaff, role: e.target.value })}
                     className={INPUT.select}>
                     {ROLES.map(r => <option key={r}>{r}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Team</label>
-                  <select value={newStaff.team} onChange={e => setNewStaff({ ...newStaff, team: e.target.value })}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.team} className={INPUT.label}>Team</label>
+                  <select id={NEW_STAFF_FIELD_IDS.team} value={newStaff.team} onChange={e => setNewStaff({ ...newStaff, team: e.target.value })}
                     className={INPUT.select}>
                     {TEAMS.map(t => <option key={t}>{t}</option>)}
                   </select>
@@ -438,47 +452,47 @@ export default function StaffRegister() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className={INPUT.label}>Pref</label>
-                  <select value={newStaff.pref} onChange={e => setNewStaff({ ...newStaff, pref: e.target.value })}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.pref} className={INPUT.label}>Pref</label>
+                  <select id={NEW_STAFF_FIELD_IDS.pref} value={newStaff.pref} onChange={e => setNewStaff({ ...newStaff, pref: e.target.value })}
                     className={INPUT.select}>
                     {PREFS.map(p => <option key={p}>{p}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Skill</label>
-                  <input type="number" step="0.5" value={newStaff.skill}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.skill} className={INPUT.label}>Skill</label>
+                  <input id={NEW_STAFF_FIELD_IDS.skill} type="number" step="0.5" value={newStaff.skill}
                     onChange={e => setNewStaff({ ...newStaff, skill: parseFloat(e.target.value) || 0 })}
                     className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Rate £/hr</label>
-                  <input type="number" step="0.5" value={newStaff.hourly_rate}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.rate} className={INPUT.label}>Rate £/hr</label>
+                  <input id={NEW_STAFF_FIELD_IDS.rate} type="number" step="0.5" value={newStaff.hourly_rate}
                     onChange={e => setNewStaff({ ...newStaff, hourly_rate: parseFloat(e.target.value) || 0 })}
                     className={INPUT.base} />
                   {(() => { const mw = getMinimumWageRate(newStaff.date_of_birth, config); return newStaff.hourly_rate < mw.rate ? <p className="text-xs text-red-600 mt-1">Below {mw.label} (£{mw.rate.toFixed(2)})</p> : null; })()}
                 </div>
               </div>
               <div>
-                <label className={INPUT.label}>Contract hrs/wk</label>
-                <input type="number" min="0" max="60" step="0.5" value={newStaff.contract_hours ?? ''}
+                <label htmlFor={NEW_STAFF_FIELD_IDS.contractHours} className={INPUT.label}>Contract hrs/wk</label>
+                <input id={NEW_STAFF_FIELD_IDS.contractHours} type="number" min="0" max="60" step="0.5" value={newStaff.contract_hours ?? ''}
                   placeholder="e.g. 36"
                   onChange={e => setNewStaff({ ...newStaff, contract_hours: e.target.value ? parseFloat(e.target.value) : null })}
                   className={INPUT.base} />
-                <p className="text-xs text-gray-400 mt-0.5">Required for AL calculation (5.6 x weekly hrs)</p>
+                <p className="text-xs text-gray-600 mt-0.5">Required for AL calculation (5.6 x weekly hrs)</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>Start Date</label>
-                  <input type="date" value={newStaff.start_date}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.startDate} className={INPUT.label}>Start Date</label>
+                  <input id={NEW_STAFF_FIELD_IDS.startDate} type="date" value={newStaff.start_date}
                     onChange={e => setNewStaff({ ...newStaff, start_date: e.target.value })}
                     className={INPUT.base} />
                 </div>
                 <div>
-                  <label className={INPUT.label}>Date of Birth</label>
-                  <input type="date" value={newStaff.date_of_birth || ''}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.dateOfBirth} className={INPUT.label}>Date of Birth</label>
+                  <input id={NEW_STAFF_FIELD_IDS.dateOfBirth} type="date" value={newStaff.date_of_birth || ''}
                     onChange={e => setNewStaff({ ...newStaff, date_of_birth: e.target.value || null })}
                     className={INPUT.base} />
-                  <p className="text-xs text-gray-400 mt-0.5">For NMW age bracket</p>
+                  <p className="text-xs text-gray-600 mt-0.5">For NMW age bracket</p>
                 </div>
               </div>
               <div className="flex items-center">
@@ -489,25 +503,25 @@ export default function StaffRegister() {
                 </label>
               </div>
               <div>
-                <label className={INPUT.label}>Notes</label>
-                <input type="text" value={newStaff.notes} onChange={e => setNewStaff({ ...newStaff, notes: e.target.value })}
+                <label htmlFor={NEW_STAFF_FIELD_IDS.notes} className={INPUT.label}>Notes</label>
+                <input id={NEW_STAFF_FIELD_IDS.notes} type="text" value={newStaff.notes} onChange={e => setNewStaff({ ...newStaff, notes: e.target.value })}
                   className={INPUT.base} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={INPUT.label}>AL Entitlement Override (hours)</label>
-                  <input type="number" min="0" max="2000" step="0.5" value={newStaff.al_entitlement ?? ''}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.alEntitlement} className={INPUT.label}>AL Entitlement Override (hours)</label>
+                  <input id={NEW_STAFF_FIELD_IDS.alEntitlement} type="number" min="0" max="2000" step="0.5" value={newStaff.al_entitlement ?? ''}
                     placeholder="Auto (5.6 x weekly hrs)"
                     onChange={e => setNewStaff({ ...newStaff, al_entitlement: e.target.value ? parseFloat(e.target.value) : null })}
                     className={INPUT.base} />
-                  <p className="text-xs text-gray-400 mt-0.5">Blank = auto (5.6 x contract hours)</p>
+                  <p className="text-xs text-gray-600 mt-0.5">Blank = auto (5.6 x contract hours)</p>
                 </div>
                 <div>
-                  <label className={INPUT.label}>Carryover (hours)</label>
-                  <input type="number" min="0" max="500" step="0.5" value={newStaff.al_carryover || 0}
+                  <label htmlFor={NEW_STAFF_FIELD_IDS.alCarryover} className={INPUT.label}>Carryover (hours)</label>
+                  <input id={NEW_STAFF_FIELD_IDS.alCarryover} type="number" min="0" max="500" step="0.5" value={newStaff.al_carryover || 0}
                     onChange={e => setNewStaff({ ...newStaff, al_carryover: parseFloat(e.target.value) || 0 })}
                     className={INPUT.base} />
-                  <p className="text-xs text-gray-400 mt-0.5">From previous year</p>
+                  <p className="text-xs text-gray-600 mt-0.5">From previous year</p>
                 </div>
               </div>
             </div>
@@ -588,7 +602,7 @@ export default function StaffRegister() {
               return (
                 <Fragment key={s.id}>
                   <tr className={`${TABLE.tr} ${s.active === false ? 'opacity-50' : ''}`}>
-                    <td className={`${TABLE.td} font-mono text-xs text-gray-400`}>{s.id}</td>
+                    <td className={`${TABLE.td} font-mono text-xs text-gray-600`}>{s.id}</td>
 
                     {/* Name — editable */}
                     <td className={TABLE.td}>
@@ -699,9 +713,9 @@ export default function StaffRegister() {
                         <input type="checkbox" checked={!!r.wtr_opt_out}
                           onChange={e => updateEditingRow('wtr_opt_out', e.target.checked)} />
                       ) : canEdit ? (
-                        <button type="button" className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'} hover:text-blue-600`} onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</button>
+                        <button type="button" className={`text-xs transition-colors ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'} hover:text-blue-700`} onClick={() => startEditing(s)}>{s.wtr_opt_out ? 'Y' : 'N'}</button>
                       ) : (
-                        <span className={`text-xs ${s.wtr_opt_out ? 'text-green-600' : 'text-red-600'}`}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
+                        <span className={`text-xs ${s.wtr_opt_out ? 'text-emerald-700' : 'text-red-700'}`}>{s.wtr_opt_out ? 'Y' : 'N'}</span>
                       )}
                     </td>
 
@@ -732,18 +746,18 @@ export default function StaffRegister() {
                           {s.al_entitlement != null ? (
                             <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
                           ) : (
-                            <span className="text-gray-400">Auto</span>
+                            <span className="text-gray-600">Auto</span>
                           )}
-                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}h</span>}
+                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-700">+{s.al_carryover}h</span>}
                         </button>
                       ) : (
                         <span className="text-xs">
                           {s.al_entitlement != null ? (
                             <span className="font-medium text-blue-700">{s.al_entitlement}h</span>
                           ) : (
-                            <span className="text-gray-400">Auto</span>
+                            <span className="text-gray-600">Auto</span>
                           )}
-                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-600">+{s.al_carryover}h</span>}
+                          {(s.al_carryover > 0) && <span className="ml-1 text-amber-700">+{s.al_carryover}h</span>}
                         </span>
                       )}
                     </td>
@@ -767,15 +781,16 @@ export default function StaffRegister() {
                           <span className={s.active !== false ? BADGE.green : BADGE.gray}
                             onClick={() => canEdit && startEditing(s)} style={canEdit ? { cursor: 'pointer' } : undefined}>{s.active !== false ? 'Y' : 'N'}</span>
                           {s.active === false && s.leaving_date && (
-                            <span className="text-[10px] text-gray-400">{s.leaving_date}</span>
+                            <span className="text-[10px] text-gray-500">{s.leaving_date}</span>
                           )}
                         </div>
                       )}
                     </td>
 
                     {/* 28d Hours & Pay (read-only, computed) */}
-                    <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
-                      {stats ? stats.totalHours.toFixed(1) : '-'}
+                    <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}
+                      title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>
+                      {stats ? stats.paidHours.toFixed(1) : '-'}
                     </td>
                     {canEdit && (
                     <td className={`${TABLE.td} text-right font-mono text-xs text-gray-600 print:hidden`}>
@@ -793,11 +808,11 @@ export default function StaffRegister() {
                               className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors disabled:opacity-50">
                               {saving ? '...' : 'Save'}
                             </button>
-                            <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 text-xs transition-colors">Cancel</button>
+                            <button onClick={cancelEdit} className="text-gray-600 hover:text-gray-800 text-xs transition-colors">Cancel</button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEditing(s)} className="text-gray-400 hover:text-blue-600 text-xs transition-colors">Edit</button>
+                            <button onClick={() => startEditing(s)} className="text-gray-600 hover:text-blue-700 text-xs transition-colors">Edit</button>
                             {s.active !== false && (
                               <button
                                 onClick={() => { void handleInviteStaff(s); }}
@@ -817,7 +832,7 @@ export default function StaffRegister() {
                             </button>
                           </>
                         )}
-                        <button onClick={() => removeStaff(s.id)} className="text-red-400 hover:text-red-600 text-xs transition-colors">Remove</button>
+                        <button onClick={() => removeStaff(s.id)} className="text-red-600 hover:text-red-700 text-xs transition-colors">Remove</button>
                       </div>
                       )}
                     </td>
@@ -851,7 +866,7 @@ export default function StaffRegister() {
       </StickyTable>
 
       {/* Financial impact note */}
-      <div className="mt-3 text-xs text-gray-400 print:hidden">
+      <div className="mt-3 text-xs text-gray-600 print:hidden">
         Click any field to edit inline, then click Save to persist. Changes to pay rates and skills affect all cost and coverage calculations across the app.
       </div>
       {ConfirmDialog}

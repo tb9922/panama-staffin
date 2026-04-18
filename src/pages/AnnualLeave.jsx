@@ -31,6 +31,12 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+const BOOKING_FIELD_IDS = {
+  staff: 'annual-leave-book-staff',
+  start: 'annual-leave-book-start',
+  end: 'annual-leave-book-end',
+};
+
 function getCenteredSchedulingRange(date, radiusDays = 200) {
   return {
     from: formatDate(addDays(date, -radiusDays)),
@@ -195,7 +201,9 @@ export default function AnnualLeave() {
           handleLockedError(targetDates, () => bookAL());
           return;
         }
-        setError(e.message);
+        setBookingError(e.message);
+        setBookingMsg(null);
+        return;
       } finally {
         setSaving(false);
       }
@@ -343,8 +351,8 @@ export default function AnnualLeave() {
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Book Leave</h2>
           <div className="space-y-3">
             <div>
-              <label className={INPUT.label}>Staff</label>
-              <select value={bookingStaff} onChange={e => setBookingStaff(e.target.value)} className={INPUT.select}>
+              <label htmlFor={BOOKING_FIELD_IDS.staff} className={INPUT.label}>Staff</label>
+              <select id={BOOKING_FIELD_IDS.staff} value={bookingStaff} onChange={e => setBookingStaff(e.target.value)} className={INPUT.select}>
                 <option value="">Select...</option>
                 {activeStaff.map(s => {
                   const acc = accruals.get(s.id);
@@ -371,7 +379,7 @@ export default function AnnualLeave() {
                 <div className="flex justify-between"><span>Used</span><span className="font-medium">{selectedAccrual.usedHours.toFixed(1)}h</span></div>
                 <div className="flex justify-between border-t border-amber-200 pt-0.5 mt-0.5">
                   <span className="font-semibold">Left</span>
-                  <span className={`font-bold ${selectedAccrual.remainingHours < 0 ? 'text-red-600' : selectedAccrual.remainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-700'}`}>
+                  <span className={`font-bold ${selectedAccrual.remainingHours < 0 ? 'text-red-700' : selectedAccrual.remainingHours <= amberThreshold ? 'text-amber-700' : 'text-emerald-700'}`}>
                     {selectedAccrual.remainingHours.toFixed(1)}h
                   </span>
                 </div>
@@ -380,12 +388,12 @@ export default function AnnualLeave() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={INPUT.label}>From</label>
-                <input type="date" value={bookingStart} onChange={e => setBookingStart(e.target.value)} className={INPUT.base} />
+                <label htmlFor={BOOKING_FIELD_IDS.start} className={INPUT.label}>From</label>
+                <input id={BOOKING_FIELD_IDS.start} type="date" value={bookingStart} onChange={e => setBookingStart(e.target.value)} className={INPUT.base} />
               </div>
               <div>
-                <label className={INPUT.label}>To</label>
-                <input type="date" value={bookingEnd} onChange={e => setBookingEnd(e.target.value)} className={INPUT.base} />
+                <label htmlFor={BOOKING_FIELD_IDS.end} className={INPUT.label}>To</label>
+                <input id={BOOKING_FIELD_IDS.end} type="date" value={bookingEnd} onChange={e => setBookingEnd(e.target.value)} className={INPUT.base} />
               </div>
             </div>
             <div className="text-xs text-gray-500">Max {schedData.config.max_al_same_day} staff on AL per day</div>
@@ -403,9 +411,9 @@ export default function AnnualLeave() {
           <div className="flex items-center justify-between p-4 pb-0 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">AL Balances</h2>
-              {leaveYear && <p className="text-xs text-gray-400 mt-0.5">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>}
+              {leaveYear && <p className="mt-0.5 text-xs text-gray-600">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>}
             </div>
-            <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`}>
+            <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter annual leave balances by team">
               <option value="All">All Teams</option>
               {TEAMS.map(t => <option key={t}>{t}</option>)}
             </select>
@@ -444,7 +452,7 @@ export default function AnnualLeave() {
                       </td>
                       <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.usedHours.toFixed(1)}</td>
                       <td className={`${TABLE.td} text-center`}>
-                        <span className={`font-medium text-sm ${acc.yearRemainingHours < 0 ? 'text-red-600' : acc.yearRemainingHours <= amberThreshold ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        <span className={`font-medium text-sm ${acc.yearRemainingHours < 0 ? 'text-red-700' : acc.yearRemainingHours <= amberThreshold ? 'text-amber-700' : 'text-emerald-700'}`}>
                           {acc.yearRemainingHours.toFixed(1)}h
                         </span>
                       </td>
@@ -487,10 +495,10 @@ export default function AnnualLeave() {
                       <div key={formatDate(d)} className={`w-8 h-8 rounded-lg text-[10px] flex flex-col items-center justify-center transition-colors ${
                         isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''
                       } ${
-                        alCount >= max ? 'bg-red-200 text-red-800' :
-                        alCount >= max - 1 ? 'bg-amber-200 text-amber-800' :
-                        alCount > 0 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-50 text-gray-400'
+                      alCount >= max ? 'bg-red-200 text-red-800' :
+                      alCount >= max - 1 ? 'bg-amber-200 text-amber-800' :
+                      alCount > 0 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-600'
                       }`} title={`${formatDate(d)}: ${alCount}/${max} AL`}>
                         <span className="font-medium leading-none">{d.getUTCDate()}</span>
                         {alCount > 0 && <span className="text-[8px] font-bold leading-none">{alCount}</span>}
@@ -513,7 +521,7 @@ export default function AnnualLeave() {
         <div className={`lg:col-span-3 ${CARD.padded}`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Upcoming AL Bookings</h2>
           {upcomingAL.length === 0 ? (
-            <div className="text-sm text-gray-400">No upcoming AL bookings</div>
+            <div className="text-sm text-gray-600">No upcoming AL bookings</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               {upcomingAL.slice(0, 20).map((b, i) => (
@@ -522,7 +530,7 @@ export default function AnnualLeave() {
                     <div className="font-medium">{b.staffName}</div>
                     <div className="text-xs text-gray-500">{parseDate(b.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}</div>
                   </div>
-                  {canEdit && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
+                  {canEdit && <button onClick={() => cancelAL(b.staffId, b.date)} disabled={saving} className="text-red-600 hover:text-red-700 text-xs font-medium transition-colors disabled:opacity-50">Cancel</button>}
                 </div>
               ))}
             </div>

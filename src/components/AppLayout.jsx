@@ -269,6 +269,7 @@ export default function AppLayout() {
         {sidebarOpen && homes.length > 1 && (
           <div className="px-3 py-2.5 border-b border-slate-800/80">
             <select value={activeHome || ''} onChange={e => { void handleHomeChange(e.target.value); }}
+              aria-label="Select active home"
               className="w-full rounded-xl border border-slate-700 bg-slate-900 text-xs text-white px-2.5 py-2 focus:border-blue-500 focus:outline-none">
               {homes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
             </select>

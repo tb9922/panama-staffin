@@ -358,30 +358,30 @@ export default function IncidentTracker() {
         <div className={CARD.padded}>
           <div className="text-xs font-medium text-gray-500">Total Incidents</div>
           <div className="text-2xl font-bold text-gray-900 mt-0.5">{stats.total}</div>
-          <div className="text-[10px] text-gray-400">Last 90 days</div>
+          <div className="text-[10px] text-gray-600">Last 90 days</div>
         </div>
         <div className={`${CARD.padded} ${stats.openInvestigations > 0 ? 'border-red-200 bg-red-50' : ''}`}>
           <div className={`text-xs font-medium ${stats.openInvestigations > 0 ? 'text-red-600' : 'text-gray-500'}`}>Open Investigations</div>
           <div className={`text-2xl font-bold ${stats.openInvestigations > 0 ? 'text-red-700' : 'text-gray-900'} mt-0.5`}>{stats.openInvestigations}</div>
-          <div className="text-[10px] text-gray-400">Require review</div>
+          <div className="text-[10px] text-gray-600">Require review</div>
         </div>
         <div className={`${CARD.padded} ${stats.overdueNotifications > 0 ? 'border-red-200 bg-red-50' : ''}`}>
           <div className={`text-xs font-medium ${stats.overdueNotifications > 0 ? 'text-red-600' : 'text-gray-500'}`}>Pending CQC</div>
           <div className={`text-2xl font-bold ${stats.overdueNotifications > 0 ? 'text-red-700' : 'text-gray-900'} mt-0.5`}>
             {stats.pendingCqcNotifications}
           </div>
-          <div className="text-[10px] text-gray-400">{stats.overdueNotifications > 0 ? `${stats.overdueNotifications} overdue` : 'Notifications'}</div>
+          <div className="text-[10px] text-gray-600">{stats.overdueNotifications > 0 ? `${stats.overdueNotifications} overdue` : 'Notifications'}</div>
         </div>
         <div className={CARD.padded}>
           <div className="text-xs font-medium text-gray-500">Avg Response</div>
           <div className="text-2xl font-bold text-gray-900 mt-0.5">{stats.avgResponseTimeHours != null ? `${stats.avgResponseTimeHours}h` : '-'}</div>
-          <div className="text-[10px] text-gray-400">CQC notification time</div>
+          <div className="text-[10px] text-gray-600">CQC notification time</div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <select className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterType} onChange={e => setFilterType(e.target.value)} aria-label="Filter incidents by type">
           <option value="">All Types</option>
           {INCIDENT_CATEGORIES.map(cat => (
             <optgroup key={cat.id} label={cat.name}>
@@ -391,16 +391,16 @@ export default function IncidentTracker() {
             </optgroup>
           ))}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} aria-label="Filter incidents by severity">
           <option value="">All Severities</option>
           {SEVERITY_LEVELS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select className={`${INPUT.select} w-auto`} value={filterStatus} onChange={e => setFilterStatus(e.target.value)} aria-label="Filter incidents by investigation status">
           <option value="">All Statuses</option>
           {INVESTIGATION_STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <input type="text" className={`${INPUT.sm} w-48`} placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
-        <span className="text-xs text-gray-400 self-center">{filtered.length} incidents</span>
+        <input type="text" className={`${INPUT.sm} w-48`} placeholder="Search..." aria-label="Search incidents" value={search} onChange={e => setSearch(e.target.value)} />
+        <span className="text-xs text-gray-600 self-center">{filtered.length} incidents</span>
       </div>
 
       {/* Incident Table */}

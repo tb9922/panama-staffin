@@ -171,13 +171,13 @@ describe('DailyStatus', () => {
     expect(screen.getByText('+Agency')).toBeInTheDocument();
   });
 
-  it('admin sees quick-action buttons (+Training, +Sleep In, Swap)', async () => {
+  it('admin sees quick-action buttons (+Training, +Sleep In, +Swap)', async () => {
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('+Training')).toBeInTheDocument();
     });
     expect(screen.getByText('+Sleep In')).toBeInTheDocument();
-    expect(screen.getByText('Swap')).toBeInTheDocument();
+    expect(screen.getByText('+Swap')).toBeInTheDocument();
   });
 
   it('clicking +Sick opens the Mark Sick modal', async () => {

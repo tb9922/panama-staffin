@@ -333,8 +333,11 @@ describe('StaffRegister', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /\+ Add Staff/i }));
-    await user.type(screen.getByLabelText('Name'), 'New Starter');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.type(await screen.findByLabelText('Name'), 'New Starter');
+    await user.click(screen.getByRole('button', { name: /^Add$/ }));
+    await waitFor(() => {
+      expect(api.createStaff).toHaveBeenCalled();
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/Staff member added\./i)).toBeInTheDocument();

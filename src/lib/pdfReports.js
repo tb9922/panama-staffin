@@ -1,7 +1,7 @@
 // PDF Report Generation using jsPDF + autoTable
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours, parseDate } from './rotation.js';
+import { getStaffForDay, formatDate, isWorkingShift, isCareRole, getShiftHours, parseDate, getALDeductionHours } from './rotation.js';
 import { calculateDayCost, getDayCoverageStatus } from './escalation.js';
 import {
   QUALITY_STATEMENTS, METRIC_DEFINITIONS, calculateComplianceScore,
@@ -78,15 +78,16 @@ export function generateRosterPDF(data, weekStart) {
   ];
 
   const rows = activeStaff.map(s => {
-    let totalHours = 0;
+    let paidHours = 0;
     const shifts = dates.map(date => {
       const staffForDay = getStaffForDay(data.staff, date, data.overrides, data.config);
       const me = staffForDay.find(x => x.id === s.id);
       const shift = me?.shift || 'OFF';
-      if (isWorkingShift(shift)) totalHours += getShiftHours(shift, data.config);
+      if (isWorkingShift(shift)) paidHours += getShiftHours(shift, data.config);
+      else if (shift === 'AL') paidHours += me?.al_hours != null ? parseFloat(me.al_hours) : getALDeductionHours(s, formatDate(date), data.config);
       return shift;
     });
-    return [s.name, s.team, s.role, ...shifts, totalHours.toFixed(1)];
+    return [s.name, s.team, s.role, ...shifts, paidHours.toFixed(1)];
   });
 
   autoTable(doc, {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { getHrMeetings, createHrMeeting } from '../lib/api.js';
 import { MEETING_TYPES, MEETING_ATTENDEE_ROLES } from '../lib/hr.js';
 import { BTN, INPUT, CARD, BADGE } from '../lib/design.js';
@@ -44,6 +44,13 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const meetingDateId = useId();
+  const meetingTimeId = useId();
+  const meetingTypeId = useId();
+  const meetingLocationId = useId();
+  const meetingSummaryId = useId();
+  const meetingKeyPointsId = useId();
+  const meetingOutcomeId = useId();
 
   const loadMeetings = useCallback(async () => {
     if (!caseId) return;
@@ -119,28 +126,28 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
           {/* Row 1: Date, Time, Type, Location */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <label className={INPUT.label}>Date</label>
-              <input type="date" className={INPUT.sm} value={form.meeting_date} onChange={e => updateForm('meeting_date', e.target.value)} />
+              <label htmlFor={meetingDateId} className={INPUT.label}>Date</label>
+              <input id={meetingDateId} type="date" className={INPUT.sm} value={form.meeting_date} onChange={e => updateForm('meeting_date', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>Time</label>
-              <input type="text" className={INPUT.sm} placeholder="14:00" value={form.meeting_time} onChange={e => updateForm('meeting_time', e.target.value)} />
+              <label htmlFor={meetingTimeId} className={INPUT.label}>Time</label>
+              <input id={meetingTimeId} type="text" className={INPUT.sm} placeholder="14:00" value={form.meeting_time} onChange={e => updateForm('meeting_time', e.target.value)} />
             </div>
             <div>
-              <label className={INPUT.label}>Type</label>
-              <select className={INPUT.select} value={form.meeting_type} onChange={e => updateForm('meeting_type', e.target.value)}>
+              <label htmlFor={meetingTypeId} className={INPUT.label}>Type</label>
+              <select id={meetingTypeId} className={INPUT.select} value={form.meeting_type} onChange={e => updateForm('meeting_type', e.target.value)}>
                 {MEETING_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>
-              <label className={INPUT.label}>Location</label>
-              <input type="text" className={INPUT.sm} placeholder="Office / Room" value={form.location} onChange={e => updateForm('location', e.target.value)} />
+              <label htmlFor={meetingLocationId} className={INPUT.label}>Location</label>
+              <input id={meetingLocationId} type="text" className={INPUT.sm} placeholder="Office / Room" value={form.location} onChange={e => updateForm('location', e.target.value)} />
             </div>
           </div>
 
           {/* Attendees */}
           <div>
-            <label className={INPUT.label}>Attendees</label>
+            <p className={INPUT.label}>Attendees</p>
             {form.attendees.length === 0 && (
               <p className="text-xs text-gray-400 mb-2">No attendees added yet.</p>
             )}
@@ -156,15 +163,17 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
                       showAll
                     />
                   </div>
-                  <input
-                    type="text"
-                    className={INPUT.sm + ' flex-1'}
-                    placeholder="Name (or external attendee)"
-                    value={att.name}
-                    onChange={e => updateAttendee(i, 'name', e.target.value)}
-                  />
+                    <input
+                      type="text"
+                      className={INPUT.sm + ' flex-1'}
+                      placeholder="Name (or external attendee)"
+                      aria-label={`Attendee ${i + 1} name`}
+                      value={att.name}
+                      onChange={e => updateAttendee(i, 'name', e.target.value)}
+                    />
                   <select
                     className={INPUT.select + ' w-48 text-xs py-1.5'}
+                    aria-label={`Attendee ${i + 1} role in meeting`}
                     value={att.role_in_meeting}
                     onChange={e => updateAttendee(i, 'role_in_meeting', e.target.value)}
                   >
@@ -187,8 +196,9 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
 
           {/* Summary */}
           <div>
-            <label className={INPUT.label}>Summary</label>
+            <label htmlFor={meetingSummaryId} className={INPUT.label}>Summary</label>
             <textarea
+              id={meetingSummaryId}
               className={INPUT.base}
               rows={6}
               placeholder="Record what was discussed, questions asked, responses given..."
@@ -199,8 +209,9 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
 
           {/* Key Points */}
           <div>
-            <label className={INPUT.label}>Key Points</label>
+            <label htmlFor={meetingKeyPointsId} className={INPUT.label}>Key Points</label>
             <textarea
+              id={meetingKeyPointsId}
               className={INPUT.base}
               rows={3}
               placeholder="Bullet point the key findings or admissions..."
@@ -211,8 +222,9 @@ export default function InvestigationMeetings({ caseType, caseId, readOnly = fal
 
           {/* Outcome/Actions */}
           <div>
-            <label className={INPUT.label}>Outcome / Actions</label>
+            <label htmlFor={meetingOutcomeId} className={INPUT.label}>Outcome / Actions</label>
             <textarea
+              id={meetingOutcomeId}
               className={INPUT.base}
               rows={3}
               placeholder="Next steps, actions agreed, follow-up required..."

@@ -359,6 +359,26 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     expect(result.totalHours).toBe(0);
     // AL pay should be in totalPay
     expect(result.totalPay).toBe(result.alPay);
+    // paidHours = worked + AL — for user-facing "hours this period" displays
+    expect(result.paidHours).toBe(16);
+  });
+
+  it('paidHours sums worked hours and AL hours — booking AL does not reduce paid hours', () => {
+    // Staff scheduled 3 working days (E = 8h each). Book AL on one of them.
+    // Worked hours drop to 16 (2 × 8), but paidHours stays at 24 (16 worked + 8 AL).
+    const dates = [];
+    const overrides = {};
+    for (let i = 0; i < 7; i++) {
+      const d = addDays('2025-01-06', i);
+      dates.push(d);
+      const key = formatDate(d);
+      if (i < 3) overrides[key] = { S1: { shift: i === 0 ? 'AL' : 'E' } };
+      else overrides[key] = { S1: { shift: 'OFF' } };
+    }
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(16);  // only worked
+    expect(result.alHours).toBe(8);      // one AL day
+    expect(result.paidHours).toBe(24);   // worked + AL — this is what displays should show
   });
 
   it('AL hours uses getALDeductionHours (pref E = 8h)', () => {

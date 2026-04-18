@@ -42,7 +42,6 @@ export default function TabBar({ tabs, activeTab, onTabChange, className = '' })
           id={tabId(prefix, t.id)}
           role="tab"
           aria-selected={t.id === activeTab}
-          aria-controls={panelId(prefix, t.id)}
           tabIndex={t.id === activeTab ? 0 : -1}
           onClick={() => onTabChange(t.id)}
           className={`${TAB.button} ${t.id === activeTab ? TAB.active : TAB.inactive}`}

@@ -62,7 +62,16 @@ export default function CoverageAlertBanner() {
         {['early', 'late', 'night'].map(p => {
           const esc = todayCoverage[p]?.escalation;
           if (!esc || esc.level < 3) return null;
-          return <span key={p} className="px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-medium capitalize">{p}: {esc.label}</span>;
+          return (
+            <span
+              key={p}
+              className={`rounded-full px-1.5 py-0.5 text-xs font-medium capitalize ${
+                isCritical ? 'bg-white text-red-700' : 'bg-white text-amber-900'
+              }`}
+            >
+              {p}: {esc.label}
+            </span>
+          );
         })}
       </div>
       <button

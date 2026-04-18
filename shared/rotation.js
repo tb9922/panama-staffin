@@ -308,6 +308,10 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     totalHours, grossPay, otHours, otPay, bhHours, bhPay, alDays, alHours, alPay,
     weekHours, avgWeeklyHours, wtrStatus, shortWeek,
     totalPay: grossPay + otPay + bhPay + alPay,
+    // paidHours = worked hours + AL hours. AL is paid, so it belongs in any user-facing
+    // "hours this period" display. totalHours stays worked-only so WTR (48h/week) remains
+    // correct — AL must not count toward the WTR limit.
+    paidHours: totalHours + alHours,
   };
 }
 

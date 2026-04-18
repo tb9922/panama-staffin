@@ -69,6 +69,14 @@ function CoverageGauge({ period, cov }) {
   );
 }
 
+const DASHBOARD_HEATMAP_DAY_STYLES = {
+  green: 'bg-emerald-700 text-white',
+  amber: 'bg-amber-700 text-white',
+  yellow: 'bg-yellow-300 text-slate-900',
+  red: 'bg-red-700 text-white',
+  empty: 'bg-gray-200 text-slate-700',
+};
+
 export default function Dashboard() {
   const { homeRole } = useData();
   const [schedData, setSchedData] = useState(null);
@@ -581,7 +589,7 @@ function DashboardInner({ schedData }) {
         ) : (
           <div className={CARD.padded}>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary</h2>
-            <p className="text-sm text-gray-400">Admin access required</p>
+            <p className="text-sm text-gray-600">Admin access required</p>
           </div>
         )}
 
@@ -598,11 +606,11 @@ function DashboardInner({ schedData }) {
                   className={`flex flex-col items-center p-1 rounded-lg transition-all hover:scale-105 ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                   title={`${d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}`}
                 >
-                  <div className="text-[9px] text-gray-400 mb-0.5">D{i + 1}</div>
-                  <div className={`w-8 h-8 rounded-lg ${HEATMAP[d.coverage.overall] || HEATMAP.empty} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
+                  <div className="mb-0.5 text-[9px] text-gray-600">D{i + 1}</div>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-[11px] font-bold shadow-sm ${DASHBOARD_HEATMAP_DAY_STYLES[d.coverage.overall] || DASHBOARD_HEATMAP_DAY_STYLES.empty}`}>
                     {d.date.getUTCDate()}
                   </div>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
+                  <div className="mt-0.5 text-[9px] text-gray-600">{d.date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}</div>
                 </button>
               );
             })}

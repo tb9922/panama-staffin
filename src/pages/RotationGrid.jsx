@@ -5,6 +5,7 @@ import {
   calculateStaffPeriodHours, getShiftHours, SHIFT_COLORS, WORKING_SHIFTS,
 } from '../lib/rotation.js';
 import { calculateDayCost, getDayCoverageStatus, checkFatigueRisk } from '../lib/escalation.js';
+import { clickableRowProps } from '../lib/a11y.js';
 import { CARD, TABLE, INPUT, BTN, BADGE, PAGE } from '../lib/design.js';
 import { getOnboardingBlockingReasons } from '../lib/onboarding.js';
 import { getTrainingBlockingReasons } from '../lib/training.js';
@@ -434,7 +435,7 @@ export default function RotationGrid() {
           const actual = getActualShift(s, d, schedData.overrides, schedData.config.cycle_start_date);
           return actual.shift;
         }),
-        stats?.totalHours.toFixed(1) ?? '',
+        stats?.paidHours.toFixed(1) ?? '',
         stats?.totalPay.toFixed(0) ?? '',
         stats?.otHours > 0 ? stats.otHours.toFixed(1) : '0',
         stats?.wtrStatus ?? '',
@@ -658,7 +659,7 @@ export default function RotationGrid() {
                       </td>
                     );
                   })}
-                  <td className="py-1 px-2 text-right font-mono">{stats?.totalHours.toFixed(1)}</td>
+                  <td className="py-1 px-2 text-right font-mono" title={stats?.alHours > 0 ? `${stats.totalHours.toFixed(1)}h worked + ${stats.alHours.toFixed(1)}h AL` : undefined}>{stats?.paidHours.toFixed(1)}</td>
                   <td className="py-1 px-2 text-right font-mono">£{stats?.totalPay.toFixed(0)}</td>
                   <td className="py-1 px-2 text-right font-mono text-orange-600">{stats?.otHours > 0 ? stats.otHours.toFixed(1) : '-'}</td>
                   <td className="py-1 px-2 text-center">
@@ -671,8 +672,10 @@ export default function RotationGrid() {
               ];
             })}
             {/* Absence & Cover summary rows */}
-            <tr className="bg-amber-50 border-t-2 border-gray-300 cursor-pointer select-none"
-                onClick={() => setSummaryExpanded(e => !e)}>
+            <tr
+              {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} absent summary` })}
+              className="bg-amber-50 border-t-2 border-gray-300 cursor-pointer select-none"
+            >
               <td className="py-1 px-2 font-semibold text-[10px] text-amber-800 sticky left-0 bg-amber-50 z-10 border-r whitespace-nowrap">
                 {summaryExpanded ? '▾' : '▸'} Absent
               </td>
@@ -693,8 +696,10 @@ export default function RotationGrid() {
               })}
               <td colSpan={4}></td>
             </tr>
-            <tr className="bg-blue-50 cursor-pointer select-none"
-                onClick={() => setSummaryExpanded(e => !e)}>
+            <tr
+              {...clickableRowProps(() => setSummaryExpanded(e => !e), { label: `${summaryExpanded ? 'Collapse' : 'Expand'} cover summary` })}
+              className="bg-blue-50 cursor-pointer select-none"
+            >
               <td className="py-1 px-2 font-semibold text-[10px] text-blue-800 sticky left-0 bg-blue-50 z-10 border-r whitespace-nowrap">
                 {summaryExpanded ? '▾' : '▸'} Cover
               </td>
