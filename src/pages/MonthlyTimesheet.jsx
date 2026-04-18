@@ -167,7 +167,7 @@ export default function MonthlyTimesheet() {
       const dayOfWeek = dateObj.getUTCDay();
 
       // Roster: what should they be doing?
-      const actual = getActualShift(staff, dateObj, schedData?.overrides || {}, schedData?.config.cycle_start_date);
+      const actual = getActualShift(staff, dateObj, schedData?.overrides || {}, schedData?.config.cycle_start_date, schedData?.config);
       const rosterShift = typeof actual === 'string' ? actual : actual?.shift || 'OFF';
       const overrideReason = typeof actual === 'object' ? actual.reason : null;
       const rosterHours = WORKING_SHIFTS.includes(rosterShift) ? getShiftHours(rosterShift, schedData?.config) : 0;

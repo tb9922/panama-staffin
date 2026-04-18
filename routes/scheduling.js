@@ -14,6 +14,7 @@ import { AppError } from '../errors.js';
 import {
   getCycleDay, getScheduledShift, isOTShift, isAgencyShift,
   getLeaveYear, getALDeductionHours, STATUTORY_WEEKS,
+  checkWTRImpact, formatDate, parseDate, addDays,
 } from '../shared/rotation.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
@@ -71,7 +72,7 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
   // 4. Reject AL on scheduled OFF days
   const cycleDay = getCycleDay(date, config.cycle_start_date);
   const staffObj = { id: staffId, team: staff.team, pref: staff.pref, start_date: staff.start_date, contract_hours: contractHours };
-  const scheduled = getScheduledShift(staffObj, cycleDay, date);
+  const scheduled = getScheduledShift(staffObj, cycleDay, date, config);
   if (scheduled === 'OFF') {
     return { error: `Cannot book AL on a scheduled OFF day (${date})`, al_hours: 0 };
   }
@@ -242,6 +243,69 @@ async function checkTrainingBlockingForOverride(homeId, staffId, shift, config, 
   return `${name}: expired or missing critical training: ${blocked.join(', ')}`;
 }
 
+function mergeOverrideMaps(base = {}, overlay = {}) {
+  const merged = { ...(base || {}) };
+  for (const [date, entries] of Object.entries(overlay || {})) {
+    merged[date] = {
+      ...(merged[date] || {}),
+      ...(entries || {}),
+    };
+  }
+  return merged;
+}
+
+function buildOverrideMap(rows = []) {
+  const map = {};
+  for (const row of rows) {
+    if (!row?.date || !row?.staffId) continue;
+    if (!map[row.date]) map[row.date] = {};
+    map[row.date][row.staffId] = {
+      ...(map[row.date][row.staffId] || {}),
+      shift: row.shift,
+      sleep_in: row.sleep_in,
+      override_hours: row.override_hours,
+      al_hours: row.al_hours ?? null,
+    };
+  }
+  return map;
+}
+
+/**
+ * Server-side WTR 48h limit enforcement for OT assignments.
+ * Runs the identical `checkWTRImpact` the client uses — but from DB state, so
+ * it can't be bypassed by a manipulated client request. Returns a blocking
+ * error message if projected weekly hours exceed 48h AND the staff hasn't
+ * opted out. Returns null (allow) for opted-out staff, non-working/agency
+ * proposed shifts, or within-limit projections. Advisory (>44h) is client-only.
+ */
+async function checkWTRBlockingForOverride(homeId, staffId, shift, config, effectiveDate, client, batchOverrides = null, weekCache = null) {
+  // Fast-exit — checkWTRImpact will exit on these too, but avoid loading DB state
+  if (!isOTShift(shift)) return null; // only OT triggers WTR block server-side; other working shifts are pattern-driven
+
+  const staff = await staffRepo.findById(homeId, staffId, client);
+  if (!staff) return null;
+  if (staff.wtr_opt_out) return null;
+
+  // Load the Mon–Sun week around the target date
+  const targetDate = parseDate(effectiveDate);
+  const dayOfWeek = targetDate.getUTCDay();
+  const daysFromMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = addDays(targetDate, -daysFromMon);
+  const sunday = addDays(monday, 6);
+  const fromDate = formatDate(monday);
+  const toDate = formatDate(sunday);
+  const cacheKey = `${fromDate}|${toDate}`;
+  let weekOverrides = weekCache?.get(cacheKey);
+  if (!weekOverrides) {
+    weekOverrides = await overrideRepo.findByHome(homeId, fromDate, toDate, client);
+    weekCache?.set(cacheKey, weekOverrides);
+  }
+  const effectiveOverrides = batchOverrides ? mergeOverrideMaps(weekOverrides, batchOverrides) : weekOverrides;
+
+  const impact = checkWTRImpact(staff, effectiveDate, effectiveOverrides, config, shift);
+  return impact.ok ? null : impact.message;
+}
+
 // GET /api/scheduling?home=X — full scheduling bundle
 router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('scheduling', 'read', { allowOwn: true }), async (req, res, next) => {
   try {
@@ -368,8 +432,14 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
         }, client);
       });
     } else {
-      // Non-AL shifts: training check + upsert in one transaction (prevents TOCTOU)
+      // Non-AL shifts: WTR + training check + upsert in one transaction (prevents TOCTOU)
       await withTransaction(async (client) => {
+        const wtrBlock = await checkWTRBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client);
+        if (wtrBlock) {
+          const err = new Error(wtrBlock);
+          err.isWTRBlock = true;
+          throw err;
+        }
         trainingWarning = await checkTrainingBlockingForOverride(req.home.id, staffId, shift, req.home.config, date, client);
         if (trainingWarning && req.home.config?.enforce_training_blocking) {
           const err = new Error(trainingWarning);
@@ -390,6 +460,7 @@ router.put('/overrides', writeRateLimiter, requireAuth, requireHomeAccess, requi
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
     if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
+    if (err.isWTRBlock) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
@@ -456,6 +527,27 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
     const overrides = parsed.data.overrides;
     const trainingWarnings = [];
     await withTransaction(async (client) => {
+      // WTR-blocking check inside transaction — same as single-upsert path.
+      // Blocks overtime that would breach the 48h/week WTR limit for non-opted-out staff.
+      const batchOverrideMap = buildOverrideMap(overrides);
+      const wtrWeekCache = new Map();
+      for (const o of overrides) {
+        const wtrBlock = await checkWTRBlockingForOverride(
+          req.home.id,
+          o.staffId,
+          o.shift,
+          req.home.config,
+          o.date,
+          client,
+          batchOverrideMap,
+          wtrWeekCache,
+        );
+        if (wtrBlock) {
+          const err = new Error(wtrBlock);
+          err.isWTRBlock = true;
+          throw err;
+        }
+      }
       // Training-blocking check inside transaction (prevents TOCTOU between check and write)
       for (const o of overrides) {
         if (!WORKING_SHIFTS_FOR_TRAINING_CHECK.has(o.shift)) continue;
@@ -508,6 +600,7 @@ router.post('/overrides/bulk', writeRateLimiter, requireAuth, requireHomeAccess,
   } catch (err) {
     if (err.isALValidation) return res.status(400).json({ error: err.message });
     if (err.isTrainingBlock) return res.status(400).json({ error: err.message });
+    if (err.isWTRBlock) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

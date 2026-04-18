@@ -5,6 +5,85 @@ const PANAMA_PATTERN = {
   B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
 };
 
+// Exposed alias so callers don't import the private const.
+export const DEFAULT_PATTERN = PANAMA_PATTERN;
+
+// Cycle length is hardcoded to 14 for now. Centralised as a helper so a future
+// non-14-day cycle (7-day, 28-day DuPont, etc.) is a single-site change.
+export const CYCLE_LENGTH = 14;
+export function resolveCycleLength() {
+  return CYCLE_LENGTH;
+}
+
+// Library of 14-day two-team patterns. A and B are always complementary in the
+// presets (B[i] = 1 - A[i]) so working days alternate — the Panama invariant.
+// Custom editors can break complementarity if the manager really wants, but
+// presets always present a clean A/B flip.
+export const ROTATION_PRESETS = [
+  {
+    id: 'panama-223',
+    name: 'Panama 2-2-3',
+    description: '2 on, 2 off, 3 on alternating — the UK care-home default.',
+    teams: {
+      A: [1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+      B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
+    },
+  },
+  {
+    id: 'pitman-fixed',
+    name: 'Pitman Fixed',
+    description: '2 on, 2 off, 3 on / 2 on, 2 off, 3 on — fixed weekends per team.',
+    teams: {
+      A: [1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1],
+      B: [0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0],
+    },
+  },
+  {
+    id: 'continental-222',
+    name: 'Continental 2-2-2',
+    description: 'Steady 2 on / 2 off — low variance, lots of handovers.',
+    teams: {
+      A: [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+      B: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
+    },
+  },
+  {
+    id: '4on-4off',
+    name: '4-on / 4-off',
+    description: 'Long rest blocks, fewer transitions. Popular in acute nursing.',
+    teams: {
+      A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+      B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+    },
+  },
+  {
+    id: 'alt-weeks',
+    name: 'Alternating Weeks',
+    description: '7 on, 7 off. Simple but intense — used occasionally for specialist cover.',
+    teams: {
+      A: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+    },
+  },
+];
+
+// Returns the active teams pattern for a config — the configured one if present
+// and valid, otherwise the Panama default. Never throws; bad config silently
+// falls back so a corrupt config field can't take down scheduling.
+export function resolvePattern(config) {
+  const teams = config?.rotation_pattern?.teams;
+  if (teams && isValidTeamsShape(teams)) return teams;
+  return DEFAULT_PATTERN;
+}
+
+export function isValidTeamsShape(teams) {
+  if (!teams || typeof teams !== 'object') return false;
+  const { A, B } = teams;
+  if (!Array.isArray(A) || !Array.isArray(B)) return false;
+  if (A.length !== CYCLE_LENGTH || B.length !== CYCLE_LENGTH) return false;
+  return A.every(v => v === 0 || v === 1) && B.every(v => v === 0 || v === 1);
+}
+
 // All shift codes from Excel
 export const ALL_SHIFTS = [
   'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'NS', 'ADM', 'TRN', 'AVL',
@@ -86,7 +165,7 @@ export function getTeamBase(team) {
   return match ? match[0] : null;
 }
 
-export function getScheduledShift(staff, cycleDay, date) {
+export function getScheduledShift(staff, cycleDay, date, config = null) {
   // If date is provided and staff has a start_date, don't schedule before they start
   if (date && staff.start_date) {
     const checkDate = typeof date === 'string' ? date : formatDate(date);
@@ -95,7 +174,10 @@ export function getScheduledShift(staff, cycleDay, date) {
   if (staff.team === 'Float') return 'AVL';
   const teamBase = getTeamBase(staff.team);
   if (!teamBase) return 'OFF';
-  const pattern = PANAMA_PATTERN[teamBase];
+  // Resolve the active pattern from config; falls back to Panama 2-2-3 if
+  // config is missing or the rotation_pattern is malformed. Never throws.
+  const teams = resolvePattern(config);
+  const pattern = teams[teamBase];
   if (!pattern) return 'OFF';
   const isOn = pattern[cycleDay] === 1;
   if (!isOn) return 'OFF';
@@ -105,13 +187,13 @@ export function getScheduledShift(staff, cycleDay, date) {
   return staff.pref || staff.default_shift || 'EL';
 }
 
-export function getActualShift(staff, date, overrides, cycleStartDate) {
+export function getActualShift(staff, date, overrides, cycleStartDate, config = null) {
   const dateKey = formatDate(date);
   if (overrides[dateKey]?.[staff.id]) {
     return overrides[dateKey][staff.id];
   }
   const cycleDay = getCycleDay(date, cycleStartDate);
-  return { shift: getScheduledShift(staff, cycleDay, date) };
+  return { shift: getScheduledShift(staff, cycleDay, date, config) };
 }
 
 // Shift classification
@@ -189,9 +271,9 @@ export function getStaffForDay(staff, date, overrides, config) {
   const staffIds = new Set(activeStaff.map(s => s.id));
   const bankHol = isBankHoliday(date, config);
   for (const s of activeStaff) {
-    const actual = getActualShift(s, date, overrides, config.cycle_start_date);
+    const actual = getActualShift(s, date, overrides, config.cycle_start_date, config);
     const cycleDay = getCycleDay(date, config.cycle_start_date);
-    const scheduled = getScheduledShift(s, cycleDay, date);
+    const scheduled = getScheduledShift(s, cycleDay, date, config);
     let shift = actual.shift;
     // If staff hasn't started yet, force OFF regardless of overrides
     if (scheduled === 'OFF' && s.start_date && formatDate(date) < s.start_date) {
@@ -259,13 +341,13 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
   const weekHours = new Array(numWeeks).fill(0);
 
   dates.forEach((date, i) => {
-    const actual = getActualShift(staff, date, overrides, config.cycle_start_date);
+    const actual = getActualShift(staff, date, overrides, config.cycle_start_date, config);
     const shift = actual.shift;
     let hours = getShiftHours(shift, config);
     // TRN/ADM: on-shift = full scheduled hours, off-day = override_hours or config
     if (shift === 'TRN' || shift === 'ADM') {
       const cycleDay = getCycleDay(date, config.cycle_start_date);
-      const scheduled = getScheduledShift(staff, cycleDay, date);
+      const scheduled = getScheduledShift(staff, cycleDay, date, config);
       if (isWorkingShift(scheduled)) {
         hours = getShiftHours(scheduled, config);
       } else {
@@ -314,6 +396,80 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     // correct — AL must not count toward the WTR limit.
     paidHours: totalHours + alHours,
   };
+}
+
+// ── WTR-aware OT limiter ────────────────────────────────────────────────────
+//
+// checkWTRImpact projects what a staff member's weekly worked hours WOULD be if
+// we added the proposed shift, against the calendar week (Mon–Sun) containing
+// the target date. WTR 1998 caps working time at 48h/week averaged over 17
+// weeks; a weekly-rolling enforcement is the industry-standard conservative
+// approximation used by care-home rostering products.
+//
+// Lives in shared/ so server (routes/scheduling.js) and client (DailyStatusModal)
+// run identical logic — no chance of client-side bypass.
+//
+// Returns:
+//   { ok, warn, projectedHours, message }
+//   - ok:false  → block (client disables button, server returns 400)
+//   - ok:true + warn:true  → require manager confirmation
+//   - ok:true + warn:false → silent allow
+//
+// Opted-out staff (staff.wtr_opt_out === true) are always allowed. Non-working
+// proposed shifts (OFF, AL, SICK, NS) skip the check — WTR is about hours
+// actually worked, not scheduled absence. Agency proposed shifts (AG-*) skip
+// too — those hours belong to agency staff, not this staff member.
+
+export const WTR_WEEKLY_LIMIT = 48;
+export const WTR_WEEKLY_WARN  = 44;
+
+export function checkWTRImpact(staff, dateStr, overrides, config, proposedShift) {
+  if (!staff) return { ok: true, warn: false, projectedHours: null, message: null };
+  if (staff.wtr_opt_out) {
+    return { ok: true, warn: false, projectedHours: null, message: 'WTR opt-out on file' };
+  }
+  if (!isWorkingShift(proposedShift)) {
+    return { ok: true, warn: false, projectedHours: null, message: null };
+  }
+  if (isAgencyShift(proposedShift)) {
+    return { ok: true, warn: false, projectedHours: null, message: null };
+  }
+
+  const targetDate = parseDate(dateStr);
+  const dayOfWeek = targetDate.getUTCDay(); // 0 = Sunday
+  const daysFromMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = addDays(targetDate, -daysFromMon);
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+
+  const staffExisting = overrides?.[dateStr]?.[staff.id];
+  const tempOverrides = {
+    ...overrides,
+    [dateStr]: {
+      ...(overrides?.[dateStr] || {}),
+      [staff.id]: { ...(staffExisting || {}), shift: proposedShift },
+    },
+  };
+
+  const stats = calculateStaffPeriodHours(staff, weekDates, tempOverrides, config);
+  const projected = stats.totalHours;
+
+  if (projected > WTR_WEEKLY_LIMIT) {
+    return {
+      ok: false,
+      warn: true,
+      projectedHours: projected,
+      message: `Projected ${projected.toFixed(1)}h this week — exceeds Working Time Regulations 48h limit. Staff has not opted out.`,
+    };
+  }
+  if (projected > WTR_WEEKLY_WARN) {
+    return {
+      ok: true,
+      warn: true,
+      projectedHours: projected,
+      message: `Projected ${projected.toFixed(1)}h this week — approaching 48h WTR limit.`,
+    };
+  }
+  return { ok: true, warn: false, projectedHours: projected, message: null };
 }
 
 // WTR check for a single staff member
@@ -383,7 +539,7 @@ export function getLeaveYear(date, leaveYearStart) {
 export function getALDeductionHours(staff, dateStr, config) {
   const contractHours = parseFloat(staff.contract_hours) || 0;
   const cycleDay = getCycleDay(dateStr, config.cycle_start_date);
-  const scheduled = getScheduledShift(staff, cycleDay, dateStr);
+  const scheduled = getScheduledShift(staff, cycleDay, dateStr, config);
 
   if (scheduled === 'OFF') return 0;
   if (scheduled === 'AVL') {

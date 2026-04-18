@@ -23,9 +23,13 @@ import { todayLocalISO } from '../lib/localDates.js';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import useSchedulingEditLock from '../hooks/useSchedulingEditLock.js';
 import RotationGridModals from '../components/scheduling/RotationGridModals.jsx';
+import CoverPlanModal from '../components/scheduling/CoverPlanModal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import { generateHorizonRoster } from '../lib/rotationAnalysis.js';
+import useTransientNotice from '../hooks/useTransientNotice.js';
+import InlineNotice from '../components/InlineNotice.jsx';
 
 /** Resolve staff ID → two-char initials for compact grid display. */
 function getInitials(staffMap, staffId) {
@@ -88,6 +92,10 @@ export default function RotationGrid() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [bulkModal, setBulkModal] = useState(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [autoPlan, setAutoPlan] = useState(null);
+  const [autoPlanSaving, setAutoPlanSaving] = useState(false);
+  const [autoSolving, setAutoSolving] = useState(false);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
 
   const homeSlug = getCurrentHome();
   const isOwnDataRoster = homeRole === 'staff_member';
@@ -222,7 +230,7 @@ export default function RotationGrid() {
 
     const simOverrides = { ...schedData.overrides };
     if (simOverrides[dateStr]) simOverrides[dateStr] = { ...simOverrides[dateStr] };
-    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date);
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date, schedData.config);
     if (proposedShift === scheduled) {
       if (simOverrides[dateStr]) {
         delete simOverrides[dateStr][staffId];
@@ -316,7 +324,7 @@ export default function RotationGrid() {
       const staff = schedData.staff.find(s => s.id === staffId);
       const date = parseLocalDate(dateStr);
       const cycleDay = getCycleDay(date, schedData.config.cycle_start_date);
-      const scheduled = getScheduledShift(staff, cycleDay, date);
+      const scheduled = getScheduledShift(staff, cycleDay, date, schedData.config);
       const currentShift = actual || scheduled;
       setEditing({
         staffId, dateStr, currentShift, proposedShift: currentShift,
@@ -330,7 +338,7 @@ export default function RotationGrid() {
     const { staffId, dateStr, proposedShift } = editing;
     const staff = schedData.staff.find(s => s.id === staffId);
     const date = parseLocalDate(dateStr);
-    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date);
+    const scheduled = getScheduledShift(staff, getCycleDay(date, schedData.config.cycle_start_date), date, schedData.config);
 
     // Guard: only persist cover link for OC/AG shifts.
     // Without this, changing from OC-EL → E could save a stale replaces_staff_id
@@ -378,7 +386,7 @@ export default function RotationGrid() {
       d.setUTCDate(d.getUTCDate() + i);
       const dk = formatDate(d);
       const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
-      const sched = getScheduledShift(staff, cycleDay, d);
+      const sched = getScheduledShift(staff, cycleDay, d, schedData.config);
       if (sched !== 'OFF') {
         sickRows.push({ date: dk, staffId, shift: 'SICK', reason: 'Sick (bulk)', source: 'manual' });
       }
@@ -422,6 +430,54 @@ export default function RotationGrid() {
     setBulkModal(null);
   }
 
+  async function handleAutoRoster() {
+    if (!schedData || autoSolving) return;
+    setAutoSolving(true);
+    try {
+      // Synchronous solve — fast enough for a month (40 staff × 28 days × 3 periods).
+      // Move to a worker if it ever slows down.
+      const dates = monthDates.map(d => formatDate(d));
+      const plan = generateHorizonRoster({
+        dates,
+        overrides: schedData.overrides,
+        config: schedData.config,
+        staff: schedData.staff,
+      });
+      const noAssignments = plan.assignments.length === 0;
+      const noGaps = (plan.summary?.gapSlotsTotal ?? 0) === 0 && (plan.residualGaps ?? 0) === 0;
+      if (noAssignments && noGaps) {
+        showNotice(`Coverage is already fully met for ${monthLabel} — no auto-roster proposal needed.`, { variant: 'success', duration: 4000 });
+      } else {
+        setAutoPlan(plan);
+      }
+    } finally {
+      setAutoSolving(false);
+    }
+  }
+
+  async function acceptAutoPlan(selectedAssignments) {
+    if (!selectedAssignments?.length) { setAutoPlan(null); return; }
+    setAutoPlanSaving(true);
+    try {
+      const rows = selectedAssignments.map(a => ({
+        date: a.date,
+        staffId: a.staffId,
+        shift: a.shift,
+        reason: a.kind === 'float' ? 'Float deployed (auto-roster)' : a.kind === 'ot' ? 'OT called in (auto-roster)' : 'Agency (auto-roster)',
+        source: a.source,
+      }));
+      const lockDates = [...new Set(rows.map(r => r.date))];
+      await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      await loadData();
+      setAutoPlan(null);
+      showNotice(`${rows.length} cover assignments saved from auto-roster.`, { variant: 'success', duration: 4000 });
+    } catch (e) {
+      setError(e.message || 'Auto-roster save failed');
+    } finally {
+      setAutoPlanSaving(false);
+    }
+  }
+
   function exportCSV() {
     if (!schedData) return;
     const headers = ['ID', 'Name', 'Team', 'Role', 'Pref',
@@ -432,7 +488,7 @@ export default function RotationGrid() {
       return [
         s.id, s.name, s.team, s.role, s.pref,
         ...monthDates.map(d => {
-          const actual = getActualShift(s, d, schedData.overrides, schedData.config.cycle_start_date);
+          const actual = getActualShift(s, d, schedData.overrides, schedData.config.cycle_start_date, schedData.config);
           return actual.shift;
         }),
         stats?.paidHours.toFixed(1) ?? '',
@@ -514,6 +570,10 @@ export default function RotationGrid() {
             <option value="All">All Teams</option>
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+          {canEdit && <button onClick={handleAutoRoster} disabled={saving || autoSolving}
+            className={`${BTN.primary} ${BTN.xs} disabled:opacity-50`}
+            title="Analyse the visible month and propose float / OT / agency cover for every gap">
+            {autoSolving ? 'Solving…' : 'Auto-Roster'}</button>}
           {canEdit && <button onClick={() => setBulkModal({ type: 'revert-all' })} disabled={saving}
             className={`${BTN.secondary} ${BTN.xs} disabled:opacity-50`}>Revert All</button>}
           <button onClick={exportCSV}
@@ -751,6 +811,18 @@ export default function RotationGrid() {
         bulkSickWeek={bulkSickWeek}
         applyChange={applyChange}
       />
+      <CoverPlanModal
+        isOpen={!!autoPlan}
+        plan={autoPlan}
+        saving={autoPlanSaving}
+        onAccept={acceptAutoPlan}
+        onDismiss={() => setAutoPlan(null)}
+      />
+      {notice && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-md">
+          <InlineNotice variant={notice.variant} onDismiss={clearNotice}>{notice.content}</InlineNotice>
+        </div>
+      )}
       {ConfirmDialog}
     </div>
   );
@@ -759,7 +831,7 @@ export default function RotationGrid() {
 function StaffSelfServiceRoster({ schedData, monthDates, monthLabel, monthOffset, setMonthOffset }) {
   const staffMember = schedData.staff?.[0];
   const rows = monthDates.map(date => {
-    const actual = getActualShift(staffMember, date, schedData.overrides || {}, schedData.config?.cycle_start_date);
+    const actual = getActualShift(staffMember, date, schedData.overrides || {}, schedData.config?.cycle_start_date, schedData.config);
     const shift = typeof actual === 'string' ? actual : actual?.shift || 'OFF';
     const hours = WORKING_SHIFTS.includes(shift) ? getShiftHours(shift, schedData.config) : 0;
     return {

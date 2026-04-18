@@ -485,6 +485,55 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
     expect(result.success).toBe(false);
   });
 
+  // rotation_pattern validation
+  it('accepts a valid rotation_pattern with 14-entry binary A and B arrays', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern: {
+        preset_id: 'panama-223',
+        teams: {
+          A: [1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+          B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rotation_pattern.preset_id is optional and may be null', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern: {
+        teams: { A: Array(14).fill(1), B: Array(14).fill(0) },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects rotation_pattern with wrong-length arrays', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern: {
+        teams: { A: [1, 0, 1], B: [0, 1, 0] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects rotation_pattern with non-binary values', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern: {
+        teams: {
+          A: [1, 2, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+          B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts config without rotation_pattern (optional field)', () => {
+    const result = homeConfigSchema.safeParse({ home_name: 'Fine without it' });
+    expect(result.success).toBe(true);
+  });
+
 });
 
 // ── S3: PII filtering in homeService ─────────────────────────────────────────

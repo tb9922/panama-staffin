@@ -48,9 +48,9 @@ export async function getStaffScheduleWindow({ homeId, staffId, from, to }) {
   const end = parseDate(to);
   const days = [];
   for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
-    const actual = getActualShift(staff, cursor, overrides, home.config?.cycle_start_date);
+    const actual = getActualShift(staff, cursor, overrides, home.config?.cycle_start_date, home.config);
     const cycleDay = getCycleDay(cursor, home.config?.cycle_start_date);
-    const scheduledShift = getScheduledShift(staff, cycleDay, cursor);
+    const scheduledShift = getScheduledShift(staff, cycleDay, cursor, home.config);
     days.push({
       date: formatDate(cursor),
       shift: actual.shift,

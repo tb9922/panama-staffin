@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { formatDate, addDays, isCareRole, getScheduledShift, getCycleDay, parseDate, countALOnDate, getALDeductionHours } from '../lib/rotation.js';
 import { getLeaveYear, getAccrualSummary } from '../lib/accrual.js';
+import { generateCoverPlan } from '../lib/rotationAnalysis.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import { useLiveDate } from '../hooks/useLiveDate.js';
 import {
@@ -15,6 +16,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import OverrideRequestReview from '../components/staff/OverrideRequestReview.jsx';
+import CoverPlanModal from '../components/scheduling/CoverPlanModal.jsx';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 
 function getMonthDates(year, month) {
@@ -59,6 +61,8 @@ export default function AnnualLeave() {
   const [bookingEnd, setBookingEnd] = useState('');
   const [bookingError, setBookingError] = useState(null);
   const [bookingMsg, setBookingMsg] = useState(null);
+  const [coverPlan, setCoverPlan] = useState(null);
+  const [coverPlanSaving, setCoverPlanSaving] = useState(false);
 
   const TEAMS = ['Day A', 'Day B', 'Night A', 'Night B', 'Float'];
 
@@ -158,7 +162,7 @@ export default function AnnualLeave() {
     while (d <= end) {
       const dateKey = formatDate(d);
       const cycleDay = getCycleDay(d, schedData.config.cycle_start_date);
-      const scheduled = getScheduledShift(staff, cycleDay, d);
+      const scheduled = getScheduledShift(staff, cycleDay, d, schedData.config);
       if (scheduled === 'OFF') {
         skippedOff++;
         d = addDays(d, 1);
@@ -193,9 +197,11 @@ export default function AnnualLeave() {
         return;
       }
       setSaving(true);
+      let bookingSucceeded = false;
       try {
         await bulkUpsertOverrides(getCurrentHome(), toBook, getEditLockOptions(targetDates));
         await loadData();
+        bookingSucceeded = true;
       } catch (e) {
         if (e.status === 423) {
           handleLockedError(targetDates, () => bookAL());
@@ -207,11 +213,57 @@ export default function AnnualLeave() {
       } finally {
         setSaving(false);
       }
+
+      // Compute cover plan for the booked range using the just-reloaded schedData.
+      // Read from the current state — setSchedData inside loadData has run by this
+      // point. We pass the refreshed overrides/staff snapshot via the ref in loadData.
+      if (bookingSucceeded) {
+        try {
+          const planData = await getSchedulingData(getCurrentHome(), {
+            from: targetDates[0],
+            to: targetDates[targetDates.length - 1],
+          });
+          const plan = generateCoverPlan({
+            dates: targetDates,
+            overrides: planData.overrides,
+            config: planData.config,
+            staff: planData.staff,
+          });
+          if (plan.assignments.length > 0 || plan.residualGaps > 0) {
+            setCoverPlan(plan);
+          }
+        } catch {
+          // Cover-plan generation is best-effort — don't block the booking if it fails.
+        }
+      }
     }
 
     setBookingStaff('');
     setBookingStart('');
     setBookingEnd('');
+  }
+
+  async function acceptCoverPlan(selectedAssignments) {
+    if (!selectedAssignments?.length) { setCoverPlan(null); return; }
+    setCoverPlanSaving(true);
+    try {
+      const rows = selectedAssignments.map(a => ({
+        date: a.date,
+        staffId: a.staffId,
+        shift: a.shift,
+        reason: a.kind === 'float' ? `Float deployed (AL cover)` : a.kind === 'ot' ? `OT called in (AL cover)` : 'Agency (AL cover)',
+        source: a.source,
+      }));
+      const lockDates = [...new Set(rows.map(r => r.date))];
+      await bulkUpsertOverrides(getCurrentHome(), rows, getEditLockOptions(lockDates));
+      await loadData();
+      setCoverPlan(null);
+      setBookingMsg(`${rows.length} cover assignments saved.`);
+    } catch (e) {
+      setBookingError(e.message || 'Cover plan save failed');
+    } finally {
+      setCoverPlanSaving(false);
+    }
   }
 
   // Cancel AL for a staff member on a date
@@ -544,6 +596,13 @@ export default function AnnualLeave() {
         )}
       </div>
       </div>
+      <CoverPlanModal
+        isOpen={!!coverPlan}
+        plan={coverPlan}
+        saving={coverPlanSaving}
+        onAccept={acceptCoverPlan}
+        onDismiss={() => setCoverPlan(null)}
+      />
     </>
   );
 }

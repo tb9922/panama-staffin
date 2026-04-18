@@ -57,7 +57,7 @@ function FatigueTrackerInner({ schedData, today, navigate }) {
 
       // Build working pattern for the 28-day cycle
       const pattern = cycleDates.map(date => {
-        const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date);
+        const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date, config);
         return { date, shift: actual.shift, working: isWorkingShift(actual.shift) };
       });
 

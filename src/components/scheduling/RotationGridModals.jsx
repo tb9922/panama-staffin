@@ -60,7 +60,7 @@ export default function RotationGridModals({
 }) {
   const currentStaff = editing ? schedData?.staff?.find(staff => staff.id === editing.staffId) : null;
   const scheduledShift = editing && currentStaff
-    ? getScheduledShift(currentStaff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr))
+    ? getScheduledShift(currentStaff, getCycleDay(parseLocalDate(editing.dateStr), schedData.config.cycle_start_date), parseLocalDate(editing.dateStr), schedData.config)
     : null;
 
   return (

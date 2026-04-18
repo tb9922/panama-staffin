@@ -210,7 +210,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         // Skip dates after staff left (deactivated mid-period leavers)
         if (s.leaving_date && date > s.leaving_date) continue;
 
-        const actualShift = getActualShift(s, date, overrides, home.config.cycle_start_date);
+        const actualShift = getActualShift(s, date, overrides, home.config.cycle_start_date, home.config);
         const { shift, sleep_in } = actualShift;
 
         // ── Phase 2: Annual Leave → Holiday Pay ──

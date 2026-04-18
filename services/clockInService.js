@@ -84,7 +84,7 @@ function checkShiftWindow(config, expectedShift, now, clockType, shiftDate) {
 
 async function lookupExpectedShift(home, staff, dateStr, client) {
   const overrides = await overrideRepo.findByHome(home.id, dateStr, dateStr, client);
-  return getActualShift(staff, parseDate(dateStr), overrides, home.config?.cycle_start_date);
+  return getActualShift(staff, parseDate(dateStr), overrides, home.config?.cycle_start_date, home.config);
 }
 
 function roundHours(minutes) {

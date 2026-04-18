@@ -47,6 +47,10 @@ vi.mock('../../lib/rotation.js', async (importActual) => {
   };
 });
 
+vi.mock('../../lib/rotationAnalysis.js', () => ({
+  generateCoverPlan: vi.fn(() => ({ assignments: [], totalCost: 0, residualGaps: 0 })),
+}));
+
 vi.mock('../../hooks/useLiveDate.js', () => ({
   useLiveDate: vi.fn(() => '2026-03-08'),
 }));
@@ -62,6 +66,7 @@ vi.mock('../../lib/design.js', async (importActual) => {
 
 import { getSchedulingData } from '../../lib/api.js';
 import { getAccrualSummary, getLeaveYear } from '../../lib/accrual.js';
+import { generateCoverPlan } from '../../lib/rotationAnalysis.js';
 
 const MOCK_LEAVE_YEAR = {
   start: new Date(Date.UTC(2025, 3, 1)),
@@ -317,5 +322,26 @@ describe('AnnualLeave', () => {
     // Critical: Book Leave panel must remain mounted — no ErrorState page replacement
     expect(screen.getByText('Book Leave')).toBeInTheDocument();
     expect(screen.queryByText('Unable to load annual leave')).not.toBeInTheDocument();
+  });
+
+  it('shows unresolved cover gaps after booking when no automatic assignments are possible', async () => {
+    bulkUpsertOverrides.mockResolvedValue({ ok: true });
+    generateCoverPlan.mockReturnValue({ assignments: [], totalCost: 0, residualGaps: 2 });
+
+    const user = userEvent.setup();
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByText('Book Leave')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Staff'), 'S001');
+    await user.type(screen.getByLabelText('From'), '2026-03-10');
+    await user.type(screen.getByLabelText('To'), '2026-03-10');
+
+    const bookBtn = screen.getByRole('button', { name: /Book Annual Leave/i });
+    await waitFor(() => expect(bookBtn).not.toBeDisabled());
+    await user.click(bookBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 residual gaps remain and no automatic cover could be proposed/i)).toBeInTheDocument();
+    });
   });
 });

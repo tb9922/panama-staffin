@@ -3,6 +3,7 @@ import { BTN, INPUT, MODAL } from '../../lib/design.js';
 import { isWorkingShift, isCareRole, getShiftHours } from '../../lib/rotation.js';
 import { validateSwap } from '../../lib/escalation.js';
 import { calculateAccrual } from '../../lib/accrual.js';
+import { checkWTRImpact } from '../../lib/rotationAnalysis.js';
 
 const SHIFT_EDIT_OPTIONS = [
   { value: '__scheduled__', label: 'Scheduled shift' },
@@ -323,12 +324,33 @@ export default function DailyStatusModal({
             ))}
           </select>
           {modal === 'ot' && selectedStaff && (
-            <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
-              <option value="OC-E">OC-E (Early)</option>
-              <option value="OC-L">OC-L (Late)</option>
-              <option value="OC-EL">OC-EL (Full Day)</option>
-              <option value="OC-N">OC-N (Night)</option>
-            </select>
+            <>
+              <select value={otShiftType} onChange={e => setOtShiftType(e.target.value)} className={INPUT.select}>
+                <option value="OC-E">OC-E (Early)</option>
+                <option value="OC-L">OC-L (Late)</option>
+                <option value="OC-EL">OC-EL (Full Day)</option>
+                <option value="OC-N">OC-N (Night)</option>
+              </select>
+              {(() => {
+                const staff = schedData.staff.find(member => member.id === selectedStaff);
+                const impact = checkWTRImpact(staff, dateStr, schedData.overrides, schedData.config, otShiftType);
+                if (impact.projectedHours == null) return null;
+                const cls = !impact.ok
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : impact.warn
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+                return (
+                  <div className={`text-xs rounded-xl px-2 py-1 ${cls}`}>
+                    <div className="font-medium">
+                      WTR: {impact.projectedHours.toFixed(1)}h projected this week
+                      {!impact.ok ? ' — BLOCKED' : impact.warn ? ' — warning' : ' — OK'}
+                    </div>
+                    {impact.message && <div className="text-[11px] mt-0.5">{impact.message}</div>}
+                  </div>
+                );
+              })()}
+            </>
           )}
           {modal === 'al' && alCount >= schedData.config.max_al_same_day && (
             <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-xl">Max AL ({schedData.config.max_al_same_day}) reached</div>
@@ -356,11 +378,31 @@ export default function DailyStatusModal({
           <div className={MODAL.footer}>
             <button onClick={onClose} className={BTN.ghost}>Cancel</button>
             <button
-              disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day) || alBlockedForSelectedStaff}
+              disabled={(() => {
+                if (!selectedStaff || saving) return true;
+                if (modal === 'al' && alCount >= schedData.config.max_al_same_day) return true;
+                if (alBlockedForSelectedStaff) return true;
+                if (modal === 'ot') {
+                  const staff = schedData.staff.find(m => m.id === selectedStaff);
+                  const impact = checkWTRImpact(staff, dateStr, schedData.overrides, schedData.config, otShiftType);
+                  if (!impact.ok) return true;
+                }
+                return false;
+              })()}
               onClick={() => {
                 if (modal === 'sick') onApplySickOverride(selectedStaff);
                 else if (modal === 'noshow') onApplyNoShowOverride(selectedStaff);
                 else if (modal === 'al') onApplyOverride(selectedStaff, 'AL', 'Annual leave', 'manual', false, null, {});
+                else if (modal === 'ot') {
+                  const staff = schedData.staff.find(m => m.id === selectedStaff);
+                  const impact = checkWTRImpact(staff, dateStr, schedData.overrides, schedData.config, otShiftType);
+                  if (!impact.ok) return; // belt-and-braces: disabled button should prevent this
+                  if (impact.warn) {
+                    const msg = `${impact.message}\n\nProceed anyway?`;
+                    if (!window.confirm(msg)) return;
+                  }
+                  onApplyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
+                }
                 else onApplyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
               }}
               className={`${BTN.primary} disabled:opacity-50`}

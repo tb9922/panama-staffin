@@ -1,7 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BANK_HOLIDAY_REGIONS, syncBankHolidays } from '../lib/bankHolidays.js';
-import { isCareRole } from '../lib/rotation.js';
+import {
+  isCareRole,
+  ROTATION_PRESETS,
+  CYCLE_LENGTH,
+  resolvePattern,
+  getCycleDay,
+  formatDate,
+  parseDate,
+  addDays,
+} from '../lib/rotation.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
+import { scoreCycleStartOffset } from '../lib/rotationAnalysis.js';
 import { CARD, TABLE, INPUT, BTN, BADGE } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import { getCurrentHome, getSchedulingData, saveConfig } from '../lib/api.js';
@@ -173,6 +183,36 @@ export default function Config() {
           <Field label="Cycle Start Date" path="cycle_start_date" type="date" />
         </div>
       </section>
+
+      {/* Rotation Pattern */}
+      <RotationPatternSection
+        config={config}
+        canEdit={canEdit}
+        onChangePattern={(patternOrNull) => {
+          const next = JSON.parse(JSON.stringify(config));
+          if (patternOrNull == null) {
+            delete next.rotation_pattern;
+          } else {
+            next.rotation_pattern = patternOrNull;
+          }
+          setConfig(next);
+          setSaved(false);
+          setSaveError(null);
+          setDirty(true);
+        }}
+      />
+
+      {/* Cycle Start Tuning */}
+      <CycleStartTuningSection
+        config={config}
+        staff={staff}
+        canEdit={canEdit}
+        onApplyOffset={(offsetDays) => {
+          const base = parseDate(config.cycle_start_date || formatDate(new Date()));
+          const newStart = formatDate(addDays(base, offsetDays));
+          handleChange('cycle_start_date', newStart);
+        }}
+      />
 
       {/* Shift Definitions */}
       <section className={`${CARD.flush} mb-5`}>
@@ -485,5 +525,248 @@ export default function Config() {
         </div>
       </section>
     </div>
+  );
+}
+
+// ── Rotation Pattern section ─────────────────────────────────────────────────
+
+function RotationPatternSection({ config, canEdit, onChangePattern }) {
+  const currentTeams = resolvePattern(config);
+  const currentPresetId = config?.rotation_pattern?.preset_id ?? null;
+  const hasCustom = Boolean(config?.rotation_pattern);
+  const [linkComplement, setLinkComplement] = useState(true);
+
+  const matchedPreset = useMemo(() => {
+    return ROTATION_PRESETS.find(p =>
+      p.teams.A.every((v, i) => v === currentTeams.A[i]) &&
+      p.teams.B.every((v, i) => v === currentTeams.B[i])
+    );
+  }, [currentTeams]);
+
+  const displayPresetId = currentPresetId ?? matchedPreset?.id ?? '';
+
+  function applyPreset(presetId) {
+    if (!canEdit) return;
+    if (!presetId) {
+      // "Custom" selected — clear preset_id but keep current teams
+      onChangePattern({ preset_id: null, teams: { A: [...currentTeams.A], B: [...currentTeams.B] } });
+      return;
+    }
+    const preset = ROTATION_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+    onChangePattern({ preset_id: preset.id, teams: { A: [...preset.teams.A], B: [...preset.teams.B] } });
+  }
+
+  function resetToDefault() {
+    if (!canEdit) return;
+    onChangePattern(null); // deletes rotation_pattern → falls back to Panama default
+  }
+
+  function toggleCell(team, i) {
+    if (!canEdit) return;
+    const nextA = [...currentTeams.A];
+    const nextB = [...currentTeams.B];
+    if (team === 'A') {
+      nextA[i] = nextA[i] === 1 ? 0 : 1;
+      if (linkComplement) nextB[i] = nextA[i] === 1 ? 0 : 1;
+    } else {
+      nextB[i] = nextB[i] === 1 ? 0 : 1;
+      if (linkComplement) nextA[i] = nextB[i] === 1 ? 0 : 1;
+    }
+    onChangePattern({ preset_id: null, teams: { A: nextA, B: nextB } });
+  }
+
+  // Next 28 days preview — which team would be working on each day
+  const cycleStart = config?.cycle_start_date || formatDate(new Date());
+  const previewDays = useMemo(() => {
+    const today = parseDate(formatDate(new Date()));
+    const rows = [];
+    for (let i = 0; i < 28; i++) {
+      const date = addDays(today, i);
+      const cd = getCycleDay(date, cycleStart);
+      rows.push({
+        date,
+        dateStr: formatDate(date),
+        weekday: date.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }),
+        dayLabel: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+        aWorking: currentTeams.A[cd] === 1,
+        bWorking: currentTeams.B[cd] === 1,
+      });
+    }
+    return rows;
+  }, [currentTeams, cycleStart]);
+
+  return (
+    <section className={`${CARD.padded} mb-5`}>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold text-gray-800">Rotation Pattern</h2>
+        {hasCustom && canEdit && (
+          <button type="button" onClick={resetToDefault} className={`${BTN.ghost} ${BTN.xs}`}>
+            Reset to Panama default
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        How work-days alternate across your {CYCLE_LENGTH}-day rota. Day A / Day B working patterns;
+        Night A / Night B follow the same pattern but are assigned the night shift. Existing overrides
+        (sick, AL, agency) always take precedence over the pattern.
+      </p>
+
+      {/* Preset picker */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <label className="text-xs font-medium text-gray-600">Preset:</label>
+        <select
+          value={displayPresetId}
+          onChange={e => applyPreset(e.target.value)}
+          disabled={!canEdit}
+          className={INPUT.sm}
+          style={{ minWidth: 220 }}
+        >
+          <option value="">— Custom —</option>
+          {ROTATION_PRESETS.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        {matchedPreset && (
+          <span className="text-xs text-gray-500">{matchedPreset.description}</span>
+        )}
+      </div>
+
+      {/* Editor grid */}
+      <div className="space-y-1.5 mb-4">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          <span className="w-14 text-xs font-mono text-gray-500 shrink-0">Day</span>
+          {Array.from({ length: CYCLE_LENGTH }, (_, i) => (
+            <span key={i} className="w-8 text-[10px] font-mono text-gray-400 text-center shrink-0">{i + 1}</span>
+          ))}
+        </div>
+        {['A', 'B'].map(team => (
+          <div key={team} className="flex items-center gap-1 overflow-x-auto">
+            <span className="w-14 text-xs font-semibold text-gray-700 shrink-0">Team {team}</span>
+            {currentTeams[team].map((val, i) => (
+              <button
+                key={i}
+                type="button"
+                disabled={!canEdit}
+                onClick={() => toggleCell(team, i)}
+                aria-label={`Team ${team} day ${i + 1}: ${val === 1 ? 'working' : 'off'} — click to toggle`}
+                className={`w-8 h-8 rounded text-[11px] font-semibold transition-colors shrink-0 ${
+                  val === 1
+                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
+              >
+                {val === 1 ? 'On' : 'Off'}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <label className="inline-flex items-center gap-2 text-xs text-gray-600 mb-4">
+        <input
+          type="checkbox"
+          checked={linkComplement}
+          onChange={e => setLinkComplement(e.target.checked)}
+          disabled={!canEdit}
+        />
+        Keep A and B complementary (toggling one flips the other)
+      </label>
+
+      {/* Preview */}
+      <div>
+        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Preview — next 28 days</h3>
+        <div className="grid grid-cols-7 gap-1 text-[11px]">
+          {previewDays.map(row => (
+            <div key={row.dateStr} className="rounded border border-gray-200 bg-white px-1.5 py-1 leading-tight">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">{row.weekday}</span>
+                <span className="text-gray-500">{row.dayLabel}</span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-1">
+                <span className={`px-1 rounded text-[10px] font-semibold ${row.aWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>A</span>
+                <span className={`px-1 rounded text-[10px] font-semibold ${row.bWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>B</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Cycle Start Tuning section ───────────────────────────────────────────────
+
+function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset }) {
+  const [scores, setScores] = useState(null);
+
+  const analyse = useCallback(() => {
+    const results = [];
+    for (let offset = 0; offset < CYCLE_LENGTH; offset++) {
+      const s = scoreCycleStartOffset(config, staff, offset);
+      results.push({ offset, ...s });
+    }
+    setScores(results);
+  }, [config, staff]);
+
+  const maxRatio = useMemo(() => scores ? Math.max(...scores.map(s => s.ratio)) : 0, [scores]);
+
+  return (
+    <section className={`${CARD.padded} mb-5`}>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold text-gray-800">Cycle Start Tuning</h2>
+        <button
+          type="button"
+          onClick={analyse}
+          disabled={!staff?.length}
+          className={`${BTN.secondary} ${BTN.sm}`}
+        >
+          Analyse all 14 offsets
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        The rotation pattern repeats every {CYCLE_LENGTH} days — but which day of the pattern falls on
+        which weekday depends on <span className="font-mono text-gray-700">cycle_start_date</span>.
+        Shifting the start by 1–13 days rearranges coverage across the week. Scores below show the
+        fraction of period-slots (early / late / night × 28 days) that would be fully covered by the
+        current pattern for each candidate offset.
+      </p>
+
+      {scores == null ? (
+        <p className="text-xs text-gray-400">Click <em>Analyse all 14 offsets</em> to compute coverage for every possible start offset.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {scores.map(s => (
+            <div key={s.offset} className="flex items-center gap-2 text-xs">
+              <span className="w-20 text-gray-500 shrink-0">
+                {s.offset === 0 ? 'current' : `+${s.offset}d`}
+              </span>
+              <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden relative">
+                <div
+                  className={`h-full ${s.ratio === maxRatio ? 'bg-emerald-500' : 'bg-blue-300'}`}
+                  style={{ width: `${Math.round(s.ratio * 100)}%` }}
+                />
+                <span className="absolute inset-0 flex items-center px-2 text-[11px] font-semibold text-gray-800">
+                  {s.covered}/{s.total} ({Math.round(s.ratio * 100)}%)
+                </span>
+              </div>
+              {s.offset !== 0 && canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Shift cycle_start_date by ${s.offset} day${s.offset === 1 ? '' : 's'}? Every staff member's rota will re-align.`)) {
+                      onApplyOffset(s.offset);
+                    }
+                  }}
+                  className={`${BTN.ghost} ${BTN.xs} shrink-0`}
+                >
+                  Apply
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

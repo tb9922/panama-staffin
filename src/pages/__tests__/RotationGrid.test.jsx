@@ -21,7 +21,26 @@ vi.mock('../../lib/api.js', async () => {
   };
 });
 
+vi.mock('../../lib/rotationAnalysis.js', () => ({
+  generateHorizonRoster: vi.fn(() => ({
+    assignments: [],
+    totalCost: 0,
+    residualGaps: 0,
+    summary: {
+      gapSlotsTotal: 0,
+      gapSlotsFilled: 0,
+      coverageFillPct: 1,
+      floatShifts: 0,
+      otShifts: 0,
+      agencyShifts: 0,
+      wtrWarnings: 0,
+      totalCost: 0,
+    },
+  })),
+}));
+
 import * as api from '../../lib/api.js';
+import { generateHorizonRoster } from '../../lib/rotationAnalysis.js';
 
 beforeEach(() => {
   api.getSchedulingData.mockResolvedValue(MOCK_SCHEDULING_DATA);
@@ -203,5 +222,35 @@ describe('RotationGrid', () => {
     });
     expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
     expect(screen.queryByText('Carol Davis')).not.toBeInTheDocument();
+  });
+
+  it('Auto-Roster opens the review modal when gaps remain but no assignments are possible', async () => {
+    generateHorizonRoster.mockReturnValue({
+      assignments: [],
+      totalCost: 0,
+      residualGaps: 2,
+      summary: {
+        gapSlotsTotal: 2,
+        gapSlotsFilled: 0,
+        coverageFillPct: 0,
+        floatShifts: 0,
+        otShifts: 0,
+        agencyShifts: 0,
+        wtrWarnings: 0,
+        totalCost: 0,
+      },
+    });
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Auto-Roster/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Auto-Roster/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 residual gaps remain and no automatic cover could be proposed/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Coverage is already fully met/i)).not.toBeInTheDocument();
   });
 });

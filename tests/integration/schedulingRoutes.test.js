@@ -3,6 +3,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
+import { addDays, formatDate, getCycleDay, getScheduledShift, parseDate } from '../../shared/rotation.js';
 
 const PREFIX = 'sched-route-hardening';
 const USERNAME = `${PREFIX}-manager`;
@@ -172,6 +173,45 @@ describe('scheduling route hardening', () => {
     expect(res.status).toBe(200);
     expect(res.body.warnings).toBeDefined();
     expect(res.body.warnings[0]).toMatch(/Fire Safety/i);
+  });
+
+  it('bulk OT WTR enforcement sees the batch final state, not one row at a time', async () => {
+    const shifts = { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } };
+    const mondayDate = new Date(Date.UTC(2099, 7, 1));
+    while (mondayDate.getUTCDay() !== 1) mondayDate.setUTCDate(mondayDate.getUTCDate() + 1);
+    const monday = formatDate(mondayDate);
+    const staffShape = { id: 'sched-route-s1', team: 'Day A', pref: 'E' };
+    const weekDates = Array.from({ length: 7 }, (_, i) => formatDate(addDays(parseDate(monday), i)));
+    const offDays = weekDates.filter((date) => {
+      const cycleDay = getCycleDay(date, monday);
+      return getScheduledShift(staffShape, cycleDay, date, { cycle_start_date: monday, shifts }) === 'OFF';
+    });
+    expect(offDays.length).toBeGreaterThanOrEqual(2);
+
+    await pool.query(`UPDATE staff SET pref = 'E', wtr_opt_out = false WHERE home_id = $1 AND id = 'sched-route-s1'`, [homeId]);
+    await pool.query(
+      `UPDATE homes
+         SET config = jsonb_set(config, '{cycle_start_date}', to_jsonb($2::text), true)
+       WHERE id = $1`,
+      [homeId, monday],
+    );
+
+    const res = await authRequest('post', `/api/scheduling/overrides/bulk?home=${homeSlug}`)
+      .send({
+        overrides: [
+          { date: offDays[0], staffId: 'sched-route-s1', shift: 'OC-E', reason: 'OT 1' },
+          { date: offDays[1], staffId: 'sched-route-s1', shift: 'OC-E', reason: 'OT 2' },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/48h/i);
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM shift_overrides
+       WHERE home_id = $1 AND staff_id = 'sched-route-s1' AND date = ANY($2::date[])`,
+      [homeId, offDays],
+    );
+    expect(rows[0].cnt).toBe(0);
   });
 
   it('rejects invalid calendar dates on scheduling bundle queries', async () => {

@@ -100,7 +100,7 @@ function SickTrendsInner({ schedData, canEdit }) {
       const monthDetails = months.map(m => {
         const sickDates = [];
         m.dates.forEach(date => {
-          const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date);
+          const actual = getActualShift(s, date, schedData.overrides, config.cycle_start_date, config);
           if (actual.shift === 'SICK') {
             sickDates.push({
               date: formatDate(date),
@@ -119,7 +119,7 @@ function SickTrendsInner({ schedData, canEdit }) {
       const trend = secondHalf > firstHalf + 0.5 ? 'worsening' : secondHalf < firstHalf - 0.5 ? 'improving' : 'stable';
       return { ...s, monthCounts, monthDetails, total, trend };
     }).sort((a, b) => b.total - a.total);
-  }, [activeStaff, months, schedData.overrides, config.cycle_start_date]);
+  }, [activeStaff, months, schedData.overrides, config]);
 
   // Totals per month
   const monthTotals = useMemo(() => {

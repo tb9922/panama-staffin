@@ -14,6 +14,12 @@ import {
   getLeaveYear,
   STATUTORY_WEEKS,
   getStaffStatus,
+  ROTATION_PRESETS,
+  DEFAULT_PATTERN,
+  CYCLE_LENGTH,
+  resolvePattern,
+  resolveCycleLength,
+  isValidTeamsShape,
 } from '../rotation.js';
 
 // ── getCycleDay ────────────────────────────────────────────────────────────────
@@ -131,6 +137,87 @@ describe('getScheduledShift', () => {
   it('defaults to EL when pref is not set', () => {
     const staffNoPrefs = { id: 'S5', team: 'Day A', active: true };
     expect(getScheduledShift(staffNoPrefs, 0)).toBe('EL');
+  });
+});
+
+// ── Custom rotation patterns ──────────────────────────────────────────────────
+
+describe('rotation presets and custom patterns', () => {
+  it('exposes a CYCLE_LENGTH constant of 14', () => {
+    expect(CYCLE_LENGTH).toBe(14);
+    expect(resolveCycleLength()).toBe(14);
+  });
+
+  it('every preset has A and B with exactly 14 binary entries', () => {
+    expect(ROTATION_PRESETS.length).toBeGreaterThanOrEqual(5);
+    for (const p of ROTATION_PRESETS) {
+      expect(p.id).toMatch(/^[a-z0-9-]+$/);
+      expect(p.teams.A).toHaveLength(14);
+      expect(p.teams.B).toHaveLength(14);
+      expect(p.teams.A.every(v => v === 0 || v === 1)).toBe(true);
+      expect(p.teams.B.every(v => v === 0 || v === 1)).toBe(true);
+    }
+  });
+
+  it('panama-223 preset matches the original Panama pattern', () => {
+    const panama = ROTATION_PRESETS.find(p => p.id === 'panama-223');
+    expect(panama.teams).toEqual(DEFAULT_PATTERN);
+  });
+
+  it('resolvePattern falls back to DEFAULT_PATTERN when config is null/undefined', () => {
+    expect(resolvePattern(null)).toEqual(DEFAULT_PATTERN);
+    expect(resolvePattern(undefined)).toEqual(DEFAULT_PATTERN);
+    expect(resolvePattern({})).toEqual(DEFAULT_PATTERN);
+  });
+
+  it('resolvePattern returns configured teams when valid', () => {
+    const teams = {
+      A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+      B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+    };
+    expect(resolvePattern({ rotation_pattern: { teams } })).toEqual(teams);
+  });
+
+  it('resolvePattern silently falls back on malformed teams (never throws)', () => {
+    const bad1 = { rotation_pattern: { teams: { A: [1, 1], B: [0, 0] } } };
+    const bad2 = { rotation_pattern: { teams: { A: 'not an array', B: [] } } };
+    const bad3 = { rotation_pattern: { teams: { A: [1, 2, 0], B: [0, 1, 0] } } };
+    expect(resolvePattern(bad1)).toEqual(DEFAULT_PATTERN);
+    expect(resolvePattern(bad2)).toEqual(DEFAULT_PATTERN);
+    expect(resolvePattern(bad3)).toEqual(DEFAULT_PATTERN);
+  });
+
+  it('isValidTeamsShape rejects non-binary, wrong-length, and non-array inputs', () => {
+    expect(isValidTeamsShape({ A: Array(14).fill(1), B: Array(14).fill(0) })).toBe(true);
+    expect(isValidTeamsShape({ A: Array(13).fill(1), B: Array(14).fill(0) })).toBe(false);
+    expect(isValidTeamsShape({ A: Array(14).fill(2), B: Array(14).fill(0) })).toBe(false);
+    expect(isValidTeamsShape({ A: 'no', B: 'way' })).toBe(false);
+    expect(isValidTeamsShape(null)).toBe(false);
+  });
+
+  it('getScheduledShift uses the configured pattern when present', () => {
+    // Custom pattern: Day A working every day
+    const teams = { A: Array(14).fill(1), B: Array(14).fill(0) };
+    const config = { rotation_pattern: { teams } };
+    const staff = { id: 'S1', team: 'Day A', pref: 'E', active: true };
+    for (let i = 0; i < 14; i++) {
+      expect(getScheduledShift(staff, i, '2025-01-06', config)).toBe('E');
+    }
+  });
+
+  it('getScheduledShift falls back to Panama 2-2-3 when config omitted (backwards compat)', () => {
+    const staff = { id: 'S1', team: 'Day A', pref: 'E', active: true };
+    // Panama pattern has Day A working on cycle day 0 and off on day 2
+    expect(getScheduledShift(staff, 0, '2025-01-06')).toBe('E');
+    expect(getScheduledShift(staff, 2, '2025-01-06')).toBe('OFF');
+  });
+
+  it('getActualShift threads config to getScheduledShift for custom patterns', () => {
+    const teams = { A: Array(14).fill(0), B: Array(14).fill(1) };  // Day A never works
+    const config = { rotation_pattern: { teams }, cycle_start_date: '2025-01-06' };
+    const staff = { id: 'S1', team: 'Day A', pref: 'E', active: true };
+    const result = getActualShift(staff, '2025-01-06', {}, '2025-01-06', config);
+    expect(result.shift).toBe('OFF');  // would be E under Panama, OFF under custom
   });
 });
 

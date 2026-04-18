@@ -204,19 +204,19 @@ export function checkFatigueRisk(staffMember, date, overrides, config) {
 
   for (let i = 0; i < scanRadius; i++) {
     checkDate = addDays(checkDate, -1);
-    const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
+    const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date, config);
     if (!isWorkingShift(actual.shift)) break;
     backward++;
   }
 
   let forward = 0;
   checkDate = typeof date === 'string' ? parseDate(date) : parseDate(formatDate(date));
-  const todayActual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
+  const todayActual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date, config);
   if (isWorkingShift(todayActual.shift)) {
     forward = 1;
     for (let i = 0; i < scanRadius; i++) {
       checkDate = addDays(checkDate, 1);
-      const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date);
+      const actual = getActualShift(staffMember, checkDate, overrides, config.cycle_start_date, config);
       if (!isWorkingShift(actual.shift)) break;
       forward++;
     }
@@ -294,8 +294,8 @@ export function validateSwap(fromStaff, toStaff, date, overrides, config, traini
   // WTR 1998 Reg 10: 11h rest gap — toStaff will work fromStaff.shift on this date.
   // getActualShift returns { shift: '...' } — extract the string.
   const newShift = fromStaff.shift;
-  const prevShift = getActualShift(toStaff, addDays(date, -1), overrides, config.cycle_start_date)?.shift;
-  const nextShift = getActualShift(toStaff, addDays(date, 1), overrides, config.cycle_start_date)?.shift;
+  const prevShift = getActualShift(toStaff, addDays(date, -1), overrides, config.cycle_start_date, config)?.shift;
+  const nextShift = getActualShift(toStaff, addDays(date, 1), overrides, config.cycle_start_date, config)?.shift;
   const restingShifts = new Set(['OFF', 'AL', 'SICK', 'NS']);
   if (isNightShift(prevShift) && !isNightShift(newShift)) {
     issues.push({ type: 'warning', msg: `${toStaff.name}: worked nights yesterday — verify 11h rest before this shift (WTR 1998 Reg 10)` });
