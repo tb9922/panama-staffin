@@ -49,14 +49,14 @@ export default defineConfig({
     {
       command: 'node server.js',
       port: 3001,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 30_000,
-      env: { ...process.env, NODE_ENV: 'test' },
+      env: { ...process.env, NODE_ENV: 'test', PANAMA_E2E_SERVER: '1' },
     },
     {
       command: 'npx vite',
       port: 5173,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 30_000,
     },
   ],

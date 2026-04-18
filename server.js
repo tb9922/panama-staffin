@@ -270,7 +270,8 @@ export { app };
 const isDirectRun = Boolean(process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')));
 const isPm2Process = process.env.pm_id != null || process.env.NODE_APP_INSTANCE != null;
 const isTestProcess = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
-const shouldListen = !isTestProcess && (isDirectRun || isPm2Process);
+const isPlaywrightWebServer = process.env.PANAMA_E2E_SERVER === '1';
+const shouldListen = isPlaywrightWebServer || (!isTestProcess && (isDirectRun || isPm2Process));
 const server = shouldListen ? app.listen(config.port, async () => {
   // Request + connection timeouts
   server.setTimeout(30000);        // 30s max request duration
