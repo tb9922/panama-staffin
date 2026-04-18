@@ -185,7 +185,7 @@ export default function RotationGrid() {
       const covers = [];
 
       staffForDay.forEach(s => {
-        if (s.shift === 'AL' || s.shift === 'SICK') {
+        if (['AL', 'SICK', 'NS'].includes(s.shift)) {
           absences.push({ id: s.id, name: s.name, shift: s.shift });
         }
         if (s.replaces_staff_id) {
@@ -770,7 +770,7 @@ function StaffSelfServiceRoster({ schedData, monthDates, monthLabel, monthOffset
     };
   });
 
-  const workingDays = rows.filter(row => !['OFF', 'AL', 'SICK'].includes(row.shift));
+  const workingDays = rows.filter(row => !['OFF', 'AL', 'SICK', 'NS'].includes(row.shift));
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -813,7 +813,7 @@ function StaffSelfServiceRoster({ schedData, monthDates, monthLabel, monthOffset
               <span className="font-medium text-gray-900">{row.label}</span>
               <div className="flex items-center gap-3">
                 {row.hours > 0 && <span className="text-xs text-gray-500">{row.hours.toFixed(1)}h</span>}
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.shift === 'OFF' ? 'bg-gray-100 text-gray-600' : row.shift === 'AL' ? 'bg-amber-100 text-amber-700' : row.shift === 'SICK' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{row.shift}</span>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.shift === 'OFF' ? 'bg-gray-100 text-gray-600' : row.shift === 'AL' ? 'bg-amber-100 text-amber-700' : ['SICK', 'NS'].includes(row.shift) ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>{row.shift}</span>
               </div>
             </div>
           ))}

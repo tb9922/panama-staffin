@@ -33,7 +33,7 @@ function daysInMonth(year, month) {
 }
 
 function isAbsence(shift) {
-  return ['AL', 'SICK'].includes(shift);
+  return ['AL', 'SICK', 'NS'].includes(shift);
 }
 
 function getShiftTimes(shift, config) {
@@ -448,6 +448,7 @@ export default function MonthlyTimesheet() {
     if (row.rowType === 'missing') return BADGE.red;
     if (row.rosterShift === 'AL') return BADGE.blue;
     if (row.rosterShift === 'SICK') return BADGE.red;
+    if (row.rosterShift === 'NS') return BADGE.pink;
     return BADGE.gray;
   }
 

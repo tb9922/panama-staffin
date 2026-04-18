@@ -208,11 +208,12 @@ function FatigueTrackerInner({ schedData, today, navigate }) {
                           'bg-green-200 text-green-800'
                         ) : (
                           p.shift === 'SICK' ? 'bg-red-100 text-red-600' :
+                          p.shift === 'NS' ? 'bg-pink-100 text-pink-700' :
                           p.shift === 'AL' ? 'bg-yellow-100 text-yellow-600' :
                           'bg-gray-100 text-gray-300'
                         )
                       }`}>
-                        {p.working ? (p.shift === 'N' ? 'N' : 'W') : (p.shift === 'SICK' ? 'S' : p.shift === 'AL' ? 'A' : '-')}
+                        {p.working ? (p.shift === 'N' ? 'N' : 'W') : (p.shift === 'SICK' ? 'S' : p.shift === 'NS' ? 'NS' : p.shift === 'AL' ? 'A' : '-')}
                       </div>
                     </td>
                   ))}

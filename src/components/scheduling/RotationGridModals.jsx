@@ -11,6 +11,7 @@ const SHIFT_OPTIONS = [
   { value: 'AVL', label: 'AVL - Available', group: 'Standard' },
   { value: 'AL', label: 'AL - Annual Leave', group: 'Absence' },
   { value: 'SICK', label: 'SICK - Sick', group: 'Absence' },
+  { value: 'NS', label: 'NS - No Show', group: 'Absence' },
   { value: 'ADM', label: 'ADM - Admin', group: 'Absence' },
   { value: 'TRN', label: 'TRN - Training', group: 'Absence' },
   { value: 'OC-E', label: 'OC-E - OT Early', group: 'Overtime' },
@@ -148,7 +149,7 @@ export default function RotationGridModals({
                         if (staff.active === false) return false;
                         if (!['carer', 'senior_carer', 'nurse'].includes(staff.role)) return false;
                         const shift = staff.shift_override?.[editing.dateStr] || null;
-                        return shift ? ['AL', 'SICK', 'ADM', 'TRN'].includes(shift) : true;
+                        return shift ? ['AL', 'SICK', 'NS', 'ADM', 'TRN'].includes(shift) : true;
                       })
                       .sort((a, b) => a.name.localeCompare(b.name))
                       .map(staff => (

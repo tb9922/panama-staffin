@@ -105,6 +105,7 @@ export function generateRosterPDF(data, weekStart) {
       if (hookData.section === 'body' && hookData.column.index >= 3 && hookData.column.index <= 9) {
         const val = hookData.cell.raw;
         if (val === 'SICK') { hookData.cell.styles.fillColor = [254, 226, 226]; hookData.cell.styles.textColor = [153, 27, 27]; }
+        else if (val === 'NS') { hookData.cell.styles.fillColor = [252, 231, 243]; hookData.cell.styles.textColor = [157, 23, 77]; }
         else if (val === 'AL') { hookData.cell.styles.fillColor = [254, 249, 195]; hookData.cell.styles.textColor = [133, 77, 14]; }
         else if (val === 'OFF') { hookData.cell.styles.fillColor = [243, 244, 246]; hookData.cell.styles.textColor = [156, 163, 175]; }
         else if (val?.startsWith('AG-')) { hookData.cell.styles.fillColor = [254, 202, 202]; hookData.cell.styles.textColor = [127, 29, 29]; }

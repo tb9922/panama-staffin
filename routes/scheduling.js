@@ -120,7 +120,7 @@ async function validateALOverride(homeId, config, date, staffId, batchCtx, clien
 }
 
 const VALID_SHIFTS = [
-  'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
+  'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'NS', 'ADM', 'TRN', 'AVL',
   'OC-E', 'OC-L', 'OC-EL', 'OC-N',
   'AG-E', 'AG-L', 'AG-EL', 'AG-N',
   'BH-D', 'BH-N',

@@ -93,7 +93,7 @@ export default function MyDashboard() {
                     <p className="font-medium text-slate-900">{day.date}</p>
                     <p className="text-sm text-slate-500">{day.scheduledShift ? `Scheduled ${day.scheduledShift}` : 'No scheduled shift'}</p>
                   </div>
-                  <span className={day.shift === 'OFF' ? BADGE.gray : day.shift === 'AL' ? BADGE.amber : day.shift === 'SICK' ? BADGE.red : BADGE.blue}>
+                  <span className={day.shift === 'OFF' ? BADGE.gray : day.shift === 'AL' ? BADGE.amber : ['SICK', 'NS'].includes(day.shift) ? BADGE.pink : BADGE.blue}>
                     {day.shift}
                   </span>
                 </div>

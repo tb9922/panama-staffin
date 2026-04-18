@@ -12,6 +12,7 @@ const SHIFT_EDIT_OPTIONS = [
   { value: 'N', label: 'N - Night' },
   { value: 'OFF', label: 'OFF - Day off' },
   { value: 'SICK', label: 'SICK - Sick leave' },
+  { value: 'NS', label: 'NS - No show' },
   { value: 'AL', label: 'AL - Annual leave' },
   { value: 'TRN', label: 'TRN - Training' },
   { value: 'ADM', label: 'ADM - Admin' },
@@ -27,6 +28,7 @@ const SHIFT_EDIT_OPTIONS = [
 
 function getTitle(modal) {
   if (modal === 'sick') return 'Mark Sick';
+  if (modal === 'noshow') return 'Mark No Show';
   if (modal === 'al') return 'Book AL';
   if (modal === 'ot') return 'Book OT';
   if (modal === 'swap') return 'Swap Shifts';
@@ -64,6 +66,7 @@ export default function DailyStatusModal({
   gapPanelAbsentStaffId,
   onApplyOverride,
   onApplySickOverride,
+  onApplyNoShowOverride,
   onToggleSleepIn,
   onApplyManualShiftEdit,
   onHandlePermanentSwap,
@@ -189,7 +192,7 @@ export default function DailyStatusModal({
             const agencyRate = isNight ? (schedData.config.agency_rate_night || 0) : (schedData.config.agency_rate_day || 0);
             const agencyCost = (agencyHours * agencyRate).toFixed(2);
             const shortPeriods = ['early', 'late', 'night'].filter(period => coverage[period] && coverage[period].escalation.level >= 1);
-            const absentToday = staffForDay.filter(staff => staff.shift === 'SICK' || staff.shift === 'AL');
+            const absentToday = staffForDay.filter(staff => ['SICK', 'NS', 'AL'].includes(staff.shift));
             return (
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 space-y-1.5 text-xs">
                 <div className="font-semibold text-blue-700">Booking - {dateStr}</div>
@@ -356,6 +359,7 @@ export default function DailyStatusModal({
               disabled={!selectedStaff || saving || (modal === 'al' && alCount >= schedData.config.max_al_same_day) || alBlockedForSelectedStaff}
               onClick={() => {
                 if (modal === 'sick') onApplySickOverride(selectedStaff);
+                else if (modal === 'noshow') onApplyNoShowOverride(selectedStaff);
                 else if (modal === 'al') onApplyOverride(selectedStaff, 'AL', 'Annual leave', 'manual', false, null, {});
                 else onApplyOverride(selectedStaff, otShiftType, 'OT booked', 'ot');
               }}

@@ -296,7 +296,7 @@ export function validateSwap(fromStaff, toStaff, date, overrides, config, traini
   const newShift = fromStaff.shift;
   const prevShift = getActualShift(toStaff, addDays(date, -1), overrides, config.cycle_start_date)?.shift;
   const nextShift = getActualShift(toStaff, addDays(date, 1), overrides, config.cycle_start_date)?.shift;
-  const restingShifts = new Set(['OFF', 'AL', 'SICK']);
+  const restingShifts = new Set(['OFF', 'AL', 'SICK', 'NS']);
   if (isNightShift(prevShift) && !isNightShift(newShift)) {
     issues.push({ type: 'warning', msg: `${toStaff.name}: worked nights yesterday — verify 11h rest before this shift (WTR 1998 Reg 10)` });
   }

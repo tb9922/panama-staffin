@@ -171,13 +171,14 @@ describe('DailyStatus', () => {
     expect(screen.getByText('+Agency')).toBeInTheDocument();
   });
 
-  it('admin sees quick-action buttons (+Training, +Sleep In, +Swap)', async () => {
+  it('admin sees quick-action buttons (+Training, +Sleep In, +Swap, +No Show)', async () => {
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('+Training')).toBeInTheDocument();
     });
     expect(screen.getByText('+Sleep In')).toBeInTheDocument();
     expect(screen.getByText('+Swap')).toBeInTheDocument();
+    expect(screen.getByText('+No Show')).toBeInTheDocument();
   });
 
   it('clicking +Sick opens the Mark Sick modal', async () => {
@@ -225,6 +226,35 @@ describe('DailyStatus', () => {
     expect(screen.getByText(/Alice Smith marked sick for 2026-03-08/i)).toBeInTheDocument();
   });
 
+  it('clicking +No Show opens the Mark No Show modal and saves NS', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('+No Show')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('+No Show'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Mark No Show' })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'S001');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(api.upsertOverride).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          date: FIXED_DATE,
+          staffId: 'S001',
+          shift: 'NS',
+          reason: 'No show',
+          source: 'manual',
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
   it('clicking a shift badge opens the change-status modal and saves a new shift', async () => {
     const user = userEvent.setup();
     renderAdmin();
@@ -256,6 +286,22 @@ describe('DailyStatus', () => {
         expect.any(Object),
       );
     });
+  });
+
+  it('change-status modal includes the no-show option', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    let shiftButtons = [];
+    await waitFor(() => {
+      shiftButtons = screen.getAllByRole('button', { name: 'Change shift for Alice Smith' });
+      expect(shiftButtons.length).toBeGreaterThan(0);
+    });
+
+    await user.click(shiftButtons[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    const shiftSelect = within(dialog).getByRole('combobox');
+    expect(within(shiftSelect).getByRole('option', { name: 'NS - No show' })).toBeInTheDocument();
   });
 
   it('displays Handover Notes textarea', async () => {

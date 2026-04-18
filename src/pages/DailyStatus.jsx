@@ -43,6 +43,7 @@ function getShiftEditReason(shift) {
   if (shift === 'OFF') return 'Manual day off';
   if (shift === 'TRN') return 'Training';
   if (shift === 'ADM') return 'Admin';
+  if (shift === 'NS') return 'No show';
   if (shift.startsWith('OC-')) return 'OT booked';
   if (shift.startsWith('AG-')) return 'Agency';
   return 'Manual shift edit';
@@ -161,6 +162,7 @@ export default function DailyStatus() {
   const lateStaff = staffForDay.filter(s => isCareRole(s.role) && isLateShift(s.shift));
   const nightStaff = staffForDay.filter(s => isCareRole(s.role) && isNightShift(s.shift));
   const sickStaff = staffForDay.filter(s => s.shift === 'SICK');
+  const noShowStaff = staffForDay.filter(s => s.shift === 'NS');
   const alStaff = staffForDay.filter(s => s.shift === 'AL');
   const availableStaff = staffForDay.filter(s => (s.shift === 'AVL' || s.shift === 'OFF') && isCareRole(s.role));
 
@@ -353,6 +355,51 @@ export default function DailyStatus() {
     }
   }
 
+  async function applyNoShowOverride(staffId) {
+    if (!schedData || savingRef.current) return;
+    savingRef.current = true;
+
+    const projectedOverrides = JSON.parse(JSON.stringify(schedData.overrides));
+    if (!projectedOverrides[dateStr]) projectedOverrides[dateStr] = {};
+    projectedOverrides[dateStr][staffId] = { shift: 'NS', reason: 'No show', source: 'manual', sleep_in: false };
+    const projectedStaff = getStaffForDay(schedData.staff, currentDate, projectedOverrides, schedData.config);
+    const projectedCoverage = getDayCoverageStatus(projectedStaff, schedData.config);
+
+    setSaving(true);
+    try {
+      await upsertOverride(
+        getCurrentHome(),
+        { date: dateStr, staffId, shift: 'NS', reason: 'No show', source: 'manual' },
+        getEditLockOptions(dateStr),
+      );
+      await loadData();
+    } catch (e) {
+      if (e.status === 423) {
+        handleLockedError(dateStr, () => applyNoShowOverride(staffId));
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
+      setError(e.message);
+      savingRef.current = false;
+      setSaving(false);
+      setModal(null);
+      setSelectedStaff('');
+      return;
+    }
+    savingRef.current = false;
+    setSaving(false);
+    setModal(null);
+    setSelectedStaff('');
+    const absentStaff = staffForDay.find(member => member.id === staffId);
+    showNotice(`${absentStaff?.name || staffId} marked as no-show for ${dateStr}.`, { variant: 'warning', duration: 6000 });
+    if (projectedCoverage.overallLevel >= 1) {
+      setShowGapPanel(true);
+      setGapPanelDate(dateStr);
+      setGapPanelAbsentStaffId(staffId);
+    }
+  }
+
   async function applyManualShiftEdit() {
     const staff = staffForDay.find(member => member.id === selectedStaff);
     if (!staff || !manualShiftType) return;
@@ -370,6 +417,10 @@ export default function DailyStatus() {
     }
     if (manualShiftType === 'SICK') {
       await applySickOverride(staff.id);
+      return;
+    }
+    if (manualShiftType === 'NS') {
+      await applyNoShowOverride(staff.id);
       return;
     }
     const source = manualShiftType.startsWith('OC-')
@@ -683,7 +734,7 @@ export default function DailyStatus() {
           </div>
 
           <div className="border-t mt-3 pt-2 text-xs text-gray-500">
-            AL: {alCount}/{schedData.config.max_al_same_day} | Sick: {sickStaff.length}
+            AL: {alCount}/{schedData.config.max_al_same_day} | Sick: {sickStaff.length} | No show: {noShowStaff.length}
           </div>
 
           {/* Day Notes */}
@@ -748,6 +799,7 @@ export default function DailyStatus() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Staff</h2>
             {canEdit && <div className="flex gap-1.5 print:hidden">
               <button onClick={() => withLockCheck(() => setModal('sick'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Sick</button>
+              <button onClick={() => withLockCheck(() => setModal('noshow'))} disabled={saving} className={`${BADGE.pink} cursor-pointer transition-colors duration-150 hover:bg-pink-100 disabled:opacity-50`}>+No Show</button>
               <button onClick={() => withLockCheck(() => setModal('al'))} disabled={saving} className={`${BADGE.amber} cursor-pointer transition-colors duration-150 hover:bg-amber-100 disabled:opacity-50`}>+AL</button>
               <button onClick={() => withLockCheck(() => setModal('ot'))} disabled={saving} className={`${BADGE.orange} cursor-pointer transition-colors duration-150 hover:bg-orange-100 disabled:opacity-50`}>+OT</button>
               <button onClick={() => withLockCheck(() => setModal('agency'))} disabled={saving} className={`${BADGE.red} cursor-pointer transition-colors duration-150 hover:bg-red-100 disabled:opacity-50`}>+Agency</button>
@@ -761,6 +813,7 @@ export default function DailyStatus() {
           <StaffTable title="Late" staff={lateStaff} bgColor="bg-indigo-50 text-indigo-700" />
           <StaffTable title="Night" staff={nightStaff} bgColor="bg-purple-50 text-purple-700" />
           <StaffTable title="Sick" staff={sickStaff} bgColor="bg-red-50 text-red-700" />
+          <StaffTable title="No Show" staff={noShowStaff} bgColor="bg-pink-50 text-pink-700" />
           <StaffTable title="Annual Leave" staff={alStaff} bgColor="bg-yellow-50 text-yellow-700" />
 
           {/* Available Cover */}
@@ -831,6 +884,7 @@ export default function DailyStatus() {
         gapPanelAbsentStaffId={gapPanelAbsentStaffId}
         onApplyOverride={applyOverride}
         onApplySickOverride={applySickOverride}
+        onApplyNoShowOverride={applyNoShowOverride}
         onToggleSleepIn={toggleSleepIn}
         onApplyManualShiftEdit={applyManualShiftEdit}
         onHandlePermanentSwap={handlePermanentSwap}

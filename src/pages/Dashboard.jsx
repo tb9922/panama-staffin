@@ -178,7 +178,7 @@ function StaffSelfServiceDashboard({ schedData, payrollRuns }) {
   }, [schedData, staffMember]);
 
   const upcomingLeave = useMemo(() => upcomingShifts.filter(shift => shift.shift === 'AL').length, [upcomingShifts]);
-  const nextWorkingShift = upcomingShifts.find(shift => !['OFF', 'AL', 'SICK'].includes(shift.shift));
+  const nextWorkingShift = upcomingShifts.find(shift => !['OFF', 'AL', 'SICK', 'NS'].includes(shift.shift));
   const recentRuns = payrollRuns.slice(0, 3);
 
   return (
@@ -207,7 +207,7 @@ function StaffSelfServiceDashboard({ schedData, payrollRuns }) {
             {upcomingShifts.map(shift => (
               <div key={shift.date} className="flex items-center justify-between py-3 text-sm">
                 <span className="font-medium text-slate-900">{shift.label}</span>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${shift.shift === 'OFF' ? 'bg-slate-100 text-slate-600' : shift.shift === 'AL' ? 'bg-amber-100 text-amber-700' : shift.shift === 'SICK' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${shift.shift === 'OFF' ? 'bg-slate-100 text-slate-600' : shift.shift === 'AL' ? 'bg-amber-100 text-amber-700' : ['SICK', 'NS'].includes(shift.shift) ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
                   {shift.shift}
                 </span>
               </div>

@@ -13,6 +13,7 @@ import {
   getALDeductionHours,
   getLeaveYear,
   STATUTORY_WEEKS,
+  getStaffStatus,
 } from '../rotation.js';
 
 // ── getCycleDay ────────────────────────────────────────────────────────────────
@@ -156,6 +157,13 @@ describe('getActualShift', () => {
     const overrides = { '2025-01-06': { S1: { shift: 'SICK' } } };
     const result = getActualShift(staff, dateOn, overrides, START);
     expect(result.shift).toBe('SICK');
+  });
+
+  it('supports NS as an override shift', () => {
+    const overrides = { '2025-01-06': { S1: { shift: 'NS', reason: 'No show' } } };
+    const result = getActualShift(staff, dateOn, overrides, START);
+    expect(result.shift).toBe('NS');
+    expect(result.reason).toBe('No show');
   });
 
   it('does not apply other staff overrides', () => {
@@ -412,6 +420,20 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     expect(result.alDays).toBe(1);
     expect(result.alHours).toBe(8); // derived from scheduled E
     expect(result.totalPay).toBe(result.grossPay + result.otPay + result.bhPay + result.alPay);
+  });
+
+  it('does not count NS as working hours or paid hours', () => {
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'NS' } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, config);
+    expect(result.totalHours).toBe(0);
+    expect(result.paidHours).toBe(0);
+  });
+});
+
+describe('getStaffStatus', () => {
+  it('returns NO_SHOW for NS shifts', () => {
+    expect(getStaffStatus('NS')).toBe('NO_SHOW');
   });
 });
 

@@ -7,7 +7,7 @@ const PANAMA_PATTERN = {
 
 // All shift codes from Excel
 export const ALL_SHIFTS = [
-  'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'ADM', 'TRN', 'AVL',
+  'E', 'L', 'EL', 'N', 'OFF', 'AL', 'SICK', 'NS', 'ADM', 'TRN', 'AVL',
   'OC-E', 'OC-L', 'OC-EL', 'OC-N',
   'AG-E', 'AG-L', 'AG-EL', 'AG-N',
   'BH-D', 'BH-N',
@@ -32,6 +32,7 @@ export const SHIFT_COLORS = {
   OFF: 'bg-gray-100 text-gray-400',
   AL: 'bg-amber-100 text-amber-700 border border-amber-200',
   SICK: 'bg-red-100 text-red-700 border border-red-200',
+  NS: 'bg-pink-100 text-pink-700 border border-pink-200',
   ADM: 'bg-cyan-100 text-cyan-700 border border-cyan-200',
   TRN: 'bg-teal-100 text-teal-700 border border-teal-200',
   AVL: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
@@ -413,6 +414,7 @@ export function getStaffStatus(shift) {
   if (OT_SHIFTS.includes(shift)) return 'ON-CALL';
   if (shift === 'SICK') return 'SICK';
   if (shift === 'AL') return 'AL';
+  if (shift === 'NS') return 'NO_SHOW';
   if (BH_SHIFTS.includes(shift)) return 'WORKING';
   if (['ADM', 'TRN'].includes(shift)) return 'WORKING';
   return shift;
