@@ -77,7 +77,7 @@ const MOCK_LEAVE_YEAR = {
 
 const ACTIVE_CARE_STAFF = MOCK_STAFF.filter(s => s.active !== false && ['Senior Carer', 'Carer', 'Night Carer', 'Float Senior', 'Float Carer', 'Team Lead', 'Night Senior'].includes(s.role));
 
-function buildAccrualMap(remainingHours = 100, usedHours = 20) {
+function buildAccrualMap(remainingHours = 100, usedHours = 20, yearRemainingHours = remainingHours) {
   const map = new Map();
   ACTIVE_CARE_STAFF.forEach(s => {
     map.set(s.id, {
@@ -89,7 +89,7 @@ function buildAccrualMap(remainingHours = 100, usedHours = 20) {
       accruedHours: remainingHours + usedHours,
       usedHours,
       remainingHours,
-      yearRemainingHours: remainingHours,
+      yearRemainingHours,
       isProRata: false,
       missingContractHours: false,
       entitlementWeeks: 5.6,
@@ -168,13 +168,13 @@ describe('AnnualLeave', () => {
     expect(screen.queryByText('Dan Wilson')).not.toBeInTheDocument();
   });
 
-  it('shows entitlement columns — Entitled, Used, Left', async () => {
+  it('shows entitlement columns — Entitled, Used, Earned left', async () => {
     renderWithProviders(<AnnualLeave />);
     await waitFor(() => expect(screen.getByText('Annual Leave')).toBeInTheDocument());
 
     expect(screen.getByRole('columnheader', { name: 'Entitled' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Used' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Left' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Earned left' })).toBeInTheDocument();
   });
 
   it('shows team column header', async () => {
@@ -371,5 +371,21 @@ describe('AnnualLeave', () => {
     await waitFor(() => {
       expect(screen.getByText(/2 residual gaps remain and no automatic cover could be proposed/i)).toBeInTheDocument();
     });
+  });
+
+  it('shows earned left in the balances table and keeps projected year-end left as secondary context', async () => {
+    getAccrualSummary.mockReturnValue(buildAccrualMap(-26.7, 36.8, 164.8));
+
+    const user = userEvent.setup();
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByText('Annual Leave')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Staff'), 'S001');
+
+    expect(screen.getByRole('columnheader', { name: 'Earned left' })).toBeInTheDocument();
+    expect(screen.getByText('Booking uses earned leave. Projected year-end balance is shown beneath each current balance.')).toBeInTheDocument();
+    expect(screen.getAllByText('-26.7h').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Year-end: 164.8h').length).toBeGreaterThan(0);
+    expect(screen.getByText('Projected year-end left')).toBeInTheDocument();
   });
 });

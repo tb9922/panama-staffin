@@ -149,7 +149,7 @@ export default function AnnualLeave() {
     }
 
     if (accrual.remainingHours <= 0) {
-      setBookingError(`${staff.name} has no leave left (${accrual.accruedHours.toFixed(1)}h earned, ${accrual.usedHours.toFixed(1)}h used). No more leave can be booked.`);
+      setBookingError(`${staff.name} has no earned leave left (${accrual.accruedHours.toFixed(1)}h earned, ${accrual.usedHours.toFixed(1)}h used). No more leave can be booked.`);
       return;
     }
 
@@ -419,7 +419,7 @@ export default function AnnualLeave() {
                   const avail = acc ? acc.remainingHours : 0;
                   return (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.team}) — {avail.toFixed(1)}h left
+                      {s.name} ({s.team}) — {avail.toFixed(1)}h earned left
                     </option>
                   );
                 })}
@@ -438,10 +438,14 @@ export default function AnnualLeave() {
                 <div className="flex justify-between"><span>Earned to date</span><span className="font-medium">{selectedAccrual.accruedHours.toFixed(1)}h</span></div>
                 <div className="flex justify-between"><span>Used</span><span className="font-medium">{selectedAccrual.usedHours.toFixed(1)}h</span></div>
                 <div className="flex justify-between border-t border-amber-200 pt-0.5 mt-0.5">
-                  <span className="font-semibold">Left</span>
+                  <span className="font-semibold">Earned left</span>
                   <span className={`font-bold ${selectedAccrual.remainingHours < 0 ? 'text-red-700' : selectedAccrual.remainingHours <= amberThreshold ? 'text-amber-700' : 'text-emerald-700'}`}>
                     {selectedAccrual.remainingHours.toFixed(1)}h
                   </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Projected year-end left</span>
+                  <span className="font-medium">{selectedAccrual.yearRemainingHours.toFixed(1)}h</span>
                 </div>
               </div>
             )}
@@ -472,6 +476,7 @@ export default function AnnualLeave() {
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">AL Balances</h2>
               {leaveYear && <p className="mt-0.5 text-xs text-gray-600">{fmtDate(leaveYear.start)} – {fmtDate(leaveYear.end)}</p>}
+              <p className="mt-1 text-xs text-gray-500">Booking uses earned leave. Projected year-end balance is shown beneath each current balance.</p>
             </div>
             <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className={`${INPUT.select} w-auto`} aria-label="Filter annual leave balances by team">
               <option value="All">All Teams</option>
@@ -486,7 +491,7 @@ export default function AnnualLeave() {
                   <th scope="col" className={TABLE.th}>Team</th>
                   <th scope="col" className={`${TABLE.th} text-center`}>Entitled</th>
                   <th scope="col" className={`${TABLE.th} text-center`}>Used</th>
-                  <th scope="col" className={`${TABLE.th} text-center`}>Left</th>
+                  <th scope="col" className={`${TABLE.th} text-center`}>Earned left</th>
                   <th scope="col" className={TABLE.th}>Progress</th>
                 </tr>
               </thead>
@@ -512,9 +517,14 @@ export default function AnnualLeave() {
                       </td>
                       <td className={`${TABLE.td} text-center font-mono text-xs`}>{acc.usedHours.toFixed(1)}</td>
                       <td className={`${TABLE.td} text-center`}>
-                        <span className={`font-medium text-sm ${acc.yearRemainingHours < 0 ? 'text-red-700' : acc.yearRemainingHours <= amberThreshold ? 'text-amber-700' : 'text-emerald-700'}`}>
-                          {acc.yearRemainingHours.toFixed(1)}h
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={`font-medium text-sm ${acc.remainingHours < 0 ? 'text-red-700' : acc.remainingHours <= amberThreshold ? 'text-amber-700' : 'text-emerald-700'}`}>
+                            {acc.remainingHours.toFixed(1)}h
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            Year-end: {acc.yearRemainingHours.toFixed(1)}h
+                          </span>
+                        </div>
                       </td>
                       <td className={TABLE.td}>
                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -645,7 +655,7 @@ function StaffSelfServiceAnnualLeave({ schedData, accruals, today, leaveYear }) 
       <div className="grid gap-4 md:grid-cols-3">
         <LeaveMetric label="Earned to date" value={`${(accrual?.accruedHours || 0).toFixed(1)}h`} />
         <LeaveMetric label="Used" value={`${(accrual?.usedHours || 0).toFixed(1)}h`} />
-        <LeaveMetric label="Left" value={`${(accrual?.remainingHours || 0).toFixed(1)}h`} highlight />
+        <LeaveMetric label="Earned left" value={`${(accrual?.remainingHours || 0).toFixed(1)}h`} highlight />
       </div>
 
       <div className={CARD.flush}>
