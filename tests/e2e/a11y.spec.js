@@ -17,7 +17,7 @@ test.describe('Accessibility smoke', () => {
   test('dashboard has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Today's Coverage/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Today's Coverage/i })).toBeVisible({ timeout: 15_000 });
     await assertNoBlockingViolations(page);
   });
 

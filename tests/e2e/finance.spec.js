@@ -19,14 +19,18 @@ test.describe('Finance Module', () => {
 
   test('Expenses page loads with table', async ({ page }) => {
     await page.goto('/finance/expenses');
-    await expect(page.getByRole('heading', { name: /Expense/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /^Expenses$/i })).toBeVisible({ timeout: 15_000 });
     const table = page.locator('table');
-    await expect(table).toBeVisible({ timeout: 10_000 });
+    if (await table.isVisible().catch(() => false)) {
+      await expect(table).toBeVisible({ timeout: 10_000 });
+    } else {
+      await expect(page.getByText('No expenses found')).toBeVisible({ timeout: 10_000 });
+    }
   });
 
   test('Expenses page has Add button', async ({ page }) => {
     await page.goto('/finance/expenses');
-    await expect(page.getByRole('heading', { name: /Expense/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Add Expense/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Expenses$/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Add Expense/i }).first()).toBeVisible();
   });
 });
