@@ -67,6 +67,10 @@ export const ROTATION_PRESETS = [
   },
 ];
 
+function isDateOnlyString(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 // Returns the active teams pattern for a config — the configured one if present
 // and valid, otherwise the Panama default. Never throws; bad config silently
 // falls back so a corrupt config field can't take down scheduling.
@@ -74,6 +78,49 @@ export function resolvePattern(config) {
   const teams = config?.rotation_pattern?.teams;
   if (teams && isValidTeamsShape(teams)) return teams;
   return DEFAULT_PATTERN;
+}
+
+export function isNightTeam(team) {
+  return typeof team === 'string' && team.startsWith('Night');
+}
+
+export function resolveRotationScopeForStaff(staff) {
+  return isNightTeam(staff?.team) ? 'night' : 'day';
+}
+
+export function resolvePatternForScope(config, scope = 'day') {
+  if (scope === 'night') {
+    const nightTeams = config?.rotation_pattern_night?.teams;
+    if (nightTeams && isValidTeamsShape(nightTeams)) return nightTeams;
+  }
+  return resolvePattern(config);
+}
+
+export function resolvePatternForStaff(config, staff) {
+  return resolvePatternForScope(config, resolveRotationScopeForStaff(staff));
+}
+
+export function resolveCycleStartDateForScope(config, scope = 'day', fallbackCycleStartDate = null) {
+  if (scope === 'night' && isDateOnlyString(config?.cycle_start_date_night)) {
+    return config.cycle_start_date_night;
+  }
+  if (isDateOnlyString(config?.cycle_start_date)) {
+    return config.cycle_start_date;
+  }
+  if (isDateOnlyString(fallbackCycleStartDate)) {
+    return fallbackCycleStartDate;
+  }
+  return null;
+}
+
+export function resolveCycleStartDateForStaff(config, staff, fallbackCycleStartDate = null) {
+  return resolveCycleStartDateForScope(config, resolveRotationScopeForStaff(staff), fallbackCycleStartDate);
+}
+
+export function resolveCycleDayForStaff(staff, date, config = null, fallbackCycleStartDate = null) {
+  const cycleStartDate = resolveCycleStartDateForStaff(config, staff, fallbackCycleStartDate)
+    || formatDate(date);
+  return getCycleDay(date, cycleStartDate);
 }
 
 export function isValidTeamsShape(teams) {
@@ -156,7 +203,7 @@ export function getCycleDay(date, cycleStartDate) {
   const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
   const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const diffDays = Math.round((dUTC - startUTC) / (1000 * 60 * 60 * 24));
-  return ((diffDays % 14) + 14) % 14;
+  return ((diffDays % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH;
 }
 
 export function getTeamBase(team) {
@@ -176,13 +223,16 @@ export function getScheduledShift(staff, cycleDay, date, config = null) {
   if (!teamBase) return 'OFF';
   // Resolve the active pattern from config; falls back to Panama 2-2-3 if
   // config is missing or the rotation_pattern is malformed. Never throws.
-  const teams = resolvePattern(config);
+  const teams = resolvePatternForStaff(config, staff);
+  const effectiveCycleDay = date && config
+    ? resolveCycleDayForStaff(staff, date, config)
+    : cycleDay;
   const pattern = teams[teamBase];
   if (!pattern) return 'OFF';
-  const isOn = pattern[cycleDay] === 1;
+  const isOn = pattern[effectiveCycleDay] === 1;
   if (!isOn) return 'OFF';
   // Night teams
-  if (staff.team.startsWith('Night')) return 'N';
+  if (isNightTeam(staff.team)) return 'N';
   // Day teams — use preference (E, L, or EL)
   return staff.pref || staff.default_shift || 'EL';
 }
@@ -192,7 +242,7 @@ export function getActualShift(staff, date, overrides, cycleStartDate, config = 
   if (overrides[dateKey]?.[staff.id]) {
     return overrides[dateKey][staff.id];
   }
-  const cycleDay = getCycleDay(date, cycleStartDate);
+  const cycleDay = resolveCycleDayForStaff(staff, date, config, cycleStartDate);
   return { shift: getScheduledShift(staff, cycleDay, date, config) };
 }
 
@@ -272,7 +322,7 @@ export function getStaffForDay(staff, date, overrides, config) {
   const bankHol = isBankHoliday(date, config);
   for (const s of activeStaff) {
     const actual = getActualShift(s, date, overrides, config.cycle_start_date, config);
-    const cycleDay = getCycleDay(date, config.cycle_start_date);
+    const cycleDay = resolveCycleDayForStaff(s, date, config, config.cycle_start_date);
     const scheduled = getScheduledShift(s, cycleDay, date, config);
     let shift = actual.shift;
     // If staff hasn't started yet, force OFF regardless of overrides
@@ -346,7 +396,7 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
     let hours = getShiftHours(shift, config);
     // TRN/ADM: on-shift = full scheduled hours, off-day = override_hours or config
     if (shift === 'TRN' || shift === 'ADM') {
-      const cycleDay = getCycleDay(date, config.cycle_start_date);
+      const cycleDay = resolveCycleDayForStaff(staff, date, config, config.cycle_start_date);
       const scheduled = getScheduledShift(staff, cycleDay, date, config);
       if (isWorkingShift(scheduled)) {
         hours = getShiftHours(scheduled, config);
@@ -538,7 +588,7 @@ export function getLeaveYear(date, leaveYearStart) {
  */
 export function getALDeductionHours(staff, dateStr, config) {
   const contractHours = parseFloat(staff.contract_hours) || 0;
-  const cycleDay = getCycleDay(dateStr, config.cycle_start_date);
+  const cycleDay = resolveCycleDayForStaff(staff, dateStr, config, config?.cycle_start_date);
   const scheduled = getScheduledShift(staff, cycleDay, dateStr, config);
 
   if (scheduled === 'OFF') return 0;

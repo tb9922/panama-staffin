@@ -1,6 +1,5 @@
 import {
   isCareRole,
-  getCycleDay,
   getScheduledShift,
   isWorkingShift,
   formatDate,
@@ -9,6 +8,8 @@ import {
   getStaffForDay,
   getShiftHours,
   checkWTRImpact,
+  isNightTeam,
+  resolveCycleStartDateForScope,
 } from './rotation.js';
 import { checkFatigueRisk } from './escalation.js';
 import { getTrainingBlockingReasons } from './training.js';
@@ -22,29 +23,41 @@ export {
   WTR_WEEKLY_WARN,
 } from './rotation.js';
 
+function matchesRotationScope(staffMember, scope) {
+  if (scope === 'night') return isNightTeam(staffMember?.team);
+  if (scope === 'day') return !isNightTeam(staffMember?.team);
+  return true;
+}
+
 // Score a candidate cycle-start offset by counting fully-covered period-slots
 // across the next 28 days. Returns { covered, total, ratio }.
 // "Fully covered" means scheduled heads >= minimum heads for that period.
 // Overrides (sick/AL) are IGNORED here — we're scoring the pattern itself,
 // not the current roster. This lets a manager see which offset would ship the
 // most coverage before any manual absences are applied on top.
-export function scoreCycleStartOffset(config, staff, offsetDays, fromDate = new Date()) {
+export function scoreCycleStartOffset(config, staff, offsetDays, fromDate = new Date(), options = {}) {
+  const scope = typeof options === 'string' ? options : (options.scope || 'all');
   const base = parseDate(formatDate(fromDate));
-  const currentStart = parseDate(config?.cycle_start_date || formatDate(fromDate));
+  const targetScope = scope === 'night' ? 'night' : 'day';
+  const currentStart = parseDate(resolveCycleStartDateForScope(config, targetScope, formatDate(fromDate)));
   const shiftedStart = addDays(currentStart, offsetDays);
-  const simConfig = { ...config, cycle_start_date: formatDate(shiftedStart) };
+  const shiftedStartStr = formatDate(shiftedStart);
+  const simConfig = scope === 'night'
+    ? { ...config, cycle_start_date_night: shiftedStartStr }
+    : { ...config, cycle_start_date: shiftedStartStr };
   const min = config?.minimum_staffing || {};
-  const periods = ['early', 'late', 'night'];
+  const periods = scope === 'night'
+    ? ['night']
+    : scope === 'day'
+      ? ['early', 'late']
+      : ['early', 'late', 'night'];
   let covered = 0;
   let total = 0;
   for (let i = 0; i < 28; i++) {
     const date = addDays(base, i);
     const scheduled = (staff || [])
-      .filter(s => s.active !== false && isCareRole(s.role))
-      .map(s => {
-        const cd = getCycleDay(date, simConfig.cycle_start_date);
-        return getScheduledShift(s, cd, date, simConfig);
-      });
+      .filter(s => s.active !== false && isCareRole(s.role) && matchesRotationScope(s, scope))
+      .map(s => getScheduledShift(s, 0, date, simConfig));
     for (const period of periods) {
       const minHeads = min[period]?.heads ?? 0;
       if (minHeads === 0) continue;

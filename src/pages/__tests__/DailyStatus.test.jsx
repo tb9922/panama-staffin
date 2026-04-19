@@ -226,6 +226,29 @@ describe('DailyStatus', () => {
     expect(screen.getByText(/Alice Smith marked sick for 2026-03-08/i)).toBeInTheDocument();
   });
 
+  it('sick-mark failure keeps the page mounted and shows error inline', async () => {
+    api.upsertOverride.mockRejectedValueOnce(new Error('Injected Daily Status failure'));
+
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByText('+Sick')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('+Sick'));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox'), 'S001');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Some daily status actions could not be completed')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Injected Daily Status failure')).toBeInTheDocument();
+    expect(screen.getByText('+Sick')).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load daily status')).not.toBeInTheDocument();
+  });
+
   it('clicking +No Show opens the Mark No Show modal and saves NS', async () => {
     const user = userEvent.setup();
     renderAdmin();

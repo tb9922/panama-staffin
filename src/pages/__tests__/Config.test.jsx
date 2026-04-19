@@ -126,6 +126,15 @@ describe('Config', () => {
     expect(screen.getByText('Annual Leave')).toBeInTheDocument();
   });
 
+  it('displays separate night rotation controls', async () => {
+    renderWithProviders(<Config />);
+    await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());
+
+    expect(screen.getByText('Night Rotation Pattern')).toBeInTheDocument();
+    expect(screen.getByText('Night Cycle Start Tuning')).toBeInTheDocument();
+    expect(screen.getByLabelText('Night Cycle Start Date')).toBeInTheDocument();
+  });
+
   it('displays Bank Holiday & Sickness section', async () => {
     renderWithProviders(<Config />);
     await waitFor(() => expect(screen.getByText('Settings')).toBeInTheDocument());

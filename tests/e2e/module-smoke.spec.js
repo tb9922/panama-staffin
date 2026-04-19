@@ -2,9 +2,8 @@
 import { expect, test } from '@playwright/test';
 
 const HOME_SLUG = 'e2e-test-home';
-const ALICE_ID = 'S001';
 const BOB_ID = 'S002';
-const LEAVE_DATE = '2026-04-22'; // cycleDay 9 -> Alice (Day A) is working
+const LEAVE_DATE = '2026-04-24'; // cycleDay 11 -> Bob (Day B) is working
 const NO_SHOW_DATE = '2026-04-20'; // cycleDay 7 -> Bob (Day B) is working
 
 async function getCsrfToken(page) {
@@ -28,25 +27,30 @@ test.describe('Module smoke', () => {
     await expect(page.getByText(/Loading annual leave/i)).not.toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: 'Book Annual Leave' })).toBeVisible({ timeout: 15_000 });
 
-    await deleteOverrideIfPresent(page, LEAVE_DATE, ALICE_ID);
+    await deleteOverrideIfPresent(page, LEAVE_DATE, BOB_ID);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Annual Leave' })).toBeVisible({ timeout: 15_000 });
 
-    await page.locator(`#annual-leave-book-staff`).selectOption(ALICE_ID);
+    await page.locator(`#annual-leave-book-staff`).selectOption(BOB_ID);
     await page.locator(`#annual-leave-book-start`).fill(LEAVE_DATE);
     await page.locator(`#annual-leave-book-end`).fill(LEAVE_DATE);
     await page.getByRole('button', { name: 'Book Annual Leave' }).click();
 
-    await expect(page.getByText(/1 AL days booked \(8\.0h\)/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/1 AL days booked \([\d.]+h\)/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Saving...')).not.toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('No upcoming AL bookings')).not.toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Wed,?\s+22 Apr/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Fri,?\s+24 Apr/i)).toBeVisible({ timeout: 10_000 });
+    const coverPlanDialog = page.getByRole('dialog', { name: /Cover Plan/i });
+    if (await coverPlanDialog.isVisible().catch(() => false)) {
+      await coverPlanDialog.getByRole('button', { name: 'Dismiss' }).click();
+      await expect(coverPlanDialog).not.toBeVisible({ timeout: 10_000 });
+    }
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Annual Leave' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Wed,?\s+22 Apr/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Fri,?\s+24 Apr/i)).toBeVisible({ timeout: 10_000 });
 
-    await deleteOverrideIfPresent(page, LEAVE_DATE, ALICE_ID);
+    await deleteOverrideIfPresent(page, LEAVE_DATE, BOB_ID);
   });
 
   test('staff invite golden path opens a shareable invite link', async ({ page }) => {

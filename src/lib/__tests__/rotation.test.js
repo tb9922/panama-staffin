@@ -18,7 +18,10 @@ import {
   DEFAULT_PATTERN,
   CYCLE_LENGTH,
   resolvePattern,
+  resolvePatternForScope,
   resolveCycleLength,
+  resolveCycleStartDateForScope,
+  resolveCycleStartDateForStaff,
   isValidTeamsShape,
 } from '../rotation.js';
 
@@ -178,6 +181,39 @@ describe('rotation presets and custom patterns', () => {
     expect(resolvePattern({ rotation_pattern: { teams } })).toEqual(teams);
   });
 
+  it('resolvePatternForScope uses a dedicated night pattern when present', () => {
+    const dayTeams = {
+      A: [1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+      B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
+    };
+    const nightTeams = {
+      A: Array(14).fill(0),
+      B: Array(14).fill(1),
+    };
+    const config = {
+      rotation_pattern: { teams: dayTeams },
+      rotation_pattern_night: { teams: nightTeams },
+    };
+    expect(resolvePatternForScope(config, 'day')).toEqual(dayTeams);
+    expect(resolvePatternForScope(config, 'night')).toEqual(nightTeams);
+  });
+
+  it('resolvePatternForScope falls back to the day pattern for nights when no dedicated night pattern exists', () => {
+    const dayTeams = {
+      A: Array(14).fill(1),
+      B: Array(14).fill(0),
+    };
+    const config = { rotation_pattern: { teams: dayTeams } };
+    expect(resolvePatternForScope(config, 'night')).toEqual(dayTeams);
+  });
+
+  it('resolveCycleStartDateForScope and resolveCycleStartDateForStaff fall back cleanly for nights', () => {
+    const config = { cycle_start_date: '2025-01-06' };
+    const nightStaff = { id: 'S3', team: 'Night A', active: true };
+    expect(resolveCycleStartDateForScope(config, 'night')).toBe('2025-01-06');
+    expect(resolveCycleStartDateForStaff(config, nightStaff)).toBe('2025-01-06');
+  });
+
   it('resolvePattern silently falls back on malformed teams (never throws)', () => {
     const bad1 = { rotation_pattern: { teams: { A: [1, 1], B: [0, 0] } } };
     const bad2 = { rotation_pattern: { teams: { A: 'not an array', B: [] } } };
@@ -205,6 +241,17 @@ describe('rotation presets and custom patterns', () => {
     }
   });
 
+  it('getScheduledShift uses the dedicated night pattern when present', () => {
+    const config = {
+      rotation_pattern: { teams: { A: Array(14).fill(1), B: Array(14).fill(0) } },
+      rotation_pattern_night: { teams: { A: Array(14).fill(0), B: Array(14).fill(1) } },
+      cycle_start_date: '2025-01-06',
+      cycle_start_date_night: '2025-01-06',
+    };
+    const staff = { id: 'S3', team: 'Night A', active: true };
+    expect(getScheduledShift(staff, 0, '2025-01-06', config)).toBe('OFF');
+  });
+
   it('getScheduledShift falls back to Panama 2-2-3 when config omitted (backwards compat)', () => {
     const staff = { id: 'S1', team: 'Day A', pref: 'E', active: true };
     // Panama pattern has Day A working on cycle day 0 and off on day 2
@@ -218,6 +265,16 @@ describe('rotation presets and custom patterns', () => {
     const staff = { id: 'S1', team: 'Day A', pref: 'E', active: true };
     const result = getActualShift(staff, '2025-01-06', {}, '2025-01-06', config);
     expect(result.shift).toBe('OFF');  // would be E under Panama, OFF under custom
+  });
+
+  it('getActualShift uses a dedicated night cycle start date when present', () => {
+    const config = {
+      cycle_start_date: '2025-01-06',
+      cycle_start_date_night: '2025-01-08',
+    };
+    const staff = { id: 'S3', team: 'Night A', active: true };
+    const result = getActualShift(staff, '2025-01-06', {}, '2025-01-06', config);
+    expect(result.shift).toBe('OFF');
   });
 });
 

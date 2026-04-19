@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RotationGrid from '../RotationGrid.jsx';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
@@ -191,6 +191,30 @@ describe('RotationGrid', () => {
     });
     expect(screen.getByText(/Remove all manual overrides/i)).toBeInTheDocument();
   });
+
+  it('revert-all failure keeps the roster mounted and shows error inline', async () => {
+    api.revertMonthOverrides.mockRejectedValueOnce(new Error('Injected Rotation Grid failure'));
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Revert All/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Revert All/i }));
+
+    const revertDialog = await screen.findByRole('dialog');
+    await user.click(within(revertDialog).getByRole('button', { name: /Revert All/i }));
+
+    const confirmDialogs = await screen.findAllByRole('dialog');
+    await user.click(within(confirmDialogs[confirmDialogs.length - 1]).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Some roster actions could not be completed')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Injected Rotation Grid failure')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Auto-Roster/i })).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load the roster')).not.toBeInTheDocument();
+  }, 20000);
 
   it('navigating to next month updates the month label', async () => {
     const user = userEvent.setup();

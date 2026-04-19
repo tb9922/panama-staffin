@@ -325,7 +325,7 @@ export default function AnnualLeave() {
   const confirmDialog = ConfirmDialog;
 
   if (isOwnDataAnnualLeave) {
-    if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your leave view" message={error} onRetry={() => void loadData()} /></div>;
+    if (error && !schedData) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load your leave view" message={error} onRetry={() => void loadData()} /></div>;
     if (!schedData?.staff?.length) {
       return (
         <div className="p-6 max-w-5xl mx-auto">
@@ -336,7 +336,7 @@ export default function AnnualLeave() {
     return <StaffSelfServiceAnnualLeave schedData={schedData} accruals={accruals} today={today} leaveYear={leaveYear} />;
   }
 
-  if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load annual leave" message={error} onRetry={() => void loadData()} /></div>;
+  if (error && !schedData) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load annual leave" message={error} onRetry={() => void loadData()} /></div>;
 
   if (!schedData) return null;
 
@@ -347,6 +347,14 @@ export default function AnnualLeave() {
     <>
       {confirmDialog}
       <div className="p-6 max-w-7xl mx-auto">
+      {error && (
+        <ErrorState
+          title="Some annual leave actions could not be completed"
+          message={error}
+          onRetry={() => void loadData()}
+          className="mb-4"
+        />
+      )}
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{schedData.config.home_name} — Annual Leave</h1>

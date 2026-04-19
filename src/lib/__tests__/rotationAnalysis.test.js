@@ -97,6 +97,26 @@ describe('scoreCycleStartOffset', () => {
     expect(result.covered).toBe(0);
     expect(result.ratio).toBe(0);
   });
+
+  it('supports day-only scoring for the day cycle tuning section', () => {
+    const result = scoreCycleStartOffset(config, staff, 0, new Date('2026-04-20T00:00:00Z'), { scope: 'day' });
+    expect(result.total).toBe(28 * 2);
+  });
+
+  it('supports night-only scoring for the night cycle tuning section', () => {
+    const result = scoreCycleStartOffset(config, staff, 0, new Date('2026-04-20T00:00:00Z'), { scope: 'night' });
+    expect(result.total).toBe(28);
+  });
+
+  it('treats night offsets relative to cycle_start_date_night when present', () => {
+    const fixedDate = new Date('2026-04-20T00:00:00Z');
+    const nightConfig = { ...config, cycle_start_date_night: '2025-01-10' };
+    const shiftedNightStart = formatDate(addDays(parseDate(nightConfig.cycle_start_date_night), 2));
+    const shiftedConfig = { ...nightConfig, cycle_start_date_night: shiftedNightStart };
+    expect(scoreCycleStartOffset(nightConfig, staff, 2, fixedDate, { scope: 'night' })).toEqual(
+      scoreCycleStartOffset(shiftedConfig, staff, 0, fixedDate, { scope: 'night' }),
+    );
+  });
 });
 
 // ── checkWTRImpact ──────────────────────────────────────────────────────────

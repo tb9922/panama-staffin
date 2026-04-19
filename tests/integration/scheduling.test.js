@@ -534,6 +534,29 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts dedicated night cycle and night pattern fields', () => {
+    const result = homeConfigSchema.safeParse({
+      cycle_start_date_night: '2025-01-08',
+      rotation_pattern_night: {
+        preset_id: '4on-4off',
+        teams: {
+          A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+          B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects rotation_pattern_night with wrong-length arrays', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern_night: {
+        teams: { A: [1, 0, 1], B: [0, 1, 0] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
 });
 
 // ── S3: PII filtering in homeService ─────────────────────────────────────────

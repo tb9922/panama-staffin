@@ -4,7 +4,8 @@ import {
   isCareRole,
   ROTATION_PRESETS,
   CYCLE_LENGTH,
-  resolvePattern,
+  resolvePatternForScope,
+  resolveCycleStartDateForScope,
   getCycleDay,
   formatDate,
   parseDate,
@@ -170,7 +171,7 @@ export default function Config() {
       {/* Home Details */}
       <section className={`${CARD.padded} mb-5`}>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Home Details</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Field label="Home Name" path="home_name" type="text" />
           <Field label="Registered Beds" path="registered_beds" />
           <div>
@@ -180,14 +181,29 @@ export default function Config() {
               {['Residential', 'Nursing', 'Dementia', 'Mixed'].map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
-          <Field label="Cycle Start Date" path="cycle_start_date" type="date" />
+          <Field label="Day Cycle Start Date" path="cycle_start_date" type="date" />
+          <div>
+            <label htmlFor="config-night-cycle-start-date" className={INPUT.label}>Night Cycle Start Date</label>
+            <input
+              id="config-night-cycle-start-date"
+              type="date"
+              value={config.cycle_start_date_night || ''}
+              onChange={e => handleChange('cycle_start_date_night', e.target.value || undefined)}
+              disabled={!canEdit}
+              className={INPUT.sm}
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              Optional. Leave blank to use the day cycle start date.
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* Rotation Pattern */}
+      {/* Day Rotation Pattern */}
       <RotationPatternSection
         config={config}
         canEdit={canEdit}
+        scope="day"
         onChangePattern={(patternOrNull) => {
           const next = JSON.parse(JSON.stringify(config));
           if (patternOrNull == null) {
@@ -202,15 +218,49 @@ export default function Config() {
         }}
       />
 
-      {/* Cycle Start Tuning */}
+      {/* Night Rotation Pattern */}
+      <RotationPatternSection
+        config={config}
+        canEdit={canEdit}
+        scope="night"
+        onChangePattern={(patternOrNull) => {
+          const next = JSON.parse(JSON.stringify(config));
+          if (patternOrNull == null) {
+            delete next.rotation_pattern_night;
+          } else {
+            next.rotation_pattern_night = patternOrNull;
+          }
+          setConfig(next);
+          setSaved(false);
+          setSaveError(null);
+          setDirty(true);
+        }}
+      />
+
+      {/* Day Cycle Start Tuning */}
       <CycleStartTuningSection
         config={config}
         staff={staff}
         canEdit={canEdit}
+        scope="day"
         onApplyOffset={(offsetDays) => {
           const base = parseDate(config.cycle_start_date || formatDate(new Date()));
           const newStart = formatDate(addDays(base, offsetDays));
           handleChange('cycle_start_date', newStart);
+        }}
+      />
+
+      {/* Night Cycle Start Tuning */}
+      <CycleStartTuningSection
+        config={config}
+        staff={staff}
+        canEdit={canEdit}
+        scope="night"
+        onApplyOffset={(offsetDays) => {
+          const effectiveStart = resolveCycleStartDateForScope(config, 'night', formatDate(new Date()));
+          const base = parseDate(effectiveStart);
+          const newStart = formatDate(addDays(base, offsetDays));
+          handleChange('cycle_start_date_night', newStart);
         }}
       />
 
@@ -530,10 +580,17 @@ export default function Config() {
 
 // ── Rotation Pattern section ─────────────────────────────────────────────────
 
-function RotationPatternSection({ config, canEdit, onChangePattern }) {
-  const currentTeams = resolvePattern(config);
-  const currentPresetId = config?.rotation_pattern?.preset_id ?? null;
-  const hasCustom = Boolean(config?.rotation_pattern);
+function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day' }) {
+  const isNightScope = scope === 'night';
+  const title = isNightScope ? 'Night Rotation Pattern' : 'Rotation Pattern';
+  const description = isNightScope
+    ? `How work-days alternate across your ${CYCLE_LENGTH}-day night rota. Night A / Night B can follow a separate pattern from the day teams. If unset, night staff inherit the day pattern above.`
+    : `How work-days alternate across your ${CYCLE_LENGTH}-day rota. Day A / Day B working patterns; existing overrides (sick, AL, agency) always take precedence over the pattern.`;
+  const patternKey = isNightScope ? 'rotation_pattern_night' : 'rotation_pattern';
+  const effectiveCycleStart = resolveCycleStartDateForScope(config, scope, formatDate(new Date()));
+  const currentTeams = resolvePatternForScope(config, scope);
+  const currentPresetId = config?.[patternKey]?.preset_id ?? null;
+  const hasCustom = Boolean(config?.[patternKey]);
   const [linkComplement, setLinkComplement] = useState(true);
 
   const matchedPreset = useMemo(() => {
@@ -559,7 +616,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
 
   function resetToDefault() {
     if (!canEdit) return;
-    onChangePattern(null); // deletes rotation_pattern → falls back to Panama default
+    onChangePattern(null);
   }
 
   function toggleCell(team, i) {
@@ -577,7 +634,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
   }
 
   // Next 28 days preview — which team would be working on each day
-  const cycleStart = config?.cycle_start_date || formatDate(new Date());
+  const cycleStart = effectiveCycleStart;
   const previewDays = useMemo(() => {
     const today = parseDate(formatDate(new Date()));
     const rows = [];
@@ -599,18 +656,23 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
   return (
     <section className={`${CARD.padded} mb-5`}>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-gray-800">Rotation Pattern</h2>
+        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
         {hasCustom && canEdit && (
           <button type="button" onClick={resetToDefault} className={`${BTN.ghost} ${BTN.xs}`}>
-            Reset to Panama default
+            {isNightScope ? 'Inherit day pattern' : 'Reset to Panama default'}
           </button>
         )}
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        How work-days alternate across your {CYCLE_LENGTH}-day rota. Day A / Day B working patterns;
-        Night A / Night B follow the same pattern but are assigned the night shift. Existing overrides
-        (sick, AL, agency) always take precedence over the pattern.
+        {description}
       </p>
+      {isNightScope && !hasCustom && (
+        <div className="mb-4">
+          <span className={`${BADGE.warn} text-[11px]`}>
+            Using the day-team pattern until you customise nights.
+          </span>
+        </div>
+      )}
 
       {/* Preset picker */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -642,7 +704,9 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
         </div>
         {['A', 'B'].map(team => (
           <div key={team} className="flex items-center gap-1 overflow-x-auto">
-            <span className="w-14 text-xs font-semibold text-gray-700 shrink-0">Team {team}</span>
+            <span className="w-14 text-xs font-semibold text-gray-700 shrink-0">
+              {isNightScope ? `Night ${team}` : `Team ${team}`}
+            </span>
             {currentTeams[team].map((val, i) => (
               <button
                 key={i}
@@ -676,6 +740,10 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
       {/* Preview */}
       <div>
         <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Preview — next 28 days</h3>
+        <p className="text-[11px] text-gray-500 mb-2">
+          Anchored to <span className="font-mono text-gray-700">{cycleStart}</span>
+          {isNightScope && !config?.cycle_start_date_night ? ' (currently inheriting the day cycle start date).' : '.'}
+        </p>
         <div className="grid grid-cols-7 gap-1 text-[11px]">
           {previewDays.map(row => (
             <div key={row.dateStr} className="rounded border border-gray-200 bg-white px-1.5 py-1 leading-tight">
@@ -684,8 +752,12 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
                 <span className="text-gray-500">{row.dayLabel}</span>
               </div>
               <div className="mt-0.5 flex items-center gap-1">
-                <span className={`px-1 rounded text-[10px] font-semibold ${row.aWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>A</span>
-                <span className={`px-1 rounded text-[10px] font-semibold ${row.bWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>B</span>
+                <span className={`px-1 rounded text-[10px] font-semibold ${row.aWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                  {isNightScope ? 'NA' : 'A'}
+                </span>
+                <span className={`px-1 rounded text-[10px] font-semibold ${row.bWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                  {isNightScope ? 'NB' : 'B'}
+                </span>
               </div>
             </div>
           ))}
@@ -697,39 +769,50 @@ function RotationPatternSection({ config, canEdit, onChangePattern }) {
 
 // ── Cycle Start Tuning section ───────────────────────────────────────────────
 
-function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset }) {
+function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope = 'day' }) {
+  const isNightScope = scope === 'night';
+  const title = isNightScope ? 'Night Cycle Start Tuning' : 'Cycle Start Tuning';
+  const targetKey = isNightScope ? 'cycle_start_date_night' : 'cycle_start_date';
+  const effectiveStart = resolveCycleStartDateForScope(config, scope, formatDate(new Date()));
+  const relevantStaffCount = useMemo(
+    () => (staff || []).filter(s => s.active !== false && (isNightScope ? s.team?.startsWith('Night') : !s.team?.startsWith('Night'))).length,
+    [staff, isNightScope],
+  );
   const [scores, setScores] = useState(null);
 
   const analyse = useCallback(() => {
     const results = [];
     for (let offset = 0; offset < CYCLE_LENGTH; offset++) {
-      const s = scoreCycleStartOffset(config, staff, offset);
+      const s = scoreCycleStartOffset(config, staff, offset, new Date(), { scope });
       results.push({ offset, ...s });
     }
     setScores(results);
-  }, [config, staff]);
+  }, [config, staff, scope]);
 
   const maxRatio = useMemo(() => scores ? Math.max(...scores.map(s => s.ratio)) : 0, [scores]);
 
   return (
     <section className={`${CARD.padded} mb-5`}>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-gray-800">Cycle Start Tuning</h2>
+        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
         <button
           type="button"
           onClick={analyse}
-          disabled={!staff?.length}
+          disabled={!relevantStaffCount}
           className={`${BTN.secondary} ${BTN.sm}`}
         >
           Analyse all 14 offsets
         </button>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        The rotation pattern repeats every {CYCLE_LENGTH} days — but which day of the pattern falls on
-        which weekday depends on <span className="font-mono text-gray-700">cycle_start_date</span>.
-        Shifting the start by 1–13 days rearranges coverage across the week. Scores below show the
-        fraction of period-slots (early / late / night × 28 days) that would be fully covered by the
-        current pattern for each candidate offset.
+        {isNightScope ? 'Night' : 'Day'} rotation repeats every {CYCLE_LENGTH} days, but which weekday each
+        cycle day lands on depends on <span className="font-mono text-gray-700">{targetKey}</span>.
+        Shifting the start by 1–13 days rearranges coverage across the week. Scores below show the fraction
+        of period-slots that would be fully covered across the next 28 days for the current {isNightScope ? 'night' : 'day'} rota.
+      </p>
+      <p className="text-[11px] text-gray-500 mb-4">
+        Current effective start: <span className="font-mono text-gray-700">{effectiveStart}</span>
+        {isNightScope && !config?.cycle_start_date_night ? ' (currently inheriting the day cycle start date).' : '.'}
       </p>
 
       {scores == null ? (
@@ -754,7 +837,7 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset }) {
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Shift cycle_start_date by ${s.offset} day${s.offset === 1 ? '' : 's'}? Every staff member's rota will re-align.`)) {
+                    if (window.confirm(`Shift ${targetKey} by ${s.offset} day${s.offset === 1 ? '' : 's'}? ${isNightScope ? 'Night teams' : 'Day teams'} will re-align.`)) {
                       onApplyOffset(s.offset);
                     }
                   }}

@@ -625,12 +625,20 @@ export default function DailyStatus() {
     );
   }
 
-  if (error) return <div className="p-6"><ErrorState title="Unable to load daily status" message={error} onRetry={() => { setError(null); loadData(); }} /></div>;
+  if (error && !schedData) return <div className="p-6"><ErrorState title="Unable to load daily status" message={error} onRetry={() => { setError(null); loadData(); }} /></div>;
 
   if (!schedData) return null;
 
   return (
     <div className={PAGE.container}>
+      {error && (
+        <ErrorState
+          title="Some daily status actions could not be completed"
+          message={error}
+          onRetry={() => { setError(null); loadData(); }}
+          className="mb-4"
+        />
+      )}
       {notice && (
         <InlineNotice variant={notice.variant} onDismiss={clearNotice} className="mb-4">
           {notice.content}

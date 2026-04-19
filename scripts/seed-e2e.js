@@ -93,11 +93,24 @@ async function seed() {
     const homeId = rows[0].id;
 
     await client.query(
-      `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, start_date, contract_hours)
+      `INSERT INTO staff (
+         id, home_id, name, role, team, pref, skill, hourly_rate,
+         active, start_date, contract_hours, al_carryover
+       )
        VALUES
-         ('S001', $1, 'Alice Smith', 'Senior Carer', 'Day A', 'E', 3, 14.50, true, '2024-01-15', 37.5),
-         ('S002', $1, 'Bob Jones', 'Carer', 'Day B', 'L', 2, 12.50, true, '2024-06-01', 37.5)
-       ON CONFLICT (home_id, id) DO NOTHING`,
+         ('S001', $1, 'Alice Smith', 'Senior Carer', 'Day A', 'E', 3, 14.50, true, '2024-01-15', 37.5, 0),
+         ('S002', $1, 'Bob Jones', 'Carer', 'Day B', 'L', 2, 12.50, true, '2024-06-01', 37.5, 8)
+       ON CONFLICT (home_id, id) DO UPDATE
+         SET name = EXCLUDED.name,
+             role = EXCLUDED.role,
+             team = EXCLUDED.team,
+             pref = EXCLUDED.pref,
+             skill = EXCLUDED.skill,
+             hourly_rate = EXCLUDED.hourly_rate,
+             active = EXCLUDED.active,
+             start_date = EXCLUDED.start_date,
+             contract_hours = EXCLUDED.contract_hours,
+             al_carryover = EXCLUDED.al_carryover`,
       [homeId]
     );
 

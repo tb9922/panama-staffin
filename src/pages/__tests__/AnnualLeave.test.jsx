@@ -6,7 +6,7 @@ import { MOCK_SCHEDULING_DATA, MOCK_STAFF, MOCK_CONFIG } from '../../test/fixtur
 import AnnualLeave from '../AnnualLeave.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
 import { addDays, formatDate, parseDate } from '../../lib/rotation.js';
-import { bulkUpsertOverrides } from '../../lib/api.js';
+import { bulkUpsertOverrides, deleteOverride } from '../../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -321,6 +321,34 @@ describe('AnnualLeave', () => {
     });
     // Critical: Book Leave panel must remain mounted — no ErrorState page replacement
     expect(screen.getByText('Book Leave')).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load annual leave')).not.toBeInTheDocument();
+  });
+
+  it('cancel failure keeps the page mounted and shows error inline', async () => {
+    const futureDate = '2026-04-01';
+    const schedData = {
+      ...MOCK_SCHEDULING_DATA,
+      overrides: {
+        [futureDate]: {
+          S001: { shift: 'AL', reason: 'Annual leave', source: 'al', al_hours: 12 },
+        },
+      },
+    };
+    getSchedulingData.mockResolvedValue(schedData);
+    deleteOverride.mockRejectedValue(new Error('Cancel failed'));
+
+    const user = userEvent.setup();
+    renderWithProviders(<AnnualLeave />);
+    await waitFor(() => expect(screen.getByText('Upcoming AL Bookings')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Some annual leave actions could not be completed')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Book Leave')).toBeInTheDocument();
+    expect(screen.getByText('Cancel failed')).toBeInTheDocument();
     expect(screen.queryByText('Unable to load annual leave')).not.toBeInTheDocument();
   });
 

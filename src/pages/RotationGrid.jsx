@@ -527,13 +527,21 @@ export default function RotationGrid() {
     return <StaffSelfServiceRoster schedData={schedData} monthDates={monthDates} monthLabel={monthLabel} monthOffset={monthOffset} setMonthOffset={setMonthOffset} />;
   }
 
-  if (error) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load the roster" message={error} onRetry={() => void loadData()} /></div>;
+  if (error && !schedData) return <div className="p-6 max-w-5xl mx-auto"><ErrorState title="Unable to load the roster" message={error} onRetry={() => void loadData()} /></div>;
 
   if (!schedData) return null;
 
 
   return (
     <div className="p-4 max-w-full mx-auto">
+      {error && (
+        <ErrorState
+          title="Some roster actions could not be completed"
+          message={error}
+          onRetry={() => void loadData()}
+          className="mb-3"
+        />
+      )}
       {/* Print header */}
       <div className="hidden print:block print-header">
         <h1 className="text-xl font-bold">{schedData.config.home_name} — Roster: {monthLabel}</h1>

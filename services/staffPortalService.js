@@ -18,6 +18,7 @@ import {
   getScheduledShift,
   getCycleDay,
   parseDate,
+  resolveCycleStartDateForStaff,
 } from '../shared/rotation.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
 
@@ -70,7 +71,7 @@ export async function getStaffScheduleWindow({ homeId, staffId, from, to }) {
     },
     config: {
       homeName: home.config?.home_name || home.name,
-      cycleStartDate: home.config?.cycle_start_date || null,
+      cycleStartDate: resolveCycleStartDateForStaff(home.config, staff, home.config?.cycle_start_date) || null,
     },
     days,
   };
