@@ -53,7 +53,7 @@ export function countALInLeaveYear(staffId, overrides, leaveYear) {
  * Sum AL hours used by a staff member within a leave year.
  * Uses stored al_hours if present, otherwise derives from scheduled shift.
  */
-export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config) {
+export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments = {}) {
   let hours = 0;
   for (const [dateKey, dayOverrides] of Object.entries(overrides)) {
     if (dateKey < leaveYear.startStr || dateKey > leaveYear.endStr) continue;
@@ -65,6 +65,12 @@ export function sumALHoursInLeaveYear(staff, overrides, leaveYear, config) {
       // Legacy booking — derive from scheduled shift
       hours += getALDeductionHours(staff, dateKey, config);
     }
+  }
+  for (const [dateKey, dayAdjustments] of Object.entries(hourAdjustments || {})) {
+    if (dateKey < leaveYear.startStr || dateKey > leaveYear.endStr) continue;
+    const adj = dayAdjustments?.[staff.id];
+    if (adj?.kind !== 'annual_leave') continue;
+    hours += parseFloat(adj.hours || 0);
   }
   return Math.round(hours * 10) / 10;
 }
@@ -81,7 +87,7 @@ const round1 = (n) => Math.round(n * 10) / 10;
  * @param {Date|string} asOfDate
  * @returns {object} hours-based accrual result
  */
-export function calculateAccrual(staff, config, overrides, asOfDate) {
+export function calculateAccrual(staff, config, overrides, asOfDate, hourAdjustments = {}) {
   const d = typeof asOfDate === 'string' ? parseDate(asOfDate) : new Date(asOfDate);
   const leaveYear = getLeaveYear(d, config.leave_year_start);
 
@@ -103,7 +109,7 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
 
   // If staff hasn't started yet, nothing accrued
   if (effectiveStart > d) {
-    const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+    const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments);
     // Pro-rata based on their actual working portion of the leave year
     const futureMonths = monthsBetween(effectiveStart, addDays(leaveYear.end, 1));
     const futureProRata = round1(annualEntitlementHours * (futureMonths / 12));
@@ -136,7 +142,7 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
   // Carryover is available from day 1
   accruedHours = round1(accruedHours + carryoverHours);
 
-  const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config);
+  const usedHours = sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments);
   const remainingHours = round1(accruedHours - usedHours);
   const effectiveEntitlement = round1(proRataEntitlementHours + carryoverHours);
   const yearRemainingHours = round1(effectiveEntitlement - usedHours);
@@ -164,10 +170,10 @@ export function calculateAccrual(staff, config, overrides, asOfDate) {
  * Calculate accrual for all active staff members.
  * @returns {Map<staffId, accrualResult>}
  */
-export function getAccrualSummary(activeStaff, config, overrides, asOfDate) {
+export function getAccrualSummary(activeStaff, config, overrides, asOfDate, hourAdjustments = {}) {
   const map = new Map();
   for (const s of activeStaff) {
-    map.set(s.id, calculateAccrual(s, config, overrides, asOfDate));
+    map.set(s.id, calculateAccrual(s, config, overrides, asOfDate, hourAdjustments));
   }
   return map;
 }

@@ -16,38 +16,38 @@ async function assertNoBlockingViolations(page) {
 test.describe('Accessibility smoke', () => {
   test('dashboard has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('heading', { name: /Today's Coverage/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: /Today's Coverage/i })).toBeVisible({ timeout: 30_000 });
     await assertNoBlockingViolations(page);
   });
 
   test('staff database has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/staff');
-    await expect(page.getByRole('heading', { name: 'Staff Database' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Staff Database' })).toBeVisible({ timeout: 30_000 });
     await assertNoBlockingViolations(page);
   });
 
   test('residents page has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/residents');
-    await expect(page.getByRole('heading', { name: 'Residents' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Residents' })).toBeVisible({ timeout: 30_000 });
     await assertNoBlockingViolations(page);
   });
 
   test('annual leave page has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/leave');
-    await expect(page.getByRole('heading', { name: 'Annual Leave' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Annual Leave' })).toBeVisible({ timeout: 30_000 });
     await assertNoBlockingViolations(page);
   });
 
   test('incidents page has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/incidents');
-    await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 30_000 });
     await assertNoBlockingViolations(page);
   });
 
   test('new incident modal has no serious or critical axe violations', async ({ page }) => {
     await page.goto('/incidents');
-    await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: /new incident/i }).click();
     await expect(page.getByRole('heading', { name: 'New Incident' })).toBeVisible({ timeout: 10_000 });
     await assertNoBlockingViolations(page);

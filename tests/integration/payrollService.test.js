@@ -447,6 +447,110 @@ describe('calculateRun', () => {
     expect(Math.abs(parseFloat(run.total_enhancements) - lineEnh)).toBeLessThanOrEqual(0.01);
   });
 
+  it('uses recorded payable hours plus hourly annual leave when a shortfall adjustment exists', async () => {
+    await pool.query(
+      `INSERT INTO timesheet_entries
+         (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
+       VALUES ($1, 'TP01', '2025-11-03', '07:00', '15:00', '07:00', '13:00', 0, 6, 'pending')
+       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+         payable_hours = EXCLUDED.payable_hours,
+         actual_end = EXCLUDED.actual_end,
+         status = EXCLUDED.status`,
+      [homeId],
+    );
+    await pool.query(
+      `INSERT INTO shift_hour_adjustments (home_id, staff_id, date, kind, hours, note, source)
+       VALUES ($1, 'TP01', '2025-11-03', 'annual_leave', 2, 'Medical appointment', 'test')
+       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+         kind = EXCLUDED.kind,
+         hours = EXCLUDED.hours,
+         note = EXCLUDED.note,
+         source = EXCLUDED.source`,
+      [homeId],
+    );
+
+    try {
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+
+      const { rows: [line] } = await pool.query(
+        `SELECT base_hours, holiday_pay
+         FROM payroll_lines
+         WHERE payroll_run_id = $1 AND staff_id = 'TP01'`,
+        [runId],
+      );
+      expect(parseFloat(line.base_hours)).toBe(86);
+      expect(parseFloat(line.holiday_pay)).toBeGreaterThan(0);
+
+      const { rows: [shift] } = await pool.query(
+        `SELECT shift_code, hours, total_amount
+         FROM payroll_line_shifts pls
+         JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
+         WHERE pl.payroll_run_id = $1 AND pl.staff_id = 'TP01' AND pls.date = '2025-11-03' AND pls.shift_code = 'AL-H'`,
+        [runId],
+      );
+      expect(shift.shift_code).toBe('AL-H');
+      expect(parseFloat(shift.hours)).toBe(2);
+      expect(parseFloat(shift.total_amount)).toBeGreaterThan(0);
+    } finally {
+      await pool.query(`DELETE FROM shift_hour_adjustments WHERE home_id = $1 AND staff_id = 'TP01' AND date = '2025-11-03'`, [homeId]);
+      await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1 AND staff_id = 'TP01' AND date = '2025-11-03'`, [homeId]);
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+    }
+  }, 30000);
+
+  it('adds paid authorised absence into gross pay and payroll line detail', async () => {
+    await pool.query(
+      `INSERT INTO timesheet_entries
+         (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
+       VALUES ($1, 'TP02', '2025-11-04', '14:00', '22:00', '14:00', '20:00', 0, 6, 'pending')
+       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+         payable_hours = EXCLUDED.payable_hours,
+         actual_end = EXCLUDED.actual_end,
+         status = EXCLUDED.status`,
+      [homeId],
+    );
+    await pool.query(
+      `INSERT INTO shift_hour_adjustments (home_id, staff_id, date, kind, hours, note, source)
+       VALUES ($1, 'TP02', '2025-11-04', 'paid_authorised_absence', 2, 'Managed shortfall', 'test')
+       ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+         kind = EXCLUDED.kind,
+         hours = EXCLUDED.hours,
+         note = EXCLUDED.note,
+         source = EXCLUDED.source`,
+      [homeId],
+    );
+
+    try {
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+
+      const { rows: [line] } = await pool.query(
+        `SELECT base_hours, authorised_absence_hours, authorised_absence_pay, gross_pay
+         FROM payroll_lines
+         WHERE payroll_run_id = $1 AND staff_id = 'TP02'`,
+        [runId],
+      );
+      expect(parseFloat(line.base_hours)).toBe(80);
+      expect(parseFloat(line.authorised_absence_hours)).toBe(2);
+      expect(parseFloat(line.authorised_absence_pay)).toBeGreaterThan(0);
+      expect(parseFloat(line.gross_pay)).toBeGreaterThan(0);
+
+      const { rows: [shift] } = await pool.query(
+        `SELECT shift_code, hours, total_amount
+         FROM payroll_line_shifts pls
+         JOIN payroll_lines pl ON pl.id = pls.payroll_line_id
+         WHERE pl.payroll_run_id = $1 AND pl.staff_id = 'TP02' AND pls.date = '2025-11-04' AND pls.shift_code = 'AUTH-PAY'`,
+        [runId],
+      );
+      expect(shift.shift_code).toBe('AUTH-PAY');
+      expect(parseFloat(shift.hours)).toBe(2);
+      expect(parseFloat(shift.total_amount)).toBeGreaterThan(0);
+    } finally {
+      await pool.query(`DELETE FROM shift_hour_adjustments WHERE home_id = $1 AND staff_id = 'TP02' AND date = '2025-11-04'`, [homeId]);
+      await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1 AND staff_id = 'TP02' AND date = '2025-11-04'`, [homeId]);
+      await calculateRun(runId, homeId, SLUG, USERNAME);
+    }
+  }, 30000);
+
   it('is safe to recalculate (wipes and recreates lines)', async () => {
     // Recalculate the same run — should not error or double-count
     await calculateRun(runId, homeId, SLUG, USERNAME);

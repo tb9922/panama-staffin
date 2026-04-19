@@ -264,6 +264,8 @@ export default function PayrollDetail() {
     total_hours:             acc.total_hours             + parseFloat(l.total_hours || 0),
     gross_pay:               acc.gross_pay               + parseFloat(l.gross_pay || 0),
     holiday_pay:             acc.holiday_pay             + parseFloat(l.holiday_pay || 0),
+    authorised_absence_hours: acc.authorised_absence_hours + parseFloat(l.authorised_absence_hours || 0),
+    authorised_absence_pay:  acc.authorised_absence_pay  + parseFloat(l.authorised_absence_pay || 0),
     ssp_amount:              acc.ssp_amount              + parseFloat(l.ssp_amount || 0),
     tax_deducted:            acc.tax_deducted            + parseFloat(l.tax_deducted || 0),
     employee_ni:             acc.employee_ni             + parseFloat(l.employee_ni || 0),
@@ -275,7 +277,8 @@ export default function PayrollDetail() {
     base_hours: 0, base_pay: 0, night_enhancement: 0, weekend_enhancement: 0,
     bank_holiday_enhancement: 0, overtime_enhancement: 0, sleep_in_pay: 0,
     on_call_enhancement: 0, total_hours: 0, gross_pay: 0,
-    holiday_pay: 0, ssp_amount: 0, tax_deducted: 0, employee_ni: 0,
+    holiday_pay: 0, authorised_absence_hours: 0, authorised_absence_pay: 0,
+    ssp_amount: 0, tax_deducted: 0, employee_ni: 0,
     employer_ni: 0, pension_employee: 0, student_loan: 0, net_pay: 0,
   });
   const nmwViolations = lines.filter(l => !l.nmw_compliant);
@@ -563,6 +566,13 @@ export default function PayrollDetail() {
                             <div className="mb-3 flex flex-wrap gap-4 text-xs text-gray-600 bg-white rounded border border-gray-200 px-3 py-2">
                               <span><span className="text-gray-400">Gross:</span> <span className="font-mono font-semibold">{fmt(line.gross_pay)}</span></span>
                               {line.holiday_pay > 0 && <span><span className="text-gray-400">Holiday Pay:</span> <span className="font-mono">{fmt(line.holiday_pay)}</span></span>}
+                              {line.authorised_absence_pay > 0 && (
+                                <span>
+                                  <span className="text-gray-400">Paid Authorised Absence:</span>{' '}
+                                  <span className="font-mono">{fmt(line.authorised_absence_pay)}</span>
+                                  {line.authorised_absence_hours > 0 && <span className="text-gray-400"> ({fmtHrs(line.authorised_absence_hours)})</span>}
+                                </span>
+                              )}
                               {line.ssp_amount > 0 && <span><span className="text-gray-400">SSP:</span> <span className="font-mono">{fmt(line.ssp_amount)}</span></span>}
                               {line.tax_deducted > 0 && <span><span className="text-gray-400">PAYE:</span> <span className="font-mono text-red-600">({fmt(line.tax_deducted)})</span></span>}
                               {line.employee_ni > 0 && <span><span className="text-gray-400">NI (EE):</span> <span className="font-mono text-red-600">({fmt(line.employee_ni)})</span></span>}

@@ -77,7 +77,7 @@ export default function DailyStatusModal({
   const alBlockedForSelectedStaff = modal === 'al' && selectedStaff && (() => {
     const staff = schedData?.staff?.find(member => member.id === selectedStaff);
     if (!staff) return false;
-    const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
+    const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate, schedData.hour_adjustments || {});
     return accrual.remainingHours <= 0 || accrual.missingContractHours;
   })();
 
@@ -266,7 +266,7 @@ export default function DailyStatusModal({
             const staff = staffForDay.find(member => member.id === selectedStaff);
             if (!staff) return null;
             const alAccrual = manualShiftType === 'AL'
-              ? calculateAccrual(staff, schedData.config, schedData.overrides, currentDate)
+              ? calculateAccrual(staff, schedData.config, schedData.overrides, currentDate, schedData.hour_adjustments || {})
               : null;
             const alBlocked = manualShiftType === 'AL'
               && (alCount >= schedData.config.max_al_same_day
@@ -358,7 +358,7 @@ export default function DailyStatusModal({
           {modal === 'al' && selectedStaff && (() => {
             const staff = schedData.staff.find(member => member.id === selectedStaff);
             if (!staff) return null;
-            const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate);
+            const accrual = calculateAccrual(staff, schedData.config, schedData.overrides, currentDate, schedData.hour_adjustments || {});
             if (accrual.missingContractHours) {
               return (
                 <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-xl">

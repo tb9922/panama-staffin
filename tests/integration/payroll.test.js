@@ -385,6 +385,134 @@ describe('Timesheets — /timesheets', () => {
     await adminGet(`/timesheets/period?home=${homeASlug}`).expect(400);
   });
 
+  it('PUT creates an hourly annual leave adjustment within the recorded shortfall', async () => {
+    await adminPost(`/timesheets?home=${homeASlug}`, {
+      ...validEntry,
+      date: '2099-06-04',
+      payable_hours: 7.5,
+    }).expect(201);
+
+    const res = await adminPut(`/timesheets/adjustments?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      date: '2099-06-04',
+      kind: 'annual_leave',
+      hours: 0.5,
+      note: 'Left early for GP appointment',
+    }).expect(201);
+
+    expect(res.body.staff_id).toBe('PH01');
+    expect(res.body.kind).toBe('annual_leave');
+    expect(res.body.hours).toBe(0.5);
+  });
+
+  it('GET adjustment period returns saved hourly adjustments', async () => {
+    const res = await adminGet(
+      `/timesheets/adjustments/period?home=${homeASlug}&start=2099-06-04&end=2099-06-04&staff_id=PH01`
+    ).expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          staff_id: 'PH01',
+          date: '2099-06-04',
+          kind: 'annual_leave',
+          hours: 0.5,
+        }),
+      ]),
+    );
+  });
+
+  it('PUT rejects hourly adjustments larger than the remaining shortfall', async () => {
+    await adminPost(`/timesheets?home=${homeASlug}`, {
+      ...validEntry,
+      date: '2099-06-05',
+      payable_hours: 7.5,
+    }).expect(201);
+
+    const res = await adminPut(`/timesheets/adjustments?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      date: '2099-06-05',
+      kind: 'annual_leave',
+      hours: 1.5,
+    }).expect(400);
+
+    expect(res.body.error).toMatch(/shortfall/i);
+  });
+
+  it('PUT rejects hourly adjustments when a full-day AL override exists', async () => {
+    await pool.query(
+      `INSERT INTO shift_overrides (home_id, date, staff_id, shift, source)
+       VALUES ($1, '2099-06-08', 'PH01', 'AL', 'manual')
+       ON CONFLICT (home_id, date, staff_id) DO UPDATE SET shift = EXCLUDED.shift, source = EXCLUDED.source`,
+      [homeAId],
+    );
+    try {
+      const res = await adminPut(`/timesheets/adjustments?home=${homeASlug}`, {
+        staff_id: 'PH01',
+        date: '2099-06-08',
+        kind: 'annual_leave',
+        hours: 1,
+      }).expect(400);
+
+      expect(res.body.error).toMatch(/full-day AL/i);
+    } finally {
+      await pool.query(
+        `DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = 'PH01' AND date = '2099-06-08'`,
+        [homeAId],
+      );
+    }
+  });
+
+  it('DELETE removes an unlocked hourly adjustment and blocks removal once the timesheet is locked', async () => {
+    await adminPost(`/timesheets?home=${homeASlug}`, {
+      ...validEntry,
+      date: '2099-06-06',
+      payable_hours: 7.5,
+    }).expect(201);
+    await adminPut(`/timesheets/adjustments?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      date: '2099-06-06',
+      kind: 'paid_authorised_absence',
+      hours: 0.5,
+    }).expect(201);
+
+    await adminDelete(`/timesheets/adjustments?home=${homeASlug}&staff_id=PH01&date=2099-06-06`).expect(200);
+
+    await adminPost(`/timesheets?home=${homeASlug}`, {
+      ...validEntry,
+      date: '2099-06-07',
+      payable_hours: 7.5,
+    }).expect(201);
+    await adminPut(`/timesheets/adjustments?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      date: '2099-06-07',
+      kind: 'paid_authorised_absence',
+      hours: 0.5,
+    }).expect(201);
+    await pool.query(
+      `UPDATE timesheet_entries
+          SET status = 'locked'
+        WHERE home_id = $1 AND staff_id = 'PH01' AND date = '2099-06-07'`,
+      [homeAId],
+    );
+
+    const res = await adminDelete(`/timesheets/adjustments?home=${homeASlug}&staff_id=PH01&date=2099-06-07`).expect(400);
+    expect(res.body.error).toMatch(/locked/i);
+
+    await pool.query(
+      `UPDATE timesheet_entries
+          SET status = 'pending'
+        WHERE home_id = $1 AND staff_id = 'PH01' AND date = '2099-06-07'`,
+      [homeAId],
+    );
+    await pool.query(
+      `DELETE FROM shift_hour_adjustments
+        WHERE home_id = $1 AND staff_id = 'PH01' AND date = '2099-06-07'`,
+      [homeAId],
+    );
+  });
+
   it('POST approve single entry', async () => {
     const res = await adminPost(`/timesheets/${createdTsId}/approve?home=${homeASlug}`).expect(200);
     expect(res.body.approved_by).toBeTruthy();
@@ -1101,8 +1229,8 @@ describe('Cross-cutting: auth + tenant isolation', () => {
 describe('Timesheet: status field stripped from upsert', () => {
   it('POST /timesheets ignores status field — always creates as pending', async () => {
     const res = await adminPost(`/timesheets?home=${homeASlug}`, {
-      staff_id: 'S001',
-      date: '2026-03-20',
+      staff_id: 'PH01',
+      date: '2099-06-09',
       payable_hours: 8,
       status: 'approved',  // should be stripped by Zod schema
     }).expect(201);

@@ -103,7 +103,7 @@ export default function AnnualLeave() {
   // Accrual calculations for all active staff
   const accruals = useMemo(() => {
     if (!schedData) return new Map();
-    return getAccrualSummary(activeStaff, schedData.config, schedData.overrides, today);
+    return getAccrualSummary(activeStaff, schedData.config, schedData.overrides, today, schedData.hour_adjustments || {});
   }, [schedData, activeStaff, today]);
 
   // Leave year for display

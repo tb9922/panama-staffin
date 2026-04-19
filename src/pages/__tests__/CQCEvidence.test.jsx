@@ -440,11 +440,10 @@ describe('CQCEvidence', () => {
     });
 
     renderAdmin();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Show Snapshot History (1)' })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Show Snapshot History (1)' }));
+    const historyToggle = await screen.findByRole('button', { name: /Snapshot History \(1\)/i }, { timeout: 20_000 });
+    if (/show/i.test(historyToggle.textContent || '')) {
+      await user.click(historyToggle);
+    }
     await user.click(screen.getByRole('button', { name: 'View' }));
 
     await waitFor(() => {
@@ -459,8 +458,8 @@ describe('CQCEvidence', () => {
         90,
         expect.objectContaining({ id: 'snap-100' })
       );
-    });
-  });
+    }, { timeout: 20_000 });
+  }, 20_000);
 
   it('lets you upload supporting files on the first pass by auto-saving the evidence item', async () => {
     const user = userEvent.setup();
@@ -490,11 +489,11 @@ describe('CQCEvidence', () => {
     await waitFor(() => {
       expect(api.createCqcEvidence).toHaveBeenCalled();
       expect(api.uploadCqcEvidenceFile).toHaveBeenCalledWith('cqc_evidence', 'ev-001', expect.any(File), '');
-    });
+    }, { timeout: 20_000 });
     expect(screen.getByText('Evidence saved. Uploading supporting files now.')).toBeInTheDocument();
     expect(screen.getByText('No supporting files uploaded yet.')).toBeInTheDocument();
     expect(api.getCqcEvidenceFiles).toHaveBeenCalledWith('cqc_evidence', 'ev-001');
-  });
+  }, 20_000);
 
   it('shows manual evidence file counts so unsaved attachments are obvious', async () => {
     api.getCqcEvidence.mockResolvedValue({

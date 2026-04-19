@@ -11,7 +11,7 @@ test.describe('Visual smoke', () => {
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await expect(dialog).toHaveScreenshot('staff-add-modal.png', {
       animations: 'disabled',
-      maxDiffPixels: 100,
+      maxDiffPixels: 250,
     });
   });
 

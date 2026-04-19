@@ -5,6 +5,7 @@ import { requireAuth, requireHomeAccess, requireModule } from '../middleware/aut
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
+import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as dayNoteRepo from '../repositories/dayNoteRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as onboardingRepo from '../repositories/onboardingRepo.js';
@@ -328,9 +329,10 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       return res.status(400).json({ error: 'Date range must be 0–400 days' });
     }
 
-    const [staffResult, overrides, dayNotes, trainingResult, onboarding] = await Promise.all([
+    const [staffResult, overrides, hourAdjustments, dayNotes, trainingResult, onboarding] = await Promise.all([
       staffRepo.findByHome(req.home.id),
       overrideRepo.findByHome(req.home.id, fromDate, toDate),
+      shiftHourAdjustmentRepo.findMapByHomePeriod(req.home.id, fromDate, toDate),
       dayNoteRepo.findByHome(req.home.id, fromDate, toDate),
       trainingRepo.findByHome(req.home.id),
       onboardingRepo.findByHome(req.home.id),
@@ -339,7 +341,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
     const training = trainingResult.rows;
 
     // Strip PII for non-admin users — only expose scheduling-relevant fields
-    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training;
+    let staffOut, onboardingOut, overridesOut = overrides, trainingOut = training, hourAdjustmentsOut = hourAdjustments;
     if (req.homeRole !== 'home_manager' && req.homeRole !== 'deputy_manager') {
       staffOut = staff.map(({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }) =>
         ({ id, name, role, team, pref, skill, active, start_date, contract_hours, wtr_opt_out, al_entitlement, al_carryover, leaving_date }));
@@ -357,8 +359,12 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
         .filter(({ id }) => id === req.staffId)
         .map(({ id, name, role, team, active }) => ({ id, name, role, team, active }));
       overridesOut = {};
+      hourAdjustmentsOut = {};
       for (const [date, entries] of Object.entries(overrides)) {
         if (entries[req.staffId]) overridesOut[date] = { [req.staffId]: entries[req.staffId] };
+      }
+      for (const [date, entries] of Object.entries(hourAdjustments)) {
+        if (entries[req.staffId]) hourAdjustmentsOut[date] = { [req.staffId]: entries[req.staffId] };
       }
       trainingOut = [];
       onboardingOut = undefined;
@@ -371,6 +377,7 @@ router.get('/', readRateLimiter, requireAuth, requireHomeAccess, requireModule('
       configUpdatedAt: req.home.updated_at ? req.home.updated_at.toISOString() : null,
       staff: staffOut,
       overrides: overridesOut,
+      hour_adjustments: hourAdjustmentsOut,
       day_notes: dayNotes,
       training: trainingOut,
       ...(onboardingOut !== undefined && { onboarding: onboardingOut }),

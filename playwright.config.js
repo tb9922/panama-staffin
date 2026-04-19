@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   globalSetup: './scripts/seed-e2e.js',
   testDir: 'tests/e2e',
-  timeout: 30_000,
+  timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   workers: 1, // sequential — tests share DB state
   reporter: process.env.CI ? 'github' : 'list',

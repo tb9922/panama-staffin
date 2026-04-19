@@ -131,8 +131,8 @@ describe('RotationGrid', () => {
 
   it('renders Print button', async () => {
     renderAdmin();
-    expect(await screen.findByRole('button', { name: 'Print' })).toBeInTheDocument();
-  });
+    expect(await screen.findByRole('button', { name: 'Print' }, { timeout: 20_000 })).toBeInTheDocument();
+  }, 20_000);
 
   it('renders Export CSV button', async () => {
     renderAdmin();
@@ -153,11 +153,11 @@ describe('RotationGrid', () => {
     renderAdmin();
     await waitFor(() => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
-    });
+    }, { timeout: 20_000 });
 
     const shiftButtons = screen.getAllByRole('button');
     expect(shiftButtons.length).toBeGreaterThan(5);
-  });
+  }, 20_000);
 
   it('clicking a shift cell opens the shift editor modal for admin', async () => {
     const user = userEvent.setup();

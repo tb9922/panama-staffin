@@ -116,6 +116,17 @@ describe('sumALHoursInLeaveYear', () => {
     };
     expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config)).toBe(8);
   });
+
+  it('includes hourly annual leave adjustments in used hours', () => {
+    const overrides = {
+      '2025-05-01': { S1: { shift: 'AL', al_hours: 8 } },
+    };
+    const hourAdjustments = {
+      '2025-05-03': { S1: { kind: 'annual_leave', hours: 3 } },
+      '2025-05-04': { S1: { kind: 'paid_authorised_absence', hours: 2 } },
+    };
+    expect(sumALHoursInLeaveYear(staff, overrides, leaveYear, config, hourAdjustments)).toBe(11);
+  });
 });
 
 // ── calculateAccrual (hours-based) ──────────────────────────────────────────
@@ -185,6 +196,20 @@ describe('calculateAccrual', () => {
     const result = calculateAccrual(staff, config, overrides, '2025-09-01');
     expect(result.usedHours).toBe(36);
     expect(result.remainingHours).toBeCloseTo(result.accruedHours - 36, 1);
+  });
+
+  it('treats hourly annual leave adjustments as used leave without affecting non-leave adjustments', () => {
+    const staff = makeStaff('2024-01-01');
+    const overrides = {
+      '2025-06-01': { S1: { shift: 'AL', al_hours: 12 } },
+    };
+    const hourAdjustments = {
+      '2025-06-02': { S1: { kind: 'annual_leave', hours: 3 } },
+      '2025-06-03': { S1: { kind: 'paid_authorised_absence', hours: 2 } },
+    };
+    const result = calculateAccrual(staff, config, overrides, '2025-09-01', hourAdjustments);
+    expect(result.usedHours).toBe(15);
+    expect(result.remainingHours).toBeCloseTo(result.accruedHours - 15, 1);
   });
 
   it('remainingHours can be negative when over-booked', () => {

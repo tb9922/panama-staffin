@@ -401,8 +401,9 @@ function DashboardInner({ schedData }) {
   const agencyTotal = cycleData.reduce((s, d) => s + d.cost.agency, 0);
   const agencyPct = cycleCost > 0 ? (agencyTotal / cycleCost) * 100 : 0;
 
-  const alerts = useMemo(() => {
+  const alerts = (() => {
     const list = [];
+    const hourAdjustments = schedData?.hour_adjustments || {};
 
     cycleData.forEach(d => {
       const dateLabel = d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -436,7 +437,7 @@ function DashboardInner({ schedData }) {
     });
 
     activeCareStaff.forEach((s, idx) => {
-      const acc = calculateAccrual(s, config, overrides, today);
+      const acc = calculateAccrual(s, config, overrides, today, hourAdjustments);
       if (acc.remainingHours < 0) {
         const label = canEdit ? s.name : `Staff Member ${idx + 1}`;
         list.push(withPriority({ type: 'warning', msg: `${label}: ${Math.abs(acc.remainingHours).toFixed(1)} AL hours over earned balance` }, 2));
@@ -461,7 +462,7 @@ function DashboardInner({ schedData }) {
 
     list.sort(sortAlerts);
     return list.slice(0, 24);
-  }, [cycleData, staff, overrides, config, hrData, financeAlerts, summary, canEdit, today]);
+  })();
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

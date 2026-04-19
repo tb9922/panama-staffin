@@ -11,6 +11,7 @@ import { withTransaction } from '../db.js';
 import * as homeRepo        from '../repositories/homeRepo.js';
 import * as staffRepo       from '../repositories/staffRepo.js';
 import * as overrideRepo    from '../repositories/overrideRepo.js';
+import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as payRateRulesRepo from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo   from '../repositories/timesheetRepo.js';
 import * as payrollRunRepo  from '../repositories/payrollRunRepo.js';
@@ -119,6 +120,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
     const allStaff    = allStaffResult.rows;
     const overrides   = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
+    const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, run.period_start, run.period_end, null, client);
     const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
     const nmwRates    = await payRateRulesRepo.getAllNmwRates(client);
 
@@ -196,6 +198,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         total_hours: 0, total_enhancements: 0, gross_pay: 0,
         // Phase 2 additions
         holiday_days: 0, holiday_pay: 0,
+        authorised_absence_hours: 0, authorised_absence_pay: 0,
         ssp_days: 0, ssp_amount: 0, enhanced_sick_amount: 0,
       };
 
@@ -212,10 +215,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
         const actualShift = getActualShift(s, date, overrides, home.config.cycle_start_date, home.config);
         const { shift, sleep_in } = actualShift;
+        const overrideALHours = actualShift?.al_hours != null ? Number(actualShift.al_hours) : null;
 
         // ── Phase 2: Annual Leave → Holiday Pay ──
         if (shift === 'AL') {
-          const dailyRate = await calculateHolidayDailyRate(homeId, s.id, date, client, home.config, s);
+          const dailyRate = await calculateHolidayDailyRate(homeId, s.id, date, client, home.config, s, overrideALHours);
           acc.holiday_days += 1;
           acc.holiday_pay = round2(acc.holiday_pay + dailyRate);
           // Record as a shift so lookback query can find it
@@ -263,8 +267,9 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
         // Hours: approved/locked timesheet > config default
         const ts = tsMap.get(`${s.id}:${date}`) || null;
+        const adjustment = hourAdjustments?.[date]?.[s.id] || null;
         let hours;
-        if (ts && ['approved', 'locked'].includes(ts.status) && ts.payable_hours != null) {
+        if (ts && ts.payable_hours != null && (['approved', 'locked'].includes(ts.status) || adjustment)) {
           hours = parseFloat(ts.payable_hours);
         } else {
           hours = getDefaultShiftHours(shift, home.config);
@@ -328,6 +333,45 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
               break;
           }
         }
+
+        if (adjustment?.kind === 'annual_leave' && adjustment.hours > 0) {
+          const scheduledHours = getDefaultShiftHours(shift, home.config);
+          if (scheduledHours > 0) {
+            const dailyRate = await calculateHolidayDailyRate(homeId, s.id, date, client, home.config, s, scheduledHours);
+            const holidayHourlyRate = round2(dailyRate / scheduledHours);
+            const adjustmentPay = round2(holidayHourlyRate * adjustment.hours);
+            acc.holiday_pay = round2(acc.holiday_pay + adjustmentPay);
+            shiftDetails.push({
+              date,
+              shift_code: 'AL-H',
+              hours: adjustment.hours,
+              base_rate: holidayHourlyRate,
+              base_amount: adjustmentPay,
+              enhancements_json: [],
+              total_amount: adjustmentPay,
+              effective_hourly_rate: holidayHourlyRate,
+            });
+          }
+        } else if (adjustment?.kind === 'paid_authorised_absence' && adjustment.hours > 0) {
+          const scheduledHours = getDefaultShiftHours(shift, home.config);
+          const scheduledPay = calculateShiftPay(shift, date, s, rules, home.config, !!sleep_in, isBH, scheduledHours);
+          const effectiveRate = scheduledPay.hours > 0
+            ? round2(scheduledPay.total / scheduledPay.hours)
+            : round2(parseFloat(s.hourly_rate) || 0);
+          const adjustmentPay = round2(effectiveRate * adjustment.hours);
+          acc.authorised_absence_hours = round2(acc.authorised_absence_hours + adjustment.hours);
+          acc.authorised_absence_pay = round2(acc.authorised_absence_pay + adjustmentPay);
+          shiftDetails.push({
+            date,
+            shift_code: 'AUTH-PAY',
+            hours: adjustment.hours,
+            base_rate: effectiveRate,
+            base_amount: adjustmentPay,
+            enhancements_json: [],
+            total_amount: adjustmentPay,
+            effective_hourly_rate: effectiveRate,
+          });
+        }
       }
 
       // Batch INSERT all shift details for this line (replaces N individual INSERTs)
@@ -344,7 +388,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         acc.bank_holiday_enhancement + acc.overtime_enhancement +
         acc.sleep_in_pay + acc.on_call_enhancement,
       );
-      acc.gross_pay = round2(acc.base_pay + acc.total_enhancements);
+      acc.gross_pay = round2(acc.base_pay + acc.total_enhancements + acc.authorised_absence_pay);
 
       // ── Phase 2: Deductions block ──────────────────────────────────────────
 
@@ -462,6 +506,8 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         holiday_days:        acc.holiday_days,
         holiday_pay:         acc.holiday_pay,
         holiday_daily_rate:  acc.holiday_days > 0 ? round2(acc.holiday_pay / acc.holiday_days) : null,
+        authorised_absence_hours: acc.authorised_absence_hours,
+        authorised_absence_pay: acc.authorised_absence_pay,
         ssp_days:            acc.ssp_days,
         ssp_amount:          acc.ssp_amount,
         enhanced_sick_amount: acc.enhanced_sick_amount,
@@ -786,12 +832,15 @@ export async function markRunExported(runId, homeId, homeSlug, username, format)
  * Fallback to (contract_hours / 5) × hourly_rate when no payroll history exists
  * (e.g. new starters on their first run).
  */
-async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, config, staff) {
+async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, config, staff, fallbackHoursOverride = null) {
   if (!staff) return 0;
   const contractHours = parseFloat(staff.contract_hours);
   if (!contractHours || contractHours <= 0) return 0;
   const hourlyRate = parseFloat(staff.hourly_rate) || 0;
-  const fallback = round2(getALDeductionHours(staff, holidayDate, config) * hourlyRate);
+  const fallbackHours = fallbackHoursOverride != null
+    ? Number(fallbackHoursOverride)
+    : getALDeductionHours(staff, holidayDate, config);
+  const fallback = round2(fallbackHours * hourlyRate);
 
   const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, staffId, holidayDate, client);
   if (!avg) return fallback;

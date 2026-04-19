@@ -2,12 +2,13 @@ import { withTransaction } from '../db.js';
 import { AppError, ConflictError } from '../errors.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
+import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as overrideRequestRepo from '../repositories/overrideRequestRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
 import { calculateAccrual } from '../src/lib/accrual.js';
-import { getALDeductionHours } from '../shared/rotation.js';
+import { getALDeductionHours, getLeaveYear } from '../shared/rotation.js';
 
 export async function submitALRequest({ homeId, staffId, date, reason }) {
   return withTransaction(async (client) => {
@@ -24,7 +25,9 @@ export async function submitALRequest({ homeId, staffId, date, reason }) {
     }
 
     const overrides = await overrideRepo.findByHome(homeId, undefined, undefined, client);
-    const accrual = calculateAccrual(staff, home.config || {}, overrides, date);
+    const leaveYear = getLeaveYear(date, home.config?.leave_year_start);
+    const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, leaveYear.startStr, leaveYear.endStr, staffId, client);
+    const accrual = calculateAccrual(staff, home.config || {}, overrides, date, hourAdjustments);
     const alHours = getALDeductionHours(staff, date, home.config || {});
     if (alHours <= 0) {
       throw new AppError('Annual leave can only be requested on a working day', 400, 'AL_NON_WORKING_DAY');

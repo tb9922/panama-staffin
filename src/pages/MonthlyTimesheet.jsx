@@ -11,6 +11,7 @@ import {
   getCurrentHome, getTimesheetPeriod,
   batchUpsertTimesheets, approveTimesheetRange,
   upsertTimesheet, approveTimesheet, disputeTimesheet,
+  upsertTimesheetHourAdjustment, deleteTimesheetHourAdjustment,
   getSchedulingData, } from '../lib/api.js';
 import { getActualShift, getShiftHours, WORKING_SHIFTS, parseDate } from '../lib/rotation.js';
 import { snapToShift, calculatePayableHours } from '../lib/payroll.js';
@@ -18,6 +19,7 @@ import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { todayLocalISO } from '../lib/localDates.js';
+import { calculateAccrual } from '../lib/accrual.js';
 
 const STATUS_BADGE = {
   pending:  BADGE.amber,
@@ -85,7 +87,9 @@ export default function MonthlyTimesheet() {
   // Dispute modal state
   const [disputeModal, setDisputeModal] = useState(null); // { entry }
   const [disputeReason, setDisputeReason] = useState('');
-  useDirtyGuard(!!editModal || !!disputeModal);
+  const [adjustmentModal, setAdjustmentModal] = useState(null); // { row }
+  const [adjustmentForm, setAdjustmentForm] = useState({ kind: 'annual_leave', hours: '', note: '' });
+  useDirtyGuard(!!editModal || !!disputeModal || !!adjustmentModal);
 
   // Snap config from schedData
   const snapConfig = useMemo(() => ({
@@ -174,6 +178,7 @@ export default function MonthlyTimesheet() {
 
       // Timesheet entry (if exists)
       const entry = entries.find(e => e.date === dateStr);
+      const adjustment = schedData?.hour_adjustments?.[dateStr]?.[selectedStaffId] || null;
 
       // Classify the row
       let rowType;
@@ -191,18 +196,27 @@ export default function MonthlyTimesheet() {
       }
 
       const variance = entry?.payable_hours != null ? (entry.payable_hours - rosterHours) : null;
+      const shortfallHours = entry?.payable_hours != null ? Math.max(0, rosterHours - entry.payable_hours) : null;
+      const paidHours = entry?.payable_hours != null
+        ? entry.payable_hours + (adjustment?.hours || 0)
+        : null;
 
       result.push({
         dateStr, dayOfWeek, rosterShift, rosterHours, overrideReason,
-        entry, rowType, variance,
+        entry, rowType, variance, shortfallHours, adjustment, paidHours,
       });
     }
     return result;
-  }, [staff, schedData, entries, year, month]);
+  }, [staff, schedData, entries, year, month, selectedStaffId]);
 
   // Summary stats
   const stats = useMemo(() => {
-    let scheduledHours = 0, actualHours = 0, approvedCount = 0, workingDays = 0;
+    let scheduledHours = 0;
+    let actualHours = 0;
+    let paidAdjustmentHours = 0;
+    let paidHours = 0;
+    let approvedCount = 0;
+    let workingDays = 0;
     for (const row of rows) {
       if (WORKING_SHIFTS.includes(row.rosterShift)) {
         scheduledHours += row.rosterHours;
@@ -211,6 +225,12 @@ export default function MonthlyTimesheet() {
       if (row.entry?.payable_hours != null) {
         actualHours += row.entry.payable_hours;
       }
+      if (row.adjustment?.hours) {
+        paidAdjustmentHours += row.adjustment.hours;
+      }
+      if (row.paidHours != null) {
+        paidHours += row.paidHours;
+      }
       if (row.entry?.status === 'approved' || row.entry?.status === 'locked') {
         approvedCount++;
       }
@@ -218,6 +238,8 @@ export default function MonthlyTimesheet() {
     return {
       scheduledHours: scheduledHours.toFixed(1),
       actualHours: actualHours.toFixed(1),
+      paidAdjustmentHours: paidAdjustmentHours.toFixed(1),
+      paidHours: paidHours.toFixed(1),
       variance: (actualHours - scheduledHours).toFixed(1),
       approvedCount,
       workingDays,
@@ -303,6 +325,17 @@ export default function MonthlyTimesheet() {
     setDisputeModal({ entry });
   }
 
+  function openAdjustment(row) {
+    setAdjustmentForm({
+      kind: row.adjustment?.kind || 'annual_leave',
+      hours: row.adjustment?.hours != null
+        ? String(row.adjustment.hours)
+        : (row.shortfallHours != null ? row.shortfallHours.toFixed(2).replace(/\.00$/, '') : ''),
+      note: row.adjustment?.note || '',
+    });
+    setAdjustmentModal({ row });
+  }
+
   async function handleDisputeSubmit() {
     if (saving || !disputeModal?.entry?.id || !disputeReason.trim()) return;
     setSaving(true);
@@ -314,6 +347,73 @@ export default function MonthlyTimesheet() {
       showNotice('Timesheet entry disputed.');
     } catch (e) {
       setError(e.message || 'Failed to dispute entry');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const adjustmentAccrual = useMemo(() => {
+    if (!adjustmentModal || !staff || !schedData) return null;
+    const hourAdjustments = JSON.parse(JSON.stringify(schedData.hour_adjustments || {}));
+    const currentDate = adjustmentModal.row.dateStr;
+    if (hourAdjustments[currentDate]?.[selectedStaffId]) {
+      delete hourAdjustments[currentDate][selectedStaffId];
+      if (Object.keys(hourAdjustments[currentDate]).length === 0) delete hourAdjustments[currentDate];
+    }
+    return calculateAccrual(staff, schedData.config, schedData.overrides, currentDate, hourAdjustments);
+  }, [adjustmentModal, schedData, selectedStaffId, staff]);
+
+  async function handleSaveAdjustment() {
+    if (saving || !adjustmentModal) return;
+    const hours = parseFloat(adjustmentForm.hours);
+    const maxShortfall = adjustmentModal.row.shortfallHours ?? 0;
+    if (!(hours > 0)) {
+      setError('Enter a positive number of hours for the paid adjustment');
+      return;
+    }
+    if (hours > maxShortfall + 0.05) {
+      setError(`Adjustment cannot exceed the current shortfall (${maxShortfall.toFixed(2)}h)`);
+      return;
+    }
+    if (adjustmentForm.kind === 'annual_leave' && adjustmentAccrual && hours > adjustmentAccrual.remainingHours + 0.05) {
+      setError(`Only ${adjustmentAccrual.remainingHours.toFixed(1)}h of earned leave is available for that date`);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await upsertTimesheetHourAdjustment(homeSlug, {
+        staff_id: selectedStaffId,
+        date: adjustmentModal.row.dateStr,
+        kind: adjustmentForm.kind,
+        hours,
+        note: adjustmentForm.note?.trim() || null,
+        source: 'timesheet_shortfall',
+      });
+      setAdjustmentModal(null);
+      setRefreshKey((value) => value + 1);
+      showNotice(adjustmentForm.kind === 'annual_leave'
+        ? 'Hourly annual leave applied to the shortfall.'
+        : 'Paid authorised absence applied to the shortfall.');
+    } catch (e) {
+      setError(e.message || 'Failed to save hourly adjustment');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteAdjustment() {
+    if (saving || !adjustmentModal?.row?.adjustment) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteTimesheetHourAdjustment(homeSlug, selectedStaffId, adjustmentModal.row.dateStr);
+      setAdjustmentModal(null);
+      setRefreshKey((value) => value + 1);
+      showNotice('Hourly adjustment removed.');
+    } catch (e) {
+      setError(e.message || 'Failed to remove hourly adjustment');
     } finally {
       setSaving(false);
     }
@@ -504,6 +604,15 @@ export default function MonthlyTimesheet() {
             title="Dispute this entry"
           >Dispute</button>
         )}
+
+        {(e && WORKING_SHIFTS.includes(row.rosterShift) && ((row.shortfallHours ?? 0) > 0.05 || row.adjustment)) && (
+          <button
+            className={`${BTN.secondary} ${BTN.xs}`}
+            onClick={() => openAdjustment(row)}
+            disabled={saving}
+            title={row.adjustment ? 'Edit paid shortfall adjustment' : 'Resolve unpaid shortfall'}
+          >Adjust</button>
+        )}
       </div>
     );
   }
@@ -561,8 +670,9 @@ export default function MonthlyTimesheet() {
       {/* Staff + month selector */}
       <div className="flex flex-wrap items-center gap-4 mb-6 print:hidden">
         <div className="flex items-center gap-2">
-          <label className={INPUT.label}>Staff</label>
+          <label className={INPUT.label} htmlFor="monthly-timesheet-staff">Staff</label>
           <select
+            id="monthly-timesheet-staff"
             className={INPUT.select + ' min-w-[220px]'}
             value={selectedStaffId}
             onChange={e => {
@@ -589,18 +699,26 @@ export default function MonthlyTimesheet() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <div className={CARD.padded}>
           <p className="text-xs text-gray-400 uppercase">Scheduled</p>
           <p className="text-2xl font-bold text-gray-900">{stats.scheduledHours}<span className="text-sm font-normal text-gray-400"> hrs</span></p>
           <p className="text-xs text-gray-400">{stats.workingDays} working days</p>
         </div>
         <div className={CARD.padded}>
-          <p className="text-xs text-gray-400 uppercase">Actual</p>
+          <p className="text-xs text-gray-400 uppercase">Worked</p>
           <p className="text-2xl font-bold text-gray-900">{stats.actualHours}<span className="text-sm font-normal text-gray-400"> hrs</span></p>
         </div>
         <div className={CARD.padded}>
-          <p className="text-xs text-gray-400 uppercase">Variance</p>
+          <p className="text-xs text-gray-400 uppercase">Paid Adj.</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.paidAdjustmentHours}<span className="text-sm font-normal text-gray-400"> hrs</span></p>
+        </div>
+        <div className={CARD.padded}>
+          <p className="text-xs text-gray-400 uppercase">Paid Hours</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.paidHours}<span className="text-sm font-normal text-gray-400"> hrs</span></p>
+        </div>
+        <div className={CARD.padded}>
+          <p className="text-xs text-gray-400 uppercase">Worked Variance</p>
           <p className={`text-2xl font-bold ${parseFloat(stats.variance) < 0 ? 'text-red-600' : parseFloat(stats.variance) > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
             {parseFloat(stats.variance) > 0 ? '+' : ''}{stats.variance}<span className="text-sm font-normal text-gray-400"> hrs</span>
           </p>
@@ -654,6 +772,8 @@ export default function MonthlyTimesheet() {
                 <th scope="col" className={TABLE.th}>Actual Out</th>
                 <th scope="col" className={TABLE.th + ' text-right'}>Break</th>
                 <th scope="col" className={TABLE.th + ' text-right'}>Payable Hrs</th>
+                <th scope="col" className={TABLE.th}>Paid Adj.</th>
+                <th scope="col" className={TABLE.th + ' text-right'}>Paid Hrs</th>
                 <th scope="col" className={TABLE.th + ' text-right'}>Variance</th>
                 <th scope="col" className={TABLE.th}>Status</th>
                 {canEdit && <th scope="col" className={TABLE.th + ' print:hidden'}>Actions</th>}
@@ -676,6 +796,19 @@ export default function MonthlyTimesheet() {
                   <td className={TABLE.tdMono + ' text-right text-sm'}>{row.entry ? `${row.entry.break_minutes}m` : '\u2014'}</td>
                   <td className={TABLE.tdMono + ' text-right text-sm font-medium'}>
                     {row.entry?.payable_hours != null ? row.entry.payable_hours.toFixed(1) : '\u2014'}
+                  </td>
+                  <td className={TABLE.td + ' text-xs'}>
+                    {row.adjustment ? (
+                      <div className="flex items-center gap-2">
+                        <span className={row.adjustment.kind === 'annual_leave' ? BADGE.blue : BADGE.green}>
+                          {row.adjustment.kind === 'annual_leave' ? 'AL' : 'Paid'}
+                        </span>
+                        <span className="font-mono text-gray-700">{row.adjustment.hours.toFixed(1)}h</span>
+                      </div>
+                    ) : '\u2014'}
+                  </td>
+                  <td className={TABLE.tdMono + ' text-right text-sm font-medium'}>
+                    {row.paidHours != null ? row.paidHours.toFixed(1) : '\u2014'}
                   </td>
                   <td className={TABLE.tdMono + ' text-right text-sm'}>
                     {row.variance != null ? (
@@ -700,6 +833,8 @@ export default function MonthlyTimesheet() {
                 <td className={TABLE.td} colSpan={2}></td>
                 <td className={TABLE.td}></td>
                 <td className={TABLE.tdMono + ' text-right'}>{stats.actualHours}</td>
+                <td className={TABLE.tdMono + ' text-right'}>{stats.paidAdjustmentHours}</td>
+                <td className={TABLE.tdMono + ' text-right'}>{stats.paidHours}</td>
                 <td className={TABLE.tdMono + ' text-right'}>
                   <span className={parseFloat(stats.variance) < 0 ? 'text-red-600' : parseFloat(stats.variance) > 0 ? 'text-blue-600' : ''}>
                     {parseFloat(stats.variance) > 0 ? '+' : ''}{stats.variance}
@@ -811,6 +946,82 @@ export default function MonthlyTimesheet() {
                 disabled={saving || !disputeReason.trim()}
               >
                 {saving ? 'Submitting...' : 'Dispute'}
+              </button>
+            </div>
+          </>}
+      </Modal>
+      <Modal isOpen={!!adjustmentModal} onClose={() => setAdjustmentModal(null)} title="Resolve Shortfall">
+          {adjustmentModal && <>
+            <p className="text-sm text-gray-500 -mt-2 mb-4">
+              {staff?.name} â€” {adjustmentModal.row.dateStr}
+            </p>
+
+            <div className="rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-600 space-y-1 mb-4">
+              <div><span className="font-medium text-gray-800">Roster:</span> {adjustmentModal.row.rosterShift} ({adjustmentModal.row.rosterHours.toFixed(1)}h)</div>
+              <div><span className="font-medium text-gray-800">Worked:</span> {adjustmentModal.row.entry?.payable_hours?.toFixed(1) || '0.0'}h</div>
+              <div><span className="font-medium text-gray-800">Shortfall:</span> {(adjustmentModal.row.shortfallHours || 0).toFixed(1)}h</div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className={INPUT.label} htmlFor="shortfall-adjustment-kind">How should the shortfall be handled?</label>
+                <select
+                  id="shortfall-adjustment-kind"
+                  className={INPUT.select}
+                  value={adjustmentForm.kind}
+                  onChange={e => setAdjustmentForm(current => ({ ...current, kind: e.target.value }))}
+                >
+                  <option value="annual_leave">Use annual leave hours</option>
+                  <option value="paid_authorised_absence">Pay authorised absence hours</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={INPUT.label} htmlFor="shortfall-adjustment-hours">Hours to apply</label>
+                <input
+                  id="shortfall-adjustment-hours"
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  max={adjustmentModal.row.shortfallHours || undefined}
+                  className={INPUT.base}
+                  value={adjustmentForm.hours}
+                  onChange={e => setAdjustmentForm(current => ({ ...current, hours: e.target.value }))}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Maximum available on this row: {(adjustmentModal.row.shortfallHours || 0).toFixed(1)}h
+                </p>
+              </div>
+
+              {adjustmentForm.kind === 'annual_leave' && adjustmentAccrual && (
+                <div className={`rounded-xl px-3 py-2 text-xs ${adjustmentAccrual.remainingHours <= 0 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
+                  {adjustmentAccrual.missingContractHours
+                    ? 'Contract hours must be set before hourly annual leave can be used.'
+                    : `Earned leave available for ${adjustmentModal.row.dateStr}: ${adjustmentAccrual.remainingHours.toFixed(1)}h`}
+                </div>
+              )}
+
+              <div>
+                <label className={INPUT.label} htmlFor="shortfall-adjustment-note">Note</label>
+                <input
+                  id="shortfall-adjustment-note"
+                  className={INPUT.base}
+                  value={adjustmentForm.note}
+                  onChange={e => setAdjustmentForm(current => ({ ...current, note: e.target.value }))}
+                  placeholder="Optional explanation for payroll history"
+                />
+              </div>
+            </div>
+
+            <div className={MODAL.footer}>
+              {adjustmentModal.row.adjustment && (
+                <button className={BTN.danger} onClick={handleDeleteAdjustment} disabled={saving}>
+                  {saving ? 'Removing...' : 'Remove'}
+                </button>
+              )}
+              <button className={BTN.secondary} onClick={() => setAdjustmentModal(null)}>Cancel</button>
+              <button className={BTN.primary} onClick={handleSaveAdjustment} disabled={saving}>
+                {saving ? 'Saving...' : adjustmentModal.row.adjustment ? 'Update' : 'Apply'}
               </button>
             </div>
           </>}

@@ -21,12 +21,15 @@ import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { withTransaction } from '../db.js';
 import * as payRateRulesRepo  from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo     from '../repositories/timesheetRepo.js';
+import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as payrollRunRepo    from '../repositories/payrollRunRepo.js';
 import * as agencyRepo        from '../repositories/agencyRepo.js';
 import * as taxRepo           from '../repositories/taxRepo.js';
 import * as pensionRepo       from '../repositories/pensionRepo.js';
 import * as sspRepo           from '../repositories/sspRepo.js';
 import * as hmrcRepo          from '../repositories/hmrcRepo.js';
+import * as staffRepo         from '../repositories/staffRepo.js';
+import * as overrideRepo      from '../repositories/overrideRepo.js';
 import * as payrollService    from '../services/payrollService.js';
 import * as auditService      from '../services/auditService.js';
 import { dispatchEvent }      from '../services/webhookService.js';
@@ -37,6 +40,8 @@ import { NotFoundError, ValidationError } from '../errors.js';
 import { isOwnDataOnly } from '../shared/roles.js';
 import { nullableDateInput } from '../lib/zodHelpers.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
+import { calculateAccrual } from '../src/lib/accrual.js';
+import { getActualShift, getLeaveYear, getShiftHours, isWorkingShift } from '../shared/rotation.js';
 
 const router = Router();
 const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
@@ -134,6 +139,116 @@ const timesheetBatchBodySchema = z.object({
   entries: z.array(z.unknown()).min(1, 'entries array required').max(62, 'Maximum 62 entries per batch'),
 });
 
+const hourAdjustmentBodySchema = z.object({
+  staff_id: z.string().min(1).max(20),
+  date: dateSchema,
+  kind: z.enum(['annual_leave', 'paid_authorised_absence']),
+  hours: z.number().positive().max(24),
+  note: z.string().max(500).nullable().optional(),
+  source: z.string().max(20).optional().default('manual'),
+});
+
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
+async function getHourAdjustmentContext(home, staffId, date, client, payableHoursOverride = undefined) {
+  const [staff, overrides, existingAdjustment, existingTimesheet] = await Promise.all([
+    staffRepo.findById(home.id, staffId, client),
+    overrideRepo.findByHome(home.id, date, date, client),
+    shiftHourAdjustmentRepo.findByStaffDate(home.id, staffId, date, client),
+    timesheetRepo.findByStaffDate(home.id, staffId, date, client),
+  ]);
+
+  if (!staff || staff.active === false) {
+    throw new NotFoundError('Staff member not found');
+  }
+
+  const existingOverride = overrides?.[date]?.[staffId] || null;
+  const actual = getActualShift(staff, date, overrides, home.config?.cycle_start_date, home.config || {});
+  const shift = typeof actual === 'string' ? actual : actual?.shift || 'OFF';
+  const rosterHours = isWorkingShift(shift) ? getShiftHours(shift, home.config || {}) : 0;
+  const payableHours = payableHoursOverride ?? existingTimesheet?.payable_hours ?? null;
+  const shortfallHours = payableHours != null
+    ? round2(Math.max(0, rosterHours - Number(payableHours)))
+    : 0;
+
+  return {
+    staff,
+    shift,
+    rosterHours,
+    payableHours,
+    shortfallHours,
+    existingAdjustment,
+    existingOverride,
+    existingTimesheet,
+  };
+}
+
+async function validateHourAdjustmentUpsert(home, payload, client) {
+  const context = await getHourAdjustmentContext(home, payload.staff_id, payload.date, client);
+
+  if (context.existingTimesheet?.status === 'locked') {
+    throw new ValidationError('Timesheet is locked for payroll and cannot be adjusted');
+  }
+  if (context.existingOverride?.shift === 'AL') {
+    throw new ValidationError('Remove the full-day AL override before adding an hourly adjustment');
+  }
+  if (!isWorkingShift(context.shift) || context.rosterHours <= 0) {
+    throw new ValidationError('Hourly adjustments are only available on rostered working shifts');
+  }
+  if (context.payableHours == null) {
+    throw new ValidationError('Record the worked hours first, then resolve the shortfall');
+  }
+  if (context.shortfallHours <= 0) {
+    throw new ValidationError('This day has no unpaid shortfall to resolve');
+  }
+  if (payload.hours > context.shortfallHours + 0.05) {
+    throw new ValidationError(`Adjustment cannot exceed the current shortfall (${context.shortfallHours.toFixed(2)}h)`);
+  }
+
+  if (payload.kind === 'annual_leave') {
+    const leaveYear = getLeaveYear(payload.date, home.config?.leave_year_start);
+    const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(
+      home.id,
+      leaveYear.startStr,
+      leaveYear.endStr,
+      payload.staff_id,
+      client,
+    );
+
+    if (hourAdjustments?.[payload.date]?.[payload.staff_id]) {
+      delete hourAdjustments[payload.date][payload.staff_id];
+      if (Object.keys(hourAdjustments[payload.date]).length === 0) delete hourAdjustments[payload.date];
+    }
+
+    const overrides = await overrideRepo.findByHome(home.id, leaveYear.startStr, leaveYear.endStr, client);
+    const accrual = calculateAccrual(context.staff, home.config || {}, overrides, payload.date, hourAdjustments);
+    if (accrual.missingContractHours) {
+      throw new ValidationError('Contract hours must be set before using hourly annual leave');
+    }
+    if (payload.hours > accrual.remainingHours + 0.05) {
+      throw new ValidationError(`Only ${accrual.remainingHours.toFixed(1)}h of earned leave is available for that date`);
+    }
+  }
+
+  return context;
+}
+
+async function assertTimesheetCompatibleWithAdjustment(home, entry, client) {
+  const context = await getHourAdjustmentContext(home, entry.staff_id, entry.date, client, entry.payable_hours);
+  if (!context.existingAdjustment) return;
+  if (context.existingTimesheet?.status === 'locked') return;
+  if (context.shortfallHours <= 0) {
+    throw new ValidationError('Remove the hourly adjustment before saving a full-hours timesheet entry');
+  }
+  if (context.existingAdjustment.hours > context.shortfallHours + 0.05) {
+    throw new ValidationError(
+      `Existing hourly adjustment (${context.existingAdjustment.hours.toFixed(2)}h) exceeds the new shortfall (${context.shortfallHours.toFixed(2)}h). Update or remove the adjustment first.`,
+    );
+  }
+}
+
 // ── Pay Rate Rules ─────────────────────────────────────────────────────────────
 
 // GET /api/payroll/rates?home=X — list active rules (seeds defaults on first call)
@@ -225,14 +340,80 @@ router.get('/timesheets/period', readRateLimiter, requireAuth, requireHomeAccess
   } catch (err) { next(err); }
 });
 
+router.get('/timesheets/adjustments/period', readRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'read', { allowOwn: true }), async (req, res, next) => {
+  try {
+    const startP = dateSchema.safeParse(req.query.start);
+    const endP = dateSchema.safeParse(req.query.end);
+    if (!startP.success || !endP.success) return res.status(400).json({ error: 'start and end date parameters required' });
+    if (requireStaffLink(req, res, 'payroll')) return;
+    const staffIdFilter = isOwnDataOnly(req.homeRole, 'payroll')
+      ? req.staffId
+      : safeStr(req.query.staff_id, 20);
+    const adjustments = await shiftHourAdjustmentRepo.findByHomePeriod(req.home.id, startP.data, endP.data, staffIdFilter);
+    res.json(adjustments);
+  } catch (err) { next(err); }
+});
+
 // POST /api/payroll/timesheets?home=X — create or update entry
 router.post('/timesheets', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
   try {
     const parsed = timesheetBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const entry = await timesheetRepo.upsert(req.home.id, parsed.data);
+    const entry = await withTransaction(async (client) => {
+      await assertTimesheetCompatibleWithAdjustment(req.home, parsed.data, client);
+      return timesheetRepo.upsert(req.home.id, parsed.data, client);
+    });
     await auditService.log('payroll_create', req.home.slug, req.user.username, { id: entry.id, entity: 'timesheet', staff_id: parsed.data.staff_id });
     res.status(201).json(entry);
+  } catch (err) { next(err); }
+});
+
+router.put('/timesheets/adjustments', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+  try {
+    const parsed = hourAdjustmentBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const adjustment = await withTransaction(async (client) => {
+      const context = await validateHourAdjustmentUpsert(req.home, parsed.data, client);
+      const saved = await shiftHourAdjustmentRepo.upsert(req.home.id, parsed.data, client);
+      await auditService.log('payroll_update', req.home.slug, req.user.username, {
+        entity: 'shift_hour_adjustment',
+        action: context.existingAdjustment ? 'update' : 'create',
+        staff_id: parsed.data.staff_id,
+        date: parsed.data.date,
+        kind: parsed.data.kind,
+        hours: parsed.data.hours,
+      }, client);
+      return saved;
+    });
+    res.status(201).json(adjustment);
+  } catch (err) { next(err); }
+});
+
+router.delete('/timesheets/adjustments', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('payroll', 'write'), async (req, res, next) => {
+  try {
+    const staffIdP = z.string().min(1).max(20).safeParse(req.query.staff_id);
+    const dateP = dateSchema.safeParse(req.query.date);
+    if (!staffIdP.success || !dateP.success) return res.status(400).json({ error: 'staff_id and date are required' });
+    const deleted = await withTransaction(async (client) => {
+      const existing = await shiftHourAdjustmentRepo.findByStaffDate(req.home.id, staffIdP.data, dateP.data, client);
+      if (!existing) return false;
+      const timesheet = await timesheetRepo.findByStaffDate(req.home.id, staffIdP.data, dateP.data, client);
+      if (timesheet?.status === 'locked') {
+        throw new ValidationError('Timesheet is locked for payroll and the adjustment cannot be removed');
+      }
+      const ok = await shiftHourAdjustmentRepo.deleteOne(req.home.id, staffIdP.data, dateP.data, client);
+      if (ok) {
+        await auditService.log('payroll_update', req.home.slug, req.user.username, {
+          entity: 'shift_hour_adjustment',
+          action: 'delete',
+          staff_id: staffIdP.data,
+          date: dateP.data,
+        }, client);
+      }
+      return ok;
+    });
+    if (!deleted) return res.status(404).json({ error: 'Hourly adjustment not found' });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
@@ -286,6 +467,9 @@ router.post('/timesheets/batch-upsert', writeRateLimiter, requireAuth, requireHo
       parsed.push(p.data);
     }
     const results = await withTransaction(async (client) => {
+      for (const entry of parsed) {
+        await assertTimesheetCompatibleWithAdjustment(req.home, entry, client);
+      }
       return timesheetRepo.bulkUpsert(req.home.id, parsed, client);
     });
     await auditService.log('payroll_create', req.home.slug, req.user.username, { entity: 'timesheet', action: 'batch_upsert', count: results.length });

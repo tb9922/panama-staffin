@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import MonthlyTimesheet from '../MonthlyTimesheet.jsx';
 
@@ -20,6 +20,8 @@ vi.mock('../../lib/api.js', async () => {
     upsertTimesheet: vi.fn(),
     approveTimesheet: vi.fn(),
     disputeTimesheet: vi.fn(),
+    upsertTimesheetHourAdjustment: vi.fn(),
+    deleteTimesheetHourAdjustment: vi.fn(),
     getHrStaffList: vi.fn().mockResolvedValue([]),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
@@ -52,6 +54,7 @@ const MOCK_SCHED_DATA = {
     { id: 'S002', name: 'Bob Jones', role: 'Carer', team: 'Day B', pref: 'EL', skill: 0.5, active: true, contract_hours: 36 },
   ],
   overrides: {},
+  hour_adjustments: {},
   config: {
     cycle_start_date: '2025-01-06',
     shifts: {
@@ -110,6 +113,7 @@ function renderAdmin(entries) {
   setupMocks(entries);
   return renderWithProviders(<MonthlyTimesheet />, {
     route: '/payroll/monthly-timesheet/S001',
+    path: '/payroll/monthly-timesheet/:staffId?',
     user: { username: 'admin', role: 'admin' },
   });
 }
@@ -119,8 +123,16 @@ function renderViewer(entries) {
   setupMocks(entries);
   return renderWithProviders(<MonthlyTimesheet />, {
     route: '/payroll/monthly-timesheet/S001',
+    path: '/payroll/monthly-timesheet/:staffId?',
     user: { username: 'viewer', role: 'viewer' }, canWrite: false,
   });
+}
+
+function currentMonthDate(day = 2) {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-${String(day).padStart(2, '0')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,8 +190,8 @@ describe('MonthlyTimesheet', () => {
     await waitFor(() =>
       expect(screen.getByText('Scheduled')).toBeInTheDocument()
     );
-    expect(screen.getByText('Actual')).toBeInTheDocument();
-    expect(screen.getAllByText('Variance').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Worked')).toBeInTheDocument();
+    expect(screen.getByText('Worked Variance')).toBeInTheDocument();
     // 'Approved' appears in both summary card label and status badge
     expect(screen.getAllByText('Approved').length).toBeGreaterThanOrEqual(1);
   });
@@ -224,5 +236,100 @@ describe('MonthlyTimesheet', () => {
     // The staff selector should contain staff options
     const select = screen.getByDisplayValue(/S001/);
     expect(select).toBeInTheDocument();
+  });
+
+  it('lets a manager resolve a shortfall with hourly annual leave', async () => {
+    const dateStr = currentMonthDate(2);
+    api.getSchedulingData.mockResolvedValue({
+      ...MOCK_SCHED_DATA,
+      overrides: {
+        [dateStr]: {
+          S001: { shift: 'EL' },
+        },
+      },
+    });
+    api.getTimesheetPeriod.mockResolvedValue([
+      {
+        ...MOCK_ENTRIES[0],
+        date: dateStr,
+        payable_hours: 11.5,
+      },
+    ]);
+    api.upsertTimesheetHourAdjustment.mockResolvedValue({
+      staff_id: 'S001',
+      date: dateStr,
+      kind: 'annual_leave',
+      hours: 0.5,
+      note: 'Left early for appointment',
+    });
+
+    renderWithProviders(<MonthlyTimesheet />, {
+      route: '/payroll/monthly-timesheet/S001',
+      path: '/payroll/monthly-timesheet/:staffId?',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await screen.findByText('Monthly Timesheet');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Adjust' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjust' }));
+    await screen.findByText('Resolve Shortfall');
+
+    fireEvent.change(screen.getByLabelText('Hours to apply'), { target: { value: '0.5' } });
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Left early for appointment' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => {
+      expect(api.upsertTimesheetHourAdjustment).toHaveBeenCalledWith('test-home', {
+        staff_id: 'S001',
+        date: dateStr,
+        kind: 'annual_leave',
+        hours: 0.5,
+        note: 'Left early for appointment',
+        source: 'timesheet_shortfall',
+      });
+    });
+  });
+
+  it('lets a manager remove an existing hourly shortfall adjustment', async () => {
+    const dateStr = currentMonthDate(2);
+    api.getSchedulingData.mockResolvedValue({
+      ...MOCK_SCHED_DATA,
+      hour_adjustments: {
+        [dateStr]: {
+          S001: { kind: 'annual_leave', hours: 0.5, note: 'Existing adjustment' },
+        },
+      },
+      overrides: {
+        [dateStr]: {
+          S001: { shift: 'EL' },
+        },
+      },
+    });
+    api.getTimesheetPeriod.mockResolvedValue([
+      {
+        ...MOCK_ENTRIES[0],
+        date: dateStr,
+        payable_hours: 11.5,
+      },
+    ]);
+    api.deleteTimesheetHourAdjustment.mockResolvedValue({ ok: true });
+
+    renderWithProviders(<MonthlyTimesheet />, {
+      route: '/payroll/monthly-timesheet/S001',
+      path: '/payroll/monthly-timesheet/:staffId?',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await screen.findByText('Monthly Timesheet');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Adjust' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjust' }));
+    await screen.findByText('Resolve Shortfall');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => {
+      expect(api.deleteTimesheetHourAdjustment).toHaveBeenCalledWith('test-home', 'S001', dateStr);
+    });
   });
 });

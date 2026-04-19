@@ -2,6 +2,7 @@ import { withTransaction } from '../db.js';
 import { AppError, ConflictError } from '../errors.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as overrideRepo from '../repositories/overrideRepo.js';
+import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRepo.js';
 import * as payrollRunRepo from '../repositories/payrollRunRepo.js';
 import * as sspRepo from '../repositories/sspRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
@@ -17,6 +18,7 @@ import {
   getActualShift,
   getScheduledShift,
   getCycleDay,
+  getLeaveYear,
   parseDate,
   resolveCycleStartDateForStaff,
 } from '../shared/rotation.js';
@@ -78,6 +80,7 @@ export async function getStaffScheduleWindow({ homeId, staffId, from, to }) {
 }
 
 export async function getStaffAccrualSummary({ homeId, staffId, asOfDate }) {
+  const accrualDate = asOfDate || todayLocalISO();
   const [home, staff, overrides] = await Promise.all([
     homeRepo.findById(homeId),
     staffRepo.findById(homeId, staffId),
@@ -85,7 +88,9 @@ export async function getStaffAccrualSummary({ homeId, staffId, asOfDate }) {
   ]);
   if (!home) throw new AppError('Home not found', 404, 'HOME_NOT_FOUND');
   if (!staff || staff.active === false) throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
-  return calculateAccrual(staff, home.config || {}, overrides, asOfDate || todayLocalISO());
+  const leaveYear = getLeaveYear(accrualDate, home.config?.leave_year_start);
+  const filteredAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, leaveYear.startStr, leaveYear.endStr, staffId);
+  return calculateAccrual(staff, home.config || {}, overrides, accrualDate, filteredAdjustments);
 }
 
 export async function getStaffPayslipRuns({ homeId, staffId }) {

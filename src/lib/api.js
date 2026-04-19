@@ -687,9 +687,23 @@ export async function getTimesheetPeriod(homeSlug, start, end, status, staffId) 
   const staffQ = staffId ? `&staff_id=${staffId}` : '';
   return apiFetch(`${API_BASE}/payroll/timesheets/period?home=${h(homeSlug)}&start=${start}&end=${end}${statusQ}${staffQ}`, { headers: authHeaders() });
 }
+export async function getTimesheetHourAdjustments(homeSlug, start, end, staffId) {
+  const staffQ = staffId ? `&staff_id=${staffId}` : '';
+  return apiFetch(`${API_BASE}/payroll/timesheets/adjustments/period?home=${h(homeSlug)}&start=${start}&end=${end}${staffQ}`, { headers: authHeaders() });
+}
 export async function upsertTimesheet(homeSlug, entry) {
   return apiFetch(`${API_BASE}/payroll/timesheets?home=${h(homeSlug)}`, {
     method: 'POST', headers: authHeaders(), body: JSON.stringify(entry),
+  });
+}
+export async function upsertTimesheetHourAdjustment(homeSlug, adjustment) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/adjustments?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(adjustment),
+  });
+}
+export async function deleteTimesheetHourAdjustment(homeSlug, staffId, date) {
+  return apiFetch(`${API_BASE}/payroll/timesheets/adjustments?home=${h(homeSlug)}&staff_id=${encodeURIComponent(staffId)}&date=${date}`, {
+    method: 'DELETE', headers: authHeaders(),
   });
 }
 export async function approveTimesheet(homeSlug, id) {
