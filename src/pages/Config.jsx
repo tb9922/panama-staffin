@@ -3,8 +3,8 @@ import { BANK_HOLIDAY_REGIONS, syncBankHolidays } from '../lib/bankHolidays.js';
 import {
   isCareRole,
   ROTATION_PRESETS,
-  CYCLE_LENGTH,
   resolvePatternForScope,
+  resolveCycleLengthForScope,
   resolveCycleStartDateForScope,
   getCycleDay,
   formatDate,
@@ -583,9 +583,10 @@ export default function Config() {
 function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day' }) {
   const isNightScope = scope === 'night';
   const title = isNightScope ? 'Night Rotation Pattern' : 'Rotation Pattern';
+  const activeCycleLength = resolveCycleLengthForScope(config, scope);
   const description = isNightScope
-    ? `How work-days alternate across your ${CYCLE_LENGTH}-day night rota. Night A / Night B can follow a separate pattern from the day teams. If unset, night staff inherit the day pattern above.`
-    : `How work-days alternate across your ${CYCLE_LENGTH}-day rota. Day A / Day B working patterns; existing overrides (sick, AL, agency) always take precedence over the pattern.`;
+    ? `How work-days alternate across your ${activeCycleLength}-day night rota. Night A / Night B can follow a separate pattern from the day teams. If unset, night staff inherit the day pattern above.`
+    : `How work-days alternate across your ${activeCycleLength}-day rota. Day A / Day B working patterns; existing overrides (sick, AL, agency) always take precedence over the pattern.`;
   const patternKey = isNightScope ? 'rotation_pattern_night' : 'rotation_pattern';
   const effectiveCycleStart = resolveCycleStartDateForScope(config, scope, formatDate(new Date()));
   const currentTeams = resolvePatternForScope(config, scope);
@@ -595,6 +596,8 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
 
   const matchedPreset = useMemo(() => {
     return ROTATION_PRESETS.find(p =>
+      p.teams.A.length === currentTeams.A.length &&
+      p.teams.B.length === currentTeams.B.length &&
       p.teams.A.every((v, i) => v === currentTeams.A[i]) &&
       p.teams.B.every((v, i) => v === currentTeams.B[i])
     );
@@ -640,7 +643,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
     const rows = [];
     for (let i = 0; i < 28; i++) {
       const date = addDays(today, i);
-      const cd = getCycleDay(date, cycleStart);
+      const cd = getCycleDay(date, cycleStart, activeCycleLength);
       rows.push({
         date,
         dateStr: formatDate(date),
@@ -651,7 +654,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
       });
     }
     return rows;
-  }, [currentTeams, cycleStart]);
+  }, [activeCycleLength, currentTeams, cycleStart]);
 
   return (
     <section className={`${CARD.padded} mb-5`}>
@@ -698,7 +701,7 @@ function RotationPatternSection({ config, canEdit, onChangePattern, scope = 'day
       <div className="space-y-1.5 mb-4">
         <div className="flex items-center gap-1 overflow-x-auto">
           <span className="w-14 text-xs font-mono text-gray-500 shrink-0">Day</span>
-          {Array.from({ length: CYCLE_LENGTH }, (_, i) => (
+          {Array.from({ length: activeCycleLength }, (_, i) => (
             <span key={i} className="w-8 text-[10px] font-mono text-gray-400 text-center shrink-0">{i + 1}</span>
           ))}
         </div>
@@ -773,6 +776,7 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
   const isNightScope = scope === 'night';
   const title = isNightScope ? 'Night Cycle Start Tuning' : 'Cycle Start Tuning';
   const targetKey = isNightScope ? 'cycle_start_date_night' : 'cycle_start_date';
+  const activeCycleLength = resolveCycleLengthForScope(config, scope);
   const effectiveStart = resolveCycleStartDateForScope(config, scope, formatDate(new Date()));
   const relevantStaffCount = useMemo(
     () => (staff || []).filter(s => s.active !== false && (isNightScope ? s.team?.startsWith('Night') : !s.team?.startsWith('Night'))).length,
@@ -782,12 +786,12 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
 
   const analyse = useCallback(() => {
     const results = [];
-    for (let offset = 0; offset < CYCLE_LENGTH; offset++) {
+    for (let offset = 0; offset < activeCycleLength; offset++) {
       const s = scoreCycleStartOffset(config, staff, offset, new Date(), { scope });
       results.push({ offset, ...s });
     }
     setScores(results);
-  }, [config, staff, scope]);
+  }, [activeCycleLength, config, staff, scope]);
 
   const maxRatio = useMemo(() => scores ? Math.max(...scores.map(s => s.ratio)) : 0, [scores]);
 
@@ -801,13 +805,13 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
           disabled={!relevantStaffCount}
           className={`${BTN.secondary} ${BTN.sm}`}
         >
-          Analyse all 14 offsets
+          Analyse all {activeCycleLength} offsets
         </button>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        {isNightScope ? 'Night' : 'Day'} rotation repeats every {CYCLE_LENGTH} days, but which weekday each
+        {isNightScope ? 'Night' : 'Day'} rotation repeats every {activeCycleLength} days, but which weekday each
         cycle day lands on depends on <span className="font-mono text-gray-700">{targetKey}</span>.
-        Shifting the start by 1–13 days rearranges coverage across the week. Scores below show the fraction
+        Shifting the start by 1–{Math.max(activeCycleLength - 1, 1)} days rearranges coverage across the week. Scores below show the fraction
         of period-slots that would be fully covered across the next 28 days for the current {isNightScope ? 'night' : 'day'} rota.
       </p>
       <p className="text-[11px] text-gray-500 mb-4">
@@ -816,7 +820,7 @@ function CycleStartTuningSection({ config, staff, canEdit, onApplyOffset, scope 
       </p>
 
       {scores == null ? (
-        <p className="text-xs text-gray-400">Click <em>Analyse all 14 offsets</em> to compute coverage for every possible start offset.</p>
+        <p className="text-xs text-gray-400">Click <em>Analyse all {activeCycleLength} offsets</em> to compute coverage for every possible start offset.</p>
       ) : (
         <div className="space-y-1.5">
           {scores.map(s => (

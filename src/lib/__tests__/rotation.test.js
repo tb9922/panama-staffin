@@ -19,9 +19,12 @@ import {
   ROTATION_PRESETS,
   DEFAULT_PATTERN,
   CYCLE_LENGTH,
+  SUPPORTED_CYCLE_LENGTHS,
   resolvePattern,
   resolvePatternForScope,
   resolveCycleLength,
+  resolveCycleLengthForScope,
+  resolveCycleLengthForStaff,
   resolveCycleStartDateForScope,
   resolveCycleStartDateForStaff,
   isValidTeamsShape,
@@ -76,6 +79,12 @@ describe('getCycleDay', () => {
     const day0 = getCycleDay(addDays('2025-01-06', 0), START);
     const day14 = getCycleDay(addDays('2025-01-06', 14), START);
     expect(day0).toBe(day14);
+  });
+
+  it('supports a real 8-day cycle when requested', () => {
+    expect(getCycleDay('2025-01-06', START, 8)).toBe(0);
+    expect(getCycleDay('2025-01-13', START, 8)).toBe(7);
+    expect(getCycleDay('2025-01-14', START, 8)).toBe(0);
   });
 
   it('team A pattern: days 0,1 are working (1=working)', () => {
@@ -148,20 +157,27 @@ describe('getScheduledShift', () => {
 // ── Custom rotation patterns ──────────────────────────────────────────────────
 
 describe('rotation presets and custom patterns', () => {
-  it('exposes a CYCLE_LENGTH constant of 14', () => {
+  it('keeps 14 as the default CYCLE_LENGTH and supports 8-day custom cycles', () => {
     expect(CYCLE_LENGTH).toBe(14);
     expect(resolveCycleLength()).toBe(14);
+    expect(SUPPORTED_CYCLE_LENGTHS).toEqual([8, 14]);
   });
 
-  it('every preset has A and B with exactly 14 binary entries', () => {
+  it('every preset has A and B with matching supported binary lengths', () => {
     expect(ROTATION_PRESETS.length).toBeGreaterThanOrEqual(5);
     for (const p of ROTATION_PRESETS) {
       expect(p.id).toMatch(/^[a-z0-9-]+$/);
-      expect(p.teams.A).toHaveLength(14);
-      expect(p.teams.B).toHaveLength(14);
+      expect(p.teams.A).toHaveLength(p.teams.B.length);
+      expect(SUPPORTED_CYCLE_LENGTHS).toContain(p.teams.A.length);
       expect(p.teams.A.every(v => v === 0 || v === 1)).toBe(true);
       expect(p.teams.B.every(v => v === 0 || v === 1)).toBe(true);
     }
+  });
+
+  it('4-on / 4-off preset is a true 8-day cycle', () => {
+    const fourOnFourOff = ROTATION_PRESETS.find(p => p.id === '4on-4off');
+    expect(fourOnFourOff.teams.A).toEqual([1, 1, 1, 1, 0, 0, 0, 0]);
+    expect(fourOnFourOff.teams.B).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
   });
 
   it('panama-223 preset matches the original Panama pattern', () => {
@@ -175,10 +191,10 @@ describe('rotation presets and custom patterns', () => {
     expect(resolvePattern({})).toEqual(DEFAULT_PATTERN);
   });
 
-  it('resolvePattern returns configured teams when valid', () => {
+  it('resolvePattern returns configured teams when valid, including 8-day cycles', () => {
     const teams = {
-      A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
-      B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+      A: [1, 1, 1, 1, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 1, 1, 1, 1],
     };
     expect(resolvePattern({ rotation_pattern: { teams } })).toEqual(teams);
   });
@@ -189,8 +205,8 @@ describe('rotation presets and custom patterns', () => {
       B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
     };
     const nightTeams = {
-      A: Array(14).fill(0),
-      B: Array(14).fill(1),
+      A: Array(8).fill(0),
+      B: Array(8).fill(1),
     };
     const config = {
       rotation_pattern: { teams: dayTeams },
@@ -198,6 +214,25 @@ describe('rotation presets and custom patterns', () => {
     };
     expect(resolvePatternForScope(config, 'day')).toEqual(dayTeams);
     expect(resolvePatternForScope(config, 'night')).toEqual(nightTeams);
+    expect(resolveCycleLengthForScope(config, 'night')).toBe(8);
+  });
+
+  it('normalises legacy saved 4-on / 4-off presets to the true 8-day pattern', () => {
+    const legacyBrokenPattern = {
+      A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+      B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+    };
+    const config = {
+      rotation_pattern_night: {
+        preset_id: '4on-4off',
+        teams: legacyBrokenPattern,
+      },
+    };
+    expect(resolvePatternForScope(config, 'night')).toEqual({
+      A: [1, 1, 1, 1, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 1, 1, 1, 1],
+    });
+    expect(resolveCycleLengthForScope(config, 'night')).toBe(8);
   });
 
   it('resolvePatternForScope falls back to the day pattern for nights when no dedicated night pattern exists', () => {
@@ -216,6 +251,15 @@ describe('rotation presets and custom patterns', () => {
     expect(resolveCycleStartDateForStaff(config, nightStaff)).toBe('2025-01-06');
   });
 
+  it('resolveCycleLengthForStaff picks the dedicated night cycle length when present', () => {
+    const config = {
+      rotation_pattern: { teams: DEFAULT_PATTERN },
+      rotation_pattern_night: { teams: { A: Array(8).fill(1), B: Array(8).fill(0) } },
+    };
+    expect(resolveCycleLengthForStaff(config, { team: 'Night A' })).toBe(8);
+    expect(resolveCycleLengthForStaff(config, { team: 'Day A' })).toBe(14);
+  });
+
   it('resolvePattern silently falls back on malformed teams (never throws)', () => {
     const bad1 = { rotation_pattern: { teams: { A: [1, 1], B: [0, 0] } } };
     const bad2 = { rotation_pattern: { teams: { A: 'not an array', B: [] } } };
@@ -227,6 +271,7 @@ describe('rotation presets and custom patterns', () => {
 
   it('isValidTeamsShape rejects non-binary, wrong-length, and non-array inputs', () => {
     expect(isValidTeamsShape({ A: Array(14).fill(1), B: Array(14).fill(0) })).toBe(true);
+    expect(isValidTeamsShape({ A: Array(8).fill(1), B: Array(8).fill(0) })).toBe(true);
     expect(isValidTeamsShape({ A: Array(13).fill(1), B: Array(14).fill(0) })).toBe(false);
     expect(isValidTeamsShape({ A: Array(14).fill(2), B: Array(14).fill(0) })).toBe(false);
     expect(isValidTeamsShape({ A: 'no', B: 'way' })).toBe(false);
@@ -246,7 +291,7 @@ describe('rotation presets and custom patterns', () => {
   it('getScheduledShift uses the dedicated night pattern when present', () => {
     const config = {
       rotation_pattern: { teams: { A: Array(14).fill(1), B: Array(14).fill(0) } },
-      rotation_pattern_night: { teams: { A: Array(14).fill(0), B: Array(14).fill(1) } },
+      rotation_pattern_night: { teams: { A: Array(8).fill(0), B: Array(8).fill(1) } },
       cycle_start_date: '2025-01-06',
       cycle_start_date_night: '2025-01-06',
     };
@@ -277,6 +322,23 @@ describe('rotation presets and custom patterns', () => {
     const staff = { id: 'S3', team: 'Night A', active: true };
     const result = getActualShift(staff, '2025-01-06', {}, '2025-01-06', config);
     expect(result.shift).toBe('OFF');
+  });
+
+  it('true 4-on / 4-off night patterns stay off on days 15 and 16 instead of snapping back early', () => {
+    const config = {
+      cycle_start_date: '2026-04-01',
+      cycle_start_date_night: '2026-04-01',
+      rotation_pattern_night: {
+        teams: {
+          A: [1, 1, 1, 1, 0, 0, 0, 0],
+          B: [0, 0, 0, 0, 1, 1, 1, 1],
+        },
+      },
+    };
+    const nightA = { id: 'S3', team: 'Night A', active: true };
+    expect(getActualShift(nightA, '2026-04-15', {}, '2026-04-01', config).shift).toBe('OFF');
+    expect(getActualShift(nightA, '2026-04-16', {}, '2026-04-01', config).shift).toBe('OFF');
+    expect(getActualShift(nightA, '2026-04-17', {}, '2026-04-01', config).shift).toBe('N');
   });
 });
 

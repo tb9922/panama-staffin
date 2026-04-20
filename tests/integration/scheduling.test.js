@@ -486,7 +486,7 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
   });
 
   // rotation_pattern validation
-  it('accepts a valid rotation_pattern with 14-entry binary A and B arrays', () => {
+  it('accepts a valid 14-day rotation_pattern with binary A and B arrays', () => {
     const result = homeConfigSchema.safeParse({
       rotation_pattern: {
         preset_id: 'panama-223',
@@ -540,8 +540,20 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
       rotation_pattern_night: {
         preset_id: '4on-4off',
         teams: {
-          A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
-          B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
+          A: [1, 1, 1, 1, 0, 0, 0, 0],
+          B: [0, 0, 0, 0, 1, 1, 1, 1],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a valid 8-day night pattern', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern_night: {
+        teams: {
+          A: [1, 1, 1, 1, 0, 0, 0, 0],
+          B: [0, 0, 0, 0, 1, 1, 1, 1],
         },
       },
     });
@@ -552,6 +564,18 @@ describe('homeConfigSchema: validates safety-critical fields (B3)', () => {
     const result = homeConfigSchema.safeParse({
       rotation_pattern_night: {
         teams: { A: [1, 0, 1], B: [0, 1, 0] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects rotation patterns with mismatched A/B lengths', () => {
+    const result = homeConfigSchema.safeParse({
+      rotation_pattern: {
+        teams: {
+          A: Array(8).fill(1),
+          B: Array(14).fill(0),
+        },
       },
     });
     expect(result.success).toBe(false);

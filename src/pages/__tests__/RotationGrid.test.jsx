@@ -287,8 +287,8 @@ describe('RotationGrid', () => {
     customSchedulingData.config.cycle_start_date_night = '2026-04-01';
     customSchedulingData.config.rotation_pattern_night = {
       teams: {
-        A: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-        B: [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+        A: [1, 1, 1, 1, 0, 0, 0, 0],
+        B: [0, 0, 0, 0, 1, 1, 1, 1],
       },
     };
     customSchedulingData.staff.push({
@@ -316,6 +316,11 @@ describe('RotationGrid', () => {
     expect(carolRow).not.toBeNull();
 
     const shiftButtons = within(carolRow).getAllByRole('button');
-    expect(shiftButtons[2]).toHaveTextContent('N');
+    expect(shiftButtons[0]).toHaveTextContent('N');
+    expect(shiftButtons[3]).toHaveTextContent('N');
+    expect(shiftButtons[4]).toHaveTextContent('-');
+    expect(shiftButtons[14]).toHaveTextContent('-');
+    expect(shiftButtons[15]).toHaveTextContent('-');
+    expect(shiftButtons[16]).toHaveTextContent('N');
   });
 });

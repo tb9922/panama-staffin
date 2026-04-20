@@ -5,17 +5,60 @@ const PANAMA_PATTERN = {
   B: [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
 };
 
+const FOUR_ON_FOUR_OFF_PATTERN = {
+  A: [1, 1, 1, 1, 0, 0, 0, 0],
+  B: [0, 0, 0, 0, 1, 1, 1, 1],
+};
+
 // Exposed alias so callers don't import the private const.
 export const DEFAULT_PATTERN = PANAMA_PATTERN;
 
-// Cycle length is hardcoded to 14 for now. Centralised as a helper so a future
-// non-14-day cycle (7-day, 28-day DuPont, etc.) is a single-site change.
+export const SUPPORTED_CYCLE_LENGTHS = [8, 14];
+const SUPPORTED_CYCLE_LENGTH_SET = new Set(SUPPORTED_CYCLE_LENGTHS);
+
+// Default cycle length remains 14 for backwards compatibility. Custom patterns
+// may now opt into a supported non-default length (currently 8 or 14).
 export const CYCLE_LENGTH = 14;
-export function resolveCycleLength() {
-  return CYCLE_LENGTH;
+
+function isSupportedCycleLength(value) {
+  return Number.isInteger(value) && SUPPORTED_CYCLE_LENGTH_SET.has(value);
 }
 
-// Library of 14-day two-team patterns. A and B are always complementary in the
+export function getCycleLengthFromTeams(teams) {
+  if (!teams || typeof teams !== 'object') return null;
+  const { A, B } = teams;
+  if (!Array.isArray(A) || !Array.isArray(B)) return null;
+  if (A.length !== B.length) return null;
+  return isSupportedCycleLength(A.length) ? A.length : null;
+}
+
+function resolveTeamsFromPatternConfig(patternConfig) {
+  if (patternConfig?.preset_id === '4on-4off') {
+    return FOUR_ON_FOUR_OFF_PATTERN;
+  }
+  return patternConfig?.teams;
+}
+
+export function resolveCycleLength(config = null, scope = 'day') {
+  const teams = scope === 'night'
+    ? resolveTeamsFromPatternConfig(config?.rotation_pattern_night)
+    : resolveTeamsFromPatternConfig(config?.rotation_pattern);
+  return getCycleLengthFromTeams(teams) || CYCLE_LENGTH;
+}
+
+export function resolveCycleLengthForScope(config = null, scope = 'day') {
+  if (scope === 'night') {
+    const nightLength = getCycleLengthFromTeams(resolveTeamsFromPatternConfig(config?.rotation_pattern_night));
+    if (nightLength) return nightLength;
+  }
+  return resolveCycleLength(config, 'day');
+}
+
+export function resolveCycleLengthForStaff(config = null, staff = null) {
+  return resolveCycleLengthForScope(config, resolveRotationScopeForStaff(staff));
+}
+
+// Library of supported two-team patterns. A and B are always complementary in the
 // presets (B[i] = 1 - A[i]) so working days alternate — the Panama invariant.
 // Custom editors can break complementarity if the manager really wants, but
 // presets always present a clean A/B flip.
@@ -51,10 +94,7 @@ export const ROTATION_PRESETS = [
     id: '4on-4off',
     name: '4-on / 4-off',
     description: 'Long rest blocks, fewer transitions. Popular in acute nursing.',
-    teams: {
-      A: [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
-      B: [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1],
-    },
+    teams: FOUR_ON_FOUR_OFF_PATTERN,
   },
   {
     id: 'alt-weeks',
@@ -75,7 +115,7 @@ function isDateOnlyString(value) {
 // and valid, otherwise the Panama default. Never throws; bad config silently
 // falls back so a corrupt config field can't take down scheduling.
 export function resolvePattern(config) {
-  const teams = config?.rotation_pattern?.teams;
+  const teams = resolveTeamsFromPatternConfig(config?.rotation_pattern);
   if (teams && isValidTeamsShape(teams)) return teams;
   return DEFAULT_PATTERN;
 }
@@ -90,7 +130,7 @@ export function resolveRotationScopeForStaff(staff) {
 
 export function resolvePatternForScope(config, scope = 'day') {
   if (scope === 'night') {
-    const nightTeams = config?.rotation_pattern_night?.teams;
+    const nightTeams = resolveTeamsFromPatternConfig(config?.rotation_pattern_night);
     if (nightTeams && isValidTeamsShape(nightTeams)) return nightTeams;
   }
   return resolvePattern(config);
@@ -120,14 +160,16 @@ export function resolveCycleStartDateForStaff(config, staff, fallbackCycleStartD
 export function resolveCycleDayForStaff(staff, date, config = null, fallbackCycleStartDate = null) {
   const cycleStartDate = resolveCycleStartDateForStaff(config, staff, fallbackCycleStartDate)
     || formatDate(date);
-  return getCycleDay(date, cycleStartDate);
+  const cycleLength = resolveCycleLengthForStaff(config, staff);
+  return getCycleDay(date, cycleStartDate, cycleLength);
 }
 
 export function isValidTeamsShape(teams) {
   if (!teams || typeof teams !== 'object') return false;
   const { A, B } = teams;
   if (!Array.isArray(A) || !Array.isArray(B)) return false;
-  if (A.length !== CYCLE_LENGTH || B.length !== CYCLE_LENGTH) return false;
+  if (A.length !== B.length) return false;
+  if (!isSupportedCycleLength(A.length)) return false;
   return A.every(v => v === 0 || v === 1) && B.every(v => v === 0 || v === 1);
 }
 
@@ -196,14 +238,15 @@ export function addDays(date, days) {
 }
 
 // Cycle calculations
-export function getCycleDay(date, cycleStartDate) {
+export function getCycleDay(date, cycleStartDate, cycleLength = CYCLE_LENGTH) {
   const d = new Date(date);
   const start = new Date(cycleStartDate);
+  const effectiveCycleLength = isSupportedCycleLength(cycleLength) ? cycleLength : CYCLE_LENGTH;
   // Use UTC to avoid DST off-by-one (BST spring-forward shifts midnight local → 23:00 UTC)
   const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
   const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
   const diffDays = Math.round((dUTC - startUTC) / (1000 * 60 * 60 * 24));
-  return ((diffDays % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH;
+  return ((diffDays % effectiveCycleLength) + effectiveCycleLength) % effectiveCycleLength;
 }
 
 export function getTeamBase(team) {
