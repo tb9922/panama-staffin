@@ -1,10 +1,43 @@
 import * as cqcEvidenceRepo from '../repositories/cqcEvidenceRepo.js';
 import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 
+const PAGE_SIZE = 500;
+const FILE_PAGE_SIZE = 2000;
+
+async function loadAllEvidence(homeId) {
+  const rows = [];
+  let offset = 0;
+  let total = null;
+
+  while (total == null || rows.length < total) {
+    const page = await cqcEvidenceRepo.findByHome(homeId, { limit: PAGE_SIZE, offset });
+    rows.push(...page.rows);
+    total = page.total;
+    if (!page.rows.length) break;
+    offset += page.rows.length;
+  }
+
+  return rows;
+}
+
+async function loadAllEvidenceFiles(homeId) {
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await cqcEvidenceFileRepo.findByHome(homeId, { limit: FILE_PAGE_SIZE, offset });
+    rows.push(...page);
+    if (page.length < FILE_PAGE_SIZE) break;
+    offset += page.length;
+  }
+
+  return rows;
+}
+
 export async function getCqcDocs(homeId) {
-  const [evidenceResult, files] = await Promise.all([
-    cqcEvidenceRepo.findByHome(homeId, { limit: 2000, offset: 0 }),
-    cqcEvidenceFileRepo.findByHome(homeId),
+  const [evidenceRows, files] = await Promise.all([
+    loadAllEvidence(homeId),
+    loadAllEvidenceFiles(homeId),
   ]);
 
   const filesByEvidence = new Map();
@@ -14,7 +47,7 @@ export async function getCqcDocs(homeId) {
     filesByEvidence.set(file.evidence_id, bucket);
   }
 
-  const evidence = evidenceResult.rows.map((item) => {
+  const evidence = evidenceRows.map((item) => {
     const docs = filesByEvidence.get(item.id) || [];
     return {
       ...item,

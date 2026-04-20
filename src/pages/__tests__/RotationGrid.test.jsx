@@ -277,4 +277,45 @@ describe('RotationGrid', () => {
     });
     expect(screen.queryByText(/Coverage is already fully met/i)).not.toBeInTheDocument();
   });
+
+  it('renders custom night rotation patterns in the main monthly grid', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-20T12:00:00Z'));
+
+    const customSchedulingData = JSON.parse(JSON.stringify(MOCK_SCHEDULING_DATA));
+    customSchedulingData.config.cycle_start_date = '2026-04-01';
+    customSchedulingData.config.cycle_start_date_night = '2026-04-01';
+    customSchedulingData.config.rotation_pattern_night = {
+      teams: {
+        A: [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+        B: [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+      },
+    };
+    customSchedulingData.staff.push({
+      id: 'S005',
+      name: 'Nina Patel',
+      role: 'Night Senior',
+      team: 'Night B',
+      pref: 'N',
+      skill: 1,
+      hourly_rate: 13.5,
+      active: true,
+      start_date: '2024-01-01',
+      contract_hours: 36,
+      wtr_opt_out: false,
+      al_entitlement: null,
+      al_carryover: 0,
+      leaving_date: null,
+    });
+    api.getSchedulingData.mockResolvedValueOnce(customSchedulingData);
+
+    renderAdmin();
+    vi.useRealTimers();
+
+    const carolRow = (await screen.findByText('Carol Davis')).closest('tr');
+    expect(carolRow).not.toBeNull();
+
+    const shiftButtons = within(carolRow).getAllByRole('button');
+    expect(shiftButtons[2]).toHaveTextContent('N');
+  });
 });

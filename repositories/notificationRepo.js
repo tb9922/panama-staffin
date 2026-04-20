@@ -33,3 +33,30 @@ export async function markManyRead(userId, homeId, notificationKeys, client = po
     [userId, homeId, uniqueKeys],
   );
 }
+
+export async function pruneReadKeys(userId, homeId, { maxAgeDays = 180, maxRows = 5000 } = {}, client = pool) {
+  await client.query(
+    `DELETE FROM user_notification_reads
+      WHERE user_id = $1
+        AND home_id = $2
+        AND read_at < NOW() - ($3::int * INTERVAL '1 day')`,
+    [userId, homeId, maxAgeDays],
+  );
+
+  await client.query(
+    `WITH ranked AS (
+       SELECT notification_key,
+              ROW_NUMBER() OVER (ORDER BY read_at DESC, notification_key DESC) AS rn
+         FROM user_notification_reads
+        WHERE user_id = $1
+          AND home_id = $2
+     )
+     DELETE FROM user_notification_reads unr
+      USING ranked
+      WHERE unr.user_id = $1
+        AND unr.home_id = $2
+        AND unr.notification_key = ranked.notification_key
+        AND ranked.rn > $3`,
+    [userId, homeId, maxRows],
+  );
+}

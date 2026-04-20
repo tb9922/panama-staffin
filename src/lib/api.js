@@ -214,12 +214,11 @@ export async function markNotificationsRead(keys) {
   });
 }
 
-export async function markAllNotificationsRead(keys) {
+export async function markAllNotificationsRead() {
   const home = getCurrentHome();
   return apiFetch(`${API_BASE}/notifications/read-all?home=${h(home)}`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ keys }),
   });
 }
 

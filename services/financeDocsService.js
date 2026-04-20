@@ -1,6 +1,11 @@
 import * as financeRepo from '../repositories/financeRepo.js';
 import * as recordAttachmentsRepo from '../repositories/recordAttachments.js';
 
+const PAGE_SIZE = 500;
+const ATTACHMENT_PAGE_SIZE = 2000;
+const PENDING_TOO_LONG_DAYS = 14;
+const PENDING_TOO_LONG_MS = PENDING_TOO_LONG_DAYS * 86400000;
+
 function normalizeSupplierName(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
@@ -9,11 +14,49 @@ function monthKey(dateValue) {
   return typeof dateValue === 'string' && dateValue.length >= 7 ? dateValue.slice(0, 7) : 'unknown';
 }
 
+function attachmentTime(value) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function loadAllPages(fetchPage) {
+  const rows = [];
+  let offset = 0;
+  let total = null;
+
+  while (total == null || rows.length < total) {
+    const page = await fetchPage(offset);
+    rows.push(...page.rows);
+    total = page.total;
+    if (!page.rows.length) break;
+    offset += page.rows.length;
+  }
+
+  return rows;
+}
+
+async function loadAllAttachments(homeId) {
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await recordAttachmentsRepo.findByHome(
+      homeId,
+      { moduleIds: ['finance_expense', 'finance_payment_schedule'], limit: ATTACHMENT_PAGE_SIZE, offset },
+    );
+    rows.push(...page);
+    if (page.length < ATTACHMENT_PAGE_SIZE) break;
+    offset += page.length;
+  }
+
+  return rows;
+}
+
 export async function getFinanceDocs(homeId) {
-  const [expensesResult, schedulesResult, attachments] = await Promise.all([
-    financeRepo.findExpenses(homeId, { limit: 2000, offset: 0 }),
-    financeRepo.findPaymentSchedules(homeId, { limit: 2000, offset: 0 }),
-    recordAttachmentsRepo.findByHome(homeId, { moduleIds: ['finance_expense', 'finance_payment_schedule'], limit: 5000 }),
+  const [expenseRows, scheduleRows, attachments] = await Promise.all([
+    loadAllPages((offset) => financeRepo.findExpenses(homeId, { limit: PAGE_SIZE, offset })),
+    loadAllPages((offset) => financeRepo.findPaymentSchedules(homeId, { limit: PAGE_SIZE, offset })),
+    loadAllAttachments(homeId),
   ]);
 
   const attachmentBuckets = new Map();
@@ -24,7 +67,7 @@ export async function getFinanceDocs(homeId) {
     attachmentBuckets.set(key, bucket);
   }
 
-  const expenses = expensesResult.rows.map((expense) => {
+  const expenses = expenseRows.map((expense) => {
     const docs = attachmentBuckets.get(`finance_expense:${expense.id}`) || [];
     return {
       ...expense,
@@ -34,13 +77,21 @@ export async function getFinanceDocs(homeId) {
       approved_without_document: expense.status === 'approved' && docs.length === 0,
       pending_too_long: expense.status === 'pending'
         && expense.expense_date
-        && new Date(`${expense.expense_date}T00:00:00Z`).getTime() < Date.now() - (14 * 86400000),
+        && new Date(`${expense.expense_date}T00:00:00Z`).getTime() < Date.now() - PENDING_TOO_LONG_MS,
     };
   });
 
-  const schedules = schedulesResult.rows.map((schedule) => {
+  const expensesByScheduleId = new Map();
+  for (const expense of expenses) {
+    if (!expense.schedule_id) continue;
+    const bucket = expensesByScheduleId.get(expense.schedule_id) || [];
+    bucket.push(expense);
+    expensesByScheduleId.set(expense.schedule_id, bucket);
+  }
+
+  const schedules = scheduleRows.map((schedule) => {
     const scheduleDocs = attachmentBuckets.get(`finance_payment_schedule:${schedule.id}`) || [];
-    const resultingExpenses = expenses.filter((expense) => expense.schedule_id === schedule.id);
+    const resultingExpenses = expensesByScheduleId.get(schedule.id) || [];
     const resultingDocs = resultingExpenses.reduce((sum, expense) => sum + expense.attachment_count, 0);
     return {
       ...schedule,
@@ -70,7 +121,7 @@ export async function getFinanceDocs(homeId) {
       status: schedule.on_hold ? 'on_hold' : 'active',
       attachment,
     }))),
-  ].sort((a, b) => new Date(b.attachment.created_at).getTime() - new Date(a.attachment.created_at).getTime());
+  ].sort((a, b) => attachmentTime(b.attachment.created_at) - attachmentTime(a.attachment.created_at));
 
   const groupCounts = (items, keyFn) => {
     const buckets = new Map();

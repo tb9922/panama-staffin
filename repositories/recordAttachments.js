@@ -45,7 +45,7 @@ export async function findAttachments(homeId, moduleId, recordId, client) {
   return rows.map(shape);
 }
 
-export async function findByHome(homeId, { moduleId, moduleIds, limit = 5000 } = {}, client) {
+export async function findByHome(homeId, { moduleId, moduleIds, limit = 5000, offset = 0 } = {}, client) {
   const conn = client || pool;
   const params = [homeId];
   let sql = `
@@ -63,6 +63,8 @@ export async function findByHome(homeId, { moduleId, moduleIds, limit = 5000 } =
   }
   sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
   params.push(Math.min(limit, 10000));
+  sql += ' OFFSET $' + (params.length + 1);
+  params.push(Math.max(offset, 0));
   const { rows } = await conn.query(sql, params);
   return rows.map(shape);
 }

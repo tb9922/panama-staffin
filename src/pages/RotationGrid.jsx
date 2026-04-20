@@ -682,7 +682,7 @@ export default function RotationGrid() {
                   <td className="py-1 px-1 text-[10px] text-gray-500">{s.pref}</td>
                   {monthDates.map((date, i) => {
                     const dateKey = formatDate(date);
-                    const actual = getActualShift(s, date, schedData.overrides, schedData.config.cycle_start_date);
+                    const actual = getActualShift(s, date, schedData.overrides, schedData.config.cycle_start_date, schedData.config);
                     const shift = actual.shift;
                     const isOverride = !!schedData.overrides[dateKey]?.[s.id];
                     const isEditing = editing?.staffId === s.id && editing?.dateStr === dateKey;

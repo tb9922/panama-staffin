@@ -14,6 +14,8 @@ import { getTrainingTypes } from '../shared/training.js';
 
 const SAFE_IDENTIFIER_RE = /^[a-z_]+$/;
 
+// CRITICAL: table/column values below are interpolated into SQL. Never source
+// these identifiers from config, the database, or request data.
 const HR_PARENT_META = {
   disciplinary: {
     table: 'hr_disciplinary_cases',
@@ -232,6 +234,11 @@ function resolveRecordRows(rows) {
   }
 }
 
+function createdAtMs(value) {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
 function buildSearchFilters(roleId, filters = {}) {
   const readableSources = getReadableEvidenceSources(roleId).map((source) => source.id);
   if (readableSources.length === 0) return null;
@@ -266,13 +273,15 @@ export async function search(home, roleId, filters = {}) {
       (grouped[row.sourceModule] ||= []).push(row);
     }
 
-    if (grouped.hr) await resolveHrRows(home, grouped.hr, client);
-    if (grouped.cqc_evidence) await resolveCqcRows(home, grouped.cqc_evidence, client);
-    if (grouped.onboarding) await resolveOnboardingRows(home, grouped.onboarding, client);
-    if (grouped.training) await resolveTrainingRows(home, grouped.training, client);
+    await Promise.all([
+      grouped.hr ? resolveHrRows(home, grouped.hr, client) : Promise.resolve(),
+      grouped.cqc_evidence ? resolveCqcRows(home, grouped.cqc_evidence, client) : Promise.resolve(),
+      grouped.onboarding ? resolveOnboardingRows(home, grouped.onboarding, client) : Promise.resolve(),
+      grouped.training ? resolveTrainingRows(home, grouped.training, client) : Promise.resolve(),
+    ]);
     if (grouped.record) resolveRecordRows(grouped.record);
 
-    const rows = Object.values(grouped).flat().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const rows = Object.values(grouped).flat().sort((a, b) => createdAtMs(b.createdAt) - createdAtMs(a.createdAt));
     for (const row of rows) {
       row.sourceLabel = getEvidenceSourceLabel(row.sourceModule);
       row.canDelete = canDeleteEvidenceSource(roleId, row.sourceModule, row.sourceSubType);
@@ -289,3 +298,5 @@ export async function listUploaders(homeId, roleId) {
   if (!searchFilters) return [];
   return evidenceHubRepo.listUploaders(homeId, searchFilters);
 }
+
+export { HR_PARENT_META as _HR_PARENT_META };

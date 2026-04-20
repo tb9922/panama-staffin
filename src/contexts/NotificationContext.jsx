@@ -80,7 +80,7 @@ export function NotificationProvider({ children }) {
     setUnreadCount(0);
 
     try {
-      await markAllNotificationsRead(unreadKeys);
+      await markAllNotificationsRead();
     } catch (err) {
       if (err.status === 401) {
         await logout({ forceLocal: true });

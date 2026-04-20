@@ -36,7 +36,7 @@ export async function findByEvidence(homeId, evidenceId, client) {
   return rows.map(shape);
 }
 
-export async function findByHome(homeId, client) {
+export async function findByHome(homeId, { limit = 5000, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `SELECT f.${COLS.split(', ').join(', f.')}
@@ -47,8 +47,9 @@ export async function findByHome(homeId, client) {
               AND e.deleted_at IS NULL
       WHERE f.home_id = $1
         AND f.deleted_at IS NULL
-      ORDER BY f.created_at DESC`,
-    [homeId]
+      ORDER BY f.created_at DESC
+      LIMIT $2 OFFSET $3`,
+    [homeId, Math.min(limit, 10000), Math.max(offset, 0)]
   );
   return rows.map(shape);
 }
