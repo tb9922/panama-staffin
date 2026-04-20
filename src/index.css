@@ -137,7 +137,13 @@ button, a, input, select, textarea {
 
 /* ── Print styles ─────────────────────────────────────────────────────────── */
 @media print {
-  aside, .print\:hidden, select, input {
+  aside, .print\:hidden,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="file"],
+  input[type="checkbox"],
+  input[type="radio"] {
     display: none !important;
   }
   button:not([aria-expanded]) {

@@ -2,6 +2,7 @@
 // Maps to QS23 (Complaints & Feedback) — CQC Regulation 16
 
 import { formatDate, parseDate, addDays } from './rotation.js';
+import { addWorkingDays } from './incidents.js';
 
 // ── Default Complaint Categories ────────────────────────────────────────────
 
@@ -62,12 +63,20 @@ export function ensureComplaintDefaults(data) {
   return changed ? result : null;
 }
 
+export function getComplaintResponseDeadline(dateStr, responseDays = 28, bankHolidays = []) {
+  if (!dateStr) return null;
+  const start = parseDate(dateStr);
+  if (!start) return null;
+  return formatDate(addWorkingDays(start, responseDays, bankHolidays));
+}
+
 // ── Status Calculation ──────────────────────────────────────────────────────
 
 export function getComplaintStatus(complaint, config, asOfDate) {
   const today = asOfDate ? (typeof asOfDate === 'string' ? asOfDate : formatDate(asOfDate)) : formatDate(new Date());
   const responseDays = config?.complaint_response_days || 28;
-  const deadline = complaint.response_deadline || (complaint.date ? formatDate(addDays(parseDate(complaint.date), responseDays)) : null);
+  const bankHolidays = config?.bank_holidays || [];
+  const deadline = complaint.response_deadline || getComplaintResponseDeadline(complaint.date, responseDays, bankHolidays);
 
   const isAcknowledged = !!complaint.acknowledged_date;
   const isOverdueAck = !isAcknowledged && complaint.date && today > formatDate(addDays(parseDate(complaint.date), 2));

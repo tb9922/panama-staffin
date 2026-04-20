@@ -36,7 +36,8 @@ export async function dispatchEvent(homeId, event, payload) {
  */
 export function getNextRetryAt(retryCount) {
   const delayMs = RETRY_DELAYS_MS[retryCount] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
-  return new Date(Date.now() + delayMs);
+  const jitterMs = Math.round(delayMs * 0.1 * Math.random());
+  return new Date(Date.now() + delayMs + jitterMs);
 }
 
 function extractTimestamp(body) {

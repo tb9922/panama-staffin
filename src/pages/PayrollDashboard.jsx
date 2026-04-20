@@ -59,6 +59,7 @@ export default function PayrollDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ period_start: '', period_end: '', pay_frequency: 'monthly', notes: '' });
   const [creating, setCreating] = useState(false);
+  const [voidingRunId, setVoidingRunId] = useState(null);
   useDirtyGuard(showCreate);
 
   const load = useCallback(async () => {
@@ -111,12 +112,14 @@ export default function PayrollDashboard() {
   }
 
   async function handleVoid(run) {
+    if (voidingRunId === run.id) return;
     if (!await confirm({
       title: 'Void payroll run',
       message: `Void payroll run ${run.period_start} to ${run.period_end}${run.total_gross ? ` (£${Number(run.total_gross).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} gross)` : ''}? This cannot be undone.`,
       confirmLabel: 'Void run',
       tone: 'danger',
     })) return;
+    setVoidingRunId(run.id);
     try {
       await voidPayrollRun(homeSlug, run.id);
       showNotice(`Payroll run ${run.period_start} to ${run.period_end} was voided.`, { variant: 'success' });
@@ -128,6 +131,8 @@ export default function PayrollDashboard() {
       await load();
     } catch (e) {
       setError(e.message);
+    } finally {
+      setVoidingRunId(null);
     }
   }
 
@@ -288,8 +293,12 @@ export default function PayrollDashboard() {
                       <div className="flex gap-1">
                         <button className={`${BTN.secondary} ${BTN.sm}`} onClick={() => navigate(`/payroll/${run.id}`)}>View</button>
                         {canEdit && ['draft', 'calculated'].includes(run.status) && (
-                          <button className={`${BTN.danger} ${BTN.sm}`} onClick={() => void handleVoid(run)}>
-                            Void
+                          <button
+                            className={`${BTN.danger} ${BTN.sm}`}
+                            onClick={() => void handleVoid(run)}
+                            disabled={voidingRunId === run.id}
+                          >
+                            {voidingRunId === run.id ? 'Voiding…' : 'Void'}
                           </button>
                         )}
                       </div>

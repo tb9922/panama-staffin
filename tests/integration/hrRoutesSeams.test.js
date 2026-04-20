@@ -74,6 +74,17 @@ function authed(method, path) {
 }
 
 describe('HR route save seams', () => {
+  it('auto-computes the flexible working decision deadline from the request date when omitted', async () => {
+    const createRes = await authed('post', '/api/hr/flexible-working').send({
+      staff_id: STAFF_ID,
+      request_date: '2026-03-01',
+      requested_change: 'Compressed hours over 4 days',
+      status: 'pending',
+    }).expect(201);
+
+    expect(createRes.body.decision_deadline).toBe('2026-05-01');
+  });
+
   it('allows withdrawing a flexible working request with free-text decision notes', async () => {
     const createRes = await authed('post', '/api/hr/flexible-working').send({
       staff_id: STAFF_ID,
@@ -117,6 +128,21 @@ describe('HR route save seams', () => {
 
     expect(updateRes.body.category).toBe('Sensory');
     expect(updateRes.body.adjustments).toEqual(['Screen reader software']);
+  });
+
+  it('rejects TUPE consultation windows shorter than 30 days', async () => {
+    const createRes = await authed('post', '/api/hr/tupe').send({
+      transfer_type: 'incoming',
+      transfer_date: '2026-06-01',
+      transferor_name: 'OldCo Care Services',
+      transferee_name: 'NewCo Care Group',
+      staff_affected: 12,
+      consultation_start: '2026-04-01',
+      consultation_end: '2026-04-15',
+      status: 'consultation',
+    }).expect(400);
+
+    expect(createRes.body.error).toMatch(/at least 30 days/i);
   });
 
   it('persists TUPE consultation, ELI, and measures fields on create and update', async () => {

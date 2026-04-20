@@ -30,7 +30,7 @@ describe('getNextRetryAt', () => {
     const next = getNextRetryAt(0);
     const diffMs = next.getTime() - now;
     expect(diffMs).toBeGreaterThanOrEqual(29_000);
-    expect(diffMs).toBeLessThan(32_000);
+    expect(diffMs).toBeLessThan(34_000);
   });
 
   it('caps at last delay for high retry counts', () => {
@@ -38,7 +38,7 @@ describe('getNextRetryAt', () => {
     const d99 = getNextRetryAt(99);
     // Both should use the same delay (6hr) since they're beyond the array
     const diff = Math.abs(d99.getTime() - d5.getTime());
-    expect(diff).toBeLessThan(1000); // within 1s (execution time)
+    expect(diff).toBeLessThan(2_200_000); // allows for ±10% jitter on the 6hr cap
   });
 });
 

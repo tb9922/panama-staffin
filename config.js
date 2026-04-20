@@ -76,7 +76,7 @@ export const config = {
   port: parseIntEnv(process.env.PORT, 3001),
   sentryDsn: process.env.SENTRY_DSN || null,
   sentryTracesSampleRate: parseFloatEnv(process.env.SENTRY_TRACES_SAMPLE_RATE, 0),
-  allowedOrigin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
+  allowedOrigin: process.env.ALLOWED_ORIGIN,
   nodeEnv: process.env.NODE_ENV || 'development',
   trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || 'info',
@@ -85,7 +85,7 @@ export const config = {
   // Authentication
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '4h',
-  enableStaffPortal: process.env.ENABLE_STAFF_PORTAL === '1' || process.env.NODE_ENV !== 'production',
+  enableStaffPortal: process.env.ENABLE_STAFF_PORTAL === '1' || process.env.VITEST === 'true',
 
   // Env-var users are a temporary fallback for pre-migration compatibility.
   users: [
@@ -115,7 +115,7 @@ export const config = {
     name: process.env.DB_NAME || 'panama_dev',
     user: process.env.DB_USER || 'panama',
     password: process.env.DB_PASSWORD,
-    poolMax: parseIntEnv(process.env.DB_POOL_MAX, 20),
+    poolMax: parseIntEnv(process.env.DB_POOL_MAX, 15),
     idleTimeoutMs: parseIntEnv(process.env.DB_POOL_IDLE_TIMEOUT, 30000),
     connectionTimeoutMs: parseIntEnv(process.env.DB_POOL_CONNECT_TIMEOUT, 5000),
     idleInTransactionTimeoutMs: parseIntEnv(process.env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS, 60000),

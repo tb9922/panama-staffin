@@ -1,8 +1,9 @@
 // All 17 domain validators moved verbatim from server.js.
 // No logic changes — these are pure functions operating on the assembled data object.
-import { RIDDOR_CATEGORIES, isCqcNotificationOverdue, isDutyOfCandourOverdue } from '../shared/incidents.js';
+import { addWorkingDays, RIDDOR_CATEGORIES, isCqcNotificationOverdue, isDutyOfCandourOverdue } from '../shared/incidents.js';
 import { getLeaveYear, getALDeductionHours, STATUTORY_WEEKS } from '../shared/rotation.js';
 import { getMinimumWageRate } from '../shared/nmw.js';
+import { formatDate } from '../shared/rotation.js';
 import { diffLocalISODays, todayLocalISO } from '../lib/dateOnly.js';
 
 function getTodayString() {
@@ -252,6 +253,7 @@ function validateIncidents(data, warnings, todayStr) {
 function validateComplaints(data, warnings, todayStr) {
   if (!data.complaints?.length) return;
   const responseDays = data.config?.complaint_response_days || 28;
+  const bankHolidays = data.config?.bank_holidays || [];
   const now = getTodayUtcMidnight();
   let unacknowledged = 0, overdueResponse = 0;
   for (const c of data.complaints) {
@@ -261,7 +263,7 @@ function validateComplaints(data, warnings, todayStr) {
       if (now > ackDeadline) unacknowledged++;
     }
     const deadline = c.response_deadline || (c.date
-      ? new Date(new Date(c.date + 'T00:00:00Z').getTime() + responseDays * 86400000).toISOString().slice(0, 10)
+      ? formatDate(addWorkingDays(new Date(`${c.date}T00:00:00Z`), responseDays, bankHolidays))
       : null);
     if (deadline && todayStr > deadline) overdueResponse++;
   }

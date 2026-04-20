@@ -278,7 +278,7 @@ function ResidentsTab({ home, canEdit }) {
             {modalTab === 'fees' && (
               <div className="grid grid-cols-2 gap-3">
                 <div><label className={INPUT.label}>Weekly Fee</label>
-                  <input type="number" step="0.01" value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.weekly_fee ?? ''} onChange={e => set('weekly_fee', e.target.value)} className={INPUT.base} /></div>
                 {editing && Number(form.weekly_fee ?? editing.weekly_fee ?? 0) > Number(editing.weekly_fee ?? 0) && (
                   <div className="col-span-2">
                     <InlineNotice variant="warning">
@@ -287,17 +287,17 @@ function ResidentsTab({ home, canEdit }) {
                   </div>
                 )}
                 <div><label className={INPUT.label}>LA Contribution</label>
-                  <input type="number" step="0.01" value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.la_contribution ?? ''} onChange={e => set('la_contribution', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>CHC Contribution</label>
-                  <input type="number" step="0.01" value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.chc_contribution ?? ''} onChange={e => set('chc_contribution', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>FNC Amount</label>
-                  <input type="number" step="0.01" value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.fnc_amount ?? ''} onChange={e => set('fnc_amount', e.target.value)} className={INPUT.base} /></div>
                 <div className="col-span-2 grid grid-cols-2 gap-4 text-xs text-gray-500">
                   <p>CHC = NHS Continuing Healthcare funding for residents with a primary health need.</p>
                   <p>FNC = Funded Nursing Care contribution paid by the NHS towards registered nursing input.</p>
                 </div>
                 <div><label className={INPUT.label}>Top-Up Amount</label>
-                  <input type="number" step="0.01" value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} className={INPUT.base} /></div>
+                  <input type="number" step="0.01" inputMode="decimal" value={form.top_up_amount ?? ''} onChange={e => set('top_up_amount', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>Top-Up Payer</label>
                   <input value={form.top_up_payer || ''} onChange={e => set('top_up_payer', e.target.value)} className={INPUT.base} /></div>
                 <div><label className={INPUT.label}>Top-Up Contact</label>

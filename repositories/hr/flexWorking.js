@@ -1,4 +1,30 @@
+import { ValidationError } from '../../errors.js';
 import { pool, createShaper, paginate } from './shared.js';
+
+function parseDateOnly(value) {
+  if (!value) return null;
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function formatDateOnly(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addMonthsClamped(value, months) {
+  const parsed = parseDateOnly(value);
+  if (!parsed || Number.isNaN(parsed.getTime())) return null;
+  const year = parsed.getUTCFullYear();
+  const month = parsed.getUTCMonth();
+  const day = parsed.getUTCDate();
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + months + 1, 0)).getUTCDate();
+  return formatDateOnly(new Date(Date.UTC(year, month + months, Math.min(day, lastDayOfTargetMonth))));
+}
+
+function resolveDecisionDeadline(requestDate) {
+  const deadline = addMonthsClamped(requestDate, 2);
+  if (!deadline) throw new ValidationError('Request date is required to calculate the decision deadline');
+  return deadline;
+}
 
 const COLS = `id, home_id, staff_id,
   request_date, effective_date_requested, current_pattern, requested_change,
@@ -48,6 +74,7 @@ export async function findFlexWorkingById(id, homeId, client) {
 
 export async function createFlexWorking(homeId, data, client) {
   const conn = client || pool;
+  const decisionDeadline = resolveDecisionDeadline(data.request_date);
   const { rows } = await conn.query(
     `INSERT INTO hr_flexible_working
        (home_id, staff_id, request_date, effective_date_requested, current_pattern,
@@ -59,7 +86,7 @@ export async function createFlexWorking(homeId, data, client) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.request_date, data.effective_date_requested || null,
      data.current_pattern || null, data.requested_change, data.reason || null,
-     data.employee_assessment_of_impact || null, data.decision_deadline,
+     data.employee_assessment_of_impact || null, decisionDeadline,
      data.meeting_date || null, data.meeting_notes || null, data.decision || null,
      data.decision_date || null, data.decision_by || null, data.refusal_reason || null,
      data.refusal_explanation || null, data.approved_pattern || null, data.approved_effective_date || null,
@@ -72,6 +99,10 @@ export async function createFlexWorking(homeId, data, client) {
 
 export async function updateFlexWorking(id, homeId, data, client, version) {
   const conn = client || pool;
+  const normalized = { ...data };
+  if ('request_date' in normalized && !('decision_deadline' in normalized)) {
+    normalized.decision_deadline = normalized.request_date ? resolveDecisionDeadline(normalized.request_date) : null;
+  }
   const fields = [];
   const params = [id, homeId];
   const settable = [
@@ -85,7 +116,7 @@ export async function updateFlexWorking(id, homeId, data, client, version) {
     'status', 'notes',
   ];
   for (const key of settable) {
-    if (key in data) { params.push(data[key] ?? null); fields.push(`${key} = $${params.length}`); }
+    if (key in normalized) { params.push(normalized[key] ?? null); fields.push(`${key} = $${params.length}`); }
   }
   fields.push('version = version + 1');
   if (fields.length === 1) return findFlexWorkingById(id, homeId, client);

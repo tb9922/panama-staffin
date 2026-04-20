@@ -266,7 +266,7 @@ export async function updateInvoiceWithLines(id, homeId, data, username, version
       const subtotal = Math.round(lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) * 100) / 100;
       const adjustments = parseFloat(data.adjustments ?? existing.adjustments) || 0;
       const totalAmount = Math.round((subtotal + adjustments) * 100) / 100;
-      if (totalAmount < 0) throw Object.assign(new Error('Invoice total cannot be negative after adjustments'), { statusCode: 400 });
+      if (totalAmount <= 0) throw Object.assign(new Error('Invoice total must be greater than zero after adjustments'), { statusCode: 400 });
       const amountPaid = existing.amount_paid || 0;
       if (totalAmount < amountPaid) {
         throw Object.assign(
@@ -312,11 +312,16 @@ export async function recordPayment(invoiceId, homeId, paymentData, username) {
     if (!paymentAmount || paymentAmount <= 0) {
       throw Object.assign(new Error('Payment amount must be greater than zero'), { statusCode: 400 });
     }
-    if (paymentAmount > invoice.balance_due) {
-      throw Object.assign(new Error(`Payment amount (${paymentAmount}) exceeds outstanding balance (${invoice.balance_due})`), { statusCode: 400 });
+    const paymentAmountRounded = Math.round(paymentAmount * 100) / 100;
+    const balanceDueRounded = Math.round((invoice.balance_due || 0) * 100) / 100;
+    if (paymentAmountRounded > balanceDueRounded) {
+      throw Object.assign(
+        new Error(`Payment amount (£${paymentAmountRounded.toFixed(2)}) exceeds outstanding balance (£${balanceDueRounded.toFixed(2)})`),
+        { statusCode: 400 },
+      );
     }
 
-    const newPaid = Math.round(((invoice.amount_paid || 0) + paymentAmount) * 100) / 100;
+    const newPaid = Math.round(((invoice.amount_paid || 0) + paymentAmountRounded) * 100) / 100;
     const newBalance = Math.round((invoice.total_amount - newPaid) * 100) / 100;
     const newStatus = newBalance <= 0 ? 'paid' : 'partially_paid';
 

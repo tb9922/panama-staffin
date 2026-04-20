@@ -87,6 +87,7 @@ export async function login(username, password) {
     }
     // Account lockout — reject if locked and lockout hasn't expired
     if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
       await applyFailureFloor(startedAt);
       const err = new AuthenticationError('Account locked — contact admin');
       err.statusCode = 423;
@@ -116,6 +117,7 @@ export async function login(username, password) {
       throw new AuthenticationError('Invalid credentials');
     }
     if (creds.lockedUntil && new Date(creds.lockedUntil) > new Date()) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
       await applyFailureFloor(startedAt);
       const err = new AuthenticationError('Account locked — contact admin');
       err.statusCode = 423;

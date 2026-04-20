@@ -356,6 +356,47 @@ describe('Password updates are atomic', () => {
 });
 
 describe('Admin guardrails', () => {
+  it('deactivation revokes per-home roles as well as sessions', async () => {
+    const extraHomeSlug = `${TEST_PREFIX}-extra-home`;
+    let extraHomeId = null;
+    try {
+      const { rows: [home] } = await pool.query(
+        `INSERT INTO homes (slug, name, config) VALUES ($1, 'Lockout Extra Home', '{}') RETURNING id`,
+        [extraHomeSlug]
+      );
+      extraHomeId = home.id;
+
+      await pool.query(
+        `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+         VALUES ($1, $2, 'home_manager', 'test-setup')`,
+        [LOCKOUT_USER, extraHomeId]
+      );
+
+      await userService.updateUser(lockoutUserId, { active: false }, ADMIN_USER);
+
+      const { rows } = await pool.query(
+        `SELECT 1 FROM user_home_roles WHERE username = $1`,
+        [LOCKOUT_USER]
+      );
+      expect(rows).toHaveLength(0);
+    } finally {
+      if (extraHomeId != null) {
+        await pool.query('DELETE FROM user_home_roles WHERE home_id = $1', [extraHomeId]).catch(() => {});
+        await pool.query('DELETE FROM homes WHERE id = $1', [extraHomeId]).catch(() => {});
+      }
+      await pool.query(
+        `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
+         SELECT $1, id, 'viewer', 'test-setup' FROM homes WHERE slug = $2
+         ON CONFLICT (username, home_id) DO NOTHING`,
+        [LOCKOUT_USER, `${TEST_PREFIX}-home`]
+      ).catch(() => {});
+      await pool.query(
+        `UPDATE users SET active = true, session_version = session_version + 1 WHERE id = $1`,
+        [lockoutUserId]
+      ).catch(() => {});
+    }
+  });
+
   it('prevents removing the last active admin', async () => {
     const auxUsername = `${TEST_PREFIX}-aux-admin`;
     const auxHash = await bcrypt.hash('AuxAdminPass1X', 4);

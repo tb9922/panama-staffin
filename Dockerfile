@@ -18,6 +18,8 @@ COPY --from=builder /app/config.js ./
 COPY --from=builder /app/db.js ./
 COPY --from=builder /app/logger.js ./
 COPY --from=builder /app/errors.js ./
+COPY --from=builder /app/metrics.js ./
+COPY --from=builder /app/requestContext.js ./
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/middleware ./middleware
 COPY --from=builder /app/routes ./routes
@@ -31,5 +33,5 @@ RUN mkdir -p uploads && chown app:app uploads
 USER app
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3001/health || exit 1
+  CMD node -e "fetch('http://127.0.0.1:3001/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"
 CMD ["node", "server.js"]

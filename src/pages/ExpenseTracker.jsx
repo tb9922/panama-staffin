@@ -316,15 +316,15 @@ export default function ExpenseTracker() {
 
             <div>
               <label className={INPUT.label}>Net Amount *</label>
-              <input type="number" step="0.01" value={form.net_amount ?? ''} onChange={event => setAmount('net_amount', event.target.value)} className={INPUT.base} />
+              <input type="number" step="0.01" inputMode="decimal" value={form.net_amount ?? ''} onChange={event => setAmount('net_amount', event.target.value)} className={INPUT.base} />
             </div>
             <div>
               <label className={INPUT.label}>VAT</label>
-              <input type="number" step="0.01" value={form.vat_amount ?? ''} onChange={event => setAmount('vat_amount', event.target.value)} className={INPUT.base} />
+              <input type="number" step="0.01" inputMode="decimal" value={form.vat_amount ?? ''} onChange={event => setAmount('vat_amount', event.target.value)} className={INPUT.base} />
             </div>
             <div>
               <label className={INPUT.label}>Gross Amount</label>
-              <input type="number" step="0.01" value={form.gross_amount ?? ''} className={`${INPUT.base} bg-gray-50`} readOnly />
+              <input type="number" step="0.01" inputMode="decimal" value={form.gross_amount ?? ''} className={`${INPUT.base} bg-gray-50`} readOnly />
             </div>
             <div>
               <label className={INPUT.label}>Subcategory</label>

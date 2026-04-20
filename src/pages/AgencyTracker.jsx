@@ -199,7 +199,7 @@ function ShiftModal({ providers, existing, onSave, onClose }) {
           </div>
           <div>
             <label className={INPUT.label}>Rate (£/hr) *</label>
-            <input type="number" step="0.01" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
+            <input type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.hourly_rate} onChange={e => set('hourly_rate', e.target.value)} placeholder="e.g. 20.00" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">

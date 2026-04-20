@@ -37,7 +37,7 @@ services:
       DB_NAME: ${DB_NAME:-panama_dev}
       DB_USER: ${DB_USER:-panama}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      DB_SSL: 'false'
+      DB_SSL: ${DB_SSL:-false}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:?ALLOWED_ORIGIN is required}
     ports:
@@ -55,7 +55,7 @@ services:
           memory: 1G
           cpus: '2.0'
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))\""]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -56,6 +56,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
   const { canWrite } = useData();
   const canEdit = canWrite('finance');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const config = schedData.config;
@@ -185,6 +186,29 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
     } finally { setSaving(false); }
   }
 
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
+      const rows = monthData.map(m => [
+        m.fullLabel,
+        m.budget > 0 ? Math.round(m.budget) : '',
+        Math.round(m.actual),
+        m.budget > 0 ? Math.round(m.variance) : '',
+        m.budget > 0 ? parseFloat(m.variancePct.toFixed(1)) : '',
+        Math.round(m.base),
+        Math.round(m.ot),
+        Math.round(m.agency),
+        Math.round(m.bh),
+      ]);
+      const { downloadXLSX } = await import('../lib/excel.js');
+      downloadXLSX(`budget_${config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // SVG chart
   const chartW = 700;
   const chartH = 200;
@@ -222,22 +246,9 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
           }} className={BTN.primary}>
             Set Budget
           </button>}
-          <button onClick={async () => {
-            const headers = ['Month', 'Budget £', 'Actual £', 'Variance £', 'Var %', 'Base £', 'OT £', 'Agency £', 'BH £'];
-            const rows = monthData.map(m => [
-              m.fullLabel,
-              m.budget > 0 ? Math.round(m.budget) : '',
-              Math.round(m.actual),
-              m.budget > 0 ? Math.round(m.variance) : '',
-              m.budget > 0 ? parseFloat(m.variancePct.toFixed(1)) : '',
-              Math.round(m.base),
-              Math.round(m.ot),
-              Math.round(m.agency),
-              Math.round(m.bh),
-            ]);
-            const { downloadXLSX } = await import('../lib/excel.js');
-            downloadXLSX(`budget_${config.home_name}`, [{ name: 'Budget vs Actual', headers, rows }]);
-          }} className={BTN.secondary}>Export Excel</button>
+          <button onClick={handleExport} disabled={exporting} className={`${BTN.secondary} disabled:opacity-50`}>
+            {exporting ? 'Exporting�' : 'Export Excel'}
+          </button>
           <button onClick={() => window.print()}
             className={BTN.secondary}>Print</button>
         </div>
@@ -248,12 +259,12 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
             <div className="space-y-3">
               <div>
                 <label className={INPUT.label}>Total Staff Budget (£/month)</label>
-                <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+                <input type="number" inputMode="decimal" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
                   className={INPUT.base} placeholder="e.g. 50000" />
               </div>
               <div>
                 <label className={INPUT.label}>Agency Cap (£/month)</label>
-                <input type="number" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
+                <input type="number" inputMode="decimal" value={agencyCapInput} onChange={e => setAgencyCapInput(e.target.value)}
                   className={INPUT.base} placeholder="e.g. 5000" />
               </div>
             </div>
@@ -458,7 +469,7 @@ function BudgetTrackerInner({ schedData, setSchedData, editingBudget, setEditing
 
       {/* Per-month budget edit modal */}
       <Modal isOpen={!!editingBudget && editingBudget !== 'default'} onClose={() => setEditingBudget(null)} title={`Budget for ${editingBudget || ''}`} size="sm">
-            <input type="number" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+            <input type="number" inputMode="decimal" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               className={`${INPUT.base} mb-3`} placeholder="Monthly budget £" />
             <div className={MODAL.footer}>
               <button onClick={() => setEditingBudget(null)} className={BTN.ghost}>X</button>

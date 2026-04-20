@@ -6,7 +6,7 @@ const AUTH_COLUMNS = 'id, username, password_hash, role, display_name, active, i
 export async function findByUsername(username, client, { forUpdate = false } = {}) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `SELECT ${AUTH_COLUMNS} FROM users WHERE username = $1${forUpdate ? ' FOR UPDATE' : ''}`,
+    `SELECT ${AUTH_COLUMNS} FROM users WHERE LOWER(username) = LOWER($1)${forUpdate ? ' FOR UPDATE' : ''}`,
     [username]
   );
   return rows[0] || null;
@@ -68,7 +68,7 @@ export async function create(username, passwordHash, role, displayName, createdB
     `INSERT INTO users (username, password_hash, role, display_name, created_by)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING ${SAFE_COLUMNS}`,
-    [username, passwordHash, role, displayName || '', createdBy || null]
+    [String(username).trim().toLowerCase(), passwordHash, role, displayName || '', createdBy || null]
   );
   return rows[0];
 }
@@ -109,7 +109,7 @@ export async function updatePassword(id, newHash, client) {
 export async function setPlatformAdmin(username, isPlatformAdmin, client) {
   const conn = client || pool;
   await conn.query(
-    'UPDATE users SET is_platform_admin = $1, updated_at = NOW() WHERE username = $2',
+    'UPDATE users SET is_platform_admin = $1, updated_at = NOW() WHERE LOWER(username) = LOWER($2)',
     [isPlatformAdmin, username]
   );
 }
@@ -124,7 +124,7 @@ export async function bumpSessionVersionById(id, client) {
 
 export async function updateLastLogin(username) {
   await pool.query(
-    'UPDATE users SET last_login_at = NOW() WHERE username = $1',
+    'UPDATE users SET last_login_at = NOW() WHERE LOWER(username) = LOWER($1)',
     [username]
   );
 }
@@ -147,7 +147,7 @@ export async function lockActiveAdminIds(client) {
 export async function existsByUsername(username, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT 1 FROM users WHERE username = $1 LIMIT 1',
+    'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
     [username]
   );
   return rows.length > 0;
@@ -158,7 +158,7 @@ export async function incrementFailedLogin(username) {
     `UPDATE users SET failed_login_count = failed_login_count + 1,
        locked_until = CASE WHEN failed_login_count + 1 >= 5
          THEN NOW() + INTERVAL '30 minutes' ELSE locked_until END
-     WHERE username = $1`,
+     WHERE LOWER(username) = LOWER($1)`,
     [username]
   );
 }
@@ -166,7 +166,7 @@ export async function incrementFailedLogin(username) {
 export async function resetFailedLogin(username, client) {
   const conn = client || pool;
   await conn.query(
-    'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE username = $1',
+    'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE LOWER(username) = LOWER($1)',
     [username]
   );
 }

@@ -9,7 +9,7 @@ import ResidentPicker from '../components/ResidentPicker.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import {
   DEFAULT_COMPLAINT_CATEGORIES, getComplaintStats, getSurveyStats,
-  getComplaintStatus, COMPLAINT_STATUSES, RAISED_BY_TYPES, SURVEY_TYPES,
+  getComplaintResponseDeadline, getComplaintStatus, COMPLAINT_STATUSES, RAISED_BY_TYPES, SURVEY_TYPES,
 } from '../lib/complaints.js';
 import {
   getCurrentHome, getComplaints, createComplaint, updateComplaint, deleteComplaint,
@@ -50,8 +50,9 @@ const EMPTY_SURVEY = {
 const COMPLAINT_CONFIG = { complaint_response_days: 28 };
 
 export default function ComplaintsTracker() {
-  const { canWrite } = useData();
+  const { canWrite, activeHomeObj } = useData();
   const canEdit = canWrite('compliance');
+  const bankHolidays = useMemo(() => activeHomeObj?.config?.bank_holidays || [], [activeHomeObj]);
   const { confirm, ConfirmDialog } = useConfirm();
   const [complaints, setComplaints] = useState([]);
   const [surveys, setSurveys] = useState([]);
@@ -123,16 +124,16 @@ export default function ComplaintsTracker() {
     if (!showModal) return;
     const basisDate = form.acknowledged_date || form.date;
     if (!basisDate) return;
-    const nextDeadline = addDaysLocalISO(basisDate, COMPLAINT_CONFIG.complaint_response_days);
+    const nextDeadline = getComplaintResponseDeadline(basisDate, COMPLAINT_CONFIG.complaint_response_days, bankHolidays);
     if (form.response_deadline === nextDeadline) return;
     setForm(current => {
       const currentBasisDate = current.acknowledged_date || current.date;
       if (!currentBasisDate) return current;
-      const recalculated = addDaysLocalISO(currentBasisDate, COMPLAINT_CONFIG.complaint_response_days);
+      const recalculated = getComplaintResponseDeadline(currentBasisDate, COMPLAINT_CONFIG.complaint_response_days, bankHolidays);
       if (current.response_deadline === recalculated) return current;
       return { ...current, response_deadline: recalculated };
     });
-  }, [form.acknowledged_date, form.date, form.response_deadline, showModal]);
+  }, [bankHolidays, form.acknowledged_date, form.date, form.response_deadline, showModal]);
 
   const statsRange = useMemo(() => {
     return { from: addDaysLocalISO(today, -89), to: today };
@@ -177,7 +178,7 @@ export default function ComplaintsTracker() {
 
   function openAdd() {
     setEditingId(null);
-    const deadline = addDaysLocalISO(today, COMPLAINT_CONFIG.complaint_response_days);
+    const deadline = getComplaintResponseDeadline(today, COMPLAINT_CONFIG.complaint_response_days, bankHolidays);
     setForm({ ...EMPTY_FORM, date: today, response_deadline: deadline });
     setActiveTab('details');
     setSaveError(null);

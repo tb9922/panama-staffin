@@ -265,7 +265,7 @@ export default function PayRatesConfig() {
             <label htmlFor="pay-rate-rule-amount" className={INPUT.label}>
               Amount {form.rate_type === 'percentage' ? '(%)' : form.rate_type === 'flat_per_shift' ? '(£ flat)' : '(£/hr)'}
             </label>
-            <input id="pay-rate-rule-amount" className={INPUT.base} type="number" step="0.01" min="0" value={form.amount}
+            <input id="pay-rate-rule-amount" className={INPUT.base} type="number" step="0.01" min="0" inputMode="decimal" value={form.amount}
               onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
               placeholder={form.rate_type === 'percentage' ? 'e.g. 15' : 'e.g. 2.00'} />
             {form.rate_type === 'percentage' && form.amount && (

@@ -114,6 +114,11 @@ export async function revokeAllRolesForHome(homeId, client) {
   await conn.query('DELETE FROM user_home_roles WHERE home_id = $1', [homeId]);
 }
 
+export async function revokeAllRolesForUser(username, client) {
+  const conn = client || pool;
+  await conn.query('DELETE FROM user_home_roles WHERE username = $1', [username]);
+}
+
 /**
  * Grant home_manager role on all existing homes (used when creating platform admin).
  * @param {string} username

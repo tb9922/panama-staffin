@@ -22,6 +22,36 @@ function resolveSecret(row) {
   return row.secret || null;
 }
 
+async function migrateLegacySecret(row, client) {
+  if (!process.env.ENCRYPTION_KEY) return;
+  if (!row?.secret || (row.secret_encrypted && row.secret_encrypted.length > 0)) return;
+  const conn = client || pool;
+  const { encrypted, iv, tag } = encrypt(row.secret);
+  await conn.query(
+    `UPDATE webhooks
+     SET secret_encrypted = $2,
+         secret_iv = $3,
+         secret_tag = $4,
+         secret = NULL,
+         updated_at = NOW()
+     WHERE id = $1
+       AND secret IS NOT NULL
+       AND secret_encrypted IS NULL`,
+    [row.id, encrypted, iv, tag],
+  );
+}
+
+async function toRowWithSecret(row, client) {
+  const secret = resolveSecret(row);
+  if (row?.secret && (!row.secret_encrypted || row.secret_encrypted.length === 0)) {
+    await migrateLegacySecret(row, client);
+  }
+  return {
+    ...toSafeRow(row),
+    secret,
+  };
+}
+
 /**
  * Return only non-secret columns from a webhook row.
  */
@@ -59,10 +89,7 @@ export async function findActiveByEvent(homeId, event) {
     `SELECT ${SECRET_COLS} FROM webhooks WHERE home_id = $1 AND active = true AND $2 = ANY(events)`,
     [homeId, event]
   );
-  return rows.map(row => ({
-    ...toSafeRow(row),
-    secret: resolveSecret(row),
-  }));
+  return Promise.all(rows.map(row => toRowWithSecret(row)));
 }
 
 export async function create(homeId, data) {
@@ -173,10 +200,10 @@ export async function findPendingRetries(limit = 20) {
      FOR UPDATE OF wd SKIP LOCKED`,
     [limit]
   );
-  return rows.map(row => ({
+  return Promise.all(rows.map(async (row) => ({
     ...row,
-    secret: resolveSecret(row),
-  }));
+    secret: (await toRowWithSecret(row)).secret,
+  })));
 }
 
 export async function claimPendingRetries(limit = 20) {
@@ -209,10 +236,10 @@ export async function claimPendingRetries(limit = 20) {
       [ids]
     );
 
-    return rows.map(row => ({
+    return Promise.all(rows.map(async (row) => ({
       ...row,
-      secret: resolveSecret(row),
-    }));
+      secret: (await toRowWithSecret(row, client)).secret,
+    })));
   });
 }
 

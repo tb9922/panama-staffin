@@ -109,17 +109,23 @@ export async function updateUser(id, fields, actorUsername) {
   }
 
   let updated;
-  if (isRemovingAdmin) {
+  if (isRemovingAdmin || updateFields.active === false) {
     updated = await withTransaction(async (client) => {
       const lockedTarget = await userRepo.findById(id, client, { forUpdate: true });
       if (!lockedTarget) throw new Error('User not found');
 
-      const activeAdminIds = await userRepo.lockActiveAdminIds(client);
-      if (activeAdminIds.length <= 1) {
-        throw new Error('Cannot remove the last active admin');
+      if (isRemovingAdmin) {
+        const activeAdminIds = await userRepo.lockActiveAdminIds(client);
+        if (activeAdminIds.length <= 1) {
+          throw new Error('Cannot remove the last active admin');
+        }
       }
 
-      return userRepo.update(id, updateFields, client);
+      const nextUser = await userRepo.update(id, updateFields, client);
+      if (updateFields.active === false) {
+        await userHomeRepo.revokeAllRolesForUser(lockedTarget.username, client);
+      }
+      return nextUser;
     });
   } else {
     updated = await userRepo.update(id, updateFields);

@@ -1,4 +1,21 @@
+import { ValidationError } from '../../errors.js';
 import { pool, createShaper, paginate } from './shared.js';
+
+function parseDateOnly(value) {
+  if (!value) return null;
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function validateConsultationWindow(consultationStartDate, consultationEndDate) {
+  if (!consultationStartDate || !consultationEndDate) return;
+  const start = parseDateOnly(consultationStartDate);
+  const end = parseDateOnly(consultationEndDate);
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+  const minEnd = new Date(start.getTime() + (30 * 24 * 60 * 60 * 1000));
+  if (end < minEnd) {
+    throw new ValidationError('Consultation end date must be at least 30 days after the consultation start date');
+  }
+}
 
 const COLS = `id, home_id, transfer_type, transfer_date, signed_date,
   transferor_name, transferee_name, employees,
@@ -48,6 +65,7 @@ export async function findTupeById(id, homeId, client) {
 
 export async function createTupe(homeId, data, client) {
   const conn = client || pool;
+  validateConsultationWindow(data.consultation_start_date, data.consultation_end_date);
   const { rows } = await conn.query(
     `INSERT INTO hr_tupe_transfers
        (home_id, transfer_type, transfer_date, signed_date, transferor_name, transferee_name,
@@ -69,6 +87,14 @@ export async function createTupe(homeId, data, client) {
 
 export async function updateTupe(id, homeId, data, client, version) {
   const conn = client || pool;
+  if ('consultation_start_date' in data || 'consultation_end_date' in data) {
+    const current = await findTupeById(id, homeId, client);
+    if (!current) return null;
+    validateConsultationWindow(
+      'consultation_start_date' in data ? data.consultation_start_date : current.consultation_start_date,
+      'consultation_end_date' in data ? data.consultation_end_date : current.consultation_end_date,
+    );
+  }
   const fields = [];
   const params = [id, homeId];
   const settable = [
