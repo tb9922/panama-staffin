@@ -388,13 +388,14 @@ export function calculateStudentLoan(grossPay, planTypeStr, payFrequency, thresh
  * @param {string} payFrequency  'weekly' | 'fortnightly' | 'monthly'.
  * @param {object} pensionConfig  From getPensionConfig() — {trigger_annual, lower_qualifying_weekly, state_pension_age}.
  * @param {Date} asOfDate  Date to use for age calculation (defaults to today).
- * @returns {{ category: string, shouldAutoEnrol: boolean }}
+ * @returns {{ category: string, shouldAutoEnrol: boolean, assumedMissingDob?: boolean }}
  *   category: 'eligible_jobholder' | 'non_eligible_jobholder' | 'entitled_worker'
  */
 export function assessPensionEligibility(staff, grossThisPeriod, payFrequency, pensionConfig, asOfDate) {
-  if (!pensionConfig) return { category: 'entitled_worker', shouldAutoEnrol: false };
+  if (!pensionConfig) return { category: 'entitled_worker', shouldAutoEnrol: false, assumedMissingDob: false };
 
   const refDate = asOfDate ? new Date(asOfDate) : new Date();
+  const missingDob = !staff.date_of_birth;
   const age = staff.date_of_birth ? calculateAge(staff.date_of_birth, refDate) : null;
 
   const periodsInYear = payFrequency === 'weekly' ? 52 : payFrequency === 'fortnightly' ? 26 : 12;
@@ -407,18 +408,24 @@ export function assessPensionEligibility(staff, grossThisPeriod, payFrequency, p
   const aboveLower = grossThisPeriod >= lowerPeriod;
 
   if (aboveSPA) {
-    return { category: 'entitled_worker', shouldAutoEnrol: false };
+    return { category: 'entitled_worker', shouldAutoEnrol: false, assumedMissingDob: false };
+  }
+
+  // Compliance-first fallback: missing DOB must not silently exclude an otherwise
+  // in-scope worker from assessment. Treat as age 22+ until the DOB is corrected.
+  if (missingDob && aboveTrigger) {
+    return { category: 'eligible_jobholder', shouldAutoEnrol: true, assumedMissingDob: true };
   }
 
   if (age !== null && age >= 22 && aboveTrigger) {
-    return { category: 'eligible_jobholder', shouldAutoEnrol: true };
+    return { category: 'eligible_jobholder', shouldAutoEnrol: true, assumedMissingDob: false };
   }
 
   if (aboveLower) {
-    return { category: 'non_eligible_jobholder', shouldAutoEnrol: false };
+    return { category: 'non_eligible_jobholder', shouldAutoEnrol: false, assumedMissingDob: missingDob };
   }
 
-  return { category: 'entitled_worker', shouldAutoEnrol: false };
+  return { category: 'entitled_worker', shouldAutoEnrol: false, assumedMissingDob: missingDob };
 }
 
 /**

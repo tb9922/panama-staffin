@@ -8,6 +8,10 @@ vi.mock('../../repositories/webhookRepo.js', () => ({
   findRecentDuplicateDelivery: vi.fn().mockResolvedValue(null),
   logDelivery: vi.fn().mockResolvedValue(),
   updateDeliveryForRetry: vi.fn().mockResolvedValue(),
+  rescueStuckInProgress: vi.fn().mockResolvedValue(0),
+  claimPendingRetries: vi.fn().mockResolvedValue([]),
+  markDeliverySucceeded: vi.fn().mockResolvedValue(),
+  markDeliveryFailed: vi.fn().mockResolvedValue(),
 }));
 
 vi.mock('../../logger.js', () => ({
@@ -15,13 +19,15 @@ vi.mock('../../logger.js', () => ({
 }));
 
 vi.mock('../../lib/ssrf.js', () => ({
+  isInternalAppUrl: vi.fn().mockReturnValue(false),
   resolvedToPrivateIp: vi.fn().mockResolvedValue(false),
 }));
 
 // ── Imports after mocks ───────────────────────────────────────────────────────
 
-import { dispatchEvent } from '../../services/webhookService.js';
+import { dispatchEvent, processRetries } from '../../services/webhookService.js';
 import * as webhookRepo from '../../repositories/webhookRepo.js';
+import * as ssrf from '../../lib/ssrf.js';
 import logger from '../../logger.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -46,6 +52,8 @@ describe('webhookService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     webhookRepo.findRecentDuplicateDelivery.mockResolvedValue(null);
+    ssrf.resolvedToPrivateIp.mockResolvedValue(false);
+    ssrf.isInternalAppUrl.mockReturnValue(false);
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 200 });
   });
 
@@ -134,6 +142,12 @@ describe('webhookService', () => {
     const [, , , statusCode, , error] = webhookRepo.logDelivery.mock.calls[0];
     expect(statusCode).toBeNull();
     expect(error).toBe('Connection refused');
+    expect(webhookRepo.updateDeliveryForRetry).not.toHaveBeenCalled();
+    expect(webhookRepo.logDelivery.mock.calls[0][7]).toMatchObject({
+      retryCount: 1,
+      nextRetryAt: expect.any(Date),
+      signingSecret: hook.secret,
+    });
   });
 
   it('never throws even when findActiveByEvent fails', async () => {
@@ -226,6 +240,23 @@ describe('webhookService', () => {
     expect(status).toBe('blocked');
   });
 
+  it('blocks webhook targets pointing at Panama internal endpoints', async () => {
+    ssrf.isInternalAppUrl.mockReturnValue(true);
+    const hook = makeHook({ url: 'https://panama.example.com/api/users' });
+    webhookRepo.findActiveByEvent.mockResolvedValue([hook]);
+
+    await dispatchEvent(42, 'incident.created', { id: 'inc-1' });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(webhookRepo.logDelivery).toHaveBeenCalledOnce();
+    const [, , , statusCode, responseMs, error, status] = webhookRepo.logDelivery.mock.calls[0];
+    expect(statusCode).toBeNull();
+    expect(responseMs).toBe(0);
+    expect(error).toMatch(/Panama internal endpoints/i);
+    expect(status).toBe('blocked');
+  });
+
   it('logs error but does not throw when one webhook fails', async () => {
     const hook1 = makeHook({ id: 1 });
     const hook2 = makeHook({ id: 2, url: 'https://failing.com/hook' });
@@ -243,5 +274,56 @@ describe('webhookService', () => {
 
     // Both deliveries should be logged
     expect(webhookRepo.logDelivery).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries deliveries using the frozen signing secret from the queue row', async () => {
+    webhookRepo.claimPendingRetries.mockResolvedValue([
+      {
+        id: 77,
+        webhook_id: 1,
+        event: 'incident.created',
+        payload: {
+          event: 'incident.created',
+          payload: { id: 'inc-1' },
+          timestamp: '2026-04-20T10:00:00.000Z',
+        },
+        retry_count: 1,
+        url: 'https://example.com/webhook',
+        secret: 'old-frozen-secret',
+        active: true,
+      },
+    ]);
+
+    const processed = await processRetries();
+
+    expect(processed).toBe(1);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [, opts] = fetchSpy.mock.calls[0];
+    const signatureBase = `${opts.headers['X-Webhook-Timestamp']}.${opts.body}`;
+    const expectedSig = crypto.createHmac('sha256', 'old-frozen-secret').update(signatureBase).digest('hex');
+    expect(opts.headers['X-Webhook-Signature']).toBe(`sha256=${expectedSig}`);
+    expect(webhookRepo.markDeliverySucceeded).toHaveBeenCalledWith(77, 200, expect.any(Number));
+  });
+
+  it('claims a small retry batch to reduce background pool pressure', async () => {
+    await processRetries();
+    expect(webhookRepo.claimPendingRetries).toHaveBeenCalledWith(5);
+  });
+
+  it('skips overlapping retry polls while one is already running', async () => {
+    let releaseClaim;
+    webhookRepo.claimPendingRetries.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseClaim = resolve; }),
+    );
+
+    const first = processRetries();
+    await Promise.resolve();
+    const second = await processRetries();
+
+    expect(second).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith('Webhook retries already running — skipping overlap');
+
+    releaseClaim([]);
+    await first;
   });
 });

@@ -7,13 +7,14 @@ import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as userRepo from '../repositories/userRepo.js';
 import * as auditService from './auditService.js';
+import { validatePassword } from './userService.js';
 
 const INVITE_TTL_HOURS = 72;
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
 function ensureStrongPassword(password) {
-  if (typeof password !== 'string' || password.length < 10) {
-    throw new ValidationError('Password must be at least 10 characters');
-  }
+  const err = validatePassword(password);
+  if (err) throw new ValidationError(err);
 }
 
 export async function createInvite({ homeId, staffId, createdBy }) {
@@ -67,7 +68,7 @@ export async function consumeInvite({ token, username, password }) {
       throw new ConflictError('Username is already in use', 'USERNAME_TAKEN');
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const credentials = await staffAuthRepo.createCredentials({
       homeId: invite.homeId,
       staffId: invite.staffId,
@@ -99,7 +100,7 @@ export async function changePassword({ homeId, staffId, currentPassword, newPass
     const valid = await bcrypt.compare(currentPassword, creds.passwordHash);
     if (!valid) throw new ForbiddenError('Current password is incorrect', 'INVALID_CURRENT_PASSWORD');
 
-    const nextHash = await bcrypt.hash(newPassword, 10);
+    const nextHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     const updated = await staffAuthRepo.updatePassword(homeId, staffId, nextHash, client);
     await authRepo.revokeAllForUser(updated.username, 'user', client);
     await auditService.log('staff_password_changed', updated.homeSlug, actorUsername || updated.username, {

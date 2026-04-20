@@ -5,12 +5,61 @@ import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
 import { ConflictError, ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
+import * as authService from './authService.js';
 import logger from '../logger.js';
 
 /** Deduplicate rows by id. Assumes id is a non-null SERIAL PRIMARY KEY. */
 function dedupeById(rows) {
   const seen = new Set();
   return rows.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+}
+
+function normaliseMatchValues(values) {
+  return [...new Set((values || [])
+    .map((value) => typeof value === 'string' ? value.trim() : '')
+    .filter(Boolean))];
+}
+
+async function findWebhookDeliveriesByPayload(conn, homeId, values) {
+  const matchValues = normaliseMatchValues(values);
+  if (matchValues.length === 0) return { rows: [] };
+  return conn.query(
+    `SELECT wd.* FROM webhook_deliveries wd
+     JOIN webhooks w ON w.id = wd.webhook_id
+     WHERE w.home_id = $1
+       AND EXISTS (
+         SELECT 1
+           FROM unnest($2::text[]) AS target(val)
+          WHERE jsonb_path_exists(
+            wd.payload,
+            '$.** ? (@ == $target)',
+            jsonb_build_object('target', to_jsonb(target.val))
+          )
+       )`,
+    [homeId, matchValues],
+  );
+}
+
+async function redactWebhookDeliveriesByPayload(conn, homeId, values) {
+  const matchValues = normaliseMatchValues(values);
+  if (matchValues.length === 0) return { rowCount: 0 };
+  return conn.query(
+    `UPDATE webhook_deliveries
+        SET payload = '"[REDACTED]"'::jsonb
+       FROM webhooks w
+      WHERE w.id = webhook_deliveries.webhook_id
+        AND w.home_id = $1
+        AND EXISTS (
+          SELECT 1
+            FROM unnest($2::text[]) AS target(val)
+           WHERE jsonb_path_exists(
+             webhook_deliveries.payload,
+             '$.** ? (@ == $target)',
+             jsonb_build_object('target', to_jsonb(target.val))
+           )
+        )`,
+    [homeId, matchValues],
+  );
 }
 
 async function runSequentialQueries(tasks) {
@@ -93,14 +142,27 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(
           `SELECT pc.* FROM pension_contributions pc
            WHERE pc.home_id = $1 AND pc.staff_id = $2`, [homeId, subjectId]),
-        // access_log has no home_id column (global table) — user_name stores the login username.
-        // Resolve username from users table (matching by display_name or username) then query.
-        // All homes' access entries for this user are included in the SAR per Article 15.
+        // access_log is home-scoped; include only entries for this controller/home.
+        // Resolve username from users table (matching by display_name or username at this home).
         () => staffName
           ? conn.query(
-              `SELECT * FROM access_log WHERE user_name = $1
-                 OR user_name IN (SELECT username FROM users WHERE display_name = $1)
-               ORDER BY ts DESC LIMIT 500`, [staffName])
+              `SELECT * FROM access_log
+                 WHERE home_id = $1
+                   AND (
+                     user_name = $2
+                     OR user_name IN (
+                       SELECT username FROM users
+                        WHERE display_name = $2
+                          AND EXISTS (
+                            SELECT 1 FROM user_home_roles
+                             WHERE user_home_roles.username = users.username
+                               AND user_home_roles.home_id = $1
+                          )
+                     )
+                   )
+                 ORDER BY ts DESC LIMIT 500`,
+              [homeId, staffName],
+            )
           : { rows: [] },
         // Staff appears in incident staff_involved JSONB array
         () => conn.query(
@@ -224,9 +286,18 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         // GDPR module own tables — consent records and data requests where subject is this staff member
         () => conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
-        // DP complaints where this staff member is the complainant (matched by name)
+        // DP complaints linked to this staff member, preferring stable subject_id linkage
         () => staffName
-          ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, staffName])
+          ? conn.query(
+              `SELECT * FROM dp_complaints
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (
+                   (subject_type = 'staff' AND subject_id = $2)
+                   OR (subject_id IS NULL AND complainant_name = $3)
+                 )`,
+              [homeId, subjectId, staffName],
+            )
           : { rows: [] },
         // Agency shifts where this staff member was the worker (matched by name — no staff FK)
         () => staffName
@@ -236,12 +307,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => staffName
           ? conn.query(`SELECT * FROM complaint_surveys WHERE home_id = $1 AND conducted_by = $2 AND deleted_at IS NULL`, [homeId, staffName])
           : { rows: [] },
-        () => staffName
-          ? conn.query(
-              `SELECT wd.* FROM webhook_deliveries wd
-               JOIN webhooks w ON w.id = wd.webhook_id
-               WHERE w.home_id = $1 AND wd.payload::text LIKE '%' || $2 || '%'`,
-              [homeId, staffName])
+        () => subjectId || staffName || linkedUsernames.length > 0
+          ? findWebhookDeliveriesByPayload(conn, homeId, [subjectId, staffName, ...linkedUsernames])
           : { rows: [] },
         // CQC self-assessment narratives reviewed by this staff member
         () => staffName
@@ -434,16 +501,21 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         // GDPR module own tables — consent records and data requests by subject_id
         () => conn.query(`SELECT * FROM consent_records WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM data_requests WHERE home_id = $1 AND subject_id = $2 AND deleted_at IS NULL`, [homeId, subjectId]),
-        // DP complaints matched by resident name (dp_complaints has no resident_id FK)
-        () => subjectName
-          ? conn.query(`SELECT * FROM dp_complaints WHERE home_id = $1 AND complainant_name = $2 AND deleted_at IS NULL`, [homeId, subjectName])
-          : { rows: [] },
+        // DP complaints linked to this resident, preferring stable subject_id linkage
         () => subjectName
           ? conn.query(
-              `SELECT wd.* FROM webhook_deliveries wd
-               JOIN webhooks w ON w.id = wd.webhook_id
-               WHERE w.home_id = $1 AND wd.payload::text LIKE '%' || $2 || '%'`,
-              [homeId, subjectName])
+              `SELECT * FROM dp_complaints
+               WHERE home_id = $1
+                 AND deleted_at IS NULL
+                 AND (
+                   (subject_type = 'resident' AND subject_id = $2)
+                   OR (subject_id IS NULL AND complainant_name = $3)
+                 )`,
+              [homeId, subjectId, subjectName],
+            )
+          : { rows: [] },
+        () => subjectId || subjectName
+          ? findWebhookDeliveriesByPayload(conn, homeId, [subjectId, subjectName])
           : { rows: [] },
       ];
       // Name-based queries for incidents/complaints
@@ -518,7 +590,9 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
  * Uses transaction — all-or-nothing. Preserves record structure for CQC auditability.
  */
 export async function executeErasure(staffId, homeId, requestId, username, homeSlug) {
-  return withTransaction(async (client) => {
+  const filesToDelete = [];
+
+  const result = await withTransaction(async (client) => {
     if (requestId) {
       const request = await gdprRepo.findRequestById(requestId, homeId, client);
       if (!request) throw new ValidationError('Data request not found');
@@ -588,15 +662,14 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
     for (const attachment of trainingAttachments) {
-      const filePath = path.join(
+      filesToDelete.push(path.join(
         appConfig.upload.dir,
         String(homeId),
         'training',
         String(staffId),
         String(attachment.training_type),
         attachment.stored_name,
-      );
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      ));
     }
     await client.query(
       `DELETE FROM training_file_attachments WHERE home_id = $1 AND staff_id = $2`,
@@ -719,8 +792,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     );
     // Delete physical files from disk
     for (const att of attachments) {
-      const filePath = path.join(appConfig.upload.dir, String(homeId), att.case_type, String(att.case_id), att.stored_name);
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      filesToDelete.push(path.join(appConfig.upload.dir, String(homeId), att.case_type, String(att.case_id), att.stored_name));
     }
     // Delete attachment metadata
     await client.query(
@@ -747,21 +819,28 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       );
     }
 
-    // Anonymise access/audit log entries for this staff member.
-    // access_log.home_id is always NULL — cannot scope by home.
-    // Only redact if no OTHER staff member (across all homes) shares the same display name,
-    // to prevent cross-tenant access log destruction. Note: staff.name for this record was
-    // already anonymised earlier in this transaction, so the exclusion predicate is
-    // explicit for clarity and future-ordering safety.
+    // Anonymise access_log entries for this staff member, scoped to this home.
+    // Only redact when the original name is unique within the home so a common
+    // display name cannot erase another staff member's audit trail.
     if (originalName) {
       const { rows: nameCount } = await client.query(
-        `SELECT COUNT(*) AS cnt FROM staff WHERE name = $1 AND NOT (home_id = $2 AND id = $3)`,
+        `SELECT COUNT(*) AS cnt
+           FROM staff
+          WHERE home_id = $2
+            AND name = $1
+            AND id <> $3`,
         [originalName, homeId, staffId]
       );
       if (parseInt(nameCount[0]?.cnt, 10) === 0) {
         await client.query(
-          `UPDATE access_log SET user_name = '[REDACTED]' WHERE user_name = $1`,
-          [originalName]
+          `UPDATE access_log
+              SET user_name = '[REDACTED]'
+            WHERE home_id = $1
+              AND (
+                user_name = $2
+                OR ($3::TEXT[] IS NOT NULL AND user_name = ANY($3))
+              )`,
+          [homeId, originalName, linkedUsernames.length > 0 ? linkedUsernames : null]
         );
       }
     }
@@ -787,12 +866,17 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
        WHERE home_id = $1 AND subject_id = $3 AND deleted_at IS NULL`,
       [homeId, anon, staffId]
     );
-    // Anonymise DP complaints where this staff member was the complainant (matched by name)
+    // Anonymise DP complaints where this staff member was the complainant.
     if (originalName) {
       await client.query(
         `UPDATE dp_complaints SET complainant_name = $2, description = '[REDACTED]'
-         WHERE home_id = $1 AND complainant_name = $3 AND deleted_at IS NULL`,
-        [homeId, anon, originalName]
+         WHERE home_id = $1
+           AND deleted_at IS NULL
+           AND (
+             (subject_type = 'staff' AND subject_id = $3)
+             OR (subject_id IS NULL AND complainant_name = $4)
+           )`,
+        [homeId, anon, staffId, originalName]
       );
     }
 
@@ -815,15 +899,14 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       [homeId, staffId]
     );
     for (const attachment of onboardingAttachments) {
-      const filePath = path.join(
+      filesToDelete.push(path.join(
         appConfig.upload.dir,
         String(homeId),
         'onboarding',
         String(staffId),
         String(attachment.section),
         attachment.stored_name,
-      );
-      try { await fs.unlink(filePath); } catch { /* file already removed */ }
+      ));
     }
     await client.query(
       `DELETE FROM onboarding_file_attachments WHERE home_id = $1 AND staff_id = $2`,
@@ -930,14 +1013,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
     }
 
     // Clear webhook delivery payloads that may reference this staff member.
-    // payload is JSONB — cast to TEXT for LIKE matching.
-    await client.query(
-      `UPDATE webhook_deliveries SET payload = '"[REDACTED]"'::jsonb
-       FROM webhooks w
-       WHERE w.id = webhook_deliveries.webhook_id AND w.home_id = $1
-         AND webhook_deliveries.payload::text LIKE '%' || $2 || '%'`,
-      [homeId, staffId]
-    );
+    await redactWebhookDeliveriesByPayload(client, homeId, [staffId, originalName, ...linkedUsernames]);
 
     // Anonymise hr_investigation_meetings linked to this staff member's cases
     const meetingCaseCondition = `
@@ -1009,6 +1085,7 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
           `DELETE FROM user_home_roles WHERE username = $1 AND home_id = $2`,
           [linkedUsername, homeId]
         );
+        await authService.revokeUser(linkedUsername, 'admin', client);
       }
     }
 
@@ -1026,6 +1103,18 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
 
     return { anonymised: true, staff_id: staffId };
   });
+
+  await Promise.all(filesToDelete.map(async (filePath) => {
+    try {
+      await fs.unlink(filePath);
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn({ filePath, err: err?.message }, 'GDPR erasure could not remove attachment after commit');
+      }
+    }
+  }));
+
+  return result;
 }
 
 /**
@@ -1041,25 +1130,52 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
   return withTransaction(async (client) => {
     const anon = `[REDACTED-RES-${(subjectId || '').slice(0, 4)}]`;
 
-    // Resolve resident PK from finance_residents to avoid name-collision erasure.
-    // subjectId may be the finance_residents PK (numeric) or a string identifier.
-    const { rows: residentRows } = await client.query(
-      `SELECT id, resident_name FROM finance_residents
-       WHERE home_id = $1 AND (id::text = $2 OR resident_name = $3) AND deleted_at IS NULL
-       LIMIT 1`,
-      [homeId, subjectId, subjectName || subjectId]
+    // Resolve the resident record as safely as possible. If a name maps to
+    // multiple resident rows, fail closed instead of erasing the wrong person.
+    let residentPk = null;
+    let matchName = subjectName || subjectId || null;
+    let allowNameFallback = false;
+
+    const { rows: residentByIdRows } = await client.query(
+      `SELECT id, resident_name
+         FROM finance_residents
+        WHERE home_id = $1
+          AND id::text = $2
+          AND deleted_at IS NULL`,
+      [homeId, String(subjectId)]
     );
-    const resident = residentRows[0];
-    const residentPk = resident?.id;
-    const matchName = subjectName || resident?.resident_name || subjectId;
+    if (residentByIdRows.length > 0) {
+      residentPk = residentByIdRows[0].id;
+      matchName = subjectName || residentByIdRows[0].resident_name || matchName;
+    } else if (matchName) {
+      const { rows: residentByNameRows } = await client.query(
+        `SELECT id, resident_name
+           FROM finance_residents
+          WHERE home_id = $1
+            AND resident_name = $2
+            AND deleted_at IS NULL`,
+        [homeId, matchName]
+      );
+      if (residentByNameRows.length > 1) {
+        throw new ValidationError('Multiple residents share this name. Use the resident ID to erase safely.');
+      }
+      if (residentByNameRows.length === 1) {
+        residentPk = residentByNameRows[0].id;
+        matchName = residentByNameRows[0].resident_name;
+        allowNameFallback = true;
+      }
+    }
 
     // Block erasure of residents with active DoLS authorisations (MCA 2005 legal obligation)
     // Use resident_id FK when available for robust matching, fall back to name
     const { rows: activeDols } = residentPk
       ? await client.query(
-          `SELECT id FROM dols WHERE home_id = $1 AND (resident_id = $2 OR resident_name = $3)
+          `SELECT id FROM dols WHERE home_id = $1 AND (
+             resident_id = $2
+             OR ($3::boolean = true AND resident_id IS NULL AND resident_name = $4)
+           )
            AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE) AND deleted_at IS NULL`,
-          [homeId, residentPk, matchName])
+          [homeId, residentPk, allowNameFallback, matchName])
       : await client.query(
           `SELECT id FROM dols WHERE home_id = $1 AND resident_name = $2
            AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE) AND deleted_at IS NULL`,
@@ -1072,8 +1188,11 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     if (residentPk) {
       await client.query(
         `UPDATE dols SET resident_name = $1, dob = NULL, notes = NULL
-         WHERE home_id = $2 AND (resident_id = $3 OR resident_name = $4) AND deleted_at IS NULL`,
-        [anon, homeId, residentPk, matchName]);
+         WHERE home_id = $2 AND (
+           resident_id = $3
+           OR ($4::boolean = true AND resident_id IS NULL AND resident_name = $5)
+         ) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, allowNameFallback, matchName]);
     } else {
       await client.query(
         `UPDATE dols SET resident_name = $1, dob = NULL, notes = NULL
@@ -1085,8 +1204,11 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     if (residentPk) {
       await client.query(
         `UPDATE mca_assessments SET resident_name = $1, notes = NULL
-         WHERE home_id = $2 AND (resident_id = $3 OR resident_name = $4) AND deleted_at IS NULL`,
-        [anon, homeId, residentPk, matchName]);
+         WHERE home_id = $2 AND (
+           resident_id = $3
+           OR ($4::boolean = true AND resident_id IS NULL AND resident_name = $5)
+         ) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, allowNameFallback, matchName]);
     } else {
       await client.query(
         `UPDATE mca_assessments SET resident_name = $1, notes = NULL
@@ -1117,9 +1239,12 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
         `UPDATE incident_addenda SET content = '[REDACTED]'
          WHERE home_id = $1 AND incident_id IN (
            SELECT id FROM incidents WHERE home_id = $1
-           AND (resident_id = $2 OR person_affected_name = $3) AND deleted_at IS NULL
+           AND (
+             resident_id = $2
+             OR ($3::boolean = true AND resident_id IS NULL AND person_affected_name = $4)
+           ) AND deleted_at IS NULL
          )`,
-        [homeId, residentPk, matchName]);
+        [homeId, residentPk, allowNameFallback, matchName]);
     } else {
       await client.query(
         `UPDATE incident_addenda SET content = '[REDACTED]'
@@ -1137,8 +1262,11 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
         `UPDATE incidents SET person_affected_name = $1,
            description = '[Redacted — subject erasure]', immediate_action = '[Redacted]',
            root_cause = '[Redacted]', lessons_learned = '[Redacted]', witnesses = '[]'::jsonb
-         WHERE home_id = $2 AND (resident_id = $3 OR person_affected_name = $4) AND deleted_at IS NULL`,
-        [anon, homeId, residentPk, matchName]);
+         WHERE home_id = $2 AND (
+           resident_id = $3
+           OR ($4::boolean = true AND resident_id IS NULL AND person_affected_name = $5)
+         ) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, allowNameFallback, matchName]);
     } else {
       await client.query(
         `UPDATE incidents SET person_affected_name = $1,
@@ -1155,8 +1283,11 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
         `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]',
            investigation_notes = '[Redacted]', resolution = '[Redacted]',
            root_cause = '[Redacted]', improvements = '[Redacted]', lessons_learned = '[Redacted]'
-         WHERE home_id = $2 AND (resident_id = $3 OR raised_by_name = $4) AND deleted_at IS NULL`,
-        [anon, homeId, residentPk, matchName]);
+         WHERE home_id = $2 AND (
+           resident_id = $3
+           OR ($4::boolean = true AND resident_id IS NULL AND raised_by_name = $5)
+         ) AND deleted_at IS NULL`,
+        [anon, homeId, residentPk, allowNameFallback, matchName]);
     } else {
       await client.query(
         `UPDATE complaints SET raised_by_name = $1, description = '[REDACTED]',
@@ -1197,8 +1328,13 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     if (matchName) {
       await client.query(
         `UPDATE dp_complaints SET complainant_name = $2, description = '[REDACTED]'
-         WHERE home_id = $1 AND complainant_name = $3 AND deleted_at IS NULL`,
-        [homeId, anon, matchName]
+         WHERE home_id = $1
+           AND deleted_at IS NULL
+           AND (
+             (subject_type = 'resident' AND subject_id = $3)
+             OR (subject_id IS NULL AND complainant_name = $4)
+           )`,
+        [homeId, anon, subjectId, matchName]
       );
       await client.query(
         `UPDATE handover_entries SET content = '[REDACTED]'
@@ -1206,6 +1342,7 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
         [homeId, matchName]
       );
     }
+    await redactWebhookDeliveriesByPayload(client, homeId, [subjectId, matchName]);
 
     // Mark the request as completed
     if (requestId) {
@@ -1244,16 +1381,20 @@ const RETENTION_ALLOWED_TABLES = new Set([
 
 // Global tables skipped from per-home retention scan (see scanRetention).
 // These lack meaningful per-home scoping — their counts reflect all homes combined.
-const GLOBAL_TABLES = new Set(['retention_schedule', 'access_log', 'audit_log']);
+const GLOBAL_TABLES = new Set(['retention_schedule']);
 
 // Date column overrides for tables that don't use 'created_at'
-const TS_TABLES = new Set([]); // access_log/audit_log used 'ts' but are now skipped as global
+const TS_TABLES = new Set(['access_log', 'audit_log']);
 
 // Tables that use 'updated_at' instead of 'created_at'
 const UPDATED_AT_TABLES = new Set(['onboarding', 'pension_enrolments']);
 
 export async function scanRetention(homeId) {
   const schedule = await gdprRepo.getRetentionSchedule();
+  const {
+    rows: [homeRow],
+  } = await pool.query(`SELECT slug FROM homes WHERE id = $1 AND deleted_at IS NULL`, [homeId]);
+  const homeSlug = homeRow?.slug || null;
 
   const results = [];
   for (const rule of schedule) {
@@ -1270,18 +1411,51 @@ export async function scanRetention(homeId) {
 
     try {
       // Count total records (always scoped by home_id — global tables skipped above)
-      const totalResult = await pool.query(
-        `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1`,
-        [homeId]
-      );
-      count = parseInt(totalResult.rows[0].cnt, 10);
+      if (table === 'access_log') {
+        const totalResult = await pool.query(
+          `SELECT COUNT(*) AS cnt FROM access_log WHERE home_id = $1`,
+          [homeId],
+        );
+        count = parseInt(totalResult.rows[0].cnt, 10);
 
-      // Count records past retention
-      const expiredResult = await pool.query(
-        `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1 AND ${dateCol} < NOW() - INTERVAL '1 day' * $2`,
-        [homeId, rule.retention_days]
-      );
-      expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
+        const expiredResult = await pool.query(
+          `SELECT COUNT(*) AS cnt
+             FROM access_log
+            WHERE home_id = $1
+              AND ts < NOW() - INTERVAL '1 day' * $2`,
+          [homeId, rule.retention_days],
+        );
+        expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
+      } else if (table === 'audit_log') {
+        if (homeSlug) {
+          const totalResult = await pool.query(
+            `SELECT COUNT(*) AS cnt FROM audit_log WHERE home_slug = $1`,
+            [homeSlug],
+          );
+          count = parseInt(totalResult.rows[0].cnt, 10);
+
+          const expiredResult = await pool.query(
+            `SELECT COUNT(*) AS cnt
+               FROM audit_log
+              WHERE home_slug = $1
+                AND ts < NOW() - INTERVAL '1 day' * $2`,
+            [homeSlug, rule.retention_days],
+          );
+          expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
+        }
+      } else {
+        const totalResult = await pool.query(
+          `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1`,
+          [homeId]
+        );
+        count = parseInt(totalResult.rows[0].cnt, 10);
+
+        const expiredResult = await pool.query(
+          `SELECT COUNT(*) AS cnt FROM ${table} WHERE home_id = $1 AND ${dateCol} < NOW() - INTERVAL '1 day' * $2`,
+          [homeId, rule.retention_days]
+        );
+        expiredCount = parseInt(expiredResult.rows[0].cnt, 10);
+      }
     } catch (err) {
       logger.warn({ table, err: err?.message }, 'Retention scan: table query failed — skipping');
     }
@@ -1324,10 +1498,15 @@ export function assessBreachRisk(breachData) {
   const identityRiskCats = (breachData.data_categories || []).filter(c =>
     ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
   );
+  const emptyCategories = (breachData.data_categories || []).length === 0;
+  const vulnerableAdultContext = specialCats.some((category) =>
+    ['resident_health', 'dols', 'mca'].includes(category)
+  ) || emptyCategories;
 
   let multiplier = 1.0;
   if (specialCats.length > 0) multiplier = 1.5;
   if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
+  if (vulnerableAdultContext) multiplier = Math.max(multiplier, 1.5);
 
   const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;
@@ -1341,10 +1520,11 @@ export function assessBreachRisk(breachData) {
   const icoNotifiable = riskLevel !== 'low';
 
   // ICO deadline: 72 hours from discovery (UK GDPR Article 33).
-  // Append Z to date-only strings so they parse as UTC, not local time (BST-safe).
+  // For date-only entries, assume end-of-day UTC so we do not undercount the
+  // statutory window by implicitly treating awareness as 00:00.
   const discoveredRaw = breachData.discovered_date;
   const discoveredDate = discoveredRaw
-    ? new Date(discoveredRaw.length === 10 ? discoveredRaw + 'T00:00:00Z' : discoveredRaw)
+    ? new Date(discoveredRaw.length === 10 ? `${discoveredRaw}T23:59:59Z` : discoveredRaw)
     : null;
   const icoDeadline = discoveredDate && !isNaN(discoveredDate.getTime())
     ? new Date(discoveredDate.getTime() + 72 * 60 * 60 * 1000)

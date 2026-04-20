@@ -16,7 +16,7 @@ const RETENTION_COLS = 'id, data_category, retention_period, retention_days, ret
 
 const CONSENT_COLS = 'id, home_id, subject_type, subject_id, subject_name, purpose, legal_basis, given, withdrawn, notes, version, created_at, updated_at';
 
-const DP_COMPLAINT_COLS = 'id, home_id, date_received, complainant_name, category, description, severity, ico_involved, ico_reference, status, resolution, resolution_date, version, created_at, updated_at';
+const DP_COMPLAINT_COLS = 'id, home_id, date_received, complainant_name, subject_type, subject_id, category, description, severity, ico_involved, ico_reference, status, resolution, resolution_date, version, created_at, updated_at';
 
 // ── Access Log ───────────────────────────────────────────────────────────────
 
@@ -361,6 +361,8 @@ function shapeDPComplaint(row) {
     home_id: row.home_id,
     date_received: d(row.date_received),
     complainant_name: row.complainant_name,
+    subject_type: row.subject_type || null,
+    subject_id: row.subject_id || null,
     category: row.category,
     description: row.description,
     severity: row.severity,
@@ -401,9 +403,9 @@ export async function createDPComplaint(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO dp_complaints
-       (home_id, date_received, complainant_name, category, description, severity, ico_involved, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${DP_COMPLAINT_COLS}`,
-    [homeId, data.date_received, data.complainant_name || null, data.category,
+       (home_id, date_received, complainant_name, subject_type, subject_id, category, description, severity, ico_involved, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING ${DP_COMPLAINT_COLS}`,
+    [homeId, data.date_received, data.complainant_name || null, data.subject_type || null, data.subject_id || null, data.category,
      data.description, data.severity ?? 'low', data.ico_involved ?? false, data.status ?? 'open']
   );
   return shapeDPComplaint(rows[0]);

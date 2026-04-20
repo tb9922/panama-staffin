@@ -23,6 +23,18 @@ const homeIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Invalid home ID').max
 const idSchema = z.coerce.number().int().positive();
 const dateSchema = nullableDateInput;
 
+function buildSarAuditSummary(data) {
+  const counts = Object.entries(data?.data || {})
+    .filter(([, value]) => Array.isArray(value))
+    .map(([key, value]) => [key, value.length])
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 8)
+    .map(([key, count]) => `${key}=${count}`)
+    .join(', ');
+  return `Gathered ${data?.subject_type || 'unknown'} data for ${data?.subject_id || 'unknown'}${counts ? ` (${counts})` : ''}`;
+}
+
 const requestBodySchema = z.object({
   request_type:      z.enum(['sar', 'erasure', 'rectification', 'restriction', 'portability']),
   subject_type:      z.enum(['staff', 'resident']),
@@ -89,11 +101,16 @@ const consentBodySchema = z.object({
 const dpComplaintBodySchema = z.object({
   date_received:    dateSchema,
   complainant_name: z.string().max(200).nullable().optional(),
+  subject_type:     z.enum(['staff', 'resident']).nullable().optional(),
+  subject_id:       z.string().min(1).max(100).nullable().optional(),
   category:         z.enum(['access', 'erasure', 'rectification', 'breach', 'consent', 'other']),
   description:      z.string().min(1).max(5000),
   severity:         z.enum(['low', 'medium', 'high', 'critical']).optional().default('low'),
   ico_involved:     z.boolean().optional().default(false),
-});
+}).refine(
+  data => (!data.subject_type && !data.subject_id) || (data.subject_type && data.subject_id),
+  { message: 'subject_type and subject_id must be provided together when linking a complaint to a subject' },
+);
 
 const dpComplaintUpdateSchema = z.object({
   status:          z.enum(['open', 'investigating', 'resolved', 'closed', 'escalated']).optional(),
@@ -162,8 +179,7 @@ router.post('/requests/:id/gather', writeRateLimiter, requireAuth, requireHomeAc
       return res.status(400).json({ error: 'Resident name is required for resident data gathering. Update the request with the resident name before gathering.' });
     }
     const data = await gdprService.gatherPersonalData(request.subject_type, request.subject_id, req.home.id, null, request.subject_name);
-    await auditService.log('sar_gather', req.home.slug, req.user.username,
-      `Gathered ${request.subject_type} data for ${request.subject_id}`);
+    await auditService.log('sar_gather', req.home.slug, req.user.username, buildSarAuditSummary(data));
     res.json(data);
   } catch (err) { next(err); }
 });

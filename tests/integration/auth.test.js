@@ -680,6 +680,21 @@ describe('Token revocation', () => {
       .expect(403);
   });
 
+  it('admin cannot revoke their own current session', async () => {
+    const res = await request(app)
+      .post('/api/login/revoke')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ username: ADMIN_USER })
+      .expect(400);
+
+    expect(res.body.error).toMatch(/cannot revoke your own/i);
+
+    await request(app)
+      .get('/api/homes')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+  });
+
   it('logout of one session does not block another session', async () => {
     // Login twice as admin — two distinct JWTs
     const res1 = await request(app)

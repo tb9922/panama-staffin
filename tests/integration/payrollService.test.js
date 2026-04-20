@@ -19,6 +19,8 @@ import {
   assemblePayslipData,
   eachDayInRange,
 } from '../../services/payrollService.js';
+import * as payrollRunRepo from '../../repositories/payrollRunRepo.js';
+import * as staffRepo from '../../repositories/staffRepo.js';
 import { NotFoundError, ValidationError } from '../../errors.js';
 
 // ── Test constants ────────────────────────────────────────────────────────────
@@ -732,6 +734,21 @@ describe('assemblePayslipData', () => {
     expect(payslips[0].staff.name).toBe('Alice Senior');
   });
 
+  it('limits payslip staff details to payslip-safe fields', async () => {
+    const payslips = await assemblePayslipData(runId, homeId, 'TP01');
+    const staff = payslips[0].staff;
+
+    expect(staff).toEqual({
+      id: 'TP01',
+      name: 'Alice Senior',
+      role: expect.any(String),
+      ni_number: null,
+    });
+    expect(staff).not.toHaveProperty('date_of_birth');
+    expect(staff).not.toHaveProperty('hourly_rate');
+    expect(staff).not.toHaveProperty('address');
+  });
+
   it('includes shift breakdown in payslip data', async () => {
     const payslips = await assemblePayslipData(runId, homeId, 'TP01');
     const tp01 = payslips[0];
@@ -761,6 +778,263 @@ describe('assemblePayslipData', () => {
 });
 
 // ── Error handling ──────────────────────────────────────────────────────────
+
+describe('payroll hardening regressions', () => {
+  it('excludes voided runs from holiday-pay lookback averages', async () => {
+    const insertedRunIds = [];
+    const insertedLineIds = [];
+    try {
+      const runRows = await Promise.all([
+        pool.query(
+          `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, status)
+           VALUES ($1, '2025-08-04', '2025-08-10', 'weekly', 'approved')
+           RETURNING id`,
+          [homeId],
+        ),
+        pool.query(
+          `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, status)
+           VALUES ($1, '2025-08-11', '2025-08-17', 'weekly', 'voided')
+           RETURNING id`,
+          [homeId],
+        ),
+        pool.query(
+          `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, status)
+           VALUES ($1, '2025-08-18', '2025-08-24', 'weekly', 'approved')
+           RETURNING id`,
+          [homeId],
+        ),
+      ]);
+      const [approvedA, voidedRun, approvedB] = runRows.map((result) => result.rows[0].id);
+      insertedRunIds.push(approvedA, voidedRun, approvedB);
+
+      const lineRows = await Promise.all([
+        pool.query(
+          `INSERT INTO payroll_lines (payroll_run_id, staff_id, gross_pay)
+           VALUES ($1, 'TP01', 500)
+           RETURNING id`,
+          [approvedA],
+        ),
+        pool.query(
+          `INSERT INTO payroll_lines (payroll_run_id, staff_id, gross_pay)
+           VALUES ($1, 'TP01', 1500)
+           RETURNING id`,
+          [voidedRun],
+        ),
+        pool.query(
+          `INSERT INTO payroll_lines (payroll_run_id, staff_id, gross_pay)
+           VALUES ($1, 'TP01', 700)
+           RETURNING id`,
+          [approvedB],
+        ),
+      ]);
+      insertedLineIds.push(...lineRows.map((result) => result.rows[0].id));
+
+      const avg = await payrollRunRepo.findAverageWeeklyPay(homeId, 'TP01', '2025-09-01');
+      expect(avg).toMatchObject({
+        total_gross: 1200,
+        divisor_weeks: 2,
+      });
+    } finally {
+      if (insertedLineIds.length > 0) {
+        await pool.query(`DELETE FROM payroll_lines WHERE id = ANY($1::int[])`, [insertedLineIds]);
+      }
+      if (insertedRunIds.length > 0) {
+        await pool.query(`DELETE FROM payroll_runs WHERE id = ANY($1::int[])`, [insertedRunIds]);
+      }
+    }
+  });
+
+  it('stamps leaving_date when a staff member is deactivated without one', async () => {
+    await pool.query(
+      `INSERT INTO staff (id, home_id, name, role, team, skill, hourly_rate, active)
+       VALUES ('TP-LEAVER', $1, 'Temp Leaver', 'Carer', 'Day A', 1, 12.5, true)`,
+      [homeId],
+    );
+
+    try {
+      const updated = await staffRepo.updateOne(homeId, 'TP-LEAVER', { active: false }, null);
+      expect(updated.active).toBe(false);
+      expect(updated.leaving_date).toBe(new Date().toISOString().slice(0, 10));
+    } finally {
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = 'TP-LEAVER'`, [homeId]);
+    }
+  });
+
+  it('still pays a deactivated staff member who has period activity but no leaving_date', async () => {
+    const tempStaffId = 'TP-INACTIVE-ACT';
+    let tempRunId = null;
+    try {
+      await pool.query(
+        `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date, contract_hours)
+         VALUES ($1, $2, 'Inactive But Owed', 'Carer', 'Day A', 'E', 1, 12.5, false, false, '2025-01-01', 37.5)`,
+        [tempStaffId, homeId],
+      );
+      await pool.query(
+        `INSERT INTO shift_overrides (home_id, date, staff_id, shift)
+         VALUES ($1, '2025-12-01', $2, 'E')
+         ON CONFLICT (home_id, date, staff_id) DO UPDATE SET shift = EXCLUDED.shift`,
+        [homeId, tempStaffId],
+      );
+      await pool.query(
+        `INSERT INTO timesheet_entries
+           (home_id, staff_id, date, scheduled_start, scheduled_end, actual_start, actual_end, break_minutes, payable_hours, status)
+         VALUES ($1, $2, '2025-12-01', '07:00', '15:00', '07:00', '15:00', 0, 8, 'approved')
+         ON CONFLICT (home_id, staff_id, date) DO UPDATE SET
+           actual_start = EXCLUDED.actual_start,
+           actual_end = EXCLUDED.actual_end,
+           payable_hours = EXCLUDED.payable_hours,
+           status = EXCLUDED.status`,
+        [homeId, tempStaffId],
+      );
+      const { rows: [run] } = await pool.query(
+        `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency)
+         VALUES ($1, '2025-12-01', '2025-12-07', 'weekly')
+         RETURNING id`,
+        [homeId],
+      );
+      tempRunId = run.id;
+
+      await calculateRun(tempRunId, homeId, SLUG, USERNAME);
+
+      const { rows: [line] } = await pool.query(
+        `SELECT gross_pay, base_hours
+           FROM payroll_lines
+          WHERE payroll_run_id = $1 AND staff_id = $2`,
+        [tempRunId, tempStaffId],
+      );
+      expect(line).toBeTruthy();
+      expect(parseFloat(line.base_hours)).toBeGreaterThan(0);
+      expect(parseFloat(line.gross_pay)).toBeGreaterThan(0);
+    } finally {
+      if (tempRunId) {
+        await pool.query(
+          `DELETE FROM payroll_line_shifts
+            WHERE payroll_line_id IN (
+              SELECT id FROM payroll_lines WHERE payroll_run_id = $1
+            )`,
+          [tempRunId],
+        );
+        await pool.query(`DELETE FROM payroll_lines WHERE payroll_run_id = $1`, [tempRunId]);
+        await pool.query(`DELETE FROM payroll_runs WHERE id = $1`, [tempRunId]);
+      }
+      await pool.query(`DELETE FROM timesheet_entries WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]);
+      await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]);
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeId, tempStaffId]);
+    }
+  });
+
+  it('uses the worker 22nd birthday as pension enrolled_date when that falls mid-run', async () => {
+    const tempStaffId = 'TP-PEN-BDAY';
+    let tempRunId = null;
+    const overrideDates = ['2025-12-08', '2025-12-09', '2025-12-10'];
+    try {
+      await pool.query(
+        `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date, date_of_birth, contract_hours)
+         VALUES ($1, $2, 'Pension Birthday', 'Carer', 'Day A', 'E', 1, 13.00, true, false, '2025-01-01', '2003-12-10', 37.5)`,
+        [tempStaffId, homeId],
+      );
+      for (const date of overrideDates) {
+        await pool.query(
+          `INSERT INTO shift_overrides (home_id, date, staff_id, shift)
+           VALUES ($1, $2, $3, 'E')
+           ON CONFLICT (home_id, date, staff_id) DO UPDATE SET shift = EXCLUDED.shift`,
+          [homeId, date, tempStaffId],
+        );
+      }
+      const { rows: [run] } = await pool.query(
+        `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency)
+         VALUES ($1, '2025-12-08', '2025-12-14', 'weekly')
+         RETURNING id`,
+        [homeId],
+      );
+      tempRunId = run.id;
+
+      await calculateRun(tempRunId, homeId, SLUG, USERNAME);
+
+      const { rows: [enrolment] } = await pool.query(
+        `SELECT status, enrolled_date::text
+         FROM pension_enrolments
+         WHERE home_id = $1 AND staff_id = $2`,
+        [homeId, tempStaffId],
+      );
+      expect(enrolment.status).toBe('eligible_enrolled');
+      expect(enrolment.enrolled_date).toBe('2025-12-10');
+    } finally {
+      if (tempRunId) {
+        await pool.query(
+          `DELETE FROM payroll_line_shifts
+            WHERE payroll_line_id IN (SELECT id FROM payroll_lines WHERE payroll_run_id = $1)`,
+          [tempRunId],
+        ).catch(() => {});
+        await pool.query(`DELETE FROM payroll_lines WHERE payroll_run_id = $1`, [tempRunId]).catch(() => {});
+        await pool.query(`DELETE FROM payroll_runs WHERE id = $1`, [tempRunId]).catch(() => {});
+      }
+      await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeId, tempStaffId]).catch(() => {});
+    }
+  });
+
+  it('re-enrols opted-out staff once reassessment_date falls inside the run', async () => {
+    const tempStaffId = 'TP-PEN-REASS';
+    let tempRunId = null;
+    try {
+      await pool.query(
+        `INSERT INTO staff (id, home_id, name, role, team, pref, skill, hourly_rate, active, wtr_opt_out, start_date, date_of_birth, contract_hours)
+         VALUES ($1, $2, 'Pension Reassess', 'Carer', 'Day A', 'E', 1, 13.00, true, false, '2024-01-01', '1990-05-01', 37.5)`,
+        [tempStaffId, homeId],
+      );
+      await pool.query(
+        `INSERT INTO shift_overrides (home_id, date, staff_id, shift)
+         VALUES ($1, '2025-12-10', $2, 'EL')
+         ON CONFLICT (home_id, date, staff_id) DO UPDATE SET shift = EXCLUDED.shift`,
+        [homeId, tempStaffId],
+      );
+      await pool.query(
+        `INSERT INTO pension_enrolments (home_id, staff_id, status, opted_out_date, reassessment_date)
+         VALUES ($1, $2, 'opted_out', '2025-06-01', '2025-12-10')
+         ON CONFLICT (home_id, staff_id) DO UPDATE SET
+           status = EXCLUDED.status,
+           opted_out_date = EXCLUDED.opted_out_date,
+           reassessment_date = EXCLUDED.reassessment_date`,
+        [homeId, tempStaffId],
+      );
+      const { rows: [run] } = await pool.query(
+        `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency)
+         VALUES ($1, '2025-12-08', '2025-12-14', 'weekly')
+         RETURNING id`,
+        [homeId],
+      );
+      tempRunId = run.id;
+
+      await calculateRun(tempRunId, homeId, SLUG, USERNAME);
+
+      const { rows: [enrolment] } = await pool.query(
+        `SELECT status, enrolled_date::text, opted_out_date, reassessment_date
+         FROM pension_enrolments
+         WHERE home_id = $1 AND staff_id = $2`,
+        [homeId, tempStaffId],
+      );
+      expect(enrolment.status).toBe('eligible_enrolled');
+      expect(enrolment.enrolled_date).toBe('2025-12-10');
+      expect(enrolment.opted_out_date).toBeNull();
+      expect(enrolment.reassessment_date).toBeNull();
+    } finally {
+      if (tempRunId) {
+        await pool.query(
+          `DELETE FROM payroll_line_shifts
+            WHERE payroll_line_id IN (SELECT id FROM payroll_lines WHERE payroll_run_id = $1)`,
+          [tempRunId],
+        ).catch(() => {});
+        await pool.query(`DELETE FROM payroll_lines WHERE payroll_run_id = $1`, [tempRunId]).catch(() => {});
+        await pool.query(`DELETE FROM payroll_runs WHERE id = $1`, [tempRunId]).catch(() => {});
+      }
+      await pool.query(`DELETE FROM shift_overrides WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM pension_enrolments WHERE home_id = $1 AND staff_id = $2`, [homeId, tempStaffId]).catch(() => {});
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeId, tempStaffId]).catch(() => {});
+    }
+  });
+});
 
 describe('error handling', () => {
   it('calculateRun throws NotFoundError for non-existent run', async () => {

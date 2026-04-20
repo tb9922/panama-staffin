@@ -285,6 +285,10 @@ export async function createOne(homeId, staff, client) {
  * @returns {object|null} shaped staff row, or null if not found / version conflict
  */
 export async function updateOne(homeId, staffId, fields, version, client) {
+  const effectiveFields = { ...fields };
+  if (effectiveFields.active === false && !('leaving_date' in effectiveFields)) {
+    effectiveFields.leaving_date = new Date().toISOString().slice(0, 10);
+  }
   const setClauses = [];
   const params = [homeId, staffId];
   const settable = {
@@ -297,8 +301,8 @@ export async function updateOne(homeId, staffId, fields, version, client) {
     phone: 'phone', address: 'address', emergency_contact: 'emergency_contact',
   };
   for (const [key, cast] of Object.entries(settable)) {
-    if (key in fields) {
-      params.push(fields[key] ?? null);
+    if (key in effectiveFields) {
+      params.push(effectiveFields[key] ?? null);
       const col = cast.includes('::') ? cast.split('::')[0] : cast;
       const typeCast = cast.includes('::') ? '::' + cast.split('::')[1] : '';
       setClauses.push(`${col} = $${params.length}${typeCast}`);

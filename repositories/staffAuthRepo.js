@@ -131,13 +131,18 @@ export async function consumeInviteToken(token, client = pool) {
   return rowCount > 0;
 }
 
-export async function recordFailedLogin(homeId, staffId, client = pool) {
+export async function recordFailedLogin(homeId, staffId, lockoutMinutes = 15, client = pool) {
   await client.query(
     `UPDATE staff_auth_credentials
         SET failed_login_count = failed_login_count + 1,
+            locked_until = CASE
+              WHEN failed_login_count + 1 >= 5
+                THEN NOW() + ($3::text || ' minutes')::interval
+              ELSE locked_until
+            END,
             updated_at = NOW()
       WHERE home_id = $1 AND staff_id = $2`,
-    [homeId, staffId],
+    [homeId, staffId, String(lockoutMinutes)],
   );
 }
 

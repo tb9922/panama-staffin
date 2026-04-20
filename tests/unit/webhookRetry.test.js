@@ -7,6 +7,9 @@ import { getNextRetryAt } from '../../services/webhookService.js';
 import { pool } from '../../db.js';
 import * as webhookRepo from '../../repositories/webhookRepo.js';
 
+const TEST_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const ORIGINAL_ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+
 // ── Backoff calculation ──────────────────────────────────────────────────────
 
 describe('getNextRetryAt', () => {
@@ -49,6 +52,14 @@ describe('webhookRepo retry functions', () => {
   let testWebhookId;
 
   beforeAll(async () => {
+    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || TEST_ENCRYPTION_KEY;
+    await pool.query(`
+      ALTER TABLE webhook_deliveries
+        ADD COLUMN IF NOT EXISTS signing_secret_encrypted BYTEA,
+        ADD COLUMN IF NOT EXISTS signing_secret_iv BYTEA,
+        ADD COLUMN IF NOT EXISTS signing_secret_tag BYTEA
+    `);
+
     // Create test home + webhook
     const { rows: [h] } = await pool.query(
       `INSERT INTO homes (slug, name) VALUES ('webhook-retry-test', 'Webhook Retry Test') RETURNING id`
@@ -68,6 +79,8 @@ describe('webhookRepo retry functions', () => {
     await pool.query('DELETE FROM webhook_deliveries WHERE webhook_id = $1', [testWebhookId]);
     await pool.query('DELETE FROM webhooks WHERE id = $1', [testWebhookId]);
     await pool.query('DELETE FROM homes WHERE id = $1', [testHomeId]);
+    if (ORIGINAL_ENCRYPTION_KEY == null) delete process.env.ENCRYPTION_KEY;
+    else process.env.ENCRYPTION_KEY = ORIGINAL_ENCRYPTION_KEY;
   });
 
   it('logDelivery returns delivery ID', async () => {
@@ -90,6 +103,97 @@ describe('webhookRepo retry functions', () => {
     );
     expect(rows[0].status).toBe('pending_retry');
     expect(rows[0].error).toBe('timeout');
+  });
+
+  it('findRecentDuplicateDelivery ignores timestamp-only differences in the event envelope', async () => {
+    const id = await webhookRepo.logDelivery(
+      testWebhookId,
+      'override.created',
+      JSON.stringify({ event: 'override.created', payload: { id: 'dup-1' }, timestamp: '2026-04-20T10:00:00.000Z' }),
+      200,
+      50,
+      null,
+      'delivered'
+    );
+
+    const duplicate = await webhookRepo.findRecentDuplicateDelivery(
+      testWebhookId,
+      'override.created',
+      JSON.stringify({ event: 'override.created', payload: { id: 'dup-1' }, timestamp: '2026-04-20T10:00:05.000Z' }),
+    );
+
+    expect(duplicate?.id).toBe(id);
+  });
+
+  it('claimPendingRetries returns the frozen signing secret after webhook rotation', async () => {
+    const nextRetry = new Date(Date.now() - 60_000);
+    const id = await webhookRepo.logDelivery(
+      testWebhookId,
+      'override.created',
+      '{"retry":"secret-rotation"}',
+      null,
+      100,
+      'timeout',
+      'pending_retry',
+      {
+        retryCount: 1,
+        nextRetryAt: nextRetry,
+        signingSecret: 'frozen-secret-before-rotation',
+      }
+    );
+
+    await pool.query(
+      `UPDATE webhooks
+          SET secret = 'rotated-secret-after-dispatch',
+              secret_encrypted = NULL,
+              secret_iv = decode('00', 'hex'),
+              secret_tag = decode('00', 'hex')
+        WHERE id = $1`,
+      [testWebhookId]
+    );
+
+    try {
+      const claimed = await webhookRepo.claimPendingRetries(10);
+      const found = claimed.find(d => d.id === id);
+      expect(found).toBeDefined();
+      expect(found.secret).toBe('frozen-secret-before-rotation');
+    } finally {
+      await pool.query(
+        `UPDATE webhooks
+            SET secret = 'test-secret-1234567890',
+                secret_encrypted = NULL,
+                secret_iv = decode('00', 'hex'),
+                secret_tag = decode('00', 'hex')
+          WHERE id = $1`,
+        [testWebhookId]
+      );
+      await webhookRepo.markDeliveryFailed(id);
+    }
+  });
+
+  it('migrateAllLegacySecrets upgrades plaintext webhook secrets in place', async () => {
+    const { rows: [legacy] } = await pool.query(
+      `INSERT INTO webhooks (home_id, url, secret, events, active)
+       VALUES ($1, 'https://legacy.example.com/hook', 'legacy-plaintext-secret', ARRAY['incident.created'], true)
+       RETURNING id`,
+      [testHomeId],
+    );
+
+    try {
+      const migrated = await webhookRepo.migrateAllLegacySecrets();
+      expect(migrated).toBeGreaterThanOrEqual(1);
+
+      const { rows: [row] } = await pool.query(
+        `SELECT secret, secret_encrypted
+           FROM webhooks
+          WHERE id = $1`,
+        [legacy.id],
+      );
+      expect(row.secret).toBeNull();
+      expect(row.secret_encrypted).toBeTruthy();
+    } finally {
+      await pool.query('DELETE FROM webhooks WHERE id = $1', [legacy.id]).catch(() => {});
+    }
   });
 
   it('updateDeliveryForRetry sets retry_count and next_retry_at', async () => {

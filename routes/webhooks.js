@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { config } from '../config.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as webhookRepo from '../repositories/webhookRepo.js';
 import { zodError } from '../errors.js';
-import { isPrivateUrl, resolvedToPrivateIp } from '../lib/ssrf.js';
+import { isInternalAppUrl, isPrivateUrl, resolvedToPrivateIp } from '../lib/ssrf.js';
 import * as auditService from '../services/auditService.js';
 
 const router = Router();
@@ -18,7 +19,8 @@ const SUPPORTED_EVENTS = [
 const webhookSchema = z.object({
   url: z.string().url().max(2000)
     .refine(u => u.startsWith('https://'), 'Webhook URL must use HTTPS')
-    .refine(u => !isPrivateUrl(u), 'Webhook URL must not target private/internal networks'),
+    .refine(u => !isPrivateUrl(u), 'Webhook URL must not target private/internal networks')
+    .refine(u => !isInternalAppUrl(u, config.allowedOrigin), 'Webhook URL must not target Panama internal endpoints'),
   secret: z.string().min(16).max(500),
   events: z.array(z.enum(SUPPORTED_EVENTS)).min(1),
   active: z.boolean(),

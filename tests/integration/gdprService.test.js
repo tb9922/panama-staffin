@@ -292,6 +292,11 @@ beforeAll(async () => {
      VALUES ($1, 'edit', 'GET', '/api/data', $2, 200)`,
     [STAFF_NAMES[0], homeA]
   );
+  await pool.query(
+    `INSERT INTO access_log (user_name, user_role, method, endpoint, home_id, status_code)
+     VALUES ($1, 'edit', 'GET', '/api/data', $2, 200)`,
+    [STAFF_NAMES[0], homeB]
+  );
 
   // ── Home B isolation data ──────────────────────────────────────────────
   await pool.query(
@@ -380,6 +385,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM access_log WHERE user_name = ANY($1)`, [STAFF_NAMES]);
   await pool.query(`DELETE FROM access_log WHERE user_name = '[REDACTED]' AND home_id IN ($1, $2)`, [homeA, homeB]);
   await pool.query('DELETE FROM user_home_roles WHERE username = $1', [LINK_USERNAME]).catch(() => {});
+  await pool.query('DELETE FROM token_denylist WHERE username = $1', [LINK_USERNAME]).catch(() => {});
   await pool.query('DELETE FROM users WHERE username = $1', [LINK_USERNAME]).catch(() => {});
 
   if (homeA) { await cleanHome(homeA); await pool.query('DELETE FROM homes WHERE id = $1', [homeA]); }
@@ -607,6 +613,53 @@ describe('gatherPersonalData: staff', () => {
     expect(result.data.hr_grievance_cases.length).toBeGreaterThanOrEqual(1);
     expect(result.data.hr_grievance_actions.length).toBeGreaterThanOrEqual(1);
     expect(result.data.hr_grievance_actions[0].description).toBe('Arrange mediation session');
+  });
+
+  it('includes DP complaints linked by subject_id even when the complainant name differs', async () => {
+    const { rows: [complaint] } = await pool.query(
+      `INSERT INTO dp_complaints
+         (home_id, date_received, complainant_name, subject_type, subject_id, category, description, severity, status)
+       VALUES ($1, CURRENT_DATE, 'Alias Name', 'staff', $2, 'access', 'Linked by subject id', 'medium', 'open')
+       RETURNING id`,
+      [homeA, STAFF[0]],
+    );
+
+    try {
+      const linked = await gdprService.gatherPersonalData('staff', STAFF[0], homeA);
+      expect(linked.data.dp_complaints.some(c => c.id === complaint.id)).toBe(true);
+    } finally {
+      await pool.query('DELETE FROM dp_complaints WHERE id = $1', [complaint.id]).catch(() => {});
+    }
+  });
+
+  it('matches webhook payloads by exact scalar values instead of substring text search', async () => {
+    const { rows: [hook] } = await pool.query(
+      `INSERT INTO webhooks (home_id, url, secret, events, active)
+       VALUES ($1, 'https://example.com/webhook', 'legacy-secret', ARRAY['incident.created'], true)
+       RETURNING id`,
+      [homeA],
+    );
+    try {
+      const { rows: [exact] } = await pool.query(
+        `INSERT INTO webhook_deliveries (webhook_id, event, payload, status)
+         VALUES ($1, 'incident.created', '{"staff_id":"gdpr-S001","status":"open"}'::jsonb, 'delivered')
+         RETURNING id`,
+        [hook.id],
+      );
+      const { rows: [substringOnly] } = await pool.query(
+        `INSERT INTO webhook_deliveries (webhook_id, event, payload, status)
+         VALUES ($1, 'incident.created', '{"status":"gdpr-S001-completed"}'::jsonb, 'delivered')
+         RETURNING id`,
+        [hook.id],
+      );
+
+      const result = await gdprService.gatherPersonalData('staff', STAFF[0], homeA);
+      const deliveryIds = result.data.webhook_deliveries.map((row) => row.id);
+      expect(deliveryIds).toContain(exact.id);
+      expect(deliveryIds).not.toContain(substringOnly.id);
+    } finally {
+      await pool.query('DELETE FROM webhooks WHERE id = $1', [hook.id]).catch(() => {});
+    }
   });
 
   it('includes incidents (via staff_involved JSONB) and addenda', () => {
@@ -886,7 +939,62 @@ describe('executeErasure', () => {
     const { rows: original } = await pool.query(
       `SELECT * FROM access_log WHERE user_name = $1`, [STAFF_NAMES[0]]
     );
-    expect(original).toHaveLength(0);
+    expect(original.filter((row) => row.home_id === homeA)).toHaveLength(0);
+  });
+
+  it('redacts only exact webhook payload values during staff erasure', async () => {
+    const exactStaffId = STAFF[1];
+    const { rows: [hook] } = await pool.query(
+      `INSERT INTO webhooks (home_id, url, secret, events, active)
+       VALUES ($1, 'https://example.com/webhook', 'legacy-secret', ARRAY['incident.created'], true)
+       RETURNING id`,
+      [homeA],
+    );
+    try {
+      const { rows: [exact] } = await pool.query(
+        `INSERT INTO webhook_deliveries (webhook_id, event, payload, status)
+         VALUES ($1, 'incident.created', $2::jsonb, 'delivered')
+         RETURNING id`,
+        [hook.id, JSON.stringify({ staff_id: exactStaffId })],
+      );
+      const { rows: [substringOnly] } = await pool.query(
+        `INSERT INTO webhook_deliveries (webhook_id, event, payload, status)
+         VALUES ($1, 'incident.created', $2::jsonb, 'delivered')
+         RETURNING id`,
+        [hook.id, JSON.stringify({ status: `${exactStaffId}-completed` })],
+      );
+
+      await gdprService.executeErasure(exactStaffId, homeA, null, 'admin', SLUG_A);
+
+      const { rows } = await pool.query(
+        `SELECT id, payload::text AS payload
+           FROM webhook_deliveries
+          WHERE id = ANY($1::int[])
+          ORDER BY id`,
+        [[exact.id, substringOnly.id]],
+      );
+      const payloadMap = new Map(rows.map((row) => [row.id, row.payload]));
+      expect(payloadMap.get(exact.id)).toBe('"[REDACTED]"');
+      expect(payloadMap.get(substringOnly.id)).toContain(`${exactStaffId}-completed`);
+    } finally {
+      await pool.query('DELETE FROM webhooks WHERE id = $1', [hook.id]).catch(() => {});
+    }
+  });
+
+  it('preserves same-name access log entries in other homes', async () => {
+    const { rows } = await pool.query(
+      `SELECT * FROM access_log WHERE home_id = $1 AND user_name = $2`,
+      [homeB, STAFF_NAMES[0]]
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('revokes linked user sessions during erasure', async () => {
+    const { rows } = await pool.query(
+      `SELECT * FROM token_denylist WHERE username = $1 AND scope = 'admin'`,
+      [LINK_USERNAME]
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it('marks erasure request as completed', async () => {
@@ -904,7 +1012,13 @@ describe('executeErasure', () => {
 
   it('creates audit log entry for erasure', async () => {
     const { rows } = await pool.query(
-      `SELECT * FROM audit_log WHERE home_slug = $1 AND action = 'erasure' ORDER BY ts DESC LIMIT 1`, [SLUG_A]
+      `SELECT * FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'erasure'
+          AND details LIKE '%' || $2 || '%'
+        ORDER BY ts DESC
+        LIMIT 1`,
+      [SLUG_A, targetStaff],
     );
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0].details).toContain(targetStaff);
@@ -946,6 +1060,32 @@ describe('scanRetention', () => {
     if (training) {
       expect(training.total_records).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('scopes access_log and audit_log counts to the current home', async () => {
+    await pool.query(
+      `INSERT INTO access_log (home_id, user_name, user_role, method, endpoint, status_code)
+       VALUES
+         ($1, 'gdpr-a', 'admin', 'GET', '/api/gdpr/requests', 200),
+         ($2, 'gdpr-b', 'admin', 'GET', '/api/gdpr/requests', 200)`,
+      [homeA, homeB],
+    );
+    await pool.query(
+      `INSERT INTO audit_log (action, home_slug, user_name, details)
+       VALUES
+         ('gdpr_retention_test', $1, 'gdpr-a', '{"home":"a"}'),
+         ('gdpr_retention_test', $2, 'gdpr-b', '{"home":"b"}')`,
+      [SLUG_A, SLUG_B],
+    );
+
+    const results = await gdprService.scanRetention(homeA);
+    const access = results.find(r => r.data_category === 'Access log');
+    const audit = results.find(r => r.data_category === 'Audit log');
+
+    expect(access).toBeTruthy();
+    expect(audit).toBeTruthy();
+    expect(access.total_records).toBeGreaterThanOrEqual(1);
+    expect(audit.total_records).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -993,6 +1133,30 @@ describe('assessBreachRisk', () => {
     const diffHours = (deadline - discovery) / (1000 * 60 * 60);
     expect(diffHours).toBe(72);
   });
+
+  it('uses end-of-day UTC for date-only discovery values', () => {
+    const result = gdprService.assessBreachRisk({
+      severity: 'medium',
+      risk_to_rights: 'possible',
+      individuals_affected: 5,
+      data_categories: [],
+      discovered_date: '2026-02-01',
+    });
+    expect(result.icoDeadline).toBe('2026-02-04T23:59:59.000Z');
+  });
+
+  it('fails closed for empty breach categories in care-home context', () => {
+    const result = gdprService.assessBreachRisk({
+      severity: 'low',
+      risk_to_rights: 'unlikely',
+      individuals_affected: 0,
+      data_categories: [],
+      discovered_date: '2026-02-01T10:00:00Z',
+    });
+    expect(result.riskLevel).toBe('medium');
+    expect(result.icoNotifiable).toBe(true);
+    expect(result.factors.multiplier).toBe(1.5);
+  });
 });
 
 // ── Cross-home Isolation ─────────────────────────────────────────────────────
@@ -1003,6 +1167,7 @@ describe('cross-home isolation', () => {
     const result = await gdprService.gatherPersonalData('staff', 'gdpr-S001', homeB);
     expect(result.data.staff).toHaveLength(1);
     expect(result.data.staff[0].name).toBe('Alice GDPR HomeB');
+    expect(result.data.access_log).toHaveLength(0);
 
     // Training from home B only
     const trTypes = result.data.training_records.map(t => t.training_type_id);
@@ -1044,5 +1209,40 @@ describe('cross-home isolation', () => {
     );
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0].trainer).toBe('HomeB Trainer');
+  });
+});
+
+describe('resident erasure safety', () => {
+  it('fails closed when multiple residents share the same name', async () => {
+    const duplicateName = 'Duplicate Resident';
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO finance_residents (
+         home_id,
+         resident_name,
+         room_number,
+         admission_date,
+         care_type,
+         funding_type,
+         weekly_fee,
+         status,
+         created_by
+       )
+       VALUES
+         ($1, $2, 'D1', '2026-01-01', 'residential', 'self_funded', 1000, 'active', 'test-admin'),
+         ($1, $2, 'D2', '2026-01-01', 'residential', 'self_funded', 1000, 'active', 'test-admin')
+       RETURNING id`,
+      [homeA, duplicateName]
+    );
+
+    try {
+      await expect(
+        gdprService.executeResidentErasure('missing-resident-id', homeA, null, 'test-admin', SLUG_A, duplicateName)
+      ).rejects.toThrow(/multiple residents share this name/i);
+    } finally {
+      await pool.query(
+        `DELETE FROM finance_residents WHERE id = ANY($1::int[])`,
+        [inserted.map((row) => row.id)]
+      );
+    }
   });
 });

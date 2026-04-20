@@ -14,6 +14,9 @@ const SECRET_COLS = 'id, home_id, url, events, active, secret, secret_encrypted,
  *   3. Neither — return null
  */
 function resolveSecret(row) {
+  if (row.signing_secret_encrypted && row.signing_secret_encrypted.length > 0) {
+    return decrypt(row.signing_secret_encrypted, row.signing_secret_iv, row.signing_secret_tag);
+  }
   if (row.secret_encrypted && row.secret_encrypted.length > 0) {
     // Buffer columns from pg driver are already Buffers
     return decrypt(row.secret_encrypted, row.secret_iv, row.secret_tag);
@@ -92,6 +95,20 @@ export async function findActiveByEvent(homeId, event) {
   return Promise.all(rows.map(row => toRowWithSecret(row)));
 }
 
+export async function migrateAllLegacySecrets(client = pool) {
+  if (!process.env.ENCRYPTION_KEY) return 0;
+  const { rows } = await client.query(
+    `SELECT ${SECRET_COLS}
+       FROM webhooks
+      WHERE secret IS NOT NULL
+        AND secret_encrypted IS NULL`
+  );
+  for (const row of rows) {
+    await migrateLegacySecret(row, client);
+  }
+  return rows.length;
+}
+
 export async function create(homeId, data) {
   const { encrypted: ciphertext, iv, tag } = encrypt(data.secret);
   const { rows } = await pool.query(
@@ -124,12 +141,52 @@ export async function remove(id, homeId) {
   return rowCount > 0;
 }
 
-export async function logDelivery(webhookId, event, payload, statusCode, responseMs, error, status = 'delivered') {
+export async function logDelivery(webhookId, event, payload, statusCode, responseMs, error, status = 'delivered', options = {}) {
+  let retryCount = 0;
+  let nextRetryAt = null;
+  let signingSecretEncrypted = null;
+  let signingSecretIv = null;
+  let signingSecretTag = null;
+  if (typeof options.retryCount === 'number') retryCount = options.retryCount;
+  if (options.nextRetryAt != null) nextRetryAt = options.nextRetryAt;
+  if (options.signingSecret) {
+    const { encrypted, iv, tag } = encrypt(options.signingSecret);
+    signingSecretEncrypted = encrypted;
+    signingSecretIv = iv;
+    signingSecretTag = tag;
+  }
+
   const { rows } = await pool.query(
-    `INSERT INTO webhook_deliveries (webhook_id, event, payload, status_code, response_ms, error, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO webhook_deliveries (
+       webhook_id,
+       event,
+       payload,
+       status_code,
+       response_ms,
+       error,
+       status,
+       retry_count,
+       next_retry_at,
+       signing_secret_encrypted,
+       signing_secret_iv,
+       signing_secret_tag
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
-    [webhookId, event, payload, statusCode, responseMs, error, status]
+    [
+      webhookId,
+      event,
+      payload,
+      statusCode,
+      responseMs,
+      error,
+      status,
+      retryCount,
+      nextRetryAt,
+      signingSecretEncrypted,
+      signingSecretIv,
+      signingSecretTag,
+    ]
   );
   return rows[0]?.id;
 }
@@ -146,7 +203,14 @@ export async function findRecentDuplicateDelivery(
      FROM webhook_deliveries
      WHERE webhook_id = $1
        AND event = $2
-       AND payload = $3::jsonb
+       AND (
+         payload = $3::jsonb
+         OR (
+           jsonb_typeof(payload) = 'object'
+           AND jsonb_typeof($3::jsonb) = 'object'
+           AND (payload - 'timestamp') = ($3::jsonb - 'timestamp')
+         )
+       )
        AND status = ANY($4::text[])
        AND delivered_at >= NOW() - ($5::int * INTERVAL '1 minute')
      ORDER BY delivered_at DESC
@@ -190,6 +254,7 @@ export async function getRecentDeliveries(webhookId, homeId, { limit = 50, statu
 export async function findPendingRetries(limit = 20) {
   const { rows } = await pool.query(
     `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+            wd.signing_secret_encrypted, wd.signing_secret_iv, wd.signing_secret_tag,
             w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
             w.home_id, w.active
      FROM webhook_deliveries wd
@@ -231,6 +296,7 @@ export async function claimPendingRetries(limit = 20) {
        WHERE wd.id = ANY($1::int[])
          AND w.id = wd.webhook_id
        RETURNING wd.id, wd.webhook_id, wd.event, wd.payload, wd.retry_count,
+                 wd.signing_secret_encrypted, wd.signing_secret_iv, wd.signing_secret_tag,
                  w.url, w.secret, w.secret_encrypted, w.secret_iv, w.secret_tag,
                  w.home_id, w.active`,
       [ids]

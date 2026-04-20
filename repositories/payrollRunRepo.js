@@ -506,7 +506,7 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pr.home_id = $1
        AND pl.staff_id = $2
-       AND pr.status IN ('approved', 'exported', 'locked', 'voided')
+       AND pr.status IN ('approved', 'exported', 'locked')
        AND pr.period_end < $3
      ORDER BY pr.period_end DESC
      LIMIT 260`,

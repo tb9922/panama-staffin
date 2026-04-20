@@ -45,6 +45,12 @@ const loginSchema = z.object({
   password: z.string().min(10, 'Password must be at least 10 characters').max(200),
 });
 
+function logAuthAudit(action, username, details = null) {
+  return auditService.log(action, '-', username, details).catch((err) => {
+    logger.warn({ action, username, err: err.message }, 'Auth audit write failed');
+  });
+}
+
 router.post('/', loginIpLimiter, loginLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body || {});
@@ -53,7 +59,7 @@ router.post('/', loginIpLimiter, loginLimiter, async (req, res, next) => {
     }
     const { username, password } = parsed.data;
     const result = await authService.login(username, password);
-    auditService.log('login', '-', username, null).catch(() => {});
+    void logAuthAudit('login', username);
 
     res.cookie('panama_token', result.token, {
       httpOnly: true,
@@ -76,7 +82,7 @@ router.post('/', loginIpLimiter, loginLimiter, async (req, res, next) => {
     res.json(result);
   } catch (err) {
     const username = req.body?.username || '(empty)';
-    await auditService.log('login_failure', '-', username, null).catch(() => {});
+    await logAuthAudit('login_failure', username);
     next(err);
   }
 });
@@ -93,7 +99,7 @@ router.post('/logout', requireAuth, async (req, res) => {
     }
   }
 
-  auditService.log('logout', '-', req.user.username, null).catch(() => {});
+  void logAuthAudit('logout', req.user.username);
   res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
   res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
@@ -115,6 +121,9 @@ router.post('/revoke', requireAuth, requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid request body' });
     }
     const { username } = parsed.data;
+    if (username.toLowerCase() === req.user.username.toLowerCase()) {
+      return res.status(400).json({ error: 'You cannot revoke your own current admin session' });
+    }
     await authService.revokeUser(username, 'admin');
     await auditService.log('token_revoke', '-', req.user.username, { revoked_user: username });
     res.json({ ok: true, message: `All tokens revoked for ${username}` });

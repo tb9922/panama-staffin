@@ -15,11 +15,11 @@ import * as shiftHourAdjustmentRepo from '../repositories/shiftHourAdjustmentRep
 import * as payRateRulesRepo from '../repositories/payRateRulesRepo.js';
 import * as timesheetRepo   from '../repositories/timesheetRepo.js';
 import * as payrollRunRepo  from '../repositories/payrollRunRepo.js';
-import * as auditRepo       from '../repositories/auditRepo.js';
 import * as taxRepo         from '../repositories/taxRepo.js';
 import * as pensionRepo     from '../repositories/pensionRepo.js';
 import * as sspRepo         from '../repositories/sspRepo.js';
 import * as hmrcRepo        from '../repositories/hmrcRepo.js';
+import * as auditService    from './auditService.js';
 
 import {
   getActualShift,
@@ -56,6 +56,44 @@ import { NotFoundError, ValidationError } from '../errors.js';
 
 // Zero-value YTD — used when no approved run exists yet this tax year
 const ZERO_YTD = { gross_pay: 0, taxable_pay: 0, tax_deducted: 0, employee_ni: 0, employer_ni: 0, student_loan: 0, pension_employee: 0, pension_employer: 0 };
+
+async function logPayrollAction(action, homeSlug, username, details) {
+  await auditService.log(action, homeSlug, username, details);
+}
+
+async function logPayrollFailure(action, homeSlug, username, runId, err) {
+  const message = err?.message || 'Unknown payroll failure';
+  await auditService.log(`${action}_failed`, homeSlug, username, `Run ID ${runId}: ${message}`);
+}
+
+function addYearsToIsoDate(isoDate, years) {
+  if (!isoDate) return null;
+  const parsed = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setUTCFullYear(parsed.getUTCFullYear() + years);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function maxIsoDate(values) {
+  return values.filter(Boolean).sort().at(-1) || null;
+}
+
+function getAutoEnrolmentDate(staff, run, enrolment = null) {
+  const candidates = [run.period_start];
+  if (staff?.start_date && staff.start_date <= run.period_end) {
+    candidates.push(staff.start_date);
+  }
+  if (staff?.date_of_birth) {
+    const twentySecondBirthday = addYearsToIsoDate(staff.date_of_birth, 22);
+    if (twentySecondBirthday && twentySecondBirthday <= run.period_end) {
+      candidates.push(twentySecondBirthday);
+    }
+  }
+  if (enrolment?.reassessment_date && enrolment.reassessment_date <= run.period_end) {
+    candidates.push(enrolment.reassessment_date);
+  }
+  return maxIsoDate(candidates) || run.period_end;
+}
 
 // ── Default Pay Rate Rules (seeded once per home on first payroll access) ──────
 
@@ -107,59 +145,64 @@ export async function seedDefaultRulesIfNeeded(homeId, client) {
  * @param {string} username  — from JWT, for audit log
  */
 export async function calculateRun(runId, homeId, homeSlug, username) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (!['draft', 'calculated'].includes(run.status)) {
-      throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
-    }
+  try {
+    const auditMeta = await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (!['draft', 'calculated'].includes(run.status)) {
+        throw new ValidationError(`Cannot recalculate a run with status '${run.status}'`);
+      }
 
-    const home = await homeRepo.findById(homeId, client);
-    if (!home) throw new NotFoundError('Home not found');
+      const home = await homeRepo.findById(homeId, client);
+      if (!home) throw new NotFoundError('Home not found');
 
-    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
-    const allStaff    = allStaffResult.rows;
-    const overrides   = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
-    const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, run.period_start, run.period_end, null, client);
-    const rules       = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
-    const nmwRates    = await payRateRulesRepo.getAllNmwRates(client);
+      const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
+      const allStaff = allStaffResult.rows;
+      const overrides = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
+      const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, run.period_start, run.period_end, null, client);
+      const rules = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
+      const nmwRates = await payRateRulesRepo.getAllNmwRates(client);
 
-    // Log pension contributions that will be cascade-deleted with the lines
-    const { rows: cascadedPensions } = await client.query(
-      `SELECT pc.id, pc.staff_id, pc.employee_amount, pc.employer_amount
-       FROM pension_contributions pc
-       JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
-       WHERE pl.payroll_run_id = $1 AND pc.home_id = $2`,
-      [runId, homeId]
-    );
-    if (cascadedPensions.length > 0) {
-      await auditRepo.log(
-        'payroll_recalc_pension_cascade', homeSlug, username,
-        `Cascade-deleting ${cascadedPensions.length} pension contributions for run ${runId}`,
-        client
+      // Pre-load all timesheets for the period to avoid N+1 queries (staff × dates)
+      const allTimesheets = await timesheetRepo.findByHomePeriod(homeId, run.period_start, run.period_end, null, null, client);
+      const tsMap = new Map();
+      for (const ts of allTimesheets) {
+        tsMap.set(`${ts.staff_id}:${ts.date}`, ts);
+      }
+
+      // A deactivated worker can still be owed wages for this run if they have
+      // period activity (override/timesheet) but an older row lacks leaving_date.
+      const staffWithPeriodActivity = new Set([
+        ...Object.values(overrides).flatMap((day) => Object.keys(day || {})),
+        ...allTimesheets.map((ts) => ts.staff_id),
+      ]);
+
+      const { rows: cascadedPensions } = await client.query(
+        `SELECT pc.id, pc.staff_id, pc.employee_amount, pc.employer_amount
+         FROM pension_contributions pc
+         JOIN payroll_lines pl ON pl.id = pc.payroll_line_id
+         WHERE pl.payroll_run_id = $1 AND pc.home_id = $2`,
+        [runId, homeId]
       );
-    }
 
-    // Wipe existing lines (cascades to payroll_line_shifts + pension_contributions)
-    await payrollRunRepo.deleteLines(runId, homeId, client);
+      // Wipe existing lines (cascades to payroll_line_shifts + pension_contributions)
+      await payrollRunRepo.deleteLines(runId, homeId, client);
 
     const dates = eachDayInRange(run.period_start, run.period_end);
     // Include staff who were active during any part of the period.
-    // A carer deactivated mid-period still needs paying for days worked.
+    // A carer deactivated mid-period still needs paying for days worked, and we
+    // also fail safe for legacy rows that were deactivated without leaving_date.
     const activeStaff = allStaff.filter(s =>
-      (s.active || (s.leaving_date && s.leaving_date >= run.period_start)) &&
+      (
+        s.active
+        || (s.leaving_date && s.leaving_date >= run.period_start)
+        || staffWithPeriodActivity.has(s.id)
+      ) &&
       (!s.start_date || s.start_date <= run.period_end)
     );
 
     // Pre-load SSP configs once for the run (pick the right row per date inside the loop)
     const allSSPConfigs = await sspRepo.getAllSSPConfigs(client);
-
-    // Pre-load all timesheets for the period to avoid N+1 queries (staff × dates)
-    const allTimesheets = await timesheetRepo.findByHomePeriod(homeId, run.period_start, run.period_end, null, null, client);
-    const tsMap = new Map();
-    for (const ts of allTimesheets) {
-      tsMap.set(`${ts.staff_id}:${ts.date}`, ts);
-    }
 
     // Pre-load constant tax/pension config once for the run (same for all staff)
     const taxYear       = getTaxYear(new Date(run.period_end));
@@ -178,10 +221,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const enrolmentMap = await pensionRepo.getEnrolmentBatch(homeId, activeStaffIds, client);
     const sickPeriodsMap = await sspRepo.getActiveSickPeriodsBatch(homeId, activeStaffIds, run.period_start, run.period_end, client);
 
-    // Payroll run totals (accumulated across all staff)
-    let totalGross = 0;
-    let totalEnhancements = 0;
-    let totalSleepIns = 0;
+      // Payroll run totals (accumulated across all staff)
+      let totalGross = 0;
+      let totalEnhancements = 0;
+      let totalSleepIns = 0;
+      const missingDobPensionStaff = new Set();
 
     for (const s of activeStaff) {
       const line = await payrollRunRepo.createLine(runId, s.id, client);
@@ -446,16 +490,29 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const postponementActive = enrolment?.status === 'postponed'
         && enrolment.postponed_until
         && enrolment.postponed_until >= run.period_end;
-      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment' || (enrolment.status === 'postponed' && !postponementActive))) {
+      const reassessmentDue = enrolment?.status === 'opted_out'
+        && enrolment?.reassessment_date
+        && enrolment.reassessment_date <= run.period_end;
+      if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment' || (enrolment.status === 'postponed' && !postponementActive) || reassessmentDue)) {
         const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
+        if (eligibility.assumedMissingDob) {
+          missingDobPensionStaff.add(`${s.id} (${s.name})`);
+          notesParts.push('WARNING: Missing DOB — pension assessment assumed age 22+ based on earnings');
+        }
         if (eligibility.shouldAutoEnrol) {
+          const autoEnrolmentDate = getAutoEnrolmentDate(s, run, reassessmentDue ? enrolment : null);
           await pensionRepo.upsertEnrolment(homeId, {
             staff_id: s.id, status: 'eligible_enrolled',
-            enrolled_date: run.period_end, opt_in_date: null,
+            enrolled_date: autoEnrolmentDate,
+            opted_out_date: null,
+            reassessment_date: null,
+            opt_in_date: null,
           }, client);
           // Set enrolment in-memory — calculatePensionContributions only needs .status
-          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolled_date: run.period_end };
-          notesParts.push('AUTO-ENROLLED: Pension auto-enrolment triggered');
+          enrolment = { staff_id: s.id, status: 'eligible_enrolled', enrolled_date: autoEnrolmentDate };
+          notesParts.push(reassessmentDue
+            ? `RE-ENROLLED: Pension reassessment triggered from ${autoEnrolmentDate}`
+            : `AUTO-ENROLLED: Pension auto-enrolment triggered from ${autoEnrolmentDate}`);
         }
       }
       let pensionEmployee = 0, pensionEmployer = 0;
@@ -526,15 +583,41 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       totalSleepIns     += acc.sleep_in_pay;
     }
 
-    await payrollRunRepo.updateTotals(runId, homeId, {
-      total_gross:        round2(totalGross),
-      total_enhancements: round2(totalEnhancements),
-      total_sleep_ins:    round2(totalSleepIns),
-      staff_count:        activeStaff.length,
-    }, client, run.version);
+      await payrollRunRepo.updateTotals(runId, homeId, {
+        total_gross:        round2(totalGross),
+        total_enhancements: round2(totalEnhancements),
+        total_sleep_ins:    round2(totalSleepIns),
+        staff_count:        activeStaff.length,
+      }, client, run.version);
 
-    await auditRepo.log('payroll_calculate', homeSlug, username, `Run ID ${runId}`, client);
-  });
+      return {
+        cascadedPensionCount: cascadedPensions.length,
+        missingDobPensionStaff: [...missingDobPensionStaff],
+      };
+    });
+
+    if (auditMeta.cascadedPensionCount > 0) {
+      await logPayrollAction(
+        'payroll_recalc_pension_cascade',
+        homeSlug,
+        username,
+        `Cascade-deleting ${auditMeta.cascadedPensionCount} pension contributions for run ${runId}`,
+      );
+    }
+    if (auditMeta.missingDobPensionStaff.length > 0) {
+      await logPayrollAction(
+        'payroll_pension_dob_missing',
+        homeSlug,
+        username,
+        `Run ID ${runId}: assumed pension eligibility for ${auditMeta.missingDobPensionStaff.join(', ')}`,
+      );
+    }
+    await logPayrollAction('payroll_calculate', homeSlug, username, `Run ID ${runId}`);
+    return;
+  } catch (err) {
+    await logPayrollFailure('payroll_calculate', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 // ── Payroll Run Approval ───────────────────────────────────────────────────────
@@ -544,12 +627,13 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
  * On approval: locks all approved timesheets for the period.
  */
 export async function approveRun(runId, homeId, homeSlug, username) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (run.status !== 'calculated') {
-      throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
-    }
+  try {
+    await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (run.status !== 'calculated') {
+        throw new ValidationError(`Can only approve a 'calculated' run (current status: '${run.status}')`);
+      }
 
     const hasViolations = await payrollRunRepo.hasNmwViolations(runId, homeId, client);
     if (hasViolations) {
@@ -627,20 +711,24 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       er_ni:  round2(acc.er_ni  + (l.employer_ni  || 0)),
     }), { paye: 0, emp_ni: 0, er_ni: 0 });
 
-    await hmrcRepo.upsertLiability(homeId, taxYear, taxMonth, {
-      period_start: run.period_start,
-      period_end:   run.period_end,
-      total_paye:         totals.paye,
-      total_employee_ni:  totals.emp_ni,
-      total_employer_ni:  totals.er_ni,
-      employment_allowance_offset: 0,
-      total_due: round2(totals.paye + totals.emp_ni + totals.er_ni),
-      payment_due_date: getHMRCPaymentDueDate(taxYear, taxMonth),
-      status: 'unpaid',
-    }, client);
-
-    await auditRepo.log('payroll_approve', homeSlug, username, `Run ID ${runId}`, client);
-  });
+      await hmrcRepo.upsertLiability(homeId, taxYear, taxMonth, {
+        period_start: run.period_start,
+        period_end:   run.period_end,
+        total_paye:         totals.paye,
+        total_employee_ni:  totals.emp_ni,
+        total_employer_ni:  totals.er_ni,
+        employment_allowance_offset: 0,
+        total_due: round2(totals.paye + totals.emp_ni + totals.er_ni),
+        payment_due_date: getHMRCPaymentDueDate(taxYear, taxMonth),
+        status: 'unpaid',
+      }, client);
+    });
+    await logPayrollAction('payroll_approve', homeSlug, username, `Run ID ${runId}`);
+    return;
+  } catch (err) {
+    await logPayrollFailure('payroll_approve', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 // ── Void Approved Run ──────────────────────────────────────────────────────────
@@ -654,13 +742,14 @@ export async function approveRun(runId, homeId, homeSlug, username) {
  * 'exported' status. Simple draft/calculated voids are handled inline in the route.
  */
 export async function voidApprovedRun(runId, homeId, homeSlug, username, version) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (!['approved', 'exported'].includes(run.status)) {
-      const e = new ValidationError(`voidApprovedRun called on run with status "${run.status}"`);
-      throw e;
-    }
+  try {
+    const updated = await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (!['approved', 'exported'].includes(run.status)) {
+        const e = new ValidationError(`voidApprovedRun called on run with status "${run.status}"`);
+        throw e;
+      }
 
     const taxYear  = getTaxYear(new Date(run.period_end));
     const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
@@ -722,14 +811,19 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
       await payrollRunRepo.markYtdUnapplied(runId, homeId, client);
     }
 
-    const updated = await payrollRunRepo.updateStatus(runId, homeId, 'voided', null, client, version);
-    if (updated === null) {
-      throw new ValidationError('Record was modified by another user. Please refresh and try again.');
-    }
+      const updated = await payrollRunRepo.updateStatus(runId, homeId, 'voided', null, client, version);
+      if (updated === null) {
+        throw new ValidationError('Record was modified by another user. Please refresh and try again.');
+      }
 
-    await auditRepo.log('payroll_void', homeSlug, username, `Run ID ${runId} (approved → voided, YTD reversed)`, client);
+      return updated;
+    });
+    await logPayrollAction('payroll_void', homeSlug, username, `Run ID ${runId} (approved → voided, YTD reversed)`);
     return updated;
-  });
+  } catch (err) {
+    await logPayrollFailure('payroll_void', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
@@ -740,12 +834,13 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
  * Returns { csv: string, filename: string }
  */
 export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (!['approved', 'exported', 'locked'].includes(run.status)) {
-      throw new ValidationError('Payroll run must be approved before exporting');
-    }
+  try {
+    const result = await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findById(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (!['approved', 'exported', 'locked'].includes(run.status)) {
+        throw new ValidationError('Payroll run must be approved before exporting');
+      }
 
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
     const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
@@ -771,19 +866,24 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
       }, client, run.version);
     }
 
-    await auditRepo.log('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`, client);
-
-    return { csv, filename };
-  });
+      return { csv, filename };
+    });
+    await logPayrollAction('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`);
+    return result;
+  } catch (err) {
+    await logPayrollFailure('payroll_export', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, format) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findById(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (!['approved', 'exported', 'locked'].includes(run.status)) {
-      throw new ValidationError('Payroll run must be approved before exporting');
-    }
+  try {
+    const result = await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findById(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (!['approved', 'exported', 'locked'].includes(run.status)) {
+        throw new ValidationError('Payroll run must be approved before exporting');
+      }
 
     const lines = await payrollRunRepo.findLinesByRun(runId, homeId, client);
     const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
@@ -796,27 +896,37 @@ export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, fo
       ? buildSageCSV(lines, staffMap, run, ytdMap)
       : buildGenericCSV(lines, staffMap, run, ytdMap);
     const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
-    await auditRepo.log('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`, client);
-    return { csv, filename };
-  });
+      return { csv, filename };
+    });
+    await logPayrollAction('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`);
+    return result;
+  } catch (err) {
+    await logPayrollFailure('payroll_export', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 export async function markRunExported(runId, homeId, homeSlug, username, format) {
-  return withTransaction(async (client) => {
-    const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
-    if (!run) throw new NotFoundError('Payroll run not found');
-    if (!['approved', 'exported', 'locked'].includes(run.status)) {
-      throw new ValidationError('Payroll run must be approved before exporting');
-    }
-    if (run.status === 'approved') {
-      await payrollRunRepo.updateStatus(runId, homeId, 'exported', {
-        exported_at: true,
-        export_format: format,
-      }, client, run.version);
-    }
-    await auditRepo.log('payroll_export_mark', homeSlug, username, `Run ID ${runId} format=${format}`, client);
+  try {
+    await withTransaction(async (client) => {
+      const run = await payrollRunRepo.findByIdForUpdate(runId, homeId, client);
+      if (!run) throw new NotFoundError('Payroll run not found');
+      if (!['approved', 'exported', 'locked'].includes(run.status)) {
+        throw new ValidationError('Payroll run must be approved before exporting');
+      }
+      if (run.status === 'approved') {
+        await payrollRunRepo.updateStatus(runId, homeId, 'exported', {
+          exported_at: true,
+          export_format: format,
+        }, client, run.version);
+      }
+    });
+    await logPayrollAction('payroll_export_mark', homeSlug, username, `Run ID ${runId} format=${format}`);
     return true;
-  });
+  } catch (err) {
+    await logPayrollFailure('payroll_export_mark', homeSlug, username, runId, err);
+    throw err;
+  }
 }
 
 // ── Holiday Daily Rate ────────────────────────────────────────────────────────
@@ -859,47 +969,51 @@ async function calculateHolidayDailyRate(homeId, staffId, holidayDate, client, c
  * Returns array of payslip objects (one per staff).
  */
 export async function assemblePayslipData(runId, homeId, staffId) {
-  const run   = await payrollRunRepo.findById(runId, homeId);
-  if (!run) throw new NotFoundError('Payroll run not found');
+  return withTransaction(async (client) => {
+    const run = await payrollRunRepo.findById(runId, homeId, client);
+    if (!run) throw new NotFoundError('Payroll run not found');
 
-  const home  = await homeRepo.findById(homeId);
-  if (!home) throw new NotFoundError('Home not found');
-  const lines = await payrollRunRepo.findLinesByRun(runId, homeId);
-  const shifts = await payrollRunRepo.findShiftsByRun(runId, homeId);
+    const home = await homeRepo.findById(homeId, client);
+    if (!home) throw new NotFoundError('Home not found');
+    const lines = await payrollRunRepo.findLinesByRun(runId, homeId, client);
+    const shifts = await payrollRunRepo.findShiftsByRun(runId, homeId, client);
 
-  const allStaffResult = await staffRepo.findByHome(homeId);
-  const allStaff = allStaffResult.rows;
-  const staffMap = new Map(allStaff.map(s => [s.id, s]));
+    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
+    const allStaff = allStaffResult.rows;
+    const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
-  // Group shifts by staff_id
-  const shiftsByStaff = {};
-  for (const s of shifts) {
-    if (!shiftsByStaff[s.staff_id]) shiftsByStaff[s.staff_id] = [];
-    shiftsByStaff[s.staff_id].push(s);
-  }
+    // Group shifts by staff_id
+    const shiftsByStaff = {};
+    for (const s of shifts) {
+      if (!shiftsByStaff[s.staff_id]) shiftsByStaff[s.staff_id] = [];
+      shiftsByStaff[s.staff_id].push(s);
+    }
 
-  const targetLines = staffId
-    ? lines.filter(l => l.staff_id === staffId)
-    : lines;
+    const targetLines = staffId
+      ? lines.filter(l => l.staff_id === staffId)
+      : lines;
 
-  // Fetch YTD for approved runs (null for draft/calculated — payslip shows "Estimated")
-  const isApproved = ['approved', 'exported', 'locked'].includes(run.status);
-  const taxYear = getTaxYear(new Date(run.period_end));
-  let ytdMap = new Map();
-  if (isApproved) {
-    const staffIds = [...new Set(targetLines.map(l => l.staff_id))];
-    ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear);
-  }
+    // Fetch YTD for approved runs (null for draft/calculated — payslip shows "Estimated")
+    const isApproved = ['approved', 'exported', 'locked'].includes(run.status);
+    const taxYear = getTaxYear(new Date(run.period_end));
+    let ytdMap = new Map();
+    if (isApproved) {
+      const staffIds = [...new Set(targetLines.map(l => l.staff_id))];
+      ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
+    }
 
-  return targetLines.map(line => ({
-    run,
-    line,
-    staff: staffMap.get(line.staff_id) || { id: line.staff_id, name: 'Unknown' },
-    home: { name: home?.config?.home_name || home?.name, config: home?.config },
-    shifts: shiftsByStaff[line.staff_id] || [],
-    ytd: ytdMap.get(line.staff_id) || null,
-    ytdEstimated: !isApproved,
-  }));
+    return targetLines.map(line => ({
+      run,
+      line,
+      // Payslips only need identity fields used by the PDF/export surfaces.
+      // Avoid returning the full staff row (DOB, hourly rate, address, etc.).
+      staff: shapePayslipStaff(staffMap.get(line.staff_id)) || { id: line.staff_id, name: 'Unknown', role: '', ni_number: null },
+      home: { name: home?.config?.home_name || home?.name, config: home?.config },
+      shifts: shiftsByStaff[line.staff_id] || [],
+      ytd: ytdMap.get(line.staff_id) || null,
+      ytdEstimated: !isApproved,
+    }));
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -923,4 +1037,14 @@ export function eachDayInRange(start, end) {
 function round2(n) {
   if (n < 0) return -Math.round((-n + Number.EPSILON) * 100) / 100;
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function shapePayslipStaff(staff) {
+  if (!staff) return null;
+  return {
+    id: staff.id,
+    name: staff.name,
+    role: staff.role || '',
+    ni_number: staff.ni_number || null,
+  };
 }

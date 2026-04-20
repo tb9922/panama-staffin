@@ -44,6 +44,11 @@ describe('calculateICODeadline', () => {
     const expected = new Date('2025-06-04T10:00:00Z');
     expect(new Date(deadline).getTime()).toBe(expected.getTime());
   });
+
+  it('treats date-only discovery as end-of-day UTC', () => {
+    const deadline = calculateICODeadline('2025-06-01');
+    expect(deadline).toBe('2025-06-04T23:59:59.000Z');
+  });
 });
 
 describe('daysUntilDeadline / isOverdue', () => {
@@ -121,6 +126,15 @@ describe('assessBreachRisk', () => {
       individuals_affected: 100, data_categories: ['staff_health'],
     });
     expect(result.riskLevel).toBe('critical');
+    expect(result.icoNotifiable).toBe(true);
+  });
+
+  it('fails closed for empty categories in care-home context', () => {
+    const result = assessBreachRisk({
+      severity: 'low', risk_to_rights: 'unlikely',
+      individuals_affected: 0, data_categories: [],
+    });
+    expect(result.riskLevel).toBe('medium');
     expect(result.icoNotifiable).toBe(true);
   });
 });

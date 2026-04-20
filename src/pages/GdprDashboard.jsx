@@ -232,6 +232,11 @@ export default function GdprDashboard() {
     if (saving) return;
     if (!form.date_received) { setError('Date received is required.'); focusField('gdpr-complaint-date'); return; }
     if (!form.category) { setError('Complaint category is required.'); focusField('gdpr-complaint-category'); return; }
+    if (form.subject_type && !form.subject_id) {
+      setError('Please select the linked subject.');
+      focusField(form.subject_type === 'resident' ? 'gdpr-complaint-resident' : 'gdpr-complaint-staff');
+      return;
+    }
     if (!form.description) { setError('Complaint description is required.'); focusField('gdpr-complaint-description'); return; }
     setSaving(true);
     try {
@@ -1092,6 +1097,46 @@ export default function GdprDashboard() {
           <div>
             <label className={INPUT.label}>Complainant Name</label>
             <input className={INPUT.base} value={form.complainant_name || ''} onChange={e => setForm({ ...form, complainant_name: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Link to Subject</label>
+                <select
+                  className={INPUT.select}
+                  value={form.subject_type || ''}
+                  onChange={e => setForm({ ...form, subject_type: e.target.value || null, subject_id: null })}
+                >
+                <option value="">None</option>
+                <option value="staff">Staff</option>
+                <option value="resident">Resident</option>
+              </select>
+            </div>
+            <div>
+              {form.subject_type === 'resident' ? (
+                <ResidentPicker
+                  id="gdpr-complaint-resident"
+                  label="Resident"
+                  value={form.subject_id || ''}
+                  onChange={(id, resident) => setForm({
+                    ...form,
+                    subject_id: id ? String(id) : null,
+                    complainant_name: resident?.resident_name || form.complainant_name || '',
+                  })}
+                />
+              ) : form.subject_type === 'staff' ? (
+                <StaffPicker
+                  id="gdpr-complaint-staff"
+                  label="Staff Member"
+                  value={form.subject_id || ''}
+                  onChange={(val) => setForm({ ...form, subject_id: val || null })}
+                />
+              ) : (
+                <div>
+                  <label className={INPUT.label}>Linked Record</label>
+                  <input className={INPUT.base} value="" disabled placeholder="Optional" />
+                </div>
+              )}
+            </div>
           </div>
           <div>
             <label className={INPUT.label}>Description</label>

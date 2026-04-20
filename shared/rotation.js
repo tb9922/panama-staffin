@@ -81,7 +81,7 @@ export function resolvePattern(config) {
 }
 
 export function isNightTeam(team) {
-  return typeof team === 'string' && team.startsWith('Night');
+  return typeof team === 'string' && /^night/i.test(team.trim());
 }
 
 export function resolveRotationScopeForStaff(staff) {
@@ -239,8 +239,9 @@ export function getScheduledShift(staff, cycleDay, date, config = null) {
 
 export function getActualShift(staff, date, overrides, cycleStartDate, config = null) {
   const dateKey = formatDate(date);
-  if (overrides[dateKey]?.[staff.id]) {
-    return overrides[dateKey][staff.id];
+  const override = overrides?.[dateKey]?.[staff.id];
+  if (override && ALL_SHIFTS.includes(override.shift)) {
+    return override;
   }
   const cycleDay = resolveCycleDayForStaff(staff, date, config, cycleStartDate);
   return { shift: getScheduledShift(staff, cycleDay, date, config) };
@@ -391,12 +392,12 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
   const weekHours = new Array(numWeeks).fill(0);
 
   dates.forEach((date, i) => {
-    const actual = getActualShift(staff, date, overrides, config.cycle_start_date, config);
+    const actual = getActualShift(staff, date, overrides, config?.cycle_start_date, config);
     const shift = actual.shift;
     let hours = getShiftHours(shift, config);
     // TRN/ADM: on-shift = full scheduled hours, off-day = override_hours or config
     if (shift === 'TRN' || shift === 'ADM') {
-      const cycleDay = resolveCycleDayForStaff(staff, date, config, config.cycle_start_date);
+      const cycleDay = resolveCycleDayForStaff(staff, date, config, config?.cycle_start_date);
       const scheduled = getScheduledShift(staff, cycleDay, date, config);
       if (isWorkingShift(scheduled)) {
         hours = getShiftHours(scheduled, config);
@@ -419,14 +420,17 @@ export function calculateStaffPeriodHours(staff, dates, overrides, config) {
       const stored = overrides[dateKey]?.[staff.id]?.al_hours;
       const hrs = stored != null ? parseFloat(stored) : getALDeductionHours(staff, dateKey, config);
       alHours += hrs;
-      alPay += hrs * (staff.hourly_rate || 0);
+      alPay += hrs * (parseFloat(staff.hourly_rate) || 0);
     }
   });
 
-  const rate = staff.hourly_rate || 0;
+  const rate = parseFloat(staff.hourly_rate) || 0;
   const grossPay = totalHours * rate;
-  const otPay = otHours * config.ot_premium;
-  const bhPay = bhHours * rate * (config.bh_premium_multiplier - 1);
+  const otPremium = parseFloat(config?.ot_premium) || 0;
+  const rawBhMultiplier = Number(config?.bh_premium_multiplier);
+  const bhMultiplier = Number.isFinite(rawBhMultiplier) ? rawBhMultiplier : 1;
+  const otPay = otHours * otPremium;
+  const bhPay = bhHours * rate * (bhMultiplier - 1);
   const weeks = dates.length / 7;
   const avgWeeklyHours = weeks > 0 ? totalHours / weeks : 0;
 
@@ -475,7 +479,7 @@ export const WTR_WEEKLY_WARN  = 44;
 
 export function checkWTRImpact(staff, dateStr, overrides, config, proposedShift) {
   if (!staff) return { ok: true, warn: false, projectedHours: null, message: null };
-  if (staff.wtr_opt_out) {
+  if (staff.wtr_opt_out === true) {
     return { ok: true, warn: false, projectedHours: null, message: 'WTR opt-out on file' };
   }
   if (!isWorkingShift(proposedShift)) {
@@ -528,21 +532,21 @@ export function checkWTR(staff, dates, overrides, config) {
   return {
     avgWeekly: stats.avgWeeklyHours,
     status: stats.wtrStatus,
-    optOut: staff.wtr_opt_out || false,
-    safe: stats.wtrStatus === 'OK' || staff.wtr_opt_out,
+    optOut: staff.wtr_opt_out === true,
+    safe: stats.wtrStatus === 'OK' || staff.wtr_opt_out === true,
   };
 }
 
 // Check if a date is a bank holiday
 export function isBankHoliday(date, config) {
   const dateStr = formatDate(date);
-  return config.bank_holidays?.some(bh => bh.date === dateStr) || false;
+  return config?.bank_holidays?.some(bh => bh.date === dateStr) || false;
 }
 
 // Get bank holiday info
 export function getBankHoliday(date, config) {
   const dateStr = formatDate(date);
-  return config.bank_holidays?.find(bh => bh.date === dateStr) || null;
+  return config?.bank_holidays?.find(bh => bh.date === dateStr) || null;
 }
 
 // ── Hours-based Annual Leave constants and helpers ─────────────────────────
@@ -561,12 +565,17 @@ export function getLeaveYear(date, leaveYearStart) {
   const dateStr = typeof date === 'string' ? date : formatDate(date);
   const [mm, dd] = (leaveYearStart || '04-01').split('-').map(Number);
   const y = parseInt(dateStr.slice(0, 4), 10);
-  const mmStr = String(mm).padStart(2, '0');
-  const ddStr = String(dd).padStart(2, '0');
+  const clampBoundary = (year) => {
+    const lastDay = new Date(Date.UTC(year, mm, 0)).getUTCDate();
+    const safeDay = Math.min(dd, lastDay);
+    const mmStr = String(mm).padStart(2, '0');
+    const ddStr = String(safeDay).padStart(2, '0');
+    return `${year}-${mmStr}-${ddStr}`;
+  };
 
-  const thisStartStr = `${y}-${mmStr}-${ddStr}`;
-  const prevStartStr = `${y - 1}-${mmStr}-${ddStr}`;
-  const nextStartStr = `${y + 1}-${mmStr}-${ddStr}`;
+  const thisStartStr = clampBoundary(y);
+  const prevStartStr = clampBoundary(y - 1);
+  const nextStartStr = clampBoundary(y + 1);
 
   if (dateStr >= thisStartStr) {
     const endStr = formatDate(addDays(parseDate(nextStartStr), -1));

@@ -71,7 +71,10 @@ import { accessLog } from './middleware/accessLog.js';
 import { loadDenyList, pruneDenyList } from './services/authService.js';
 import { ensureSeedUsers } from './services/userService.js';
 import { purgeOlderThan as purgeAuditLog } from './services/auditService.js';
-import { purgeDeliveriesOlderThan as purgeWebhookDeliveries } from './repositories/webhookRepo.js';
+import {
+  migrateAllLegacySecrets as migrateLegacyWebhookSecrets,
+  purgeDeliveriesOlderThan as purgeWebhookDeliveries,
+} from './repositories/webhookRepo.js';
 import { processRetries as processWebhookRetries } from './services/webhookService.js';
 
 const app = express();
@@ -285,6 +288,13 @@ const server = shouldListen ? app.listen(config.port, async () => {
   // Seed database users from env vars on first run (non-fatal)
   await ensureSeedUsers().catch(err =>
     logger.warn({ err: err?.message }, 'User seeding skipped')
+  );
+  await migrateLegacyWebhookSecrets().then((migrated) => {
+    if (migrated > 0) {
+      logger.info({ migrated }, 'Migrated legacy plaintext webhook secrets');
+    }
+  }).catch(err =>
+    logger.warn({ err: err?.message }, 'Webhook secret migration skipped')
   );
   // Background cron jobs — only run on instance 0 in cluster mode.
   // PM2 sets NODE_APP_INSTANCE for each worker; without it (fork mode / dev), run on all.

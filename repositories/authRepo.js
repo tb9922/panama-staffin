@@ -1,4 +1,27 @@
 import { pool } from '../db.js';
+import { config } from '../config.js';
+
+function parseJwtExpiresIn(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value * 1000;
+  if (typeof value !== 'string') return 4 * 60 * 60 * 1000;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10) * 1000;
+  const match = trimmed.match(/^(\d+)\s*([smhd])$/i);
+  if (!match) return 4 * 60 * 60 * 1000;
+  const amount = Number.parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const unitMs = {
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+  };
+  return amount * unitMs[unit];
+}
+
+function getRevocationExpiry() {
+  return new Date(Date.now() + parseJwtExpiresIn(config.jwtExpiresIn));
+}
 
 /**
  * Add a JWT to the deny-list. Called when revoking a specific token or all
@@ -81,9 +104,9 @@ export async function revokeAllForUser(username, scope = 'user', client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `INSERT INTO token_denylist (jti, username, expires_at, scope)
-     VALUES (gen_random_uuid(), $1, NOW() + INTERVAL '24 hours', $2)
+     VALUES (gen_random_uuid(), $1, $2, $3)
      RETURNING jti`,
-    [username, scope]
+    [username, getRevocationExpiry(), scope]
   );
   return rows[0]?.jti;
 }

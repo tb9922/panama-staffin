@@ -14,6 +14,8 @@ import {
   getLeaveYear,
   STATUTORY_WEEKS,
   getStaffStatus,
+  isNightTeam,
+  checkWTR,
   ROTATION_PRESETS,
   DEFAULT_PATTERN,
   CYCLE_LENGTH,
@@ -310,6 +312,13 @@ describe('getActualShift', () => {
     expect(result.reason).toBe('No show');
   });
 
+  it('ignores invalid override shift codes and falls back to the schedule', () => {
+    const overrides = { '2025-01-06': { S1: { shift: 'BOGUS', reason: 'Bad data' } } };
+    const result = getActualShift(staff, dateOn, overrides, START);
+    expect(result.shift).toBe('E');
+    expect(result.reason).toBeUndefined();
+  });
+
   it('does not apply other staff overrides', () => {
     const overrides = { '2025-01-06': { S2: { shift: 'AL' } } };
     const result = getActualShift(staff, dateOn, overrides, START);
@@ -341,6 +350,10 @@ describe('isBankHoliday', () => {
 
   it('returns false when bank_holidays is undefined', () => {
     expect(isBankHoliday('2025-12-25', {})).toBe(false);
+  });
+
+  it('returns false when config itself is null', () => {
+    expect(isBankHoliday('2025-12-25', null)).toBe(false);
   });
 });
 
@@ -573,6 +586,17 @@ describe('calculateStaffPeriodHours — agency shift exclusion', () => {
     expect(result.totalHours).toBe(0);
     expect(result.paidHours).toBe(0);
   });
+
+  it('keeps totalPay finite when OT/BH premiums are missing from config', () => {
+    const dates = [addDays('2025-01-06', 0)];
+    const overrides = { [formatDate(dates[0])]: { S1: { shift: 'E' } } };
+    const result = calculateStaffPeriodHours(staff, dates, overrides, {
+      cycle_start_date: '2025-01-06',
+      shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+    });
+    expect(Number.isFinite(result.totalPay)).toBe(true);
+    expect(result.totalPay).toBe(8 * 13);
+  });
 });
 
 describe('getStaffStatus', () => {
@@ -692,6 +716,12 @@ describe('getLeaveYear (shared)', () => {
     expect(ly.startStr).toBe('2024-04-01');
     expect(ly.endStr).toBe('2025-03-31');
   });
+
+  it('clamps leap-day boundaries cleanly on non-leap years', () => {
+    const ly = getLeaveYear('2025-03-01', '02-29');
+    expect(ly.startStr).toBe('2025-02-28');
+    expect(ly.endStr).toBe('2026-02-27');
+  });
 });
 
 // ── STATUTORY_WEEKS ─────────────────────────────────────────────────────────
@@ -766,5 +796,26 @@ describe('addDays DST boundaries', () => {
   it('non-leap year boundary: 2025-02-28 + 1 = 2025-03-01', () => {
     const result = addDays(parseDate('2025-02-28'), 1);
     expect(formatDate(result)).toBe('2025-03-01');
+  });
+});
+
+describe('rotation safety guards', () => {
+  it('treats lowercase night teams as night staff', () => {
+    expect(isNightTeam('night a')).toBe(true);
+    expect(isNightTeam(' Night B ')).toBe(true);
+  });
+
+  it('does not treat string false WTR opt-out as opted out', () => {
+    const config = {
+      cycle_start_date: '2025-01-06',
+      shifts: { E: { hours: 8 }, L: { hours: 8 }, EL: { hours: 12 }, N: { hours: 10 } },
+      ot_premium: 5,
+      bh_premium_multiplier: 1.5,
+    };
+    const staff = { id: 'S1', team: 'Day A', pref: 'E', skill: 1, hourly_rate: 13, active: true, wtr_opt_out: 'false' };
+    const dates = Array.from({ length: 7 }, (_, idx) => addDays('2025-01-06', idx));
+    const overrides = Object.fromEntries(dates.map((date) => [formatDate(date), { S1: { shift: 'E' } }]));
+    const result = checkWTR(staff, dates, overrides, config);
+    expect(result.optOut).toBe(false);
   });
 });

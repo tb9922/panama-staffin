@@ -265,6 +265,17 @@ describe('SAR Gather — /requests/:id/gather', () => {
     expect(res.body).toHaveProperty('data');
     expect(res.body.data).toHaveProperty('staff');
     expect(res.body.subject_type).toBe('staff');
+
+    const { rows: [audit] } = await pool.query(
+      `SELECT details
+         FROM audit_log
+        WHERE home_slug = $1
+          AND action = 'sar_gather'
+        ORDER BY ts DESC
+        LIMIT 1`,
+      [homeASlug],
+    );
+    expect(audit.details).toMatch(/staff=1/);
   });
 
   it('returns 404 for non-existent request', async () => {
@@ -571,6 +582,8 @@ describe('DP Complaints — /complaints', () => {
     const res = await adminPost(`/complaints?home=${homeASlug}`, {
       date_received: '2025-06-01',
       complainant_name: 'Jane Doe',
+      subject_type: 'staff',
+      subject_id: 'GDPR-S01',
       category: 'access',
       description: 'Unable to access personal records',
       severity: 'medium',
@@ -580,6 +593,8 @@ describe('DP Complaints — /complaints', () => {
     expect(res.body).toHaveProperty('id');
     expect(res.body.category).toBe('access');
     expect(res.body.status).toBe('open');
+    expect(res.body.subject_type).toBe('staff');
+    expect(res.body.subject_id).toBe('GDPR-S01');
     complaintId = res.body.id;
   });
 
@@ -614,6 +629,15 @@ describe('DP Complaints — /complaints', () => {
       date_received: '2025-06-01',
       category: 'access',
       // missing description
+    }).expect(400);
+  });
+
+  it('POST rejects subject_type without subject_id', async () => {
+    await adminPost(`/complaints?home=${homeASlug}`, {
+      date_received: '2025-06-01',
+      subject_type: 'staff',
+      category: 'access',
+      description: 'Missing linked subject id',
     }).expect(400);
   });
 

@@ -100,10 +100,8 @@ export async function requireAuth(req, res, next) {
     } else {
       const dbUser = await findUserByUsername(decoded.username);
       req.authDbUser = dbUser || null;
-      if (dbUser) {
-        if (!dbUser.active || (dbUser.session_version || 0) !== (decoded.session_version || 0)) {
-          return res.status(401).json({ error: 'Token has been revoked' });
-        }
+      if (!dbUser || !dbUser.active || (dbUser.session_version || 0) !== (decoded.session_version || 0)) {
+        return res.status(401).json({ error: 'Token has been revoked' });
       }
     }
   } catch {

@@ -59,14 +59,15 @@ export async function replaceInDetails({ homeSlug = null, findText, replacement,
   if (!client) {
     return withTransaction((tx) => replaceInDetails({ homeSlug, findText, replacement, client: tx }));
   }
+  const escaped = String(findText).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   await setAuditMutationFlag(client, 'app.audit_log_allow_update');
   const { rowCount } = await client.query(
     `UPDATE audit_log
-        SET details = REPLACE(details, $1, $2)
+        SET details = regexp_replace(details, '\\m' || $1 || '\\M', $2, 'g')
       WHERE (home_slug = $3 OR (home_slug IS NULL AND $3 IS NULL))
-        AND details LIKE '%' || $1 || '%'`,
-    [findText, replacement, homeSlug || null],
+        AND details ~ ('\\m' || $1 || '\\M')`,
+    [escaped, replacement, homeSlug || null],
   );
   return rowCount;
 }

@@ -10,7 +10,9 @@ import * as auditService from './auditService.js';
 import logger from '../logger.js';
 
 const STAFF_LOCKOUT_MINUTES = 15;
-const DUMMY_BCRYPT_HASH = '$2a$10$7EqJtq98hPqEX7fNZaFWoOHi6V7z8N2N4dAJE1lghYzBL2cJlgKiW';
+// Cost factor intentionally matches the default production bcrypt rounds so
+// dummy compares stay close to real credential checks in lockout/fail paths.
+const DUMMY_BCRYPT_HASH = '$2b$12$bJm61chukvb86d1VWdEHJeNPvnVVqrUm9hMg/7mZIsmN9KdxD0dqi';
 const AUTH_FAILURE_FLOOR_MS = 50;
 
 async function applyFailureFloor(startedAt) {
@@ -82,6 +84,7 @@ export async function login(username, password) {
 
   if (dbUser) {
     if (!dbUser.active) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
       await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }
@@ -125,10 +128,7 @@ export async function login(username, password) {
     }
     const valid = await bcrypt.compare(password, creds.passwordHash);
     if (!valid) {
-      await staffAuthRepo.recordFailedLogin(creds.homeId, creds.staffId);
-      if ((creds.failedLoginCount + 1) >= 5) {
-        await staffAuthRepo.lockAccount(creds.homeId, creds.staffId, STAFF_LOCKOUT_MINUTES);
-      }
+      await staffAuthRepo.recordFailedLogin(creds.homeId, creds.staffId, STAFF_LOCKOUT_MINUTES);
       await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }

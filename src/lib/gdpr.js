@@ -70,10 +70,10 @@ export function calculateDeadline(dateReceived, days = 30) {
 }
 
 export function calculateICODeadline(discoveredDate) {
-  // Ensure date-only strings (YYYY-MM-DD) are parsed as UTC midnight, not local midnight.
-  // Without the explicit Z suffix, local-time parsing in BST would shift the anchor back by 1h.
+  // For date-only strings, assume end-of-day UTC so we do not undercount the
+  // 72-hour notification window by silently treating awareness as 00:00.
   const dateStr = typeof discoveredDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(discoveredDate)
-    ? discoveredDate + 'T00:00:00Z'
+    ? `${discoveredDate}T23:59:59Z`
     : discoveredDate;
   const d = new Date(dateStr);
   return new Date(d.getTime() + 72 * 60 * 60 * 1000).toISOString();
@@ -120,11 +120,16 @@ export function assessBreachRisk(breachData) {
   const identityRiskCats = (breachData.data_categories || []).filter(c =>
     ['personal_data', 'payroll', 'tax', 'pension'].includes(c)
   );
+  const emptyCategories = (breachData.data_categories || []).length === 0;
+  const vulnerableAdultContext = specialCats.some((category) =>
+    ['resident_health', 'dols', 'mca'].includes(category)
+  ) || emptyCategories;
 
   // specialCats already covers resident data (resident_health, dols, mca) at 1.5x
   let multiplier = 1.0;
   if (specialCats.length > 0) multiplier = 1.5;
   if (identityRiskCats.length > 0) multiplier = Math.max(multiplier, 1.3);
+  if (vulnerableAdultContext) multiplier = Math.max(multiplier, 1.5);
 
   const rawScore = ((sevScore + riskScore + affectedScore) / 3) * multiplier;
   const score = Math.round(rawScore * 10) / 10;

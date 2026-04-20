@@ -1,14 +1,18 @@
 import crypto from 'node:crypto';
 import logger from '../logger.js';
+import { config } from '../config.js';
 import * as webhookRepo from '../repositories/webhookRepo.js';
-import { resolvedToPrivateIp } from '../lib/ssrf.js';
+import { isInternalAppUrl, resolvedToPrivateIp } from '../lib/ssrf.js';
 
 const MAX_RETRIES = 5;
 const MAX_WEBHOOK_PAYLOAD_BYTES = 64 * 1024;
+const RETRY_BATCH_CONCURRENCY = 5;
+const RETRY_CLAIM_LIMIT = 5;
 const DELIVERY_DEDUP_WINDOW_MINUTES = 5;
 const DELIVERY_DEDUP_STATUSES = ['delivered', 'pending_retry', 'in_progress'];
 // Exponential backoff: 30s, 2min, 10min, 1hr, 6hr
 const RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
+let retriesInProgress = false;
 
 /**
  * Dispatch a webhook event to all active subscribers for a home.
@@ -72,6 +76,13 @@ async function fireWebhook(hook, event, payload) {
     logger.info({ webhookId: hook.id, event, duplicateDeliveryId: duplicate.id }, 'Skipping duplicate webhook delivery');
     return;
   }
+  if (!hook.secret) {
+    const error = 'Webhook signing secret missing';
+    logger.warn({ webhookId: hook.id, event }, error);
+    await webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'failed')
+      .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
+    return;
+  }
   const signatureBase = `${timestamp}.${body}`;
   const signature = crypto.createHmac('sha256', hook.secret).update(signatureBase).digest('hex');
   const requestId = crypto.randomUUID();
@@ -82,6 +93,13 @@ async function fireWebhook(hook, event, payload) {
   // Re-validate URL at delivery time to prevent DNS rebinding SSRF
   if (await resolvedToPrivateIp(hook.url)) {
     error = 'Webhook URL resolves to private IP at delivery time — blocked';
+    logger.warn({ webhookId: hook.id, url: hook.url }, error);
+    webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
+      .catch(logErr => logger.warn({ err: logErr }, 'Webhook delivery log failed'));
+    return;
+  }
+  if (isInternalAppUrl(hook.url, config.allowedOrigin)) {
+    error = 'Webhook URL targets Panama internal endpoints — blocked';
     logger.warn({ webhookId: hook.id, url: hook.url }, error);
     webhookRepo.logDelivery(hook.id, event, body, null, 0, error, 'blocked')
       .catch(logErr => logger.warn({ err: logErr }, 'Webhook delivery log failed'));
@@ -123,20 +141,110 @@ async function fireWebhook(hook, event, payload) {
     webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, null, 'delivered')
       .catch(logErr => logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed'));
   } else {
-    // Schedule for retry
     const retryCount = 1;
     const nextRetryAt = getNextRetryAt(0);
     const status = 'pending_retry';
-    const deliveryId = await webhookRepo.logDelivery(hook.id, event, body, statusCode, responseMs, error, status)
-      .catch(logErr => {
-        logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed');
-        return null;
-      });
-    if (deliveryId) {
-      await webhookRepo.updateDeliveryForRetry(deliveryId, retryCount, nextRetryAt)
-        .catch(err2 => logger.warn({ err: err2, deliveryId }, 'Failed to schedule retry'));
-    }
+    await webhookRepo.logDelivery(
+      hook.id,
+      event,
+      body,
+      statusCode,
+      responseMs,
+      error,
+      status,
+      { retryCount, nextRetryAt, signingSecret: hook.secret },
+    ).catch(logErr => {
+      logger.warn({ err: logErr, webhookId: hook.id }, 'Webhook delivery log failed');
+    });
   }
+}
+
+async function processRetryDelivery(delivery) {
+  // Skip if webhook was deactivated since the original dispatch
+  if (!delivery.active) {
+    await webhookRepo.markDeliveryFailed(delivery.id);
+    return 1;
+  }
+
+  if (!delivery.secret) {
+    await webhookRepo.markDeliveryFailed(delivery.id, 'Webhook signing secret missing');
+    logger.warn({ deliveryId: delivery.id, webhookId: delivery.webhook_id }, 'Webhook retry failed — signing secret missing');
+    return 1;
+  }
+
+  const start = Date.now();
+  let statusCode = null;
+  let error = null;
+
+  const body = typeof delivery.payload === 'string'
+    ? delivery.payload
+    : JSON.stringify(delivery.payload);
+  const payloadBytes = Buffer.byteLength(body, 'utf8');
+  if (payloadBytes > MAX_WEBHOOK_PAYLOAD_BYTES) {
+    await webhookRepo.markDeliveryFailed(delivery.id, `Webhook payload exceeds ${MAX_WEBHOOK_PAYLOAD_BYTES} bytes`);
+    logger.warn({ deliveryId: delivery.id, payloadBytes }, 'Webhook retry blocked by payload size limit');
+    return 1;
+  }
+  const timestamp = extractTimestamp(body);
+  const signatureBase = `${timestamp}.${body}`;
+  const signature = crypto.createHmac('sha256', delivery.secret).update(signatureBase).digest('hex');
+  const requestId = crypto.randomUUID();
+
+  // Re-validate URL at retry time to prevent DNS rebinding SSRF
+  if (await resolvedToPrivateIp(delivery.url)) {
+    await webhookRepo.markDeliveryFailed(delivery.id);
+    logger.warn({ deliveryId: delivery.id, url: delivery.url }, 'Webhook retry blocked — URL resolves to private IP');
+    return 1;
+  }
+  if (isInternalAppUrl(delivery.url, config.allowedOrigin)) {
+    await webhookRepo.markDeliveryFailed(delivery.id, 'Webhook URL targets Panama internal endpoints');
+    logger.warn({ deliveryId: delivery.id, url: delivery.url }, 'Webhook retry blocked — URL targets Panama internal endpoints');
+    return 1;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(delivery.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': `sha256=${signature}`,
+        'X-Webhook-Timestamp': timestamp,
+        'X-Webhook-Event': delivery.event,
+        'X-Webhook-Request-ID': requestId,
+      },
+      body,
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    statusCode = res.status;
+    // Reject redirects — following them would bypass the pre-request SSRF validation
+    if (statusCode >= 300 && statusCode < 400) {
+      error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
+      statusCode = null;
+    }
+  } catch (fetchErr) {
+    error = fetchErr.message;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const responseMs = Date.now() - start;
+  const isSuccess = statusCode !== null && statusCode >= 200 && statusCode < 300;
+
+  if (isSuccess) {
+    await webhookRepo.markDeliverySucceeded(delivery.id, statusCode, responseMs);
+    logger.info({ deliveryId: delivery.id, webhookId: delivery.webhook_id, retryCount: delivery.retry_count }, 'Webhook retry succeeded');
+  } else if (delivery.retry_count >= MAX_RETRIES) {
+    await webhookRepo.markDeliveryFailed(delivery.id);
+    logger.warn({ deliveryId: delivery.id, webhookId: delivery.webhook_id, retryCount: delivery.retry_count, error }, 'Webhook max retries exhausted');
+  } else {
+    const nextRetryAt = getNextRetryAt(delivery.retry_count);
+    await webhookRepo.updateDeliveryForRetry(delivery.id, delivery.retry_count + 1, nextRetryAt);
+  }
+
+  return 1;
 }
 
 /**
@@ -144,6 +252,11 @@ async function fireWebhook(hook, event, payload) {
  * Returns the number of retries processed.
  */
 export async function processRetries() {
+  if (retriesInProgress) {
+    logger.warn('Webhook retries already running — skipping overlap');
+    return 0;
+  }
+  retriesInProgress = true;
   let processed = 0;
   try {
     // Rescue any rows stuck in 'in_progress' for >10 min (process crash during prior fetch)
@@ -152,87 +265,16 @@ export async function processRetries() {
       logger.warn({ rescued }, 'Rescued webhook deliveries stuck in_progress');
     }
 
-    const pending = await webhookRepo.claimPendingRetries(20);
-    for (const delivery of pending) {
-      // Skip if webhook was deactivated since the original dispatch
-      if (!delivery.active) {
-        await webhookRepo.markDeliveryFailed(delivery.id);
-        processed++;
-        continue;
-      }
-
-      const start = Date.now();
-      let statusCode = null;
-      let error = null;
-
-      const body = typeof delivery.payload === 'string'
-        ? delivery.payload
-        : JSON.stringify(delivery.payload);
-      const payloadBytes = Buffer.byteLength(body, 'utf8');
-      if (payloadBytes > MAX_WEBHOOK_PAYLOAD_BYTES) {
-        await webhookRepo.markDeliveryFailed(delivery.id, `Webhook payload exceeds ${MAX_WEBHOOK_PAYLOAD_BYTES} bytes`);
-        logger.warn({ deliveryId: delivery.id, payloadBytes }, 'Webhook retry blocked by payload size limit');
-        processed++;
-        continue;
-      }
-      const timestamp = extractTimestamp(body);
-      const signatureBase = `${timestamp}.${body}`;
-      const signature = crypto.createHmac('sha256', delivery.secret).update(signatureBase).digest('hex');
-      const requestId = crypto.randomUUID();
-
-      // Re-validate URL at retry time to prevent DNS rebinding SSRF
-      if (await resolvedToPrivateIp(delivery.url)) {
-        await webhookRepo.markDeliveryFailed(delivery.id);
-        logger.warn({ deliveryId: delivery.id, url: delivery.url }, 'Webhook retry blocked — URL resolves to private IP');
-        processed++;
-        continue;
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      try {
-        const res = await fetch(delivery.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': `sha256=${signature}`,
-            'X-Webhook-Timestamp': timestamp,
-            'X-Webhook-Event': delivery.event,
-            'X-Webhook-Request-ID': requestId,
-          },
-          body,
-          signal: controller.signal,
-          redirect: 'manual',
-        });
-        statusCode = res.status;
-        // Reject redirects — following them would bypass the pre-request SSRF validation
-        if (statusCode >= 300 && statusCode < 400) {
-          error = `Redirect to ${res.headers.get('location') || 'unknown'} blocked (SSRF protection)`;
-          statusCode = null;
-        }
-      } catch (fetchErr) {
-        error = fetchErr.message;
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      const responseMs = Date.now() - start;
-      const isSuccess = statusCode !== null && statusCode >= 200 && statusCode < 300;
-
-      if (isSuccess) {
-        await webhookRepo.markDeliverySucceeded(delivery.id, statusCode, responseMs);
-        logger.info({ deliveryId: delivery.id, webhookId: delivery.webhook_id, retryCount: delivery.retry_count }, 'Webhook retry succeeded');
-      } else if (delivery.retry_count >= MAX_RETRIES) {
-        await webhookRepo.markDeliveryFailed(delivery.id);
-        logger.warn({ deliveryId: delivery.id, webhookId: delivery.webhook_id, retryCount: delivery.retry_count, error }, 'Webhook max retries exhausted');
-      } else {
-        const nextRetryAt = getNextRetryAt(delivery.retry_count);
-        await webhookRepo.updateDeliveryForRetry(delivery.id, delivery.retry_count + 1, nextRetryAt);
-      }
-      processed++;
+    const pending = await webhookRepo.claimPendingRetries(RETRY_CLAIM_LIMIT);
+    for (let i = 0; i < pending.length; i += RETRY_BATCH_CONCURRENCY) {
+      const chunk = pending.slice(i, i + RETRY_BATCH_CONCURRENCY);
+      const results = await Promise.all(chunk.map(processRetryDelivery));
+      processed += results.reduce((sum, result) => sum + result, 0);
     }
   } catch (err) {
     logger.error({ err }, 'Webhook retry processing error');
+  } finally {
+    retriesInProgress = false;
   }
   return processed;
 }

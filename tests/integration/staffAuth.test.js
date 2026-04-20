@@ -191,6 +191,25 @@ describe('staff login (POST /api/login)', () => {
     expect(creds.lockedUntil).not.toBeNull();
   });
 
+  it('still locks the account when wrong-password attempts arrive in parallel', async () => {
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        request(app)
+          .post('/api/login')
+          .send({ username: PORTAL_USERNAME, password: 'wrong-password' })
+      ),
+    );
+
+    const locked = await request(app)
+      .post('/api/login')
+      .send({ username: PORTAL_USERNAME, password: PORTAL_PASSWORD });
+
+    expect([401, 423, 429]).toContain(locked.status);
+    const creds = await staffAuthRepo.findByStaff(homeId, STAFF_ID);
+    expect(creds.failedLoginCount).toBeGreaterThanOrEqual(5);
+    expect(creds.lockedUntil).not.toBeNull();
+  });
+
   it('resets failed count on successful login', async () => {
     for (let i = 0; i < 3; i += 1) {
       await request(app)
