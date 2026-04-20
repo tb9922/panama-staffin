@@ -22,6 +22,8 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('../../repositories/documentIntakeRepo.js', () => ({
+  findBySha: vi.fn(),
+  create: vi.fn(),
   findById: vi.fn(),
   update: vi.fn(),
 }));
@@ -81,7 +83,9 @@ vi.mock('../../services/ocrService.js', () => ({
 import * as documentIntakeRepo from '../../repositories/documentIntakeRepo.js';
 import * as recordAttachmentsRepo from '../../repositories/recordAttachments.js';
 import * as maintenanceRepo from '../../repositories/maintenanceRepo.js';
-import { confirmScanIntake } from '../../services/scanIntakeService.js';
+import * as ocrService from '../../services/ocrService.js';
+import { createScanIntake, confirmScanIntake } from '../../services/scanIntakeService.js';
+import { readFile } from 'fs/promises';
 
 describe('scanIntakeService maintenance and record filing', () => {
   const intakeItem = {
@@ -95,9 +99,30 @@ describe('scanIntakeService maintenance and record filing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    readFile.mockResolvedValue(Buffer.from('scan-bytes'));
+    documentIntakeRepo.findBySha.mockResolvedValue(null);
     documentIntakeRepo.findById.mockResolvedValue(intakeItem);
     documentIntakeRepo.update.mockResolvedValue({ id: 7, status: 'confirmed' });
     recordAttachmentsRepo.create.mockResolvedValue({ id: 55 });
+  });
+
+  it('checks for duplicate scans before calling OCR extraction', async () => {
+    documentIntakeRepo.findBySha.mockResolvedValue({ id: 99, source_file_sha256: 'dup' });
+
+    await expect(createScanIntake(12, {
+      file: {
+        path: 'C:/uploads/dup.pdf',
+        originalname: 'dup.pdf',
+        mimetype: 'application/pdf',
+        filename: 'dup.pdf',
+        size: 42,
+      },
+      createdBy: 'alice',
+    })).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(documentIntakeRepo.findBySha).toHaveBeenCalledOnce();
+    expect(ocrService.extractDocument).not.toHaveBeenCalled();
+    expect(documentIntakeRepo.create).not.toHaveBeenCalled();
   });
 
   it('creates a maintenance check from scan intake before attaching the file', async () => {

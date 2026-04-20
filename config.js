@@ -152,3 +152,17 @@ export const config = {
     timeoutMs: parseIntEnv(process.env.PADDLE_OCR_TIMEOUT_MS, 30000),
   },
 };
+
+if (config.nodeEnv === 'production' && config.ocr.paddleUrl) {
+  let paddleUrl;
+  try {
+    paddleUrl = new URL(config.ocr.paddleUrl);
+  } catch {
+    console.error('FATAL: PADDLE_OCR_URL must be a valid URL');
+    process.exit(1);
+  }
+  if (paddleUrl.protocol !== 'https:') {
+    console.error('FATAL: PADDLE_OCR_URL must use https in production');
+    process.exit(1);
+  }
+}
