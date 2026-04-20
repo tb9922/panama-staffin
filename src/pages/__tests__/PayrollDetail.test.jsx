@@ -298,6 +298,36 @@ describe('PayrollDetail', () => {
     expect(screen.getByRole('button', { name: 'Export ▾' })).toBeInTheDocument();
   });
 
+  it('shows an RTI warning for approved payroll runs that are not exported', async () => {
+    renderAdmin({
+      ...MOCK_APPROVED_RUN,
+      run: {
+        ...MOCK_APPROVED_RUN.run,
+        period_end: '2020-01-31',
+        exported_at: null,
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/past payday and still not exported/i)).toBeInTheDocument()
+    );
+  });
+
+  it('shows the RTI warning inside the approve confirmation modal for a late calculated run', async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      ...MOCK_CALCULATED_RUN,
+      run: {
+        ...MOCK_CALCULATED_RUN.run,
+        period_end: '2020-01-31',
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(screen.getAllByText(/Approval is still allowed, but RTI\/FPS should be sent immediately afterwards/i).length).toBeGreaterThanOrEqual(2);
+  });
+
   it('shows previous-run delta text in the summary cards', async () => {
     renderAdmin(MOCK_CALCULATED_RUN);
     await waitFor(() =>

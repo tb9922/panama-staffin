@@ -18,6 +18,8 @@ const CONSENT_COLS = 'id, home_id, subject_type, subject_id, subject_name, purpo
 
 const DP_COMPLAINT_COLS = 'id, home_id, date_received, complainant_name, subject_type, subject_id, category, description, severity, ico_involved, ico_reference, status, resolution, resolution_date, version, created_at, updated_at';
 
+const PROCESSOR_COLS = 'id, home_id, provider_name, provider_role, services, categories_of_data, categories_of_subjects, countries, international_transfers, dpa_status, contract_owner, signed_date, review_due, notes, version, created_by, created_at, updated_at';
+
 // ── Access Log ───────────────────────────────────────────────────────────────
 
 function shapeAccessLog(row) {
@@ -432,5 +434,117 @@ export async function updateDPComplaint(id, homeId, data, client, version) {
   const { rows, rowCount } = await conn.query(sql, values);
   if (rowCount === 0 && version != null) return null;
   return rows[0] ? shapeDPComplaint(rows[0]) : null;
+}
+
+// —— GDPR Processors / DPA register ———————————————————————————————————————————
+
+function shapeProcessor(row) {
+  return {
+    id: row.id,
+    home_id: row.home_id,
+    provider_name: row.provider_name,
+    provider_role: row.provider_role,
+    services: row.services,
+    categories_of_data: row.categories_of_data,
+    categories_of_subjects: row.categories_of_subjects,
+    countries: row.countries,
+    international_transfers: row.international_transfers,
+    dpa_status: row.dpa_status,
+    contract_owner: row.contract_owner,
+    signed_date: d(row.signed_date),
+    review_due: d(row.review_due),
+    notes: row.notes,
+    version: row.version,
+    created_by: row.created_by,
+    created_at: ts(row.created_at),
+    updated_at: ts(row.updated_at),
+  };
+}
+
+export async function findProcessors(homeId, { limit = 100, offset = 0, dpa_status = null } = {}, client) {
+  const conn = client || pool;
+  let sql = `SELECT ${PROCESSOR_COLS}, COUNT(*) OVER() AS _total
+               FROM gdpr_processors
+              WHERE home_id = $1 AND deleted_at IS NULL`;
+  const params = [homeId];
+  if (dpa_status) {
+    params.push(dpa_status);
+    sql += ` AND dpa_status = $${params.length}`;
+  }
+  sql += ' ORDER BY provider_name ASC';
+  params.push(Math.min(limit, 500));
+  sql += ` LIMIT $${params.length}`;
+  params.push(Math.max(offset, 0));
+  sql += ` OFFSET $${params.length}`;
+  const { rows } = await conn.query(sql, params);
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return { rows: rows.map((row) => { const { _total, ...rest } = row; return shapeProcessor(rest); }), total };
+}
+
+export async function findProcessorById(id, homeId, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${PROCESSOR_COLS}
+       FROM gdpr_processors
+      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`,
+    [id, homeId]
+  );
+  return rows[0] ? shapeProcessor(rows[0]) : null;
+}
+
+export async function createProcessor(homeId, data, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `INSERT INTO gdpr_processors
+       (home_id, provider_name, provider_role, services, categories_of_data, categories_of_subjects,
+        countries, international_transfers, dpa_status, contract_owner, signed_date, review_due,
+        notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     RETURNING ${PROCESSOR_COLS}`,
+    [
+      homeId,
+      data.provider_name,
+      data.provider_role,
+      data.services || null,
+      data.categories_of_data,
+      data.categories_of_subjects,
+      data.countries || null,
+      data.international_transfers ?? false,
+      data.dpa_status || 'requested',
+      data.contract_owner || null,
+      data.signed_date || null,
+      data.review_due || null,
+      data.notes || null,
+      data.created_by,
+    ]
+  );
+  return shapeProcessor(rows[0]);
+}
+
+export async function updateProcessor(id, homeId, data, client, version) {
+  const conn = client || pool;
+  const settable = [
+    'provider_name', 'provider_role', 'services', 'categories_of_data', 'categories_of_subjects',
+    'countries', 'international_transfers', 'dpa_status', 'contract_owner', 'signed_date',
+    'review_due', 'notes',
+  ];
+  const fields = [];
+  const params = [id, homeId];
+  for (const key of settable) {
+    if (!(key in data)) continue;
+    params.push(data[key] ?? null);
+    fields.push(`${key} = $${params.length}`);
+  }
+  if (fields.length === 0) return findProcessorById(id, homeId, client);
+  fields.push('version = version + 1', 'updated_at = NOW()');
+  let sql = `UPDATE gdpr_processors SET ${fields.join(', ')} WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL`;
+  if (version != null) {
+    params.push(version);
+    sql += ` AND version = $${params.length}`;
+  }
+  sql += ` RETURNING ${PROCESSOR_COLS}`;
+  const { rows, rowCount } = await conn.query(sql, params);
+  if (rowCount === 0 && version != null) return null;
+  return rows[0] ? shapeProcessor(rows[0]) : null;
 }
 

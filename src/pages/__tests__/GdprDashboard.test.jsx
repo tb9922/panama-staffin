@@ -24,6 +24,9 @@ vi.mock('../../lib/api.js', async () => {
     getConsentRecords: vi.fn(),
     createConsentRecord: vi.fn(),
     updateConsentRecord: vi.fn(),
+    getGdprProcessors: vi.fn(),
+    createGdprProcessor: vi.fn(),
+    updateGdprProcessor: vi.fn(),
     getDPComplaints: vi.fn(),
     createDPComplaint: vi.fn(),
     updateDPComplaint: vi.fn(),
@@ -75,6 +78,7 @@ function mockAllApis(overrides = {}) {
   api.getDataBreaches.mockResolvedValue(d.breaches);
   api.getRetentionSchedule.mockResolvedValue(d.retention);
   api.getConsentRecords.mockResolvedValue(d.consent);
+  api.getGdprProcessors.mockResolvedValue(d.processors || { rows: [] });
   api.getDPComplaints.mockResolvedValue(d.complaints);
   api.getAccessLog.mockResolvedValue(d.accessLog);
   api.scanRetention.mockResolvedValue([]);
@@ -114,6 +118,7 @@ describe('GdprDashboard', () => {
     expect(screen.getByRole('tab', { name: 'Breaches' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Retention' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Consent' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Processors' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Complaints' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Access Log' })).toBeInTheDocument();
   });
@@ -151,5 +156,33 @@ describe('GdprDashboard', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Breaches' })).toBeInTheDocument());
     await user.click(screen.getByRole('tab', { name: 'Breaches' }));
     expect(screen.getByText('No data breaches recorded')).toBeInTheDocument();
+  });
+
+  it('shows the processor register tab and empty state', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<GdprDashboard />);
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Processors' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Processors' }));
+    expect(screen.getByText('No processors recorded')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Processor' })).toBeInTheDocument();
+  });
+
+  it('shows processor review counts on the overview cards', async () => {
+    mockAllApis({
+      processors: {
+        rows: [
+          {
+            id: 1,
+            provider_name: 'Example Payroll',
+            provider_role: 'processor',
+            dpa_status: 'requested',
+            review_due: '2020-01-01',
+          },
+        ],
+      },
+    });
+    renderWithProviders(<GdprDashboard />);
+    await waitFor(() => expect(screen.getByText('Processor Register')).toBeInTheDocument());
+    expect(screen.getByText('1 review due')).toBeInTheDocument();
   });
 });

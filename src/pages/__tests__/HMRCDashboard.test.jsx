@@ -10,6 +10,7 @@ vi.mock('../../lib/api.js', async () => {
     getCurrentHome: vi.fn(() => 'test-home'),
     getLoggedInUser: vi.fn(() => ({ username: 'admin', role: 'admin' })),
     getHMRCLiabilities: vi.fn(),
+    getPayrollRuns: vi.fn(),
     markHMRCPaid: vi.fn(),
     loadHomes: vi.fn().mockResolvedValue([{ id: 'test-home', name: 'Test Home' }]),
     setCurrentHome: vi.fn(),
@@ -36,8 +37,9 @@ const MOCK_LIABILITIES = [
   },
 ];
 
-function setupMocks(liabilities = MOCK_LIABILITIES) {
+function setupMocks(liabilities = MOCK_LIABILITIES, payrollRuns = []) {
   api.getHMRCLiabilities.mockResolvedValue(liabilities);
+  api.getPayrollRuns.mockResolvedValue(payrollRuns);
 }
 
 describe('HMRCDashboard', () => {
@@ -135,5 +137,20 @@ describe('HMRCDashboard', () => {
       expect(screen.getByText('HMRC Liabilities')).toBeInTheDocument()
     );
     expect(screen.getByText(/No HMRC liabilities/)).toBeInTheDocument();
+  });
+
+  it('shows RTI readiness alerts for approved payroll runs that are not exported', async () => {
+    setupMocks(MOCK_LIABILITIES, [
+      {
+        id: 'run-1',
+        status: 'approved',
+        period_end: '2020-01-31',
+        exported_at: null,
+      },
+    ]);
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText(/past payday and still not exported/i)).toBeInTheDocument()
+    );
   });
 });

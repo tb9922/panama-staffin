@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
 
+process.env.ENCRYPTION_KEY ||= 'a'.repeat(64);
+
 const PREFIX = 'hr-seam-test';
 const USERNAME = `${PREFIX}-manager`;
 const PASSWORD = 'HrSeamPass1Test';
@@ -120,6 +122,18 @@ describe('HR route save seams', () => {
     expect(createRes.body.category).toBe('Physical');
     expect(createRes.body.adjustments).toEqual(['Height-adjustable desk']);
 
+    const { rows: [stored] } = await pool.query(
+      `SELECT condition_description, adjustments, sensitive_encrypted, sensitive_iv, sensitive_tag
+         FROM hr_edi_records
+        WHERE id = $1 AND home_id = $2`,
+      [createRes.body.id, homeId]
+    );
+    expect(stored.condition_description).toBeNull();
+    expect(stored.adjustments).toEqual([]);
+    expect(stored.sensitive_encrypted).toBeTruthy();
+    expect(stored.sensitive_iv).toBeTruthy();
+    expect(stored.sensitive_tag).toBeTruthy();
+
     const updateRes = await authed('put', `/api/hr/edi/${createRes.body.id}`).send({
       _version: createRes.body.version,
       category: 'Sensory',
@@ -128,6 +142,25 @@ describe('HR route save seams', () => {
 
     expect(updateRes.body.category).toBe('Sensory');
     expect(updateRes.body.adjustments).toEqual(['Screen reader software']);
+  });
+
+  it('links HR case notes to the staff subject automatically', async () => {
+    const disciplinary = await authed('post', '/api/hr/cases/disciplinary').send({
+      staff_id: STAFF_ID,
+      date_raised: '2026-03-10',
+      category: 'conduct',
+      allegation_summary: 'Case note subject-link test',
+      raised_by: 'HR Seam Manager',
+      source: 'observation',
+      status: 'open',
+    }).expect(201);
+
+    const noteRes = await authed('post', `/api/hr/case-notes/disciplinary/${disciplinary.body.id}`).send({
+      note: 'Linked note for disciplinary case',
+    }).expect(201);
+
+    expect(noteRes.body.subject_type).toBe('staff');
+    expect(noteRes.body.subject_id).toBe(STAFF_ID);
   });
 
   it('rejects TUPE consultation windows shorter than 30 days', async () => {

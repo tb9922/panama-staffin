@@ -936,6 +936,21 @@ export async function updateConsentRecord(homeSlug, id, data) {
   });
 }
 
+// Processor register / DPA tracker
+export async function getGdprProcessors(homeSlug) {
+  return apiFetch(`${API_BASE}/gdpr/processors?home=${h(homeSlug)}`, { headers: authHeaders() });
+}
+export async function createGdprProcessor(homeSlug, data) {
+  return apiFetch(`${API_BASE}/gdpr/processors?home=${h(homeSlug)}`, {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+export async function updateGdprProcessor(homeSlug, id, data) {
+  return apiFetch(`${API_BASE}/gdpr/processors/${id}?home=${h(homeSlug)}`, {
+    method: 'PUT', headers: authHeaders(), body: JSON.stringify(data),
+  });
+}
+
 // DP complaints
 export async function getDPComplaints(homeSlug) {
   return apiFetch(`${API_BASE}/gdpr/complaints?home=${h(homeSlug)}`, { headers: authHeaders() });

@@ -13,6 +13,7 @@ import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import StickyTable from '../components/StickyTable.jsx';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -62,6 +63,29 @@ function formatDelta(value, { prefix = '', suffix = '' } = {}) {
     ? `${prefix}${Math.abs(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : `${Math.abs(value).toLocaleString('en-GB', { maximumFractionDigits: 1 })}${suffix}`;
   return `${sign}${value < 0 ? '-' : ''}${amount}`;
+}
+
+function getRtiFpsNotice(run, today = todayLocalISO()) {
+  if (!run || run.exported_at || !run.period_end) return null;
+  if (run.status === 'approved' && run.period_end < today) {
+    return {
+      variant: 'error',
+      text: 'This payroll is past payday and still not exported. Submit the FPS immediately and keep the regular payment date on the filing.',
+    };
+  }
+  if (run.status === 'approved') {
+    return {
+      variant: 'warning',
+      text: 'This payroll is approved but not yet exported. FPS should be sent on or before payday.',
+    };
+  }
+  if ((run.status === 'draft' || run.status === 'calculated') && run.period_end < today) {
+    return {
+      variant: 'warning',
+      text: 'This payroll is already past payday. Approval is still allowed, but RTI/FPS should be sent immediately afterwards.',
+    };
+  }
+  return null;
 }
 
 export default function PayrollDetail() {
@@ -205,7 +229,11 @@ export default function PayrollDetail() {
       setRun(updated);
       setShowApproveConfirm(false);
       await load();
-      showNotice('Payroll run approved. Export files when you are ready to send them on.');
+      showNotice(
+        run?.period_end && run.period_end < todayLocalISO()
+          ? 'Payroll run approved late. Export and file the FPS immediately, using the normal payment date on the submission.'
+          : 'Payroll run approved. Export files when you are ready to send them on.',
+      );
     } catch (e) {
       setError(e.message);
     } finally {
@@ -325,6 +353,7 @@ export default function PayrollDetail() {
   const canApprove    = canEdit && run.status === 'calculated' && nmwViolations.length === 0;
   const canExport     = canEdit && ['approved', 'exported', 'locked'].includes(run.status);
   const isBusy        = action !== null;
+  const rtiNotice = getRtiFpsNotice(run);
 
   const hasDeductions = totals.net_pay > 0;
 
@@ -396,6 +425,11 @@ export default function PayrollDetail() {
 
       {/* Error */}
       {error && <ErrorState title="Payroll action needs attention" message={error} className="mb-4" />}
+      {rtiNotice && (
+        <InlineNotice className="mb-4" variant={rtiNotice.variant}>
+          {rtiNotice.text}
+        </InlineNotice>
+      )}
 
       {(run.status === 'draft' || run.status === 'calculated') && (
         <div className={`${CARD.padded} mb-4`}>
@@ -696,6 +730,11 @@ export default function PayrollDetail() {
               </div>
             )}
           </div>
+          {rtiNotice && (
+            <InlineNotice variant={rtiNotice.variant}>
+              {rtiNotice.text}
+            </InlineNotice>
+          )}
         </div>
         <div className={MODAL.footer}>
           <button

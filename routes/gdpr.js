@@ -98,6 +98,25 @@ const consentBodySchema = z.object({
   notes:         z.string().max(2000).nullable().optional(),
 });
 
+const processorBodySchema = z.object({
+  provider_name: z.string().min(1).max(300),
+  provider_role: z.enum(['processor', 'sub_processor']),
+  services: z.string().max(5000).nullable().optional(),
+  categories_of_data: z.string().min(1).max(500),
+  categories_of_subjects: z.string().min(1).max(500),
+  countries: z.string().max(500).nullable().optional(),
+  international_transfers: z.boolean().optional(),
+  dpa_status: z.enum(['draft', 'requested', 'signed', 'not_required', 'expired']).optional(),
+  contract_owner: z.string().max(100).nullable().optional(),
+  signed_date: dateSchema.optional(),
+  review_due: dateSchema.optional(),
+  notes: z.string().max(5000).nullable().optional(),
+});
+
+const processorUpdateSchema = processorBodySchema.partial().extend({
+  _version: z.number().int().nonnegative().optional(),
+});
+
 const dpComplaintBodySchema = z.object({
   date_received:    dateSchema,
   complainant_name: z.string().max(200).nullable().optional(),
@@ -415,6 +434,47 @@ router.get('/access-log', readRateLimiter, requireAuth, requireAdmin, async (req
       homeSlugs = await findHomeSlugsForUser(req.user.username);
     }
     res.json(await gdprService.getAccessLog({ limit, offset, homeSlugs }));
+  } catch (err) { next(err); }
+});
+
+// Processor register / DPA tracking
+router.get('/processors', readRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'read'), async (req, res, next) => {
+  try {
+    res.json(await gdprService.findProcessors(req.home.id));
+  } catch (err) { next(err); }
+});
+
+router.post('/processors', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+  try {
+    const parsed = processorBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    if (parsed.data.dpa_status === 'signed' && !parsed.data.signed_date) {
+      return res.status(400).json({ error: 'signed_date is required when DPA status is signed' });
+    }
+    const result = await gdprService.createProcessor(req.home.id, { ...parsed.data, created_by: req.user.username });
+    await auditService.log('gdpr_create', req.home.slug, req.user.username, { id: result.id, entity: 'processor_register' });
+    res.status(201).json(result);
+  } catch (err) { next(err); }
+});
+
+router.put('/processors/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModule('gdpr', 'write'), async (req, res, next) => {
+  try {
+    const idP = idSchema.safeParse(req.params.id);
+    if (!idP.success) return res.status(400).json({ error: 'Invalid processor ID' });
+    const parsed = processorUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const existing = await gdprService.findProcessorById(idP.data, req.home.id);
+    if (!existing) return res.status(404).json({ error: 'Processor record not found' });
+    if ((parsed.data.dpa_status === 'signed' || (!('dpa_status' in parsed.data) && existing.dpa_status === 'signed'))
+        && parsed.data.signed_date === null) {
+      return res.status(400).json({ error: 'signed_date is required when DPA status is signed' });
+    }
+    const { version, payload } = splitVersion(parsed.data);
+    const result = await gdprService.updateProcessor(idP.data, req.home.id, payload, version);
+    if (result === null) return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
+    const changes = diffFields(existing, result);
+    await auditService.log('gdpr_processor_update', req.home.slug, req.user.username, { id: idP.data, changes });
+    res.json(result);
   } catch (err) { next(err); }
 });
 

@@ -309,16 +309,18 @@ const server = shouldListen ? app.listen(config.port, async () => {
       () => purgeAuditLog(2555).catch(err => logger.warn({ err: err?.message }, 'audit purge failed')),
       24 * 60 * 60 * 1000
     ).unref();
-    // Purge webhook delivery logs past 90-day retention daily
-    setInterval(
-      () => purgeWebhookDeliveries(90).catch(err => logger.warn({ err: err?.message }, 'webhook delivery purge failed')),
-      24 * 60 * 60 * 1000
-    ).unref();
-    // Process webhook retries every 30 seconds
-    setInterval(
-      () => processWebhookRetries().catch(err => logger.warn({ err: err?.message }, 'webhook retry processing failed')),
-      30_000
-    ).unref();
+    if (!config.enableWebhookRetryWorker) {
+      // Purge webhook delivery logs past 90-day retention daily
+      setInterval(
+        () => purgeWebhookDeliveries(90).catch(err => logger.warn({ err: err?.message }, 'webhook delivery purge failed')),
+        24 * 60 * 60 * 1000
+      ).unref();
+      // Process webhook retries every 30 seconds
+      setInterval(
+        () => processWebhookRetries().catch(err => logger.warn({ err: err?.message }, 'webhook retry processing failed')),
+        30_000
+      ).unref();
+    }
     logger.info('Background jobs registered (instance 0)');
   }
 }) : null;

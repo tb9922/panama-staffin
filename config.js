@@ -81,6 +81,7 @@ export const config = {
   trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || 'info',
   metricsToken: process.env.METRICS_TOKEN || null,
+  enableWebhookRetryWorker: process.env.ENABLE_WEBHOOK_RETRY_WORKER === '1' || process.env.ENABLE_WEBHOOK_RETRY_WORKER === 'true',
 
   // Authentication
   jwtSecret: process.env.JWT_SECRET,

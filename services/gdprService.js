@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pool, withTransaction } from '../db.js';
 import * as gdprRepo from '../repositories/gdprRepo.js';
 import * as auditRepo from '../repositories/auditRepo.js';
+import * as hrRepo from '../repositories/hrRepo.js';
 import { ConflictError, ValidationError } from '../errors.js';
 import { config as appConfig } from '../config.js';
 import * as authService from './authService.js';
@@ -190,7 +191,7 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(`SELECT * FROM hr_contracts WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM hr_family_leave WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
         () => conn.query(`SELECT * FROM hr_flexible_working WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
-        () => conn.query(`SELECT * FROM hr_edi_records WHERE home_id = $1 AND staff_id = $2`, [homeId, subjectId]),
+        () => hrRepo.findEdi(homeId, { staffId: subjectId }, conn, { limit: 500, offset: 0 }).then(result => ({ rows: result.rows })),
         // HR module — TUPE: include only rows where the subject is explicitly present
         // in the employees JSON payload by staff ID or resolved name.
         () => staffName
@@ -217,6 +218,8 @@ export async function gatherPersonalData(subjectType, subjectId, homeId, client,
         () => conn.query(
           `SELECT cn.* FROM hr_case_notes cn
            WHERE cn.home_id = $1 AND (
+             (cn.subject_type = 'staff' AND cn.subject_id = $2)
+             OR
              (cn.case_type = 'disciplinary' AND cn.case_id IN (SELECT id FROM hr_disciplinary_cases WHERE home_id = $1 AND staff_id = $2))
              OR (cn.case_type = 'grievance' AND cn.case_id IN (SELECT id FROM hr_grievance_cases WHERE home_id = $1 AND staff_id = $2))
              OR (cn.case_type = 'performance' AND cn.case_id IN (SELECT id FROM hr_performance_cases WHERE home_id = $1 AND staff_id = $2))
@@ -757,7 +760,14 @@ export async function executeErasure(staffId, homeId, requestId, username, homeS
       `UPDATE hr_edi_records SET
          description = $2, condition_description = NULL,
          adjustments = '[]'::jsonb,
-         outcome = NULL, notes = NULL
+         outcome = NULL, notes = NULL,
+         harassment_category = NULL,
+         respondent_name = NULL,
+         reasonable_steps_evidence = '[]'::jsonb,
+         access_to_work_reference = NULL,
+         sensitive_encrypted = NULL,
+         sensitive_iv = NULL,
+         sensitive_tag = NULL
        WHERE home_id = $1 AND staff_id = $3`,
       [homeId, anon, staffId]
     );
@@ -1573,6 +1583,11 @@ export async function findConsent(homeId) { const r = await gdprRepo.findConsent
 export async function findConsentById(id, homeId) { return gdprRepo.findConsentById(id, homeId); }
 export async function createConsent(homeId, data) { return gdprRepo.createConsent(homeId, data); }
 export async function updateConsent(id, homeId, data, version) { return gdprRepo.updateConsent(id, homeId, data, null, version); }
+
+export async function findProcessors(homeId) { return gdprRepo.findProcessors(homeId); }
+export async function findProcessorById(id, homeId) { return gdprRepo.findProcessorById(id, homeId); }
+export async function createProcessor(homeId, data) { return gdprRepo.createProcessor(homeId, data); }
+export async function updateProcessor(id, homeId, data, version) { return gdprRepo.updateProcessor(id, homeId, data, null, version); }
 
 export async function findDPComplaints(homeId) { const r = await gdprRepo.findDPComplaints(homeId); return r.rows; }
 export async function findDPComplaintById(id, homeId) { return gdprRepo.findDPComplaintById(id, homeId); }

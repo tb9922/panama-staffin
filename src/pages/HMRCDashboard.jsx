@@ -5,7 +5,7 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
+import { getHMRCLiabilities, markHMRCPaid, getCurrentHome, getPayrollRuns } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
@@ -47,6 +47,42 @@ function currentTaxYear() {
   return now.getUTCFullYear() - 1;
 }
 
+function addDaysIso(isoDate, days) {
+  const parsed = new Date(`${isoDate}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function buildRtiAlerts(runs, today = todayLocalISO()) {
+  const late = runs.filter((run) => !run.exported_at && run.period_end && run.period_end < today);
+  const ready = runs.filter((run) => run.status === 'approved' && !run.exported_at);
+  const dueSoon = runs.filter((run) => !run.exported_at && run.period_end && run.period_end >= today && run.period_end <= addDaysIso(today, 2));
+
+  return [
+    late.length > 0
+      ? {
+          key: 'late',
+          variant: 'error',
+          text: `${late.length} payroll run${late.length !== 1 ? 's are' : ' is'} past payday and still not exported for FPS/accountant filing.`,
+        }
+      : null,
+    late.length === 0 && ready.length > 0
+      ? {
+          key: 'ready',
+          variant: 'warning',
+          text: `${ready.length} approved payroll run${ready.length !== 1 ? 's still need' : ' still needs'} FPS/export action on or before payday.`,
+        }
+      : null,
+    dueSoon.length > 0
+      ? {
+          key: 'due-soon',
+          variant: 'info',
+          text: `${dueSoon.length} payroll run${dueSoon.length !== 1 ? 's reach' : ' reaches'} payday within 48 hours. Check RTI/FPS readiness now.`,
+        }
+      : null,
+  ].filter(Boolean);
+}
+
 export default function HMRCDashboard() {
   const homeSlug = getCurrentHome();
   const { canWrite } = useData();
@@ -55,6 +91,7 @@ export default function HMRCDashboard() {
   const { showToast } = useToast();
 
   const [liabilities, setLiabilities] = useState([]);
+  const [payrollRuns, setPayrollRuns] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [saving, setSaving]           = useState(false);
@@ -68,8 +105,12 @@ export default function HMRCDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const result = await getHMRCLiabilities(homeSlug, taxYear);
+      const [result, runs] = await Promise.all([
+        getHMRCLiabilities(homeSlug, taxYear),
+        getPayrollRuns(homeSlug).catch(() => []),
+      ]);
       setLiabilities(result);
+      setPayrollRuns(Array.isArray(runs) ? runs : []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -90,6 +131,7 @@ export default function HMRCDashboard() {
   const totalPaid   = liabilities
     .filter(l => l.status === 'paid')
     .reduce((s, l) => s + parseFloat(l.total_due || 0), 0);
+  const rtiAlerts = buildRtiAlerts(payrollRuns);
 
   function openPaid(liability) {
     setPaidForm({ paid_date: todayLocalISO(), paid_reference: '' });
@@ -160,6 +202,12 @@ export default function HMRCDashboard() {
           HMRC penalties may apply. Total overdue: {fmt(overdue.reduce((s, l) => s + parseFloat(l.total_due || 0), 0))}.
         </div>
       )}
+
+      {rtiAlerts.map((alert) => (
+        <InlineNotice key={alert.key} className="mb-4" variant={alert.variant}>
+          {alert.text}
+        </InlineNotice>
+      ))}
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4">

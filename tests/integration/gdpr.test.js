@@ -35,6 +35,7 @@ async function cleanup() {
   const homeIds = rows.map(r => r.id);
 
   for (const hid of homeIds) {
+    await pool.query(`DELETE FROM gdpr_processors WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM dp_complaints WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM consent_records WHERE home_id = $1`, [hid]).catch(() => {});
     await pool.query(`DELETE FROM data_breaches WHERE home_id = $1`, [hid]).catch(() => {});
@@ -111,6 +112,79 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanup();
+});
+
+describe('Processor Register — /processors', () => {
+  let processorId;
+
+  it('GET returns empty rows initially', async () => {
+    const res = await adminGet(`/processors?home=${homeASlug}`).expect(200);
+    expect(res.body.rows).toEqual([]);
+    expect(res.body.total).toBe(0);
+  });
+
+  it('POST creates a processor register entry', async () => {
+    const res = await adminPost(`/processors?home=${homeASlug}`, {
+      provider_name: 'Example Payroll Platform',
+      provider_role: 'processor',
+      services: 'Payroll processing and RTI submissions',
+      categories_of_data: 'Payroll, NI numbers, tax codes',
+      categories_of_subjects: 'Staff',
+      countries: 'United Kingdom',
+      international_transfers: false,
+      dpa_status: 'signed',
+      signed_date: '2026-04-01',
+      review_due: '2027-04-01',
+      contract_owner: 'Compliance Lead',
+    }).expect(201);
+
+    processorId = res.body.id;
+    expect(res.body.provider_name).toBe('Example Payroll Platform');
+    expect(res.body.dpa_status).toBe('signed');
+  });
+
+  it('GET returns the created processor entry', async () => {
+    const res = await adminGet(`/processors?home=${homeASlug}`).expect(200);
+    expect(res.body.total).toBeGreaterThanOrEqual(1);
+    expect(res.body.rows.some((row) => row.id === processorId)).toBe(true);
+  });
+
+  it('PUT updates a processor entry', async () => {
+    const list = await adminGet(`/processors?home=${homeASlug}`).expect(200);
+    const existing = list.body.rows.find((row) => row.id === processorId);
+    const res = await adminPut(`/processors/${processorId}?home=${homeASlug}`, {
+      _version: existing.version,
+      dpa_status: 'expired',
+      review_due: '2026-05-01',
+    }).expect(200);
+
+    expect(res.body.dpa_status).toBe('expired');
+    expect(res.body.review_due).toBe('2026-05-01');
+  });
+
+  it('POST rejects signed status without signed_date', async () => {
+    await adminPost(`/processors?home=${homeASlug}`, {
+      provider_name: 'Unsigned Processor',
+      provider_role: 'processor',
+      categories_of_data: 'Staff records',
+      categories_of_subjects: 'Staff',
+      dpa_status: 'signed',
+    }).expect(400);
+  });
+
+  it('tenant isolation hides other home processor entries', async () => {
+    await adminPost(`/processors?home=${homeBSlug}`, {
+      provider_name: 'Home B Processor',
+      provider_role: 'sub_processor',
+      categories_of_data: 'Residents',
+      categories_of_subjects: 'Residents',
+      dpa_status: 'requested',
+    }).expect(201);
+
+    const res = await adminGet(`/processors?home=${homeASlug}`).expect(200);
+    const names = res.body.rows.map((row) => row.provider_name);
+    expect(names).not.toContain('Home B Processor');
+  });
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

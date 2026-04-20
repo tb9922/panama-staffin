@@ -14,6 +14,7 @@ import {
   getDataBreaches, createDataBreach, updateDataBreach, assessBreach,
   getRetentionSchedule, scanRetention,
   getConsentRecords, createConsentRecord, updateConsentRecord,
+  getGdprProcessors, createGdprProcessor, updateGdprProcessor,
   getDPComplaints, createDPComplaint, updateDPComplaint,
   getAccessLog, getCurrentHome, getLoggedInUser,
   getRopaActivities, getDpiaAssessments,
@@ -36,6 +37,7 @@ const TABS = [
   { id: 'breaches',   label: 'Breaches' },
   { id: 'retention',  label: 'Retention' },
   { id: 'consent',    label: 'Consent' },
+  { id: 'processors', label: 'Processors' },
   { id: 'complaints', label: 'Complaints' },
   { id: 'access',     label: 'Access Log' },
 ];
@@ -60,13 +62,14 @@ export default function GdprDashboard() {
   const [retention, setRetention] = useState([]);
   const [retentionScan, setRetentionScan] = useState(null);
   const [consent, setConsent] = useState([]);
+  const [processors, setProcessors] = useState([]);
   const [complaints, setComplaints] = useState([]);
   const [accessLogData, setAccessLogData] = useState([]);
   const [ropaData, setRopaData] = useState([]);
   const [dpiaData, setDpiaData] = useState([]);
 
   // Modal state
-  const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'complaint'
+  const [showModal, setShowModal] = useState(null); // 'request' | 'breach' | 'consent' | 'processor' | 'complaint'
   const [form, setForm] = useState({});
 
   const [saving, setSaving] = useState(false);
@@ -91,11 +94,12 @@ export default function GdprDashboard() {
     if (!home) return;
     setLoading(true);
     try {
-      const [req, br, ret, con, comp, acc, ropa, dpia, retScan] = await Promise.all([
+      const [req, br, ret, con, proc, comp, acc, ropa, dpia, retScan] = await Promise.all([
         getDataRequests(home),
         getDataBreaches(home),
         getRetentionSchedule().catch(() => []),
         getConsentRecords(home),
+        getGdprProcessors(home).catch(() => ({ rows: [] })),
         getDPComplaints(home),
         getAccessLog(200).catch(() => []),  // admin-only — graceful fallback for non-admin
         getRopaActivities(home).catch(() => ({ rows: [] })),
@@ -106,6 +110,7 @@ export default function GdprDashboard() {
       setBreaches(br);
       setRetention(ret);
       setConsent(con);
+      setProcessors(Array.isArray(proc?.rows) ? proc.rows : []);
       setComplaints(comp);
       setAccessLogData(acc);
       setRopaData(ropa?.rows || []);
@@ -224,6 +229,41 @@ export default function GdprDashboard() {
       setShowModal(null);
       setForm({});
       showNotice('Consent record created.');
+      load();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
+  }
+
+  async function handleSaveProcessor() {
+    if (saving) return;
+    if (!form.provider_name?.trim()) { setError('Provider name is required.'); focusField('gdpr-processor-name'); return; }
+    if (!form.provider_role) { setError('Provider role is required.'); focusField('gdpr-processor-role'); return; }
+    if (!form.categories_of_data?.trim()) { setError('Categories of data are required.'); focusField('gdpr-processor-data'); return; }
+    if (!form.categories_of_subjects?.trim()) { setError('Categories of subjects are required.'); focusField('gdpr-processor-subjects'); return; }
+    if (form.dpa_status === 'signed' && !form.signed_date) { setError('Signed date is required when DPA status is signed.'); focusField('gdpr-processor-signed'); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        provider_name: form.provider_name.trim(),
+        provider_role: form.provider_role,
+        services: form.services?.trim() || null,
+        categories_of_data: form.categories_of_data.trim(),
+        categories_of_subjects: form.categories_of_subjects.trim(),
+        countries: form.countries?.trim() || null,
+        international_transfers: !!form.international_transfers,
+        dpa_status: form.dpa_status || 'requested',
+        contract_owner: form.contract_owner?.trim() || null,
+        signed_date: form.signed_date || null,
+        review_due: form.review_due || null,
+        notes: form.notes?.trim() || null,
+      };
+      if (form.id) {
+        await updateGdprProcessor(home, form.id, { ...payload, _version: form.version });
+        showNotice('Processor register updated.', { toastTitle: 'Processor register updated' });
+      } else {
+        await createGdprProcessor(home, payload);
+        showNotice('Processor added to the processor register.', { toastTitle: 'Processor added' });
+      }
+      closeModal();
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -352,7 +392,10 @@ export default function GdprDashboard() {
     try {
       const record = consent.find(c => c.id === id);
       await updateConsentRecord(home, id, { withdrawn: new Date().toISOString(), _version: record?.version });
-      showNotice('Consent withdrawn.');
+      showNotice(
+        'Consent withdrawn. Stop the consent-based use for this purpose, keep the withdrawal record, and review any downstream processors or exports before further processing.',
+        { variant: 'warning', duration: 9000, toastTitle: 'Consent withdrawn' }
+      );
       load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
@@ -399,6 +442,7 @@ export default function GdprDashboard() {
       {tab === 'breaches' && renderBreaches()}
       {tab === 'retention' && renderRetention()}
       {tab === 'consent' && renderConsent()}
+      {tab === 'processors' && renderProcessors()}
       {tab === 'complaints' && renderComplaints()}
       {tab === 'access' && renderAccessLog()}
 
@@ -406,6 +450,7 @@ export default function GdprDashboard() {
       {showModal === 'request' && renderRequestModal()}
       {showModal === 'breach' && renderBreachModal()}
       {showModal === 'consent' && renderConsentModal()}
+      {showModal === 'processor' && renderProcessorModal()}
       {showModal === 'complaint' && renderComplaintModal()}
 
       {/* ICO Decision Record Modal */}
@@ -527,6 +572,8 @@ export default function GdprDashboard() {
     const openBreaches = breaches.filter(b => b.status === 'open' || b.status === 'contained');
     const unnotified = breaches.filter(b => b.ico_notifiable && !b.ico_notified);
     const openComplaints = complaints.filter(c => c.status !== 'closed' && c.status !== 'resolved');
+    const processorReviewsDue = processors.filter(p => p.review_due && p.review_due <= todayLocalISO());
+    const processorDpasPending = processors.filter(p => p.dpa_status !== 'signed' && p.dpa_status !== 'not_required');
 
     return (
       <div className="space-y-6">
@@ -571,7 +618,7 @@ export default function GdprDashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div className={CARD.padded}>
             <p className="text-sm text-gray-500">Open Requests</p>
             <p className="text-2xl font-bold">{openRequests.length}</p>
@@ -590,6 +637,15 @@ export default function GdprDashboard() {
             <p className="text-sm text-gray-500">Consent Records</p>
             <p className="text-2xl font-bold">{consent.length}</p>
             <p className="text-sm text-gray-400">{consent.filter(c => c.withdrawn).length} withdrawn</p>
+          </div>
+          <div className={CARD.padded}>
+            <p className="text-sm text-gray-500">Processor Register</p>
+            <p className="text-2xl font-bold">{processors.length}</p>
+            {processorReviewsDue.length > 0 ? (
+              <p className="text-sm text-red-600">{processorReviewsDue.length} review due</p>
+            ) : (
+              <p className="text-sm text-gray-400">{processorDpasPending.length} awaiting DPA action</p>
+            )}
           </div>
         </div>
 
@@ -837,6 +893,101 @@ export default function GdprDashboard() {
     );
   }
 
+  function renderProcessors() {
+    const today = todayLocalISO();
+    return (
+      <div>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Processor Register</h2>
+            <p className="text-sm text-gray-500">Track processors, sub-processors, DPA status, transfers, and review deadlines.</p>
+          </div>
+          {canEdit && (
+            <button
+              className={BTN.primary + ' ' + BTN.sm}
+              onClick={() => {
+                setForm({ provider_role: 'processor', dpa_status: 'requested', international_transfers: false });
+                setShowModal('processor');
+              }}
+            >
+              Add Processor
+            </button>
+          )}
+        </div>
+        <div className={CARD.flush}>
+          <div className={TABLE.wrapper}>
+            <table className={TABLE.table}>
+              <thead className={TABLE.thead}>
+                <tr>
+                  <th scope="col" className={TABLE.th}>Provider</th>
+                  <th scope="col" className={TABLE.th}>Role</th>
+                  <th scope="col" className={TABLE.th}>DPA Status</th>
+                  <th scope="col" className={TABLE.th}>Transfers</th>
+                  <th scope="col" className={TABLE.th}>Review Due</th>
+                  <th scope="col" className={TABLE.th}>Owner</th>
+                  <th scope="col" className={TABLE.th}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processors.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className={TABLE.empty}>
+                      <EmptyState compact title="No processors recorded" description="Add your core payroll, care, communications, hosting, and document suppliers so DPA and transfer reviews are tracked in one place." />
+                    </td>
+                  </tr>
+                )}
+                {processors.map((processor) => {
+                  const reviewOverdue = processor.review_due && processor.review_due <= today;
+                  const statusBadge =
+                    processor.dpa_status === 'signed' ? 'green'
+                    : processor.dpa_status === 'expired' ? 'red'
+                    : processor.dpa_status === 'not_required' ? 'gray'
+                    : 'amber';
+                  return (
+                    <tr key={processor.id} className={TABLE.tr}>
+                      <td className={TABLE.td}>
+                        <div className="font-medium">{processor.provider_name}</div>
+                        {processor.services && <div className="text-xs text-gray-500 line-clamp-2">{processor.services}</div>}
+                      </td>
+                      <td className={TABLE.td}>{processor.provider_role === 'sub_processor' ? 'Sub-processor' : 'Processor'}</td>
+                      <td className={TABLE.td}><span className={BADGE[statusBadge]}>{processor.dpa_status?.replaceAll('_', ' ') || 'requested'}</span></td>
+                      <td className={TABLE.td}>
+                        {processor.international_transfers ? (
+                          <span className={BADGE.amber}>{processor.countries || 'International transfer'}</span>
+                        ) : (
+                          <span className={BADGE.green}>{processor.countries || 'UK / EEA only'}</span>
+                        )}
+                      </td>
+                      <td className={TABLE.td}>
+                        {processor.review_due ? (
+                          <span className={reviewOverdue ? 'text-red-600 font-semibold' : ''}>{processor.review_due}</span>
+                        ) : '—'}
+                      </td>
+                      <td className={TABLE.td}>{processor.contract_owner || '—'}</td>
+                      <td className={TABLE.td}>
+                        {canEdit && (
+                          <button
+                            className={BTN.ghost + ' ' + BTN.xs}
+                            onClick={() => {
+                              setForm({ ...processor });
+                              setShowModal('processor');
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderComplaints() {
     return (
       <div>
@@ -1073,6 +1224,87 @@ export default function GdprDashboard() {
         <div className={MODAL.footer}>
           <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
           <button className={BTN.primary} onClick={handleCreateConsent} disabled={saving}>{saving ? 'Recording...' : 'Record Consent'}</button>
+        </div>
+      </Modal>
+    );
+  }
+
+  function renderProcessorModal() {
+    const isEditing = !!form.id;
+    return (
+      <Modal isOpen={true} onClose={closeModal} title={isEditing ? 'Edit Processor' : 'Add Processor'} size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Provider Name</label>
+              <input id="gdpr-processor-name" className={INPUT.base} value={form.provider_name || ''} onChange={e => setForm({ ...form, provider_name: e.target.value })} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Role</label>
+              <select id="gdpr-processor-role" className={INPUT.select} value={form.provider_role || 'processor'} onChange={e => setForm({ ...form, provider_role: e.target.value })}>
+                <option value="processor">Processor</option>
+                <option value="sub_processor">Sub-processor</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Services</label>
+            <textarea className={INPUT.base} rows={2} value={form.services || ''} onChange={e => setForm({ ...form, services: e.target.value })} placeholder="Payroll, care planning, messaging, hosting, document storage..." />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Categories of Data</label>
+              <input id="gdpr-processor-data" className={INPUT.base} value={form.categories_of_data || ''} onChange={e => setForm({ ...form, categories_of_data: e.target.value })} placeholder="Staff payroll, resident care notes, contact details..." />
+            </div>
+            <div>
+              <label className={INPUT.label}>Categories of Subjects</label>
+              <input id="gdpr-processor-subjects" className={INPUT.base} value={form.categories_of_subjects || ''} onChange={e => setForm({ ...form, categories_of_subjects: e.target.value })} placeholder="Staff, residents, relatives, applicants..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Countries</label>
+              <input className={INPUT.base} value={form.countries || ''} onChange={e => setForm({ ...form, countries: e.target.value })} placeholder="United Kingdom, Ireland..." />
+            </div>
+            <div>
+              <label className={INPUT.label}>DPA Status</label>
+              <select className={INPUT.select} value={form.dpa_status || 'requested'} onChange={e => setForm({ ...form, dpa_status: e.target.value })}>
+                <option value="draft">Draft</option>
+                <option value="requested">Requested</option>
+                <option value="signed">Signed</option>
+                <option value="not_required">Not required</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Signed Date</label>
+              <input id="gdpr-processor-signed" type="date" className={INPUT.base} value={form.signed_date || ''} onChange={e => setForm({ ...form, signed_date: e.target.value })} />
+            </div>
+            <div>
+              <label className={INPUT.label}>Review Due</label>
+              <input type="date" className={INPUT.base} value={form.review_due || ''} onChange={e => setForm({ ...form, review_due: e.target.value })} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={INPUT.label}>Contract Owner</label>
+              <input className={INPUT.base} value={form.contract_owner || ''} onChange={e => setForm({ ...form, contract_owner: e.target.value })} />
+            </div>
+            <div className="flex items-center pt-6">
+              <input type="checkbox" id="gdpr-processor-transfer" checked={!!form.international_transfers} onChange={e => setForm({ ...form, international_transfers: e.target.checked })} className="mr-2" />
+              <label htmlFor="gdpr-processor-transfer" className="text-sm">International transfers in scope</label>
+            </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Notes</label>
+            <textarea className={INPUT.base} rows={3} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          </div>
+        </div>
+        <div className={MODAL.footer}>
+          <button className={BTN.secondary} onClick={closeModal}>Cancel</button>
+          <button className={BTN.primary} onClick={handleSaveProcessor} disabled={saving}>{saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Processor'}</button>
         </div>
       </Modal>
     );

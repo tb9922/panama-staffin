@@ -15,6 +15,9 @@ import path from 'node:path';
 import { pool } from '../../db.js';
 import { config as appConfig } from '../../config.js';
 import * as gdprService from '../../services/gdprService.js';
+import * as hrRepo from '../../repositories/hrRepo.js';
+
+process.env.ENCRYPTION_KEY ||= 'a'.repeat(64);
 
 // ── Test identifiers ─────────────────────────────────────────────────────────
 
@@ -564,6 +567,16 @@ describe('gatherPersonalData: staff', () => {
   let result;
 
   beforeAll(async () => {
+    await hrRepo.createEdi(homeA, {
+      record_type: 'reasonable_adjustment',
+      staff_id: STAFF[0],
+      date_recorded: '2025-08-15',
+      category: 'Physical',
+      condition_description: 'Back injury requiring workplace adjustment',
+      adjustments: ['Height-adjustable desk'],
+      status: 'open',
+      notes: 'Occupational health follow-up',
+    });
     result = await gdprService.gatherPersonalData('staff', STAFF[0], homeA);
   });
 
@@ -613,6 +626,12 @@ describe('gatherPersonalData: staff', () => {
     expect(result.data.hr_grievance_cases.length).toBeGreaterThanOrEqual(1);
     expect(result.data.hr_grievance_actions.length).toBeGreaterThanOrEqual(1);
     expect(result.data.hr_grievance_actions[0].description).toBe('Arrange mediation session');
+  });
+
+  it('returns decrypted EDI fields in SAR output', () => {
+    expect(result.data.hr_edi_records.length).toBeGreaterThanOrEqual(1);
+    expect(result.data.hr_edi_records[0].condition_description).toContain('Back injury');
+    expect(result.data.hr_edi_records[0].adjustments).toContain('Height-adjustable desk');
   });
 
   it('includes DP complaints linked by subject_id even when the complainant name differs', async () => {
@@ -850,6 +869,21 @@ describe('executeErasure', () => {
         expect(a.description).toBe('[REDACTED]');
       }
     }
+  });
+
+  it('clears encrypted EDI payloads during erasure', async () => {
+    const { rows } = await pool.query(
+      `SELECT condition_description, adjustments, sensitive_encrypted, sensitive_iv, sensitive_tag
+         FROM hr_edi_records
+        WHERE home_id = $1 AND staff_id = $2`,
+      [homeA, targetStaff]
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].condition_description).toBeNull();
+    expect(rows[0].adjustments).toEqual([]);
+    expect(rows[0].sensitive_encrypted).toBeNull();
+    expect(rows[0].sensitive_iv).toBeNull();
+    expect(rows[0].sensitive_tag).toBeNull();
   });
 
   it('redacts name-keyed records (case notes, addenda, handovers)', async () => {

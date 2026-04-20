@@ -494,13 +494,14 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
         && enrolment?.reassessment_date
         && enrolment.reassessment_date <= run.period_end;
       if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment' || (enrolment.status === 'postponed' && !postponementActive) || reassessmentDue)) {
-        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, run.period_end);
+        const assessmentDate = getAutoEnrolmentDate(s, run, reassessmentDue ? enrolment : null);
+        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, assessmentDate);
         if (eligibility.assumedMissingDob) {
           missingDobPensionStaff.add(`${s.id} (${s.name})`);
           notesParts.push('WARNING: Missing DOB — pension assessment assumed age 22+ based on earnings');
         }
         if (eligibility.shouldAutoEnrol) {
-          const autoEnrolmentDate = getAutoEnrolmentDate(s, run, reassessmentDue ? enrolment : null);
+          const autoEnrolmentDate = assessmentDate;
           await pensionRepo.upsertEnrolment(homeId, {
             staff_id: s.id, status: 'eligible_enrolled',
             enrolled_date: autoEnrolmentDate,
