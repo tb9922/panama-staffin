@@ -8,6 +8,13 @@ import * as auditService from '../services/auditService.js';
 import * as authRepo from '../repositories/authRepo.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { PostgresRateLimitStore } from '../lib/postgresRateLimitStore.js';
+import {
+  tokenCookieOptions,
+  csrfCookieOptions,
+  legacyCsrfClearCookieOptions,
+  logoutTokenClearCookieOptions,
+  logoutCsrfClearCookieOptions,
+} from '../lib/authCookies.js';
 import logger from '../logger.js';
 
 const router = Router();
@@ -61,23 +68,11 @@ router.post('/', loginIpLimiter, loginLimiter, async (req, res, next) => {
     const result = await authService.login(username, password);
     void logAuthAudit('login', username);
 
-    res.cookie('panama_token', result.token, {
-      httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 4 * 60 * 60 * 1000,
-    });
+    res.cookie('panama_token', result.token, tokenCookieOptions(req));
 
-    res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
+    res.clearCookie('panama_csrf', legacyCsrfClearCookieOptions(req));
 
-    res.cookie('panama_csrf', randomBytes(32).toString('hex'), {
-      httpOnly: false,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 4 * 60 * 60 * 1000,
-    });
+    res.cookie('panama_csrf', randomBytes(32).toString('hex'), csrfCookieOptions(req));
 
     res.json(result);
   } catch (err) {
@@ -100,9 +95,9 @@ router.post('/logout', requireAuth, async (req, res) => {
   }
 
   void logAuthAudit('logout', req.user.username);
-  res.clearCookie('panama_token', { path: '/', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
-  res.clearCookie('panama_token', { path: '/api', httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax' });
-  res.clearCookie('panama_csrf', { path: '/', secure: config.nodeEnv === 'production', sameSite: 'strict' });
+  res.clearCookie('panama_token', logoutTokenClearCookieOptions(req, '/'));
+  res.clearCookie('panama_token', logoutTokenClearCookieOptions(req, '/api'));
+  res.clearCookie('panama_csrf', logoutCsrfClearCookieOptions(req));
   res.json({
     ok: true,
     revoked,

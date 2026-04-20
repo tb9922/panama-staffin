@@ -124,6 +124,37 @@ describe('POST /api/login', () => {
     adminToken = res.body.token;
   });
 
+  it('sets non-secure cookies on plain HTTP login', async () => {
+    const res = await request(app)
+      .post('/api/login')
+      .send({ username: ADMIN_USER, password: ADMIN_PW })
+      .expect(200);
+
+    const setCookies = res.headers['set-cookie'] || [];
+    const tokenCookie = setCookies.find(cookie => cookie.startsWith('panama_token='));
+    const csrfCookie = setCookies.find(cookie => cookie.startsWith('panama_csrf=') && !cookie.includes('Expires=Thu, 01 Jan 1970'));
+
+    expect(tokenCookie).toBeDefined();
+    expect(csrfCookie).toBeDefined();
+    expect(tokenCookie).not.toContain('Secure');
+    expect(csrfCookie).not.toContain('Secure');
+  });
+
+  it('sets secure cookies when proxied over HTTPS', async () => {
+    const res = await request(app)
+      .post('/api/login')
+      .set('X-Forwarded-Proto', 'https')
+      .send({ username: ADMIN_USER, password: ADMIN_PW })
+      .expect(200);
+
+    const setCookies = res.headers['set-cookie'] || [];
+    const tokenCookie = setCookies.find(cookie => cookie.startsWith('panama_token='));
+    const csrfCookie = setCookies.find(cookie => cookie.startsWith('panama_csrf=') && !cookie.includes('Expires=Thu, 01 Jan 1970'));
+
+    expect(tokenCookie).toContain('Secure');
+    expect(csrfCookie).toContain('Secure');
+  });
+
   it('returns token for valid viewer credentials', async () => {
     const res = await request(app)
       .post('/api/login')

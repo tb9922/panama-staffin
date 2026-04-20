@@ -4,6 +4,11 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
+import {
+  tokenCookieOptions,
+  csrfCookieOptions,
+  legacyCsrfClearCookieOptions,
+} from '../lib/authCookies.js';
 import * as staffAuthService from '../services/staffAuthService.js';
 import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import { issueStaffToken } from '../services/authService.js';
@@ -36,22 +41,10 @@ function ensureStaffPortalEnabled(req, res, next) {
   return next();
 }
 
-function setAuthCookies(res, token) {
-  res.cookie('panama_token', token, {
-    httpOnly: true,
-    secure: config.nodeEnv === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 4 * 60 * 60 * 1000,
-  });
-  res.clearCookie('panama_csrf', { path: '/api', secure: config.nodeEnv === 'production', sameSite: 'strict' });
-  res.cookie('panama_csrf', randomBytes(32).toString('hex'), {
-    httpOnly: false,
-    secure: config.nodeEnv === 'production',
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 4 * 60 * 60 * 1000,
-  });
+function setAuthCookies(req, res, token) {
+  res.cookie('panama_token', token, tokenCookieOptions(req));
+  res.clearCookie('panama_csrf', legacyCsrfClearCookieOptions(req));
+  res.cookie('panama_csrf', randomBytes(32).toString('hex'), csrfCookieOptions(req));
 }
 
 function requireStaffToken(req, res, next) {
@@ -83,7 +76,7 @@ router.post('/invite/consume', writeRateLimiter, ensureStaffPortalEnabled, async
     const result = await staffAuthService.consumeInvite(body);
     const creds = await staffAuthRepo.findByUsername(result.username);
     const { token } = issueStaffToken(creds);
-    setAuthCookies(res, token);
+    setAuthCookies(req, res, token);
     res.status(201).json({ ...result, token });
   } catch (err) {
     next(err);
