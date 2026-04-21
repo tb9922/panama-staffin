@@ -404,24 +404,44 @@ export async function getFinanceDashboard(homeId, from, to) {
   ]);
 
   // Read payroll, agency costs and home config via repo layer
-  let staffCosts = 0;
-  let agencyCosts = 0;
-  let registeredBeds = 0;
-  try { staffCosts = await financeRepo.getPayrollTotal(homeId, from, to); } catch { /* payroll tables may not exist */ }
-  try { agencyCosts = await financeRepo.getAgencyTotal(homeId, from, to); } catch { /* agency tables may not exist */ }
-  try { registeredBeds = await financeRepo.getRegisteredBeds(homeId); } catch { /* fallback */ }
+  const degradedMetrics = [];
+  const readOptionalMetric = async (metricId, loader) => {
+    try {
+      return await loader();
+    } catch (err) {
+      logger.warn({ homeId, from, to, metricId, err: err?.message }, 'Finance dashboard metric unavailable');
+      degradedMetrics.push(metricId);
+      return null;
+    }
+  };
 
-  const totalExpenses = expenses.total_expenses + staffCosts + agencyCosts;
-  const netPosition = income.total_invoiced - totalExpenses;
+  const staffCosts = await readOptionalMetric('staff_costs', () => financeRepo.getPayrollTotal(homeId, from, to));
+  const agencyCosts = await readOptionalMetric('agency_costs', () => financeRepo.getAgencyTotal(homeId, from, to));
+  const registeredBeds = await readOptionalMetric('registered_beds', () => financeRepo.getRegisteredBeds(homeId));
+
+  const totalExpenses = staffCosts == null || agencyCosts == null
+    ? null
+    : expenses.total_expenses + staffCosts + agencyCosts;
+  const netPosition = totalExpenses == null ? null : income.total_invoiced - totalExpenses;
+  const margin = income.total_invoiced > 0 && netPosition != null
+    ? (netPosition / income.total_invoiced * 100)
+    : null;
+  const occupancyRate = registeredBeds == null
+    ? null
+    : registeredBeds > 0
+      ? (occupancy / registeredBeds * 100)
+      : 0;
 
   return {
+    degraded: degradedMetrics.length > 0,
+    degraded_metrics: degradedMetrics,
     income,
     expenses: { ...expenses, staff_costs: staffCosts, agency_costs: agencyCosts, total_all: totalExpenses },
     expenses_by_category: expensesByCat,
-    occupancy: { active: occupancy, registered_beds: registeredBeds, rate: registeredBeds > 0 ? (occupancy / registeredBeds * 100) : 0 },
+    occupancy: { active: occupancy, registered_beds: registeredBeds, rate: occupancyRate },
     ageing,
     net_position: netPosition,
-    margin: income.total_invoiced > 0 ? (netPosition / income.total_invoiced * 100) : 0,
+    margin,
     income_trend: incomeTrend,
     expense_trend: expenseTrend,
   };

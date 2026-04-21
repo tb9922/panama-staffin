@@ -261,8 +261,7 @@ export async function findPendingRetries(limit = 20) {
      JOIN webhooks w ON w.id = wd.webhook_id
      WHERE wd.status = 'pending_retry' AND wd.next_retry_at <= NOW()
      ORDER BY wd.next_retry_at ASC
-     LIMIT $1
-     FOR UPDATE OF wd SKIP LOCKED`,
+     LIMIT $1`,
     [limit]
   );
   return Promise.all(rows.map(async (row) => ({

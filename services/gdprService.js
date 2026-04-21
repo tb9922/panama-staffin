@@ -1596,7 +1596,7 @@ export async function updateDPComplaint(id, homeId, data, version) { return gdpr
 
 export async function getAccessLog({ limit = 100, offset = 0, homeSlugs } = {}) {
   if (!homeSlugs || homeSlugs.length === 0) {
-    return gdprRepo.getAccessLog({ limit, offset });
+    return [];
   }
   return gdprRepo.getAccessLogByHomeSlugs(homeSlugs, { limit, offset });
 }

@@ -37,8 +37,8 @@ function shapeAccessLog(row) {
   };
 }
 
-// Access log is global (home_id not resolved per-request to avoid DB lookups).
-// All queries return global results — access is admin-only.
+// Access log supports both global and home-scoped reads.
+// Home-scoped queries join homes by slug so callers can restrict results safely.
 export async function getAccessLog({ limit = 100, offset = 0 } = {}, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

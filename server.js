@@ -84,9 +84,7 @@ try { fs.mkdirSync(config.upload.dir, { recursive: true }); } catch { /* non-fat
 
 // Trust first proxy (nginx) so req.ip reflects the real client IP.
 // Without this, rate limiters use 127.0.0.1 for everyone behind a proxy.
-if (config.nodeEnv === 'production') {
-  app.set('trust proxy', 1);
-}
+app.set('trust proxy', config.trustProxy ? 1 : false);
 
 // ── Security middleware ───────────────────────────────────────────────────────
 

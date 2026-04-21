@@ -13,6 +13,17 @@ const ALERT_STYLES = {
   info: 'bg-blue-50 border-blue-200 text-blue-700',
 };
 
+const DEGRADED_METRIC_LABELS = {
+  staff_costs: 'staff costs',
+  agency_costs: 'agency costs',
+  registered_beds: 'registered bed count',
+};
+
+function formatPercent(value, digits = 1) {
+  if (value == null || Number.isNaN(Number(value))) return '—';
+  return `${Number(value).toFixed(digits)}%`;
+}
+
 export default function FinanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -143,6 +154,17 @@ export default function FinanceDashboard() {
       {error && dashboard && (
         <ErrorState title="Some finance data could not be refreshed" message={error} onRetry={() => void load()} className="mb-4" />
       )}
+      {dashboard?.degraded && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Some finance inputs are unavailable right now:
+          {' '}
+          {(dashboard.degraded_metrics || [])
+            .map((metric) => DEGRADED_METRIC_LABELS[metric] || metric)
+            .join(', ')}
+          .
+          Displayed totals may be incomplete until those sources recover.
+        </div>
+      )}
 
       {!dashboard ? (
         <div className={CARD.flush}>
@@ -169,13 +191,15 @@ export default function FinanceDashboard() {
             <KPICard
               label="Net Position"
               value={formatCurrency(dashboard.net_position)}
-              sub={`Margin: ${(dashboard.margin ?? 0).toFixed(1)}%`}
-              color={dashboard.net_position >= 0 ? 'emerald' : 'red'}
+              sub={`Margin: ${formatPercent(dashboard.margin)}`}
+              color={dashboard.net_position == null ? 'blue' : dashboard.net_position >= 0 ? 'emerald' : 'red'}
             />
             <KPICard
               label="Occupancy"
-              value={`${(dashboard.occupancy?.rate ?? 0).toFixed(0)}%`}
-              sub={`${dashboard.occupancy?.active ?? 0} of ${dashboard.occupancy?.registered_beds ?? 0} beds`}
+              value={formatPercent(dashboard.occupancy?.rate, 0)}
+              sub={dashboard.occupancy?.registered_beds == null
+                ? `${dashboard.occupancy?.active ?? 0} beds occupied | registered beds unavailable`
+                : `${dashboard.occupancy?.active ?? 0} of ${dashboard.occupancy?.registered_beds} beds`}
               color="blue"
             />
           </div>
