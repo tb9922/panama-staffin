@@ -5,7 +5,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
-import { ROLES, ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
+import { ROLES, USER_MANAGEMENT_ROLE_IDS, getRoleLabel } from '../../shared/roles.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard';
@@ -235,7 +235,7 @@ function AddUserModal({ homeSlug, onClose, onSuccess }) {
 
   function set(key, val) { setForm(prev => ({ ...prev, [key]: val })); }
 
-  const availableRoles = isPlatformAdmin ? ROLE_IDS : ROLE_IDS.filter(r => r !== 'home_manager');
+  const availableRoles = isPlatformAdmin ? USER_MANAGEMENT_ROLE_IDS : USER_MANAGEMENT_ROLE_IDS.filter(r => r !== 'home_manager');
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -416,7 +416,7 @@ function ResetPasswordModal({ user, homeSlug, onClose, onSuccess }) {
 
 // ── Home Role Modal (per-home, for home managers) ────────────────────────────
 
-const ASSIGNABLE_ROLES = ROLE_IDS.filter(r => r !== 'home_manager');
+const ASSIGNABLE_ROLES = USER_MANAGEMENT_ROLE_IDS.filter(r => r !== 'home_manager');
 
 function HomeRoleModal({ user, homeSlug, onClose, onSuccess }) {
   const [roleId, setRoleId] = useState(user.role_id || '');
@@ -535,7 +535,7 @@ function PlatformRolesModal({ user, onClose, onSuccess }) {
                     onChange={e => setRole(home.id, e.target.value)}
                   >
                     <option value="">No Access</option>
-                    {ROLE_IDS.map(rid => (
+                    {USER_MANAGEMENT_ROLE_IDS.map(rid => (
                       <option key={rid} value={rid}>{getRoleLabel(rid)}</option>
                     ))}
                   </select>

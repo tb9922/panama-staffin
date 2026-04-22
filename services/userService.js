@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { withTransaction } from '../db.js';
 import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
+import * as staffAuthRepo from '../repositories/staffAuthRepo.js';
 import * as authService from './authService.js';
 import logger from '../logger.js';
 
@@ -30,28 +31,37 @@ export async function ensureSeedUsers() {
   for (const envUser of config.users) {
     if (!envUser.hash) continue;
 
-    const existing = await userRepo.findByUsername(envUser.username);
-    if (!existing) {
-      await userRepo.create(
-        envUser.username,
-        envUser.hash,
-        envUser.role,
-        envUser.username === 'admin' ? 'Administrator' : 'Viewer',
-        'system'
-      );
-      seededCount++;
-      logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
-    }
-
-    if (envUser.role === 'admin') {
-      const current = existing || await userRepo.findByUsername(envUser.username);
-      if (current && !current.is_platform_admin) {
-        await userRepo.setPlatformAdmin(envUser.username, true);
-        repairedCount++;
-        logger.info({ username: envUser.username }, 'Granted platform admin to bootstrap admin');
+    await withTransaction(async (client) => {
+      const existing = await userRepo.findByUsername(envUser.username, client);
+      const staffCredentials = await staffAuthRepo.findByUsername(envUser.username, client);
+      if (!existing && staffCredentials) {
+        logger.error({ username: envUser.username }, 'Skipped bootstrap user because username is already used by staff auth');
+        return;
       }
-      await userHomeRepo.grantAllHomesRole(envUser.username);
-    }
+
+      if (!existing) {
+        await userRepo.create(
+          envUser.username,
+          envUser.hash,
+          envUser.role,
+          envUser.username === 'admin' ? 'Administrator' : 'Viewer',
+          'system',
+          client,
+        );
+        seededCount++;
+        logger.info({ username: envUser.username, role: envUser.role }, 'Seeded user from env vars');
+      }
+
+      if (envUser.role === 'admin') {
+        const current = existing || await userRepo.findByUsername(envUser.username, client);
+        if (current && !current.is_platform_admin) {
+          await userRepo.setPlatformAdmin(envUser.username, true, client);
+          repairedCount++;
+          logger.info({ username: envUser.username }, 'Granted platform admin to bootstrap admin');
+        }
+        await userHomeRepo.grantAllHomesRole(envUser.username, client);
+      }
+    });
   }
 
   if (!hasSeedHashes) {
@@ -70,6 +80,8 @@ export async function createUser(username, password, role, displayName, createdB
 
   const exists = await userRepo.existsByUsername(username, client);
   if (exists) throw new Error('Username already exists');
+  const existingStaffCredentials = await staffAuthRepo.findByUsername(username, client);
+  if (existingStaffCredentials) throw new Error('Username already exists');
 
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   let user;
@@ -165,7 +177,6 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
   const pwError = validatePassword(newPassword);
   if (pwError) throw new Error(pwError);
 
-  const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await withTransaction(async (client) => {
     const user = await userRepo.findByUsername(username, client, { forUpdate: true });
     if (!user) throw new Error('User not found');
@@ -173,6 +184,7 @@ export async function changeOwnPassword(username, currentPassword, newPassword) 
     const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) throw new Error('Current password is incorrect');
 
+    const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await userRepo.updatePassword(user.id, hash, client);
     await userRepo.bumpSessionVersionById(user.id, client);
     await authService.revokeUser(username, 'user', client);

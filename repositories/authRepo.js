@@ -136,6 +136,20 @@ export async function isUserRevoked(username) {
   return rows.length > 0;
 }
 
+export async function hasAdminRevocation(username, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT 1
+       FROM token_denylist
+      WHERE username = $1
+        AND scope = 'admin'
+        AND expires_at > NOW()
+      LIMIT 1`,
+    [username],
+  );
+  return rows.length > 0;
+}
+
 /**
  * Check if a token is denied by jti (single-token logout) or by username
  * with scope='user' (admin revocation of all sessions).

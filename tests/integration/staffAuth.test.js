@@ -28,6 +28,7 @@ beforeAll(async () => {
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
   await pool.query(`DELETE FROM staff WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]);
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`DELETE FROM homes WHERE slug = $1`, [HOME_SLUG]);
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
 
@@ -48,6 +49,7 @@ afterAll(async () => {
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`DELETE FROM homes WHERE id = $1`, [homeId]);
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
 });
@@ -56,6 +58,7 @@ beforeEach(async () => {
   // Reset credentials + invites between tests so each test sees a clean slate.
   await pool.query(`DELETE FROM staff_invite_tokens WHERE home_id = $1`, [homeId]);
   await pool.query(`DELETE FROM staff_auth_credentials WHERE home_id = $1`, [homeId]);
+  await pool.query(`DELETE FROM token_denylist WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`DELETE FROM users WHERE username = $1`, [PORTAL_USERNAME]);
   await pool.query(`UPDATE staff SET active = true, deleted_at = NULL WHERE home_id = $1`, [homeId]);
 });
@@ -166,6 +169,21 @@ describe('staff login (POST /api/login)', () => {
     expect(res.body.username).toBe(PORTAL_USERNAME);
     expect(res.body.role).toBe('staff_member');
     expect(res.headers['set-cookie']).toBeDefined();
+  });
+
+  it('staff tokens are rejected by the generic user password-change route', async () => {
+    const login = await request(app)
+      .post('/api/login')
+      .send({ username: PORTAL_USERNAME, password: PORTAL_PASSWORD })
+      .expect(200);
+
+    const res = await request(app)
+      .post('/api/users/change-password')
+      .set('Authorization', `Bearer ${login.body.token}`)
+      .send({ currentPassword: PORTAL_PASSWORD, newPassword: 'AnotherP4ss!56' })
+      .expect(403);
+
+    expect(res.body.error).toMatch(/staff portal password change/i);
   });
 
   it('rejects wrong password with 401', async () => {

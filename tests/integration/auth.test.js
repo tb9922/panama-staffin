@@ -400,12 +400,42 @@ describe('User management (CRUD)', () => {
       .post('/api/users')
       .query({ home: 'auth-test-home-a' })
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'auth-test-newuser', password: 'NewUser!2025xx', role: 'viewer', displayName: 'New User', homeRoleId: 'staff_member' })
+      .send({ username: 'auth-test-newuser', password: 'NewUser!2025xx', role: 'viewer', displayName: 'New User', homeRoleId: 'deputy_manager' })
       .expect(201);
 
     expect(res.body.username).toBe('auth-test-newuser');
     expect(res.body.role).toBe('viewer');
     createdUserId = res.body.id;
+  });
+
+  it('rejects creating a user when the username is already used by staff auth', async () => {
+    const staffId = 'AUTH-STAFF-COLLISION';
+    const collidingUsername = 'auth-test-staff-collision';
+    const passwordHash = await bcrypt.hash('PortalCollision!2025', 4);
+    try {
+      await pool.query(
+        `INSERT INTO staff (home_id, id, name, role, team, skill, hourly_rate, active, wtr_opt_out, start_date, contract_hours)
+         VALUES ($1, $2, 'Collision Staff', 'Carer', 'Day A', 1, 12.50, true, false, '2025-01-01', 37.5)`,
+        [homeAId, staffId],
+      );
+      await pool.query(
+        `INSERT INTO staff_auth_credentials (home_id, staff_id, username, password_hash)
+         VALUES ($1, $2, $3, $4)`,
+        [homeAId, staffId, collidingUsername, passwordHash],
+      );
+
+      const res = await request(app)
+        .post('/api/users')
+        .query({ home: 'auth-test-home-a' })
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ username: collidingUsername, password: 'AnotherUser!2025', role: 'viewer', displayName: 'Colliding User' })
+        .expect(409);
+
+      expect(res.body.error).toMatch(/username already exists/i);
+    } finally {
+      await pool.query(`DELETE FROM staff_auth_credentials WHERE username = $1`, [collidingUsername]);
+      await pool.query(`DELETE FROM staff WHERE home_id = $1 AND id = $2`, [homeAId, staffId]);
+    }
   });
 
   it('rejects duplicate username', async () => {
@@ -703,6 +733,13 @@ describe('Token revocation', () => {
       .set('Authorization', `Bearer ${revokeToken}`)
       .expect(401);
 
+    const relogin = await request(app)
+      .post('/api/login')
+      .send({ username: 'auth-test-revokee', password: 'RevokeTest!2025' })
+      .expect(423);
+
+    expect(relogin.body.error).toMatch(/revoked/i);
+
     // Clean up
     await pool.query(`DELETE FROM token_denylist WHERE username = 'auth-test-revokee'`);
     await pool.query(`DELETE FROM user_home_roles WHERE username = 'auth-test-revokee'`);
@@ -772,6 +809,28 @@ describe('Token revocation', () => {
       .get('/api/homes')
       .set('Authorization', `Bearer ${token1}`)
       .expect(401);
+  });
+});
+
+describe('User access assignment validation', () => {
+  it('rejects unknown home IDs on homes update', async () => {
+    const res = await request(app)
+      .put(`/api/users/${viewerUserId}/homes`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ homeIds: [99999999] })
+      .expect(404);
+
+    expect(res.body.error).toMatch(/unknown home ids/i);
+  });
+
+  it('rejects unknown home IDs on bulk role update', async () => {
+    const res = await request(app)
+      .put(`/api/users/${viewerUserId}/roles-bulk`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ roles: [{ homeId: 99999999, roleId: 'viewer' }] })
+      .expect(404);
+
+    expect(res.body.error).toMatch(/unknown home ids/i);
   });
 });
 

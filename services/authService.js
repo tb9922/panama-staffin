@@ -102,6 +102,12 @@ export async function login(username, password) {
       await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
     }
+    if (await authRepo.hasAdminRevocation(dbUser.username)) {
+      await applyFailureFloor(startedAt);
+      const err = new AuthenticationError('Account access revoked — contact admin');
+      err.statusCode = 423;
+      throw err;
+    }
     // Successful login — reset failed counter and clear user-scoped deny-list
     // sentinels so the fresh JWT isn't blocked. Durable "log everyone out"
     // invalidation is enforced separately via users.session_version.
@@ -131,6 +137,12 @@ export async function login(username, password) {
       await staffAuthRepo.recordFailedLogin(creds.homeId, creds.staffId, STAFF_LOCKOUT_MINUTES);
       await applyFailureFloor(startedAt);
       throw new AuthenticationError('Invalid credentials');
+    }
+    if (await authRepo.hasAdminRevocation(creds.username)) {
+      await applyFailureFloor(startedAt);
+      const err = new AuthenticationError('Account access revoked — contact admin');
+      err.statusCode = 423;
+      throw err;
     }
 
     await authRepo.clearForUser(creds.username);

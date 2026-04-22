@@ -120,7 +120,7 @@ router.post('/revoke', requireAuth, requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: 'You cannot revoke your own current admin session' });
     }
     await authService.revokeUser(username, 'admin');
-    await auditService.log('token_revoke', '-', req.user.username, { revoked_user: username });
+    void logAuthAudit('token_revoke', req.user.username, { revoked_user: username });
     res.json({ ok: true, message: `All tokens revoked for ${username}` });
   } catch (err) {
     next(err);

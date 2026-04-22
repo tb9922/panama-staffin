@@ -9,7 +9,8 @@ import * as userRepo from '../repositories/userRepo.js';
 import * as userHomeRepo from '../repositories/userHomeRepo.js';
 import * as homeRepo from '../repositories/homeRepo.js';
 import * as auditService from '../services/auditService.js';
-import { ROLE_IDS, canAssignRole } from '../shared/roles.js';
+import logger from '../logger.js';
+import { USER_MANAGEMENT_ROLE_IDS, canAssignRole } from '../shared/roles.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ const createUserSchema = z.object({
   password: z.string().min(10).max(200),
   role: z.enum(['viewer']),
   displayName: z.string().max(200).optional().default(''),
-  homeRoleId: z.enum(ROLE_IDS).optional(),
+  homeRoleId: z.enum(USER_MANAGEMENT_ROLE_IDS).optional(),
 });
 
 const updateUserSchema = z.object({
@@ -45,7 +46,7 @@ const setHomesSchema = z.object({
 const setRolesSchema = z.object({
   roles: z.array(z.object({
     homeId: z.number().int().positive(),
-    roleId: z.enum(ROLE_IDS),
+    roleId: z.enum(USER_MANAGEMENT_ROLE_IDS),
   })).superRefine((roles, ctx) => {
     const seen = new Set();
     roles.forEach((r, i) => {
@@ -58,10 +59,28 @@ const setRolesSchema = z.object({
 });
 
 const setHomeRoleSchema = z.object({
-  roleId: z.enum(ROLE_IDS),
+  roleId: z.enum(USER_MANAGEMENT_ROLE_IDS),
 });
 
 const idSchema = z.coerce.number().int().positive();
+
+function logUserAudit(action, homeSlug, actorUsername, details = null) {
+  return auditService.log(action, homeSlug, actorUsername, details).catch((err) => {
+    logger.warn({ action, homeSlug, actorUsername, err: err.message }, 'User-management audit write failed');
+  });
+}
+
+async function ensureHomesExist(homeIds) {
+  if (!Array.isArray(homeIds) || homeIds.length === 0) return;
+  const homes = await homeRepo.listAllWithIds();
+  const existingIds = new Set(homes.map((home) => home.id));
+  const missing = homeIds.filter((homeId) => !existingIds.has(homeId));
+  if (missing.length > 0) {
+    const err = new Error(`Unknown home IDs: ${missing.join(', ')}`);
+    err.statusCode = 404;
+    throw err;
+  }
+}
 
 // ── Platform-only endpoints (must be defined BEFORE /:id param routes) ───────
 
@@ -89,10 +108,13 @@ router.get('/all-roles/:id', readRateLimiter, requireAuth, requirePlatformAdmin,
 // POST /api/users/change-password — user changes own password (any role)
 router.post('/change-password', writeRateLimiter, requireAuth, async (req, res, next) => {
   try {
+    if (req.user?.auth_type === 'staff') {
+      return res.status(403).json({ error: 'Use the staff portal password change flow for staff accounts' });
+    }
     const parsed = changePasswordSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
     await userService.changeOwnPassword(req.user.username, parsed.data.currentPassword, parsed.data.newPassword);
-    await auditService.log('user_password_change', '-', req.user.username, null);
+    void logUserAudit('user_password_change', '-', req.user.username, null);
     res.json({ ok: true });
   } catch (err) {
     if (err.message === 'Current password is incorrect') return res.status(400).json({ error: err.message });
@@ -181,7 +203,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireHome
 
     const updated = await userService.updateUser(id.data, fields, req.user.username);
     if (!updated) return res.status(404).json({ error: 'User not found' });
-    await auditService.log('user_update', req.home.slug, req.user.username, { userId: id.data, changes: fields });
+    void logUserAudit('user_update', req.home.slug, req.user.username, { userId: id.data, changes: fields });
     res.json(updated);
   } catch (err) {
     if (err.message?.startsWith('Cannot')) return res.status(400).json({ error: err.message });
@@ -205,7 +227,7 @@ router.post('/:id/reset-password', writeRateLimiter, requireAuth, requireHomeAcc
     }
 
     await userService.resetPassword(id.data, parsed.data.newPassword, req.user.username);
-    await auditService.log('user_password_reset', req.home.slug, req.user.username, { userId: id.data });
+    void logUserAudit('user_password_reset', req.home.slug, req.user.username, { userId: id.data });
     res.json({ ok: true });
   } catch (err) {
     if (err.message?.startsWith('Password must') || err.message === 'User not found') {
@@ -234,6 +256,7 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = setHomesSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    await ensureHomesExist(parsed.data.homeIds);
     const user = await userRepo.findById(id.data);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -261,7 +284,12 @@ router.put('/:id/homes', writeRateLimiter, requireAuth, requirePlatformAdmin, as
       }, client);
     });
     res.json({ ok: true, homeIds: parsed.data.homeIds });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.statusCode === 404 && err.message?.startsWith('Unknown home IDs:')) {
+      return res.status(404).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 // GET /api/users/:id/roles?home=:slug — get user's role at this home
@@ -330,6 +358,7 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
     if (!id.success) return res.status(400).json({ error: 'Invalid user ID' });
     const parsed = setRolesSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed);
+    await ensureHomesExist(parsed.data.roles.map((entry) => entry.homeId));
     const user = await userRepo.findById(id.data);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -375,7 +404,12 @@ router.put('/:id/roles-bulk', writeRateLimiter, requireAuth, requirePlatformAdmi
     });
 
     res.json({ ok: true, roles: parsed.data.roles });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.statusCode === 404 && err.message?.startsWith('Unknown home IDs:')) {
+      return res.status(404).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 export default router;

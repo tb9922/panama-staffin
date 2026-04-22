@@ -159,7 +159,10 @@ export async function hasAccess(username, homeId) {
 export async function findHomeIdsForUser(username, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    'SELECT home_id FROM user_home_roles WHERE username = $1',
+    `SELECT uhr.home_id
+       FROM user_home_roles uhr
+       JOIN users u ON u.username = uhr.username AND u.active = true
+      WHERE uhr.username = $1`,
     [username]
   );
   return rows.map(r => r.home_id);

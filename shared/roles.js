@@ -61,6 +61,13 @@ export const ROLES = {
 export const ROLE_IDS = Object.keys(ROLES);
 
 /**
+ * Roles assignable through the generic user-management UI/API.
+ * staff_member requires an explicit staff_id linkage and is managed through
+ * the staff-auth/staff-portal flows instead of generic user CRUD.
+ */
+export const USER_MANAGEMENT_ROLE_IDS = ROLE_IDS.filter((roleId) => roleId !== 'staff_member');
+
+/**
  * Check if a role has access to a module at the given level.
  * @param {string} roleId — key from ROLES
  * @param {string} moduleId — key from MODULES
