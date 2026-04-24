@@ -40,7 +40,7 @@ function normalizeStoredCqcDeadline(data) {
 function shapeRow(row) {
   return {
     id: row.id, version: row.version != null ? parseInt(row.version, 10) : undefined,
-    date: row.date, time: row.time, location: row.location, type: row.type, severity: row.severity,
+    date: row.date, time: normalizeTimeStr(row.time), location: row.location, type: row.type, severity: row.severity,
     description: row.description, person_affected: row.person_affected, person_affected_name: row.person_affected_name,
     staff_involved: row.staff_involved, immediate_action: row.immediate_action,
     medical_attention: row.medical_attention, hospital_attendance: row.hospital_attendance,
@@ -103,7 +103,7 @@ export async function sync(homeId, incidentsArr, client) {
     const rowValues = chunk.map((inc) => ([
       inc.id,
       inc.date || null,
-      inc.time || null,
+      normalizeTimeStr(inc.time),
       inc.location || null,
       inc.type || null,
       inc.severity || null,
@@ -336,7 +336,7 @@ export async function upsert(homeId, data) {
     id,
     homeId,
     data.date || null,
-    data.time || null,
+    normalizeTimeStr(data.time),
     data.location || null,
     data.type || null,
     data.severity || null,
@@ -458,6 +458,7 @@ const ALLOWED_COLUMNS = new Set([
 
 // Fields that need JSON.stringify before binding
 const JSON_COLUMNS = new Set(['staff_involved', 'witnesses', 'corrective_actions']);
+const TIME_COLUMNS = new Set(['time', 'cqc_notified_time', 'riddor_reported_time']);
 
 /**
  * Update an incident. Returns shaped row on success.
@@ -470,7 +471,11 @@ export async function update(id, homeId, data, version) {
   if (fields.length === 0) return null;
 
   const setClause = fields.map(([k], i) => `"${k}" = $${i + 3}`).join(', ');
-  const values = fields.map(([k, v]) => JSON_COLUMNS.has(k) ? JSON.stringify(v) : v);
+  const values = fields.map(([k, v]) => {
+    if (JSON_COLUMNS.has(k)) return JSON.stringify(v);
+    if (TIME_COLUMNS.has(k)) return normalizeTimeStr(v);
+    return v;
+  });
   const params = [id, homeId, ...values];
   let sql = `UPDATE incidents SET ${setClause}, version = version + 1, updated_at = NOW()
      WHERE id = $1 AND home_id = $2 AND deleted_at IS NULL AND frozen_at IS NULL`;

@@ -17,7 +17,15 @@ import { getCqcNotificationDeadline } from '../shared/incidents.js';
 const router = Router();
 const incidentIdSchema = z.string().min(1).max(100);
 const dateSchema = nullableDateInput;
-const nullableTimeInput = z.preprocess((value) => value === '' ? null : value, timeStr).optional();
+function normalizeTimeInput(value) {
+  if (value === '') return null;
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  return match ? match[1] : trimmed;
+}
+const nullableTimeInput = z.preprocess(normalizeTimeInput, timeStr).optional();
 // Converts empty strings to null so optional enum fields tolerate unset form values from the frontend.
 const optEnum = (...values) => z.preprocess(v => v === '' ? null : v, z.enum(values).nullable().optional());
 const correctiveActionStatusSchema = z.preprocess(

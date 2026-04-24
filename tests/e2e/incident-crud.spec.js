@@ -5,6 +5,8 @@ import { test, expect } from '@playwright/test';
 // Workers: 1 — tests run sequentially and share DB state
 
 test.describe('Incident CRUD', () => {
+  let createdIncidentDate;
+
   test('Incident Tracker loads with New Incident button', async ({ page }) => {
     await page.goto('/incidents');
     await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
@@ -40,13 +42,13 @@ test.describe('Incident CRUD', () => {
     await page.goto('/incidents');
     await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
 
-    const today = new Date().toISOString().split('T')[0];
-    // Count cells containing today's date before adding (empty-state row won't have today's date)
-    const countBefore = await page.locator('table tbody td').filter({ hasText: today }).count();
-
     await page.getByRole('button', { name: '+ New Incident' }).click();
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible({ timeout: 5_000 });
+    createdIncidentDate = await modal.locator('input[type="date"]').first().inputValue();
+
+    // Count cells containing the pre-filled incident date before adding (empty-state row won't match)
+    const countBefore = await page.locator('table tbody td').filter({ hasText: createdIncidentDate }).count();
 
     // Select incident type — second select in the modal (Location=0, IncidentType=1)
     const typeSelect = modal.locator('select').nth(1);
@@ -61,21 +63,21 @@ test.describe('Incident CRUD', () => {
     // violation when the modal's "New Incident" h3 is briefly still in the DOM.
     await expect(page.getByRole('heading', { name: /Incident/i }).first()).toBeVisible({ timeout: 10_000 });
 
-    // Table should now have one more cell with today's date (retry-friendly assertion)
-    await expect(page.locator('table tbody td').filter({ hasText: today })).toHaveCount(countBefore + 1, { timeout: 5_000 });
+    // Table should now have one more cell with the created incident date (retry-friendly assertion)
+    await expect(page.locator('table tbody td').filter({ hasText: createdIncidentDate })).toHaveCount(countBefore + 1, { timeout: 5_000 });
   });
 
   test('incident persists after page reload', async ({ page }) => {
     await page.goto('/incidents');
     await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
 
-    const today = new Date().toISOString().split('T')[0];
-    const countBefore = await page.locator('table tbody td').filter({ hasText: today }).count();
+    const incidentDate = createdIncidentDate || await page.locator('table tbody td').first().textContent();
+    const countBefore = await page.locator('table tbody td').filter({ hasText: incidentDate }).count();
     // Sanity check: previous test created at least one incident
     expect(countBefore).toBeGreaterThan(0);
 
     await page.reload();
     await expect(page.getByRole('heading', { name: /Incident/i })).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('table tbody td').filter({ hasText: today })).toHaveCount(countBefore);
+    await expect(page.locator('table tbody td').filter({ hasText: incidentDate })).toHaveCount(countBefore);
   });
 });

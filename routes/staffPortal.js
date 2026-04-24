@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth, requireHomeAccess, requireStaffSelf } from '../middleware/auth.js';
 import { readRateLimiter, writeRateLimiter } from '../lib/rateLimiter.js';
-import { addDaysLocalISO, todayLocalISO } from '../lib/dateOnly.js';
+import { addDaysLocalISO, endOfLocalMonthISO, startOfLocalMonthISO, todayLocalISO } from '../lib/dateOnly.js';
 import * as overrideRequestService from '../services/overrideRequestService.js';
 import * as staffPortalService from '../services/staffPortalService.js';
 import * as clockInService from '../services/clockInService.js';
@@ -47,11 +47,19 @@ function ensureStaffPortalEnabled(req, res, next) {
   return next();
 }
 
-function defaultWindow() {
-  const start = todayLocalISO();
+function currentMonthWindow() {
+  const today = todayLocalISO();
   return {
-    from: start,
-    to: addDaysLocalISO(start, 27),
+    from: startOfLocalMonthISO(today),
+    to: endOfLocalMonthISO(today),
+  };
+}
+
+function upcomingWeekWindow() {
+  const today = todayLocalISO();
+  return {
+    from: today,
+    to: addDaysLocalISO(today, 6),
   };
 }
 
@@ -60,7 +68,7 @@ const staffWriteChain = [writeRateLimiter, requireAuth, ensureStaffPortalEnabled
 
 router.get('/dashboard', ...staffReadChain, async (req, res, next) => {
   try {
-    const { from, to } = defaultWindow();
+    const { from, to } = upcomingWeekWindow();
     const asOfDate = todayLocalISO();
     const [schedule, accrual, training, payslips, requests, profile, clockState] = await Promise.all([
       staffPortalService.getStaffScheduleWindow({ homeId: req.home.id, staffId: req.staffId, from, to }),
@@ -82,7 +90,7 @@ router.get('/dashboard', ...staffReadChain, async (req, res, next) => {
 router.get('/schedule', ...staffReadChain, async (req, res, next) => {
   try {
     const parsed = scheduleQuerySchema.parse(req.query || {});
-    const range = defaultWindow();
+    const range = currentMonthWindow();
     const data = await staffPortalService.getStaffScheduleWindow({
       homeId: req.home.id,
       staffId: req.staffId,

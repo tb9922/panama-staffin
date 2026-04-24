@@ -33,7 +33,7 @@ export default function MySchedule() {
     <div className="space-y-6 p-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-2xl font-bold text-slate-900">My Schedule</h2>
-        <p className="mt-2 text-sm text-slate-600">Your next 28 days of rota and any overrides applied to you.</p>
+        <p className="mt-2 text-sm text-slate-600">Your current calendar month of rota and any overrides applied to you.</p>
       </div>
       {(!data?.days || data.days.length === 0) ? (
         <EmptyState title="No shifts found" description="Your rota will appear here once it's published." className="pb-6" />

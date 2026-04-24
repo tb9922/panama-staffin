@@ -131,6 +131,51 @@ describe('Compliance route create flows', () => {
     expect(createRes.body.corrective_actions[0].status).toBe('pending');
   });
 
+  it('accepts HH:mm:ss incident time values and returns HH:mm values', async () => {
+    const createRes = await request(app)
+      .post('/api/incidents')
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        date: '2026-03-27',
+        time: '09:15:00',
+        type: 'fall',
+        severity: 'minor',
+        description: 'Database-style time values',
+        cqc_notifiable: true,
+        cqc_notification_type: 'serious_injury',
+        cqc_notified: true,
+        cqc_notified_date: '2026-03-27',
+        cqc_notified_time: '10:20:00',
+        riddor_reportable: true,
+        riddor_category: 'specified_injury',
+        riddor_reported: true,
+        riddor_reported_date: '2026-03-27',
+        riddor_reported_time: '11:25:00',
+      })
+      .expect(201);
+
+    expect(createRes.body.time).toBe('09:15');
+    expect(createRes.body.cqc_notified_time).toBe('10:20');
+    expect(createRes.body.riddor_reported_time).toBe('11:25');
+
+    const updateRes = await request(app)
+      .put(`/api/incidents/${createRes.body.id}`)
+      .query({ home: HOME_SLUG })
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        _version: createRes.body.version,
+        time: '12:30:00',
+        cqc_notified_time: '13:35:00',
+        riddor_reported_time: '14:40:00',
+      })
+      .expect(200);
+
+    expect(updateRes.body.time).toBe('12:30');
+    expect(updateRes.body.cqc_notified_time).toBe('13:35');
+    expect(updateRes.body.riddor_reported_time).toBe('14:40');
+  });
+
   it('accepts blank DoLS review_status and returns the created row in the list response', async () => {
     const createRes = await request(app)
       .post('/api/dols')

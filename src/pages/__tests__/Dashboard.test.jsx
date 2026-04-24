@@ -35,6 +35,10 @@ vi.mock('../../lib/finance.js', () => ({
   getFinanceAlertsForDashboard: vi.fn(() => []),
 }));
 
+vi.mock('../../hooks/useLiveDate.js', () => ({
+  useLiveDate: vi.fn(() => '2026-03-08'),
+}));
+
 import * as api from '../../lib/api.js';
 
 function renderDashboard(userOverride = { username: 'admin', role: 'admin' }, opts = {}) {
@@ -170,14 +174,14 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Non-Compliant')).not.toBeInTheDocument();
   });
 
-  it('renders the 28-Day Coverage Heatmap section with 28 day buttons', async () => {
+  it('renders the calendar-month Coverage Heatmap section with 31 day buttons', async () => {
     renderDashboard();
 
     await waitFor(() =>
-      expect(screen.getByText('28-Day Coverage Heatmap')).toBeInTheDocument()
+      expect(screen.getByText('March 2026 Coverage Heatmap')).toBeInTheDocument()
     );
     const dayLabels = screen.getAllByText(/^D\d+$/);
-    expect(dayLabels).toHaveLength(28);
+    expect(dayLabels).toHaveLength(31);
   });
 
   it('renders the Alerts section', async () => {
@@ -193,10 +197,10 @@ describe('Dashboard', () => {
     renderDashboard({ username: 'admin', role: 'admin' });
 
     await waitFor(() =>
-      expect(screen.getByText('Cost Summary (28-day)')).toBeInTheDocument()
+      expect(screen.getByText('Cost Summary (March 2026)')).toBeInTheDocument()
     );
-    expect(screen.getByText('This cycle:')).toBeInTheDocument();
-    expect(screen.getByText('Monthly proj:')).toBeInTheDocument();
+    expect(screen.getByText('This month:')).toBeInTheDocument();
+    expect(screen.getByText('Daily avg:')).toBeInTheDocument();
     expect(screen.getByText('Annual proj:')).toBeInTheDocument();
   });
 
@@ -205,10 +209,10 @@ describe('Dashboard', () => {
     renderDashboard({ username: 'viewer', role: 'viewer' }, { canWrite: false });
 
     await waitFor(() =>
-      expect(screen.getByText('Cost Summary (28-day)')).toBeInTheDocument()
+      expect(screen.getByText('Cost Summary (March 2026)')).toBeInTheDocument()
     );
-    expect(screen.getByText('This cycle:')).toBeInTheDocument();
-    expect(screen.getByText('Monthly proj:')).toBeInTheDocument();
+    expect(screen.getByText('This month:')).toBeInTheDocument();
+    expect(screen.getByText('Daily avg:')).toBeInTheDocument();
   });
 
   it('shows an error message when the scheduling API call fails', async () => {
@@ -237,7 +241,7 @@ describe('Dashboard', () => {
     renderDashboard();
 
     await waitFor(() =>
-      expect(screen.getByText('All clear — full coverage this cycle')).toBeInTheDocument()
+      expect(screen.getByText(/All clear.*full coverage this month/)).toBeInTheDocument()
     );
   });
 
@@ -252,7 +256,7 @@ describe('Dashboard', () => {
     );
     expect(screen.getByText('No alerts available while some dashboard data is unavailable')).toBeInTheDocument();
     warnSpy.mockRestore();
-    expect(screen.queryByText('All clear — full coverage this cycle')).not.toBeInTheDocument();
+    expect(screen.queryByText(/All clear.*full coverage this month/)).not.toBeInTheDocument();
   });
 
   it('does not show all-clear while summary alerts are still loading', async () => {

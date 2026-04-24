@@ -7,6 +7,7 @@ import ErrorState from '../../components/ErrorState.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ClockInButton from './ClockInButton.jsx';
 import { useData } from '../../contexts/DataContext.jsx';
+import { todayLocalISO } from '../../lib/localDates.js';
 
 function money(value) {
   if (value == null) return '-';
@@ -38,7 +39,8 @@ export default function MyDashboard() {
   if (loading) return <LoadingState message="Loading your dashboard..." className="p-6" />;
   if (error) return <div className="p-6"><ErrorState title="Unable to load your portal" message={error} onRetry={() => void load()} /></div>;
 
-  const upcoming = (data?.schedule?.days || []).slice(0, 7);
+  const today = todayLocalISO();
+  const upcoming = (data?.schedule?.days || []).filter((day) => day.date >= today).slice(0, 7);
   const nextRequest = (data?.requests || []).find((item) => item.status === 'pending');
   const dueTraining = (data?.training?.items || []).filter((item) => item.status !== 'complete');
 

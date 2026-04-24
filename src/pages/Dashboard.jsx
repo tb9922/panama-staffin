@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCycleDates, getStaffForDay, formatDate, parseDate, addDays, isWorkingShift, isCareRole } from '../lib/rotation.js';
+import { getStaffForDay, formatDate, parseDate, addDays, isWorkingShift, isCareRole } from '../lib/rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
@@ -77,6 +77,20 @@ const DASHBOARD_HEATMAP_DAY_STYLES = {
   red: 'bg-red-700 text-white',
   empty: 'bg-gray-200 text-slate-700',
 };
+
+function getCalendarMonthDates(date) {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  const dates = [];
+  for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
+    dates.push(cursor);
+  }
+  return dates;
+}
+
+function getCalendarMonthLabel(date) {
+  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
 
 export default function Dashboard() {
   const { homeRole } = useData();
@@ -191,7 +205,7 @@ function StaffSelfServiceDashboard({ schedData, payrollRuns }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PortalCard title="My Rota" description="See the next month of shifts and quick upcoming days." actionLabel="Open rota" onClick={() => navigate('/rotation')} />
+        <PortalCard title="My Rota" description="See this month's shifts and quick upcoming days." actionLabel="Open rota" onClick={() => navigate('/rotation')} />
         <PortalCard title="My Leave" description="Check booked leave and your current annual leave balance." actionLabel="Open leave" onClick={() => navigate('/leave')} />
         <PortalCard title="My Payslips" description="Open payroll runs and download your own payslips when they’re available." actionLabel="Open payroll" onClick={() => navigate('/payroll')} />
         <PortalCard title="Handover Book" description="Read the latest handover notes for your next shift." actionLabel="Open handover" onClick={() => navigate('/handover')} />
@@ -369,16 +383,17 @@ function DashboardInner({ schedData }) {
     return [...new Set(sources)];
   }, [auxFailures, summary]);
 
-  const cycleDates = useMemo(() => getCycleDates(config.cycle_start_date, today, 28), [config.cycle_start_date, today]);
+  const monthDates = useMemo(() => getCalendarMonthDates(today), [today]);
+  const monthLabel = useMemo(() => getCalendarMonthLabel(today), [today]);
 
   const cycleData = useMemo(() => {
-    return cycleDates.map(date => {
+    return monthDates.map(date => {
       const staffForDay = getStaffForDay(staff, date, overrides, config);
       const coverage = getDayCoverageStatus(staffForDay, config);
       const cost = calculateDayCost(staffForDay, config);
       return { date, staffForDay, coverage, cost };
     });
-  }, [staff, overrides, config, cycleDates]);
+  }, [staff, overrides, config, monthDates]);
 
   const todayIdx = useMemo(() => {
     const todayStr = formatDate(today);
@@ -394,11 +409,12 @@ function DashboardInner({ schedData }) {
   const floatDeployed = todayStaff.filter(s => s.team === 'Float' && isWorkingShift(s.shift) && s.shift !== 'AVL');
   const activeStaffCount = staff.filter(s => s.active !== false).length;
 
-  const cycleCost = useMemo(() => cycleData.reduce((s, d) => s + d.cost.total, 0), [cycleData]);
-  const monthlyProj = cycleCost / 28 * 30.44;
-  const annualProj = cycleCost / 28 * 365;
+  const periodDays = cycleData.length || 1;
+  const periodCost = useMemo(() => cycleData.reduce((s, d) => s + d.cost.total, 0), [cycleData]);
+  const dailyAvg = periodCost / periodDays;
+  const annualProj = dailyAvg * 365;
   const agencyTotal = cycleData.reduce((s, d) => s + d.cost.agency, 0);
-  const agencyPct = cycleCost > 0 ? (agencyTotal / cycleCost) * 100 : 0;
+  const agencyPct = periodCost > 0 ? (agencyTotal / periodCost) * 100 : 0;
 
   const alerts = (() => {
     const list = [];
@@ -563,15 +579,15 @@ function DashboardInner({ schedData }) {
             className={`${CARD.padded} w-full text-left transition-shadow hover:shadow-md`}
             onClick={() => navigate('/costs')}
           >
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary (28-day)</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost Summary ({monthLabel})</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-gray-600 text-sm">This cycle:</span>
-                <span className="text-xl font-bold">£{Math.round(cycleCost).toLocaleString()}</span>
+                <span className="text-gray-600 text-sm">This month:</span>
+                <span className="text-xl font-bold">£{Math.round(periodCost).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-600 text-sm">Monthly proj:</span>
-                <span className="font-semibold">£{Math.round(monthlyProj).toLocaleString()}</span>
+                <span className="text-gray-600 text-sm">Daily avg:</span>
+                <span className="font-semibold">£{Math.round(dailyAvg).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600 text-sm">Annual proj:</span>
@@ -597,7 +613,7 @@ function DashboardInner({ schedData }) {
         )}
 
         <div className={`${CARD.padded} lg:col-span-2`}>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">28-Day Coverage Heatmap</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{monthLabel} Coverage Heatmap</h2>
           <div className="flex gap-1.5 flex-wrap">
             {cycleData.map((d, i) => {
               const isToday = i === todayIdx;
@@ -731,7 +747,7 @@ function DashboardInner({ schedData }) {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                All clear — full coverage this cycle
+                All clear — full coverage this month
               </div>
             )
           ) : (
