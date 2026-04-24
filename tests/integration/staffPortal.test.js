@@ -234,6 +234,28 @@ describe('Sick self-report', () => {
     );
     expect(rows.length).toBe(1);
   });
+
+  it('carries forward the actual linked-period waiting days on self-report', async () => {
+    const { rows: [previous] } = await pool.query(
+      `INSERT INTO sick_periods (
+         home_id, staff_id, start_date, end_date, qualifying_days_per_week,
+         waiting_days_served, ssp_weeks_paid
+       )
+       VALUES ($1, $2, '2026-06-01', '2026-06-04', 5, 1, 0)
+       RETURNING id`,
+      [homeId, STAFF_A],
+    );
+
+    const result = await staffPortalService.reportSick({
+      homeId,
+      staffId: STAFF_A,
+      date: '2026-06-20',
+      actorUsername: STAFF_A_USER,
+    });
+
+    expect(result.sickPeriod.linked_to_period_id).toBe(previous.id);
+    expect(result.sickPeriod.waiting_days_served).toBe(1);
+  });
 });
 
 describe('Profile (own data only)', () => {
@@ -278,6 +300,47 @@ describe('Payslips (own only, approved/exported only)', () => {
   it('returns empty list when no approved runs', async () => {
     const payslips = await staffPortalService.getStaffPayslipRuns({ homeId, staffId: STAFF_A });
     expect(Array.isArray(payslips)).toBe(true);
+  });
+
+  it('pages through all payroll runs so payslip history is not capped at 50', async () => {
+    const insertedRunIds = [];
+    const insertedLineIds = [];
+    try {
+      for (let index = 0; index < 55; index += 1) {
+        const year = 2020 + Math.floor(index / 12);
+        const month = String((index % 12) + 1).padStart(2, '0');
+        const periodStart = `${year}-${month}-01`;
+        const periodEnd = `${year}-${month}-28`;
+        const payDate = `${year}-${month}-28`;
+
+        const { rows: [run] } = await pool.query(
+          `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_date, pay_frequency, status)
+           VALUES ($1, $2, $3, $4, 'monthly', 'approved')
+           RETURNING id`,
+          [homeId, periodStart, periodEnd, payDate],
+        );
+        insertedRunIds.push(run.id);
+
+        const { rows: [line] } = await pool.query(
+          `INSERT INTO payroll_lines (payroll_run_id, staff_id, gross_pay, net_pay)
+           VALUES ($1, $2, 1234.56, 1000.00)
+           RETURNING id`,
+          [run.id, STAFF_A],
+        );
+        insertedLineIds.push(line.id);
+      }
+
+      const payslips = await staffPortalService.getStaffPayslipRuns({ homeId, staffId: STAFF_A });
+      expect(payslips).toHaveLength(55);
+      expect(payslips.some((item) => item.periodStart === '2020-01-01')).toBe(true);
+    } finally {
+      if (insertedLineIds.length > 0) {
+        await pool.query(`DELETE FROM payroll_lines WHERE id = ANY($1::int[])`, [insertedLineIds]);
+      }
+      if (insertedRunIds.length > 0) {
+        await pool.query(`DELETE FROM payroll_runs WHERE id = ANY($1::int[])`, [insertedRunIds]);
+      }
+    }
   });
 });
 

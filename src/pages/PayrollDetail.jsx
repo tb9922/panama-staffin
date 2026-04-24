@@ -5,7 +5,7 @@ import Modal from '../components/Modal.jsx';
 import {
   getPayrollRun, calculatePayrollRun, approvePayrollRun,
   getPayrollExportUrl, getPayrollSummaryPdfUrl, getPayslips, getCurrentHome,
-  getSchedulingData, downloadAuthenticatedFile, getPayrollRuns, markPayrollRunExported, } from '../lib/api.js';
+  getSchedulingData, downloadAuthenticatedFile, markPayrollRunExported, } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import InlineNotice from '../components/InlineNotice.jsx';
@@ -14,6 +14,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import StickyTable from '../components/StickyTable.jsx';
 import { todayLocalISO } from '../lib/localDates.js';
+import { loadAllPayrollRuns } from '../lib/payrollRuns.js';
 
 const STATUS_BADGE = {
   draft:      BADGE.gray,
@@ -65,9 +66,14 @@ function formatDelta(value, { prefix = '', suffix = '' } = {}) {
   return `${sign}${value < 0 ? '-' : ''}${amount}`;
 }
 
+function getRunPayDate(run) {
+  return run?.pay_date || run?.period_end || null;
+}
+
 function getRtiFpsNotice(run, today = todayLocalISO()) {
-  if (!run || run.exported_at || !run.period_end) return null;
-  if (run.status === 'approved' && run.period_end < today) {
+  const payDate = getRunPayDate(run);
+  if (!run || run.exported_at || !payDate) return null;
+  if (run.status === 'approved' && payDate < today) {
     return {
       variant: 'error',
       text: 'This payroll is past payday and still not exported. Submit the FPS immediately and keep the regular payment date on the filing.',
@@ -79,7 +85,7 @@ function getRtiFpsNotice(run, today = todayLocalISO()) {
       text: 'This payroll is approved but not yet exported. FPS should be sent on or before payday.',
     };
   }
-  if ((run.status === 'draft' || run.status === 'calculated') && run.period_end < today) {
+  if ((run.status === 'draft' || run.status === 'calculated') && payDate < today) {
     return {
       variant: 'warning',
       text: 'This payroll is already past payday. Approval is still allowed, but RTI/FPS should be sent immediately afterwards.',
@@ -146,8 +152,7 @@ export default function PayrollDetail() {
       setRun(result.run);
       setLines(result.lines || []);
       try {
-        const runsResult = await getPayrollRuns(homeSlug);
-        const allRuns = Array.isArray(runsResult) ? runsResult : (runsResult.rows || []);
+        const allRuns = await loadAllPayrollRuns(homeSlug);
         const sortedRuns = [...allRuns].sort((a, b) => (b.period_end || '').localeCompare(a.period_end || ''));
         const currentIndex = sortedRuns.findIndex(candidate => String(candidate.id) === String(result.run?.id));
         const previousRun = currentIndex >= 0
@@ -230,7 +235,7 @@ export default function PayrollDetail() {
       setShowApproveConfirm(false);
       await load();
       showNotice(
-        run?.period_end && run.period_end < todayLocalISO()
+        getRunPayDate(run) && getRunPayDate(run) < todayLocalISO()
           ? 'Payroll run approved late. Export and file the FPS immediately, using the normal payment date on the submission.'
           : 'Payroll run approved. Export files when you are ready to send them on.',
       );
@@ -260,12 +265,12 @@ export default function PayrollDetail() {
     setError(null);
     setShowExportMenu(false);
     try {
-      if (run?.status === 'approved') {
-        await markPayrollRunExported(homeSlug, runId, format);
-      }
       const url = getPayrollExportUrl(homeSlug, runId, format);
       const period = run ? `${run.period_start}_${run.period_end}` : runId;
       await downloadAuthenticatedFile(url, `payroll_${format}_${period}.csv`);
+      if (run?.status === 'approved') {
+        await markPayrollRunExported(homeSlug, runId, format);
+      }
       // Reload to pick up exported_at timestamp update
       await load();
     } catch (e) {

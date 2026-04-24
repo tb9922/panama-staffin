@@ -33,7 +33,7 @@ describe('payrollTax', () => {
     expect(getHMRCPaymentDueDate(2026, 12)).toBe('2027-05-19');
   });
 
-  it('parses standard, Scottish, BR, D0, D1, and K tax codes', () => {
+  it('parses standard, Scottish, Welsh, BR, D0, D1, and K tax codes', () => {
     expect(parseTaxCode('1257L')).toMatchObject({
       type: 'standard',
       country: 'england_wales',
@@ -42,6 +42,11 @@ describe('payrollTax', () => {
     expect(parseTaxCode('S1257L')).toMatchObject({
       type: 'standard',
       country: 'scotland',
+      annualAllowance: 12570,
+    });
+    expect(parseTaxCode('C1257L')).toMatchObject({
+      type: 'standard',
+      country: 'wales',
       annualAllowance: 12570,
     });
     expect(parseTaxCode('BR')).toMatchObject({
@@ -86,6 +91,11 @@ describe('payrollTax', () => {
     expect(parseTaxCode('S1257L M1')).toMatchObject({
       type: 'standard',
       country: 'scotland',
+      annualAllowance: 12570,
+    });
+    expect(parseTaxCode('C1257L W1')).toMatchObject({
+      type: 'standard',
+      country: 'wales',
       annualAllowance: 12570,
     });
   });

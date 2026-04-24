@@ -11,6 +11,7 @@ import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
+import { todayLocalISO } from '../lib/localDates.js';
 
 const EMPTY_CREATE = {
   staff_id: '', start_date: '', end_date: '',
@@ -32,7 +33,34 @@ function daysOpen(startDate, endDate) {
 
 function needsFitNote(period) {
   if (period.fit_note_received) return false;
-  return daysOpen(period.start_date, period.end_date) >= 7;
+  return daysOpen(period.start_date, period.end_date) > 7;
+}
+
+function daysBetweenIso(laterDate, earlierDate) {
+  const later = Date.parse(`${laterDate}T00:00:00Z`);
+  const earlier = Date.parse(`${earlierDate}T00:00:00Z`);
+  return Math.floor((later - earlier) / 86400000);
+}
+
+function getLinkablePeriods(periods, staffId, startDate) {
+  if (!staffId || !startDate) return [];
+  return periods
+    .filter((period) => (
+      period.staff_id === staffId &&
+      period.end_date &&
+      period.end_date < startDate &&
+      daysBetweenIso(startDate, period.end_date) <= 56
+    ))
+    .sort((a, b) => b.end_date.localeCompare(a.end_date));
+}
+
+function resolveCurrentSSPConfig(configs, asOfDate = todayLocalISO()) {
+  if (!configs) return null;
+  if (!Array.isArray(configs)) return configs;
+  const applicable = configs
+    .filter((cfg) => cfg.effective_from <= asOfDate)
+    .sort((a, b) => b.effective_from.localeCompare(a.effective_from));
+  return applicable[0] || configs[configs.length - 1] || null;
 }
 
 export default function SickPayTracker() {
@@ -73,7 +101,7 @@ export default function SickPayTracker() {
         getSSPConfig(homeSlug),
       ]);
       setPeriods(perds);
-      setSSPConfig(cfg);
+      setSSPConfig(resolveCurrentSSPConfig(cfg));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -85,10 +113,21 @@ export default function SickPayTracker() {
 
   const openPeriods   = periods.filter(p => !p.end_date);
   const fitNoteAlerts = periods.filter(needsFitNote);
+  const linkablePeriods = getLinkablePeriods(periods, createForm.staff_id, createForm.start_date);
 
   const displayedPeriods = staffFilter
     ? periods.filter(p => p.staff_id === staffFilter)
     : periods;
+
+  useEffect(() => {
+    if (!createForm.linked_to_period_id) return;
+    const stillValid = linkablePeriods.some(
+      (period) => String(period.id) === String(createForm.linked_to_period_id),
+    );
+    if (!stillValid) {
+      setCreateForm((form) => ({ ...form, linked_to_period_id: '' }));
+    }
+  }, [createForm.linked_to_period_id, linkablePeriods]);
 
   function cfield(k, v) { setCreateForm(f => ({ ...f, [k]: v })); }
   function ufield(k, v) { setUpdateForm(f => ({ ...f, [k]: v })); }
@@ -280,7 +319,7 @@ export default function SickPayTracker() {
                       </span>
                     ) : fitNoteNeeded ? (
                       <span className={`text-xs px-2 py-0.5 rounded ${BADGE.red}`}>Required</span>
-                    ) : days > 7 ? (
+                    ) : days >= 7 ? (
                       <span className={`text-xs px-2 py-0.5 rounded ${BADGE.amber}`}>Awaited</span>
                     ) : (
                       <span className="text-gray-400 text-xs">Not needed yet</span>
@@ -368,16 +407,19 @@ export default function SickPayTracker() {
               className={INPUT.select}
               value={createForm.linked_to_period_id}
               onChange={e => cfield('linked_to_period_id', e.target.value)}
+              disabled={!createForm.staff_id || !createForm.start_date}
             >
               <option value="">None — new sick period</option>
-              {periods
-                .filter(p => p.staff_id === createForm.staff_id && p.end_date)
+              {linkablePeriods
                 .map(p => (
                   <option key={p.id} value={p.id}>
                     Period: {p.start_date} → {p.end_date} ({parseFloat(p.ssp_weeks_paid || 0).toFixed(2)} SSP wks)
                   </option>
                 ))}
             </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Only closed periods for this staff member that ended within the previous 56 days can be linked.
+            </p>
           </div>
 
           <div>

@@ -6,7 +6,7 @@ import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
 import { getMinimumWageRate } from '../../shared/nmw.js';
 import { getHrAlerts } from '../lib/hr.js';
-import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary, getPayrollRuns } from '../lib/api.js';
+import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanceAlerts, getDashboardSummary } from '../lib/api.js';
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
@@ -15,6 +15,7 @@ import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import OverrideRequestReview from '../components/staff/OverrideRequestReview.jsx';
+import { loadAllPayrollRuns } from '../lib/payrollRuns.js';
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
 const DEFAULT_PRIORITY = { error: 3, warning: 2, info: 1 };
@@ -99,11 +100,11 @@ export default function Dashboard() {
       try {
         const [data, runs] = await Promise.all([
           getSchedulingData(homeSlug),
-          isOwnDataDashboard ? getPayrollRuns(homeSlug) : Promise.resolve(null),
+          isOwnDataDashboard ? loadAllPayrollRuns(homeSlug) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setSchedData(data);
-        setStaffRuns(Array.isArray(runs) ? runs : (runs?.rows || []));
+        setStaffRuns(Array.isArray(runs) ? runs : []);
       } catch (e) {
         if (!cancelled) setError(e.message || 'Failed to load');
       } finally {

@@ -4,9 +4,9 @@
  * NO database imports. All functions take plain data arguments and return plain values.
  * This makes them fully unit-testable without a DB connection.
  *
- * Tax year boundary note: these functions treat a run's period_end as the tax year anchor.
- * A run spanning April 5-6 will use the period_end tax year for all staff. This is a known
- * approximation — per-day attribution is Phase 4.
+ * Tax year boundary note: these functions use the supplied payroll date as the
+ * tax-year anchor. Callers should pass the contractual payday / FPS payment date,
+ * not just the run period end, when those differ.
  */
 
 import { calculateAge } from './payroll.js';
@@ -146,7 +146,7 @@ export function parseTaxCode(taxCode) {
   // Determine country prefix
   let country = 'england_wales';
   if (code.startsWith('S')) { country = 'scotland'; code = code.slice(1); }
-  else if (code.startsWith('C')) { country = 'england_wales'; code = code.slice(1); }
+  else if (code.startsWith('C')) { country = 'wales'; code = code.slice(1); }
 
   // Special codes
   if (code === 'NT')  return { type: 'nt',  country, annualAllowance: Infinity, basis: 'cumulative' };

@@ -334,7 +334,7 @@ export async function subtractYTDBatch(homeId, taxYear, rows, client) {
       net_pay,
     );
     const p = (n) => `$${base + n}`;
-    values.push(`(${p(1)},${p(2)},${p(3)},${p(4)},${p(5)},${p(6)},${p(7)},${p(8)},${p(9)},${p(10)},${p(11)},${p(12)},${p(13)},${p(14)})`);
+    values.push(`(${p(1)}::int,${p(2)}::text,${p(3)}::int,${p(4)}::numeric,${p(5)}::numeric,${p(6)}::numeric,${p(7)}::numeric,${p(8)}::numeric,${p(9)}::numeric,${p(10)}::numeric,${p(11)}::numeric,${p(12)}::numeric,${p(13)}::numeric,${p(14)}::numeric)`);
   }
   await conn.query(
     `UPDATE payroll_ytd AS ytd SET

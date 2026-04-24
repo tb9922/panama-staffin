@@ -13,6 +13,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../../db.js';
 import { app } from '../../server.js';
+import * as hmrcRepo from '../../repositories/hmrcRepo.js';
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -650,11 +651,13 @@ describe('Payroll Runs — /runs', () => {
     const res = await adminPost(`/runs?home=${homeASlug}`, {
       period_start: '2099-06-01',
       period_end: '2099-06-07',
+      pay_date: '2099-06-08',
       pay_frequency: 'weekly',
     }).expect(201);
 
     expect(res.body).toHaveProperty('id');
     expect(res.body.status).toBe('draft');
+    expect(res.body.pay_date).toBe('2099-06-08');
     runId = res.body.id;
   });
 
@@ -663,6 +666,32 @@ describe('Payroll Runs — /runs', () => {
       period_start: '2099-06-07',
       period_end: '2099-06-01',
     }).expect(400);
+  });
+
+  it('POST rejects pay_date before period_end', async () => {
+    await adminPost(`/runs?home=${homeASlug}`, {
+      period_start: '2099-06-10',
+      period_end: '2099-06-17',
+      pay_date: '2099-06-09',
+      pay_frequency: 'weekly',
+    })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatch(/pay_date cannot be before period_end/i);
+      });
+  });
+
+  it('POST rejects pay_date before period_end even when it is inside the period', async () => {
+    await adminPost(`/runs?home=${homeASlug}`, {
+      period_start: '2099-06-10',
+      period_end: '2099-06-17',
+      pay_date: '2099-06-16',
+      pay_frequency: 'weekly',
+    })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatch(/pay_date cannot be before period_end/i);
+      });
   });
 
   it('POST rejects overlapping period', async () => {
@@ -746,6 +775,19 @@ describe('Payroll Runs — /runs', () => {
     const res = await adminGet(`/runs/${runId}/export?home=${homeASlug}&format=sage`).expect(200);
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.headers['content-disposition']).toMatch(/sage/i);
+  });
+
+  it('GET export logs a download action without marking the run exported', async () => {
+    const detail = await adminGet(`/runs/${runId}?home=${homeASlug}`).expect(200);
+    expect(detail.body.run.exported_at).toBeNull();
+
+    const { rows } = await pool.query(
+      `SELECT action FROM audit_log
+       WHERE home_slug = $1 AND action = 'payroll_export_download'
+       ORDER BY ts DESC LIMIT 1`,
+      [homeASlug],
+    );
+    expect(rows.length).toBe(1);
   });
 
   it('GET bulk payslips returns JSON array', async () => {
@@ -920,6 +962,31 @@ describe('Tax Codes — /tax-codes + /ytd', () => {
     expect(res.body.tax_code).toBe('BR');
   });
 
+  it('POST rejects nonexistent staff_id', async () => {
+    await adminPost(`/tax-codes?home=${homeASlug}`, {
+      staff_id: 'PH99',
+      tax_code: '1257L',
+    }).expect(404);
+  });
+
+  it('POST accepts starter and HMRC tax-code sources used by the manager UI', async () => {
+    const starter = await adminPost(`/tax-codes?home=${homeASlug}`, {
+      staff_id: 'PH02',
+      tax_code: '1257L',
+      source: 'starter',
+      effective_from: '2099-04-06',
+    }).expect(201);
+    expect(starter.body.source).toBe('starter');
+
+    const hmrc = await adminPost(`/tax-codes?home=${homeASlug}`, {
+      staff_id: 'PH02',
+      tax_code: '1257L',
+      source: 'hmrc',
+      effective_from: '2099-05-06',
+    }).expect(201);
+    expect(hmrc.body.source).toBe('hmrc');
+  });
+
   it('POST rejects invalid basis enum', async () => {
     await adminPost(`/tax-codes?home=${homeASlug}`, {
       staff_id: 'PH01',
@@ -979,6 +1046,30 @@ describe('Pensions — /pensions + /pension-config', () => {
     expect(res.body.reassessment_date).toBe('2102-07-01');
     expect(res.body.contribution_override_employee).toBe(0.06);
     expect(res.body.contribution_override_employer).toBe(0.04);
+  });
+
+  it('POST rejects nonexistent staff_id', async () => {
+    await adminPost(`/pensions?home=${homeASlug}`, {
+      staff_id: 'PH99',
+      status: 'pending_assessment',
+    }).expect(404);
+  });
+
+  it('POST rejects postponed status without postponed_until', async () => {
+    await adminPost(`/pensions?home=${homeASlug}`, {
+      staff_id: 'PH02',
+      status: 'postponed',
+    }).expect(400);
+  });
+
+  it('POST accepts postponed status with postponed_until', async () => {
+    const res = await adminPost(`/pensions?home=${homeASlug}`, {
+      staff_id: 'PH02',
+      status: 'postponed',
+      postponed_until: '2099-08-01',
+    }).expect(201);
+    expect(res.body.status).toBe('postponed');
+    expect(res.body.postponed_until).toBe('2099-08-01');
   });
 
   it('POST rejects invalid status enum', async () => {
@@ -1058,6 +1149,7 @@ describe('SSP — /sick-periods + /ssp-config', () => {
     // Close the first period
     await adminPut(`/sick-periods/${periodId}?home=${homeASlug}`, {
       end_date: '2099-06-05',
+      waiting_days_served: 2,
     }).expect(200);
     closedPeriodId = periodId;
 
@@ -1068,13 +1160,28 @@ describe('SSP — /sick-periods + /ssp-config', () => {
     }).expect(201);
 
     expect(res.body.linked_to_period_id).toBe(closedPeriodId);
-    expect(res.body.waiting_days_served).toBe(3);
+    expect(res.body.waiting_days_served).toBe(2);
     periodId = res.body.id;
   });
 
   it('POST rejects missing staff_id', async () => {
     await adminPost(`/sick-periods?home=${homeASlug}`, {
       start_date: '2099-06-01',
+    }).expect(400);
+  });
+
+  it('POST rejects nonexistent staff_id', async () => {
+    await adminPost(`/sick-periods?home=${homeASlug}`, {
+      staff_id: 'PH99',
+      start_date: '2099-06-01',
+    }).expect(404);
+  });
+
+  it('POST rejects end_date before start_date', async () => {
+    await adminPost(`/sick-periods?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      start_date: '2099-08-10',
+      end_date: '2099-08-09',
     }).expect(400);
   });
 
@@ -1110,6 +1217,44 @@ describe('SSP — /sick-periods + /ssp-config', () => {
     }).expect(200);
     expect(res.body.notes).toBe('Recovery complete');
     expect(res.body.version).toBe(current.version + 1);
+  });
+
+  it('POST carries forward waiting days when manually linking a valid previous period', async () => {
+    const res = await adminPost(`/sick-periods?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      start_date: '2099-07-20',
+      linked_to_period_id: periodId,
+    }).expect(201);
+
+    expect(res.body.linked_to_period_id).toBe(periodId);
+    expect(res.body.waiting_days_served).toBe(2);
+    periodId = res.body.id;
+  });
+
+  it('POST rejects manually linked periods outside the 56-day window', async () => {
+    await adminPost(`/sick-periods?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      start_date: '2099-09-10',
+      linked_to_period_id: closedPeriodId,
+    }).expect(400);
+  });
+
+  it('POST rejects overlapping sick periods for the same staff member', async () => {
+    await adminPost(`/sick-periods?home=${homeASlug}`, {
+      staff_id: 'PH01',
+      start_date: '2099-07-15',
+      end_date: '2099-07-21',
+    }).expect(400);
+  });
+
+  it('PUT rejects end_date before the existing start_date', async () => {
+    const current = await adminGet(`/sick-periods?home=${homeASlug}&staffId=PH01`).expect(200);
+    const target = current.body.find((entry) => entry.id === periodId);
+
+    await adminPut(`/sick-periods/${periodId}?home=${homeASlug}`, {
+      end_date: '2099-07-19',
+      _version: target.version,
+    }).expect(400);
   });
 
   it('PUT rejects stale sick-period version', async () => {
@@ -1177,6 +1322,91 @@ describe('HMRC — /hmrc', () => {
       paid_reference: 'BACS-12345',
     }).expect(200);
     expect(res.body.status).toBe('paid');
+  });
+
+  it('reopens a paid liability when later approved pay in the same tax month adds more due', async () => {
+    await hmrcRepo.upsertLiability(homeAId, 2098, 1, {
+      period_start: '2098-04-20',
+      period_end: '2098-04-27',
+      total_paye: 50,
+      total_employee_ni: 20,
+      total_employer_ni: 25,
+      employment_allowance_offset: 0,
+      total_due: 95,
+      payment_due_date: '2098-06-19',
+      status: 'unpaid',
+    });
+
+    const res = await adminGet(`/hmrc?home=${homeASlug}&year=2098`).expect(200);
+    const reopened = res.body.find((row) => row.id === liabilityId);
+    expect(reopened.status).toBe('unpaid');
+    expect(reopened.paid_date).toBeNull();
+    expect(reopened.paid_reference).toBeNull();
+    expect(parseFloat(reopened.total_due)).toBe(1045);
+  });
+
+  it('restores paid status if a reopened liability is brought back to its original paid total', async () => {
+    await hmrcRepo.subtractLiability(homeAId, 2098, 1, {
+      total_paye: 50,
+      total_employee_ni: 20,
+      total_employer_ni: 25,
+      total_due: 95,
+    });
+
+    const res = await adminGet(`/hmrc?home=${homeASlug}&year=2098`).expect(200);
+    const restored = res.body.find((row) => row.id === liabilityId);
+    expect(restored.status).toBe('paid');
+    expect(restored.paid_date).toBe('2099-07-20');
+    expect(restored.paid_reference).toBe('BACS-12345');
+    expect(parseFloat(restored.total_due)).toBe(950);
+  });
+
+  it('removes an unpaid liability row when void-style subtraction brings it back to zero', async () => {
+    await hmrcRepo.upsertLiability(homeAId, 2098, 2, {
+      period_start: '2098-05-06',
+      period_end: '2098-06-05',
+      total_paye: 100,
+      total_employee_ni: 40,
+      total_employer_ni: 50,
+      employment_allowance_offset: 0,
+      total_due: 190,
+      payment_due_date: '2098-07-19',
+      status: 'unpaid',
+    });
+
+    await hmrcRepo.subtractLiability(homeAId, 2098, 2, {
+      total_paye: 100,
+      total_employee_ni: 40,
+      total_employer_ni: 50,
+      total_due: 190,
+    });
+
+    const res = await adminGet(`/hmrc?home=${homeASlug}&year=2098`).expect(200);
+    expect(res.body.find((row) => row.tax_month === 2)).toBeUndefined();
+  });
+
+  it('uses pay_date rather than period_end when assigning HMRC tax month on approval', async () => {
+    const create = await adminPost(`/runs?home=${homeASlug}`, {
+      period_start: '2099-04-24',
+      period_end: '2099-04-30',
+      pay_date: '2099-05-06',
+      pay_frequency: 'weekly',
+    }).expect(201);
+
+    const boundaryRunId = create.body.id;
+    await adminPost(`/runs/${boundaryRunId}/calculate?home=${homeASlug}`).expect(200);
+    await adminPost(`/runs/${boundaryRunId}/approve?home=${homeASlug}`).expect(200);
+
+    const { rows } = await pool.query(
+      `SELECT tax_month
+         FROM hmrc_liabilities
+        WHERE home_id = $1 AND tax_year = $2 AND period_end = $3
+        ORDER BY id DESC`,
+      [homeAId, 2099, '2099-04-30'],
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].tax_month).toBe(2);
   });
 
   it('PUT returns 404 for nonexistent', async () => {

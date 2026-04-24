@@ -732,8 +732,11 @@ export async function approveTimesheetRange(homeSlug, staffId, start, end) {
 }
 
 // Payroll runs
-export async function getPayrollRuns(homeSlug) {
-  return apiFetch(`${API_BASE}/payroll/runs?home=${h(homeSlug)}`, { headers: authHeaders() });
+export async function getPayrollRuns(homeSlug, { limit, offset } = {}) {
+  const params = new URLSearchParams({ home: h(homeSlug) });
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  return apiFetch(`${API_BASE}/payroll/runs?${params.toString()}`, { headers: authHeaders() });
 }
 export async function createPayrollRun(homeSlug, run) {
   return apiFetch(`${API_BASE}/payroll/runs?home=${h(homeSlug)}`, {

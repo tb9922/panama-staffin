@@ -357,4 +357,34 @@ describe('Dashboard', () => {
     expect(api.getPayrollRuns).toHaveBeenCalled();
     expect(api.getDashboardSummary).not.toHaveBeenCalled();
   });
+
+  it('loads all payroll pages for the staff self-service dashboard', async () => {
+    useData.mockReturnValue({
+      canRead: module => module === 'scheduling' || module === 'payroll',
+      canWrite: () => false,
+      homeRole: 'staff_member',
+      staffId: 'S1',
+    });
+    api.getPayrollRuns
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 500 }, (_, index) => ({
+          id: `run-${index}`,
+          period_start: '2099-01-01',
+          period_end: '2099-01-31',
+          status: 'approved',
+        })),
+        total: 501,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'run-final', period_start: '2026-03-01', period_end: '2026-03-31', status: 'approved' }],
+        total: 501,
+      });
+
+    renderDashboard({ username: 'staff', role: 'staff_member' });
+
+    await waitFor(() => expect(screen.getByText('Welcome back, Alice Smith')).toBeInTheDocument());
+    expect(screen.getByText('501')).toBeInTheDocument();
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(1, 'test-home', { limit: 500, offset: 0 });
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(2, 'test-home', { limit: 500, offset: 500 });
+  });
 });

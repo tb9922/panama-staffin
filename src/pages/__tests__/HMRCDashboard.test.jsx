@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import HMRCDashboard from '../HMRCDashboard.jsx';
+import { currentTaxYearForDate } from '../../lib/hmrcDates.js';
 
 vi.mock('../../lib/api.js', async () => {
   const actual = await vi.importActual('../../lib/api.js');
@@ -39,7 +40,7 @@ const MOCK_LIABILITIES = [
 
 function setupMocks(liabilities = MOCK_LIABILITIES, payrollRuns = []) {
   api.getHMRCLiabilities.mockResolvedValue(liabilities);
-  api.getPayrollRuns.mockResolvedValue(payrollRuns);
+  api.getPayrollRuns.mockResolvedValue({ rows: payrollRuns, total: payrollRuns.length });
 }
 
 describe('HMRCDashboard', () => {
@@ -89,7 +90,7 @@ describe('HMRCDashboard', () => {
     setupMocks();
     renderWithProviders(<HMRCDashboard />);
     await waitFor(() =>
-      expect(screen.getByText('Total PAYE year')).toBeInTheDocument()
+      expect(screen.getByText('Total Due Year')).toBeInTheDocument()
     );
     expect(screen.getByText('Outstanding')).toBeInTheDocument();
     expect(screen.getByText('Overdue')).toBeInTheDocument();
@@ -144,7 +145,8 @@ describe('HMRCDashboard', () => {
       {
         id: 'run-1',
         status: 'approved',
-        period_end: '2020-01-31',
+        period_end: '2099-01-31',
+        pay_date: '2020-01-31',
         exported_at: null,
       },
     ]);
@@ -152,5 +154,123 @@ describe('HMRCDashboard', () => {
     await waitFor(() =>
       expect(screen.getByText(/past payday and still not exported/i)).toBeInTheDocument()
     );
+  });
+
+  it('does not show export-readiness alerts for draft or voided payroll runs', async () => {
+    setupMocks(MOCK_LIABILITIES, [
+      {
+        id: 'run-draft',
+        status: 'draft',
+        period_end: '2099-01-31',
+        pay_date: '2020-01-31',
+        exported_at: null,
+      },
+      {
+        id: 'run-voided',
+        status: 'voided',
+        period_end: '2099-01-31',
+        pay_date: '2020-01-31',
+        exported_at: null,
+      },
+    ]);
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText('HMRC Liabilities')).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/past payday and still not exported/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/still needs fps\/export action/i)).not.toBeInTheDocument();
+  });
+
+  it('reads payroll runs from the paginated API shape used in production', async () => {
+    api.getHMRCLiabilities.mockResolvedValue(MOCK_LIABILITIES);
+    api.getPayrollRuns.mockResolvedValue({
+      rows: [
+        {
+          id: 'run-1',
+          status: 'approved',
+          period_end: '2099-01-31',
+          pay_date: '2020-01-31',
+          exported_at: null,
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText(/past payday and still not exported/i)).toBeInTheDocument()
+    );
+  });
+
+  it('uses pay_date rather than period_end for RTI readiness alerts', async () => {
+    setupMocks(MOCK_LIABILITIES, [
+      {
+        id: 'run-1',
+        status: 'approved',
+        period_end: '2020-01-31',
+        pay_date: '2099-12-31',
+        exported_at: null,
+      },
+    ]);
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText(/approved payroll run still needs fps\/export action/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/past payday and still not exported/i)).not.toBeInTheDocument();
+  });
+
+  it('loads additional payroll pages for RTI alerts when the first page is full', async () => {
+    api.getHMRCLiabilities.mockResolvedValue(MOCK_LIABILITIES);
+    api.getPayrollRuns
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 500 }, (_, index) => ({
+          id: `run-${index}`,
+          status: 'exported',
+          period_end: '2099-01-31',
+          pay_date: '2099-01-31',
+          exported_at: '2099-02-01T09:00:00Z',
+        })),
+        total: 501,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'run-late',
+            status: 'approved',
+            period_end: '2099-01-31',
+            pay_date: '2020-01-31',
+            exported_at: null,
+          },
+        ],
+        total: 501,
+      });
+
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText(/past payday and still not exported/i)).toBeInTheDocument()
+    );
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(1, 'test-home', { limit: 500, offset: 0 });
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(2, 'test-home', { limit: 500, offset: 500 });
+  });
+
+  it('shows a degraded warning when payroll runs cannot be loaded for RTI alerts', async () => {
+    api.getHMRCLiabilities.mockResolvedValue(MOCK_LIABILITIES);
+    api.getPayrollRuns.mockRejectedValue(new Error('runs down'));
+
+    renderWithProviders(<HMRCDashboard />);
+    await waitFor(() =>
+      expect(screen.getByText(/RTI\/FPS readiness alerts are temporarily unavailable/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/past payday and still not exported/i)).not.toBeInTheDocument();
+  });
+
+  it('uses local year rather than UTC year when deriving the default tax year', () => {
+    const fakeLocalDate = {
+      getMonth: () => 0,
+      getDate: () => 10,
+      getFullYear: () => 2026,
+      getUTCFullYear: () => 2025,
+    };
+    expect(currentTaxYearForDate(fakeLocalDate)).toBe(2025);
   });
 });

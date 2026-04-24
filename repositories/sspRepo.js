@@ -102,6 +102,22 @@ export async function findSickPeriodById(id, homeId, client) {
   return rows[0] ? shapePeriod(rows[0]) : null;
 }
 
+export async function findOverlappingSickPeriods(homeId, staffId, startDate, endDate = null, excludeId = null, client) {
+  const conn = client || pool;
+  const { rows } = await conn.query(
+    `SELECT ${SICK_PERIOD_COLS}
+     FROM sick_periods
+     WHERE home_id = $1
+       AND staff_id = $2
+       AND start_date <= COALESCE($4::date, 'infinity'::date)
+       AND COALESCE(end_date, 'infinity'::date) >= $3::date
+       AND ($5::int IS NULL OR id <> $5)
+     ORDER BY start_date DESC`,
+    [homeId, staffId, startDate, endDate, excludeId],
+  );
+  return rows.map(shapePeriod);
+}
+
 export async function createSickPeriod(homeId, data, client) {
   const conn = client || pool;
   const { rows } = await conn.query(

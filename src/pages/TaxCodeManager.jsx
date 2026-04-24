@@ -14,7 +14,13 @@ import useTransientNotice from '../hooks/useTransientNotice.js';
 import { todayLocalISO } from '../lib/localDates.js';
 
 const BASIS_LABEL   = { cumulative: 'Cumulative', w1m1: 'W1/M1 (Emergency)' };
-const SOURCE_LABEL  = { manual: 'Manual', p45: 'P45', hmrc: 'HMRC Notice', starter: 'Starter Checklist' };
+const SOURCE_LABEL  = {
+  manual: 'Manual',
+  p45: 'P45',
+  hmrc: 'HMRC Notice',
+  hmrc_notice: 'HMRC Notice',
+  starter: 'Starter Checklist',
+};
 const NI_CATEGORIES = ['A','B','C','F','H','I','J','L','M','S','V','Z'];
 
 function emptyForm() {
@@ -420,8 +426,13 @@ export default function TaxCodeManager() {
 
           {/* Source */}
           <div>
-            <label className={INPUT.label}>Source</label>
-            <select className={INPUT.select} value={form.source} onChange={e => field('source', e.target.value)}>
+            <label htmlFor="tax-code-source" className={INPUT.label}>Source</label>
+            <select
+              id="tax-code-source"
+              className={INPUT.select}
+              value={form.source}
+              onChange={e => field('source', e.target.value)}
+            >
               <option value="manual">Manual entry</option>
               <option value="p45">P45 from previous employer</option>
               <option value="starter">Starter checklist</option>

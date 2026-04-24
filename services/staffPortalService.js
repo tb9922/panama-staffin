@@ -9,7 +9,6 @@ import * as staffRepo from '../repositories/staffRepo.js';
 import * as trainingRepo from '../repositories/trainingRepo.js';
 import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
-import { assemblePayslipData } from './payrollService.js';
 import { getTrainingTypes } from '../shared/training.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
 import {
@@ -25,6 +24,7 @@ import {
 import { calculateAccrual } from '../src/lib/accrual.js';
 
 const PROFILE_ALLOWLIST = new Set(['phone', 'address', 'emergency_contact']);
+const FINAL_PAYROLL_RUN_STATUSES = ['approved', 'exported', 'locked'];
 
 function shapeOwnProfile(staff) {
   return {
@@ -79,6 +79,31 @@ export async function getStaffScheduleWindow({ homeId, staffId, from, to }) {
   };
 }
 
+async function loadAllPayslipRunSummariesForStaff(homeId, staffId, pageSize = 500) {
+  const runs = [];
+  let offset = 0;
+  let total = Infinity;
+
+  while (offset < total) {
+    const page = await payrollRunRepo.findPayslipRunSummariesByStaff(
+      homeId,
+      staffId,
+      {
+        limit: pageSize,
+        offset,
+        statuses: FINAL_PAYROLL_RUN_STATUSES,
+      },
+    );
+    const rows = page?.rows || [];
+    total = page?.total ?? rows.length;
+    runs.push(...rows);
+    if (rows.length < pageSize) break;
+    offset += rows.length;
+  }
+
+  return runs;
+}
+
 export async function getStaffAccrualSummary({ homeId, staffId, asOfDate }) {
   const accrualDate = asOfDate || todayLocalISO();
   const [home, staff, overrides] = await Promise.all([
@@ -94,24 +119,16 @@ export async function getStaffAccrualSummary({ homeId, staffId, asOfDate }) {
 }
 
 export async function getStaffPayslipRuns({ homeId, staffId }) {
-  const { rows } = await payrollRunRepo.findByHome(homeId, { limit: 50, offset: 0 });
-  const visibleRuns = rows.filter((run) => ['approved', 'exported', 'locked'].includes(run.status));
-  const items = [];
-  for (const run of visibleRuns) {
-    const payslips = await assemblePayslipData(run.id, homeId, staffId);
-    if (!payslips?.length) continue;
-    const payslip = payslips[0];
-    items.push({
-      runId: run.id,
-      periodStart: run.period_start,
-      periodEnd: run.period_end,
-      status: run.status,
-      grossPay: payslip.line?.gross_pay ?? payslip.gross_pay ?? null,
-      netPay: payslip.line?.net_pay ?? payslip.net_pay ?? null,
-      generatedAt: run.exported_at || run.approved_at || run.updated_at,
-    });
-  }
-  return items;
+  const rows = await loadAllPayslipRunSummariesForStaff(homeId, staffId);
+  return rows.map((run) => ({
+    runId: run.id,
+    periodStart: run.period_start,
+    periodEnd: run.period_end,
+    status: run.status,
+    grossPay: run.gross_pay,
+    netPay: run.net_pay,
+    generatedAt: run.exported_at || run.approved_at || run.updated_at,
+  }));
 }
 
 export async function getStaffTrainingStatus({ homeId, staffId }) {
@@ -232,7 +249,7 @@ export async function reportSick({ homeId, staffId, date, reason, actorUsername 
         start_date: date,
         end_date: null,
         qualifying_days_per_week: 5,
-        waiting_days_served: previous ? 3 : 0,
+        waiting_days_served: previous?.waiting_days_served || 0,
         linked_to_period_id: previous?.id || null,
         notes: reason || 'Self-reported sick',
       }, client);

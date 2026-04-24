@@ -154,6 +154,18 @@ export async function lockByPeriod(homeId, periodStart, periodEnd, client) {
   return rowCount;
 }
 
+/** Unlock payroll-locked entries back to approved when a run is voided. */
+export async function unlockByPeriod(homeId, periodStart, periodEnd, client) {
+  const conn = client || pool;
+  const { rowCount } = await conn.query(
+    `UPDATE timesheet_entries
+     SET status = 'approved', updated_at = NOW()
+     WHERE home_id = $1 AND date >= $2 AND date <= $3 AND status = 'locked'`,
+    [homeId, periodStart, periodEnd],
+  );
+  return rowCount;
+}
+
 /** Dispute an entry. */
 export async function dispute(id, homeId, reason, client) {
   const conn = client || pool;

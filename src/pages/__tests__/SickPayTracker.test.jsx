@@ -29,7 +29,7 @@ vi.mock('../../components/StaffPicker.jsx', () => ({
   default: ({ value, onChange, label }) => (
     <div data-testid="staff-picker">
       {label && <label>{label}</label>}
-      <select value={value || ''} onChange={e => onChange(e.target.value)}>
+      <select value={value || ''} onChange={(e) => onChange(e.target.value)}>
         <option value="">All</option>
         <option value="S001">Alice Smith</option>
       </select>
@@ -39,12 +39,22 @@ vi.mock('../../components/StaffPicker.jsx', () => ({
 
 import * as api from '../../lib/api.js';
 
-const MOCK_SSP_CONFIG = {
-  weekly_rate: '118.75',
-  waiting_days: 0,
-  max_weeks: 28,
-  lel_weekly: null,
-};
+const MOCK_SSP_CONFIG = [
+  {
+    effective_from: '2025-04-06',
+    weekly_rate: '118.75',
+    waiting_days: 3,
+    max_weeks: 28,
+    lel_weekly: '125.00',
+  },
+  {
+    effective_from: '2026-04-06',
+    weekly_rate: '123.25',
+    waiting_days: 0,
+    max_weeks: 28,
+    lel_weekly: null,
+  },
+];
 
 const MOCK_SCHED_DATA = {
   staff: [
@@ -57,14 +67,28 @@ const MOCK_SCHED_DATA = {
 
 const MOCK_PERIODS = [
   {
-    id: 'sp-1', staff_id: 'S001', start_date: '2026-03-01', end_date: null,
-    qualifying_days_per_week: 5, waiting_days_served: 0, ssp_weeks_paid: '0.00',
-    fit_note_received: false, fit_note_date: null, notes: '',
+    id: 'sp-1',
+    staff_id: 'S001',
+    start_date: '2026-03-01',
+    end_date: null,
+    qualifying_days_per_week: 5,
+    waiting_days_served: 0,
+    ssp_weeks_paid: '0.00',
+    fit_note_received: false,
+    fit_note_date: null,
+    notes: '',
   },
   {
-    id: 'sp-2', staff_id: 'S002', start_date: '2026-01-10', end_date: '2026-01-20',
-    qualifying_days_per_week: 5, waiting_days_served: 3, ssp_weeks_paid: '1.14',
-    fit_note_received: true, fit_note_date: '2026-01-17', notes: 'Flu',
+    id: 'sp-2',
+    staff_id: 'S002',
+    start_date: '2026-01-10',
+    end_date: '2026-01-20',
+    qualifying_days_per_week: 5,
+    waiting_days_served: 3,
+    ssp_weeks_paid: '1.14',
+    fit_note_received: true,
+    fit_note_date: '2026-01-17',
+    notes: 'Flu',
   },
 ];
 
@@ -87,7 +111,7 @@ describe('SickPayTracker', () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />);
     await waitFor(() =>
-      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
+      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument(),
     );
   });
 
@@ -105,44 +129,40 @@ describe('SickPayTracker', () => {
     api.getSSPConfig.mockRejectedValue(new Error('Network error'));
     renderWithProviders(<SickPayTracker />);
     await waitFor(() =>
-      expect(screen.getByText('Network error')).toBeInTheDocument()
+      expect(screen.getByText('Network error')).toBeInTheDocument(),
     );
   });
 
   it('renders sick periods table with correct data', async () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />);
-    // Wait for Bob Jones — unique to the table (not in StaffPicker mock), confirms schedData loaded
     await waitFor(() =>
-      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument(),
     );
-    // "Alice Smith" appears in both the table and the mocked StaffPicker dropdown
     expect(screen.getAllByText('Alice Smith').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('2026-03-01')).toBeInTheDocument();
     expect(screen.getByText('2026-01-10')).toBeInTheDocument();
   });
 
-  it('renders SSP config summary cards', async () => {
+  it('renders SSP config summary cards from the applicable config row', async () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />);
     await waitFor(() =>
-      expect(screen.getByText('SSP weekly rate')).toBeInTheDocument()
+      expect(screen.getByText('SSP weekly rate')).toBeInTheDocument(),
     );
     expect(screen.getByText('Waiting days')).toBeInTheDocument();
     expect(screen.getByText('Max duration')).toBeInTheDocument();
+    expect(screen.getByText('£123.25')).toBeInTheDocument();
     expect(screen.getByText('28 weeks')).toBeInTheDocument();
   });
 
-  it('shows open/closed status badges', async () => {
+  it('shows open and closed status badges', async () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />);
-    // Wait for table data using a date that only appears in the table
     await waitFor(() =>
-      expect(screen.getByText('2026-03-01')).toBeInTheDocument()
+      expect(screen.getByText('2026-03-01')).toBeInTheDocument(),
     );
-    // Open period for Alice (End Date column "Open" + Status badge "Open"), Closed for Bob
-    const openBadges = screen.getAllByText('Open');
-    expect(openBadges.length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Closed').length).toBeGreaterThan(0);
   });
 
@@ -150,7 +170,7 @@ describe('SickPayTracker', () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />);
     await waitFor(() =>
-      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
+      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Record Sick Period' })).toBeInTheDocument();
   });
@@ -160,19 +180,112 @@ describe('SickPayTracker', () => {
     setupMocks();
     renderWithProviders(<SickPayTracker />, { user: { username: 'viewer', role: 'viewer' }, canWrite: false });
     await waitFor(() =>
-      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
+      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument(),
     );
     expect(screen.queryByRole('button', { name: 'Record Sick Period' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument();
+  });
+
+  it('only offers valid linked periods for the selected staff member and start date', async () => {
+    const user = userEvent.setup();
+    setupMocks([
+      {
+        id: 'recent-s001',
+        staff_id: 'S001',
+        start_date: '2026-01-20',
+        end_date: '2026-02-10',
+        qualifying_days_per_week: 5,
+        waiting_days_served: 2,
+        ssp_weeks_paid: '0.43',
+        fit_note_received: true,
+        fit_note_date: '2026-02-02',
+        notes: '',
+      },
+      {
+        id: 'stale-s001',
+        staff_id: 'S001',
+        start_date: '2025-10-01',
+        end_date: '2025-12-01',
+        qualifying_days_per_week: 5,
+        waiting_days_served: 3,
+        ssp_weeks_paid: '1.00',
+        fit_note_received: true,
+        fit_note_date: '2025-10-08',
+        notes: '',
+      },
+      {
+        id: 'recent-s002',
+        staff_id: 'S002',
+        start_date: '2026-02-01',
+        end_date: '2026-02-28',
+        qualifying_days_per_week: 5,
+        waiting_days_served: 1,
+        ssp_weeks_paid: '0.86',
+        fit_note_received: true,
+        fit_note_date: '2026-02-08',
+        notes: '',
+      },
+    ]);
+
+    renderWithProviders(<SickPayTracker />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Record Sick Period' })).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Record Sick Period' }));
+
+    const staffLabel = screen.getAllByText('Staff Member').find((node) => node.tagName === 'LABEL');
+    const startDateLabel = screen.getAllByText('Start Date').find((node) => node.tagName === 'LABEL');
+    const linkedPeriodLabel = screen.getAllByText('Linked to Previous Period (optional)').find((node) => node.tagName === 'LABEL');
+
+    const staffSelect = staffLabel.parentElement.querySelector('select');
+    const startDateInput = startDateLabel.parentElement.querySelector('input');
+    const linkSelect = linkedPeriodLabel.parentElement.querySelector('select');
+
+    expect(linkSelect).toBeDisabled();
+
+    await user.selectOptions(staffSelect, 'S001');
+    await user.type(startDateInput, '2026-03-20');
+
+    expect(linkSelect).not.toBeDisabled();
+    const optionTexts = Array.from(linkSelect.options).map((option) => option.textContent);
+
+    expect(optionTexts).toEqual([
+      'None — new sick period',
+      expect.stringContaining('2026-01-20'),
+    ]);
   });
 
   it('shows empty state when no sick periods exist', async () => {
     setupMocks([]);
     renderWithProviders(<SickPayTracker />);
     await waitFor(() =>
-      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument()
+      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument(),
     );
     expect(screen.getByText(/No sick periods recorded/)).toBeInTheDocument();
+  });
+
+  it('does not raise a fit-note alert on exactly 7 calendar days', async () => {
+    setupMocks([
+      {
+        id: 'sp-3',
+        staff_id: 'S001',
+        start_date: '2026-04-01',
+        end_date: '2026-04-07',
+        qualifying_days_per_week: 5,
+        waiting_days_served: 0,
+        ssp_weeks_paid: '0.00',
+        fit_note_received: false,
+        fit_note_date: null,
+        notes: '',
+      },
+    ]);
+    renderWithProviders(<SickPayTracker />);
+    await waitFor(() =>
+      expect(screen.getByText('Sick Pay Tracker')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Fit note required for/)).not.toBeInTheDocument();
   });
 
   it('includes the current version when saving an update', async () => {
@@ -188,13 +301,13 @@ describe('SickPayTracker', () => {
     renderWithProviders(<SickPayTracker />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument(),
     );
 
     await user.click(screen.getByRole('button', { name: 'Update' }));
     await user.type(
       screen.getByPlaceholderText('e.g. Fit note received, return to work interview completed'),
-      'Closed after GP review'
+      'Closed after GP review',
     );
     await user.click(screen.getByRole('button', { name: 'Save Changes' }));
 
@@ -205,8 +318,8 @@ describe('SickPayTracker', () => {
         expect.objectContaining({
           _version: 7,
           notes: 'Closed after GP review',
-        })
-      )
+        }),
+      ),
     );
   });
 });

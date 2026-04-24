@@ -66,6 +66,7 @@ const MOCK_DRAFT_RUN = {
     id: 'run-1',
     period_start: '2026-03-01',
     period_end: '2026-03-31',
+    pay_date: '2026-03-31',
     pay_frequency: 'monthly',
     status: 'draft',
     staff_count: 2,
@@ -130,6 +131,7 @@ const MOCK_PREVIOUS_RUN = {
   id: 'run-0',
   period_start: '2026-02-01',
   period_end: '2026-02-28',
+  pay_date: '2026-02-28',
   pay_frequency: 'monthly',
   status: 'exported',
   staff_count: 1,
@@ -303,7 +305,8 @@ describe('PayrollDetail', () => {
       ...MOCK_APPROVED_RUN,
       run: {
         ...MOCK_APPROVED_RUN.run,
-        period_end: '2020-01-31',
+        period_end: '2099-01-31',
+        pay_date: '2020-01-31',
         exported_at: null,
       },
     });
@@ -318,7 +321,8 @@ describe('PayrollDetail', () => {
       ...MOCK_CALCULATED_RUN,
       run: {
         ...MOCK_CALCULATED_RUN.run,
-        period_end: '2020-01-31',
+        period_end: '2099-01-31',
+        pay_date: '2020-01-31',
       },
     });
     await waitFor(() =>
@@ -326,6 +330,22 @@ describe('PayrollDetail', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Approve' }));
     expect(screen.getAllByText(/Approval is still allowed, but RTI\/FPS should be sent immediately afterwards/i).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not show a late RTI warning when period end has passed but pay date is still in the future', async () => {
+    renderAdmin({
+      ...MOCK_APPROVED_RUN,
+      run: {
+        ...MOCK_APPROVED_RUN.run,
+        period_end: '2020-01-31',
+        pay_date: '2099-12-31',
+        exported_at: null,
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/approved but not yet exported/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/past payday and still not exported/i)).not.toBeInTheDocument();
   });
 
   it('shows previous-run delta text in the summary cards', async () => {
@@ -336,6 +356,41 @@ describe('PayrollDetail', () => {
     expect(screen.getAllByText((_, node) => node?.textContent?.includes('vs previous run: +180h') ?? false).length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, node) => (node?.textContent?.includes('vs previous run: +') ?? false) && (node?.textContent?.includes('920.00') ?? false)).length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, node) => (node?.textContent?.includes('vs previous run: +') ?? false) && (node?.textContent?.includes('20.00') ?? false)).length).toBeGreaterThan(0);
+  });
+
+  it('loads additional payroll pages when finding the previous run snapshot', async () => {
+    api.getSchedulingData.mockResolvedValue(MOCK_SCHED_DATA);
+    api.getPayrollRun.mockImplementation(async (_home, id) => (
+      String(id) === String(MOCK_PREVIOUS_RUN.id) ? MOCK_PREVIOUS_DETAIL : MOCK_CALCULATED_RUN
+    ));
+    api.getPayrollRuns
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 500 }, (_, index) => ({
+          id: `future-${index}`,
+          period_start: '2099-01-01',
+          period_end: '2099-12-31',
+          pay_date: '2100-01-05',
+          pay_frequency: 'monthly',
+          status: 'approved',
+        })),
+        total: 501,
+      })
+      .mockResolvedValueOnce({
+        rows: [MOCK_PREVIOUS_RUN],
+        total: 501,
+      });
+    api.getPayslips.mockResolvedValue([]);
+
+    renderWithProviders(<PayrollDetail />, {
+      route: '/payroll/run-1',
+      user: { username: 'admin', role: 'admin' },
+    });
+
+    await waitFor(() =>
+      expect(screen.getAllByText((_, node) => node?.textContent?.includes('vs previous run: +1') ?? false).length).toBeGreaterThan(0)
+    );
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(1, 'test-home', { limit: 500, offset: 0 });
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(2, 'test-home', { limit: 500, offset: 500 });
   });
 
   it('opens the export dropdown menu with all export options', async () => {
@@ -349,5 +404,44 @@ describe('PayrollDetail', () => {
     expect(screen.getByRole('button', { name: 'Xero CSV' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Generic CSV' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Summary PDF' })).toBeInTheDocument();
+  });
+
+  it('marks a run exported only after the CSV download succeeds', async () => {
+    const user = userEvent.setup();
+    api.downloadAuthenticatedFile.mockResolvedValue();
+    api.markPayrollRunExported.mockResolvedValue({ ok: true });
+
+    renderAdmin(MOCK_APPROVED_RUN);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Export ▾' })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole('button', { name: 'Export ▾' }));
+    await user.click(screen.getByRole('button', { name: 'Generic CSV' }));
+
+    await waitFor(() =>
+      expect(api.downloadAuthenticatedFile).toHaveBeenCalled()
+    );
+    expect(api.markPayrollRunExported).toHaveBeenCalled();
+    expect(api.downloadAuthenticatedFile.mock.invocationCallOrder[0]).toBeLessThan(
+      api.markPayrollRunExported.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('does not mark a run exported when the CSV download fails', async () => {
+    const user = userEvent.setup();
+    api.downloadAuthenticatedFile.mockRejectedValue(new Error('Download failed'));
+    api.markPayrollRunExported.mockResolvedValue({ ok: true });
+
+    renderAdmin(MOCK_APPROVED_RUN);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Export ▾' })).toBeInTheDocument()
+    );
+    await user.click(screen.getByRole('button', { name: 'Export ▾' }));
+    await user.click(screen.getByRole('button', { name: 'Generic CSV' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Payroll action needs attention')).toBeInTheDocument()
+    );
+    expect(api.markPayrollRunExported).not.toHaveBeenCalled();
   });
 });

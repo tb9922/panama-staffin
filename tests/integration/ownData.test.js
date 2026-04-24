@@ -21,6 +21,8 @@ const PW = 'TestOwn!2025x';
 let staffToken, managerToken;
 let homeId, homeSlug;
 let payrollRunId;
+let otherPayrollRunId;
+let ownApprovedPayrollRunId;
 
 beforeAll(async () => {
   // Clean up from previous runs
@@ -85,6 +87,32 @@ beforeAll(async () => {
       [payrollRunId, sid, gross]
     );
   }
+
+  const { rows: [otherRun] } = await pool.query(
+    `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, status, total_gross, total_enhancements, total_sleep_ins, staff_count)
+     VALUES ($1, '2099-06-01', '2099-06-30', 'monthly', 'approved', 10000, 250, 0, 2) RETURNING id`,
+    [homeId]
+  );
+  otherPayrollRunId = otherRun.id;
+  for (const [sid, gross] of [['S002', 5500], ['S003', 4500]]) {
+    await pool.query(
+      `INSERT INTO payroll_lines (payroll_run_id, staff_id, base_hours, base_pay, total_hours, gross_pay)
+       VALUES ($1, $2, 160, $3, 160, $3)`,
+      [otherPayrollRunId, sid, gross]
+    );
+  }
+
+  const { rows: [ownApprovedRun] } = await pool.query(
+    `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, status, total_gross, total_enhancements, total_sleep_ins, staff_count)
+     VALUES ($1, '2099-07-01', '2099-07-31', 'monthly', 'approved', 5200, 120, 0, 1) RETURNING id`,
+    [homeId]
+  );
+  ownApprovedPayrollRunId = ownApprovedRun.id;
+  await pool.query(
+    `INSERT INTO payroll_lines (payroll_run_id, staff_id, base_hours, base_pay, total_hours, gross_pay)
+     VALUES ($1, 'S001', 160, 5200, 160, 5200)`,
+    [ownApprovedPayrollRunId]
+  );
 
   // Create tax codes for S001 and S002
   for (const [sid, code] of [['S001', '1257L'], ['S002', '1100L']]) {
@@ -262,19 +290,19 @@ describe('staff_member: write endpoints blocked', () => {
 // ── Payroll: own-data filtering ──────────────────────────────────────────────
 
 describe('staff_member: GET /api/payroll/runs', () => {
-  it('returns runs but strips aggregate totals', async () => {
+  it('returns only finalised runs with the linked staff member and strips internal fields', async () => {
     const res = await authGet(`/api/payroll/runs?home=${homeSlug}`, staffToken).expect(200);
-    expect(res.body.rows.length).toBeGreaterThanOrEqual(1);
-    const run = res.body.rows.find(r => r.id === payrollRunId);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows).toHaveLength(1);
+    const run = res.body.rows.find(r => r.id === ownApprovedPayrollRunId);
     expect(run).toBeDefined();
-    // Totals should be stripped
-    expect(run.total_gross).toBeUndefined();
-    expect(run.total_enhancements).toBeUndefined();
-    expect(run.total_sleep_ins).toBeUndefined();
-    expect(run.staff_count).toBeUndefined();
-    // Non-sensitive fields remain
+    expect(res.body.rows.find(r => r.id === payrollRunId)).toBeUndefined();
+    expect(res.body.rows.find(r => r.id === otherPayrollRunId)).toBeUndefined();
     expect(run.period_start).toBeDefined();
-    expect(run.status).toBe('calculated');
+    expect(run.status).toBe('approved');
+    expect(run.approved_by).toBeUndefined();
+    expect(run.notes).toBeUndefined();
+    expect(run.staff_count).toBeUndefined();
   });
 
   it('manager sees aggregate totals on runs list', async () => {
@@ -286,16 +314,24 @@ describe('staff_member: GET /api/payroll/runs', () => {
 });
 
 describe('staff_member: GET /api/payroll/runs/:runId', () => {
-  it('returns only own line, no aggregate totals', async () => {
-    const res = await authGet(`/api/payroll/runs/${payrollRunId}?home=${homeSlug}`, staffToken).expect(200);
+  it('returns only own line and a safe run payload', async () => {
+    const res = await authGet(`/api/payroll/runs/${ownApprovedPayrollRunId}?home=${homeSlug}`, staffToken).expect(200);
     // Only S001's line
     expect(res.body.lines).toHaveLength(1);
     expect(res.body.lines[0].staff_id).toBe('S001');
-    expect(res.body.lines[0].gross_pay).toBe(5000);
-    // Run totals stripped
+    expect(res.body.lines[0].gross_pay).toBe(5200);
     expect(res.body.run.total_gross).toBeUndefined();
-    expect(res.body.run.total_enhancements).toBeUndefined();
     expect(res.body.run.staff_count).toBeUndefined();
+    expect(res.body.run.notes).toBeUndefined();
+    expect(res.body.run.approved_by).toBeUndefined();
+  });
+
+  it('returns 404 for a calculated run that is not finalised yet', async () => {
+    await authGet(`/api/payroll/runs/${payrollRunId}?home=${homeSlug}`, staffToken).expect(404);
+  });
+
+  it('returns 404 for a run that has no payslip line for the linked staff member', async () => {
+    await authGet(`/api/payroll/runs/${otherPayrollRunId}?home=${homeSlug}`, staffToken).expect(404);
   });
 
   it('manager sees all lines and totals', async () => {
@@ -310,6 +346,33 @@ describe('staff_member: GET /api/payroll/runs/:runId/payslips/:staffId', () => {
     const res = await authGet(`/api/payroll/runs/${payrollRunId}/payslips/S002?home=${homeSlug}`, staffToken);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/own payslip/i);
+  });
+
+  it('returns 404 for own calculated-run PDF payslips before payroll is finalised', async () => {
+    await authGet(`/api/payroll/runs/${payrollRunId}/payslips/S001?home=${homeSlug}`, staffToken).expect(404);
+  });
+});
+
+describe('staff_member: GET /api/payroll/runs/:runId/payslips', () => {
+  it('returns only own payslip with safe run and home payloads', async () => {
+    const res = await authGet(`/api/payroll/runs/${ownApprovedPayrollRunId}/payslips?home=${homeSlug}`, staffToken).expect(200);
+    expect(res.body).toHaveLength(1);
+    const [payslip] = res.body;
+    expect(payslip.staff.id).toBe('S001');
+    expect(payslip.run.id).toBe(ownApprovedPayrollRunId);
+    expect(payslip.run.total_gross).toBeUndefined();
+    expect(payslip.run.staff_count).toBeUndefined();
+    expect(payslip.run.notes).toBeUndefined();
+    expect(payslip.run.approved_by).toBeUndefined();
+    expect(payslip.home).toEqual({ name: 'Own Data Test Home' });
+  });
+
+  it('returns 404 for a calculated run payslip before payroll is finalised', async () => {
+    await authGet(`/api/payroll/runs/${payrollRunId}/payslips?home=${homeSlug}`, staffToken).expect(404);
+  });
+
+  it('returns 404 when the linked staff member has no payslip in that run', async () => {
+    await authGet(`/api/payroll/runs/${otherPayrollRunId}/payslips?home=${homeSlug}`, staffToken).expect(404);
   });
 });
 

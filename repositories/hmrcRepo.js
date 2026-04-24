@@ -51,6 +51,30 @@ export async function upsertLiability(homeId, taxYear, taxMonth, data, client) {
        total_due                   = hmrc_liabilities.total_due          + EXCLUDED.total_due,
        period_start                = LEAST(hmrc_liabilities.period_start, EXCLUDED.period_start),
        period_end                  = GREATEST(hmrc_liabilities.period_end, EXCLUDED.period_end),
+       status                      = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN EXCLUDED.status
+                                       ELSE hmrc_liabilities.status
+                                     END,
+       reopened_paid_date          = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN hmrc_liabilities.paid_date
+                                       ELSE hmrc_liabilities.reopened_paid_date
+                                     END,
+       reopened_paid_reference     = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN hmrc_liabilities.paid_reference
+                                       ELSE hmrc_liabilities.reopened_paid_reference
+                                     END,
+       reopened_paid_total_due     = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN hmrc_liabilities.total_due
+                                       ELSE hmrc_liabilities.reopened_paid_total_due
+                                     END,
+       paid_date                   = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN NULL
+                                       ELSE hmrc_liabilities.paid_date
+                                     END,
+       paid_reference              = CASE
+                                       WHEN hmrc_liabilities.status = 'paid' THEN NULL
+                                       ELSE hmrc_liabilities.paid_reference
+                                     END,
        updated_at                  = NOW()
      RETURNING ${COLS}`,
     [
@@ -73,24 +97,70 @@ export async function upsertLiability(homeId, taxYear, taxMonth, data, client) {
  */
 export async function subtractLiability(homeId, taxYear, taxMonth, amounts, client) {
   const conn = client || pool;
-  await conn.query(
+  const { rows } = await conn.query(
     `UPDATE hmrc_liabilities
      SET total_paye         = GREATEST(0, total_paye         - $4),
          total_employee_ni  = GREATEST(0, total_employee_ni  - $5),
          total_employer_ni  = GREATEST(0, total_employer_ni  - $6),
          total_due          = GREATEST(0, total_due          - $7),
          updated_at         = NOW()
-     WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3`,
+     WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3
+     RETURNING total_paye, total_employee_ni, total_employer_ni, total_due, status,
+               reopened_paid_date, reopened_paid_reference, reopened_paid_total_due`,
     [homeId, taxYear, taxMonth,
      amounts.total_paye, amounts.total_employee_ni, amounts.total_employer_ni, amounts.total_due],
   );
+
+  const row = rows[0];
+  if (!row) return;
+
+  const isZeroBalance =
+    parseFloat(row.total_paye || 0) === 0 &&
+    parseFloat(row.total_employee_ni || 0) === 0 &&
+    parseFloat(row.total_employer_ni || 0) === 0 &&
+    parseFloat(row.total_due || 0) === 0;
+
+  if (isZeroBalance && row.status !== 'paid') {
+    await conn.query(
+      `DELETE FROM hmrc_liabilities
+       WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3`,
+      [homeId, taxYear, taxMonth],
+    );
+    return;
+  }
+
+  const reopenedTotalDue = parseFloat(row.reopened_paid_total_due || 0);
+  if (
+    row.status !== 'paid' &&
+    reopenedTotalDue > 0 &&
+    parseFloat(row.total_due || 0) === reopenedTotalDue
+  ) {
+    await conn.query(
+      `UPDATE hmrc_liabilities
+       SET status = 'paid',
+           paid_date = reopened_paid_date,
+           paid_reference = reopened_paid_reference,
+           reopened_paid_date = NULL,
+           reopened_paid_reference = NULL,
+           reopened_paid_total_due = NULL,
+           updated_at = NOW()
+       WHERE home_id = $1 AND tax_year = $2 AND tax_month = $3`,
+      [homeId, taxYear, taxMonth],
+    );
+  }
 }
 
 export async function markPaid(id, homeId, paidDate, paidReference, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
     `UPDATE hmrc_liabilities
-     SET status = 'paid', paid_date = $3, paid_reference = $4, updated_at = NOW()
+     SET status = 'paid',
+         paid_date = $3,
+         paid_reference = $4,
+         reopened_paid_date = NULL,
+         reopened_paid_reference = NULL,
+         reopened_paid_total_due = NULL,
+         updated_at = NOW()
      WHERE id = $1 AND home_id = $2
      RETURNING ${COLS}`,
     [id, homeId, paidDate, paidReference || null]

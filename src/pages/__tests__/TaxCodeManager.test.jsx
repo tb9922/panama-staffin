@@ -158,6 +158,28 @@ describe('TaxCodeManager', () => {
     expect(screen.getByText('Starter Checklist')).toBeInTheDocument();
   });
 
+  it('saves the source values used by the manager UI', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await waitFor(() =>
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[1]);
+    await user.selectOptions(screen.getByLabelText('Source'), 'hmrc');
+    await user.click(screen.getByRole('button', { name: 'Save Tax Code' }));
+
+    await waitFor(() =>
+      expect(api.upsertTaxCode).toHaveBeenCalledWith(
+        'test-home',
+        expect.objectContaining({
+          staff_id: 'S002',
+          source: 'hmrc',
+        }),
+      )
+    );
+  });
+
   it('shows Add / Update Tax Code button for admin', async () => {
     renderAdmin();
     await waitFor(() =>

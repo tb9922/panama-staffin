@@ -78,21 +78,43 @@ function maxIsoDate(values) {
   return values.filter(Boolean).sort().at(-1) || null;
 }
 
+function getRunPayDate(run) {
+  return run?.pay_date || run?.period_end;
+}
+
+async function loadAllStaffByHome(homeId, client, pageSize = 1000) {
+  const allStaff = [];
+  let offset = 0;
+  let total = Infinity;
+
+  while (offset < total) {
+    const page = await staffRepo.findByHome(homeId, { limit: pageSize, offset }, client);
+    const rows = page?.rows || [];
+    total = page?.total ?? rows.length;
+    allStaff.push(...rows);
+    if (rows.length < pageSize) break;
+    offset += rows.length;
+  }
+
+  return allStaff;
+}
+
 function getAutoEnrolmentDate(staff, run, enrolment = null) {
+  const assessmentCutoff = getRunPayDate(run) || run.period_end;
   const candidates = [run.period_start];
   if (staff?.start_date && staff.start_date <= run.period_end) {
     candidates.push(staff.start_date);
   }
   if (staff?.date_of_birth) {
     const twentySecondBirthday = addYearsToIsoDate(staff.date_of_birth, 22);
-    if (twentySecondBirthday && twentySecondBirthday <= run.period_end) {
+    if (twentySecondBirthday && twentySecondBirthday <= assessmentCutoff) {
       candidates.push(twentySecondBirthday);
     }
   }
-  if (enrolment?.reassessment_date && enrolment.reassessment_date <= run.period_end) {
+  if (enrolment?.reassessment_date && enrolment.reassessment_date <= assessmentCutoff) {
     candidates.push(enrolment.reassessment_date);
   }
-  return maxIsoDate(candidates) || run.period_end;
+  return maxIsoDate(candidates) || assessmentCutoff;
 }
 
 // ── Default Pay Rate Rules (seeded once per home on first payroll access) ──────
@@ -156,8 +178,7 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       const home = await homeRepo.findById(homeId, client);
       if (!home) throw new NotFoundError('Home not found');
 
-      const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
-      const allStaff = allStaffResult.rows;
+      const allStaff = await loadAllStaffByHome(homeId, client);
       const overrides = await overrideRepo.findByHome(homeId, run.period_start, run.period_end, client);
       const hourAdjustments = await shiftHourAdjustmentRepo.findMapByHomePeriod(homeId, run.period_start, run.period_end, null, client);
       const rules = await payRateRulesRepo.findForPeriod(homeId, run.period_start, run.period_end, client);
@@ -205,18 +226,19 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
     const allSSPConfigs = await sspRepo.getAllSSPConfigs(client);
 
     // Pre-load constant tax/pension config once for the run (same for all staff)
-    const taxYear       = getTaxYear(new Date(run.period_end));
+    const payDate       = getRunPayDate(run);
+    const taxYear       = getTaxYear(new Date(payDate));
     const periodsInYear = run.pay_frequency === 'weekly' ? 52 : run.pay_frequency === 'fortnightly' ? 26 : 12;
-    const payPeriod     = getPayPeriodNumber(run.period_end, run.pay_frequency);
+    const payPeriod     = getPayPeriodNumber(payDate, run.pay_frequency);
     const niThresholds  = await taxRepo.getNIThresholds(taxYear, client);
     const slThresholds  = await taxRepo.getStudentLoanThresholds(taxYear, client);
-    const pensionConf   = await pensionRepo.getPensionConfig(run.period_end, client);
+    const pensionConf   = await pensionRepo.getPensionConfig(payDate, client);
     const taxBandsCache = new Map();
     const niRatesCache  = new Map();
 
     // Pre-load tax codes, YTD, pension enrolments, and sick periods for all active staff (avoid N+1 per-staff queries)
     const activeStaffIds = activeStaff.map(s => s.id);
-    const taxCodeMap = await taxRepo.getTaxCodeBatch(homeId, activeStaffIds, run.period_end, client);
+    const taxCodeMap = await taxRepo.getTaxCodeBatch(homeId, activeStaffIds, payDate, client);
     const ytdMap = await taxRepo.getYTDBatch(homeId, activeStaffIds, taxYear, client);
     const enrolmentMap = await pensionRepo.getEnrolmentBatch(homeId, activeStaffIds, client);
     const sickPeriodsMap = await sspRepo.getActiveSickPeriodsBatch(homeId, activeStaffIds, run.period_start, run.period_end, client);
@@ -465,10 +487,11 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
 
       // Tax bands and NI rates: cached by country/category (same for most staff)
       const country = parsedCode.country;
-      if (!taxBandsCache.has(country)) {
-        taxBandsCache.set(country, await taxRepo.getTaxBands(country, taxYear, client));
+      const taxBandCountry = country === 'wales' ? 'england_wales' : country;
+      if (!taxBandsCache.has(taxBandCountry)) {
+        taxBandsCache.set(taxBandCountry, await taxRepo.getTaxBands(taxBandCountry, taxYear, client));
       }
-      const taxBands = taxBandsCache.get(country);
+      const taxBands = taxBandsCache.get(taxBandCountry);
 
       const niCat = taxCodeRow?.ni_category || 'A';
       if (!niRatesCache.has(niCat)) {
@@ -487,21 +510,21 @@ export async function calculateRun(runId, homeId, homeSlug, username) {
       // Pension contributions — calculated FIRST (UK Net Pay Arrangement:
       // employee pension is deducted before PAYE, reducing taxable income)
       let enrolment = enrolmentMap.get(s.id) || null;
+      const assessmentDate = getRunPayDate(run);
       const postponementActive = enrolment?.status === 'postponed'
         && enrolment.postponed_until
-        && enrolment.postponed_until >= run.period_end;
+        && enrolment.postponed_until >= assessmentDate;
       const reassessmentDue = enrolment?.status === 'opted_out'
         && enrolment?.reassessment_date
-        && enrolment.reassessment_date <= run.period_end;
+        && enrolment.reassessment_date <= assessmentDate;
       if (pensionConf && (!enrolment || enrolment.status === 'pending_assessment' || (enrolment.status === 'postponed' && !postponementActive) || reassessmentDue)) {
-        const assessmentDate = getAutoEnrolmentDate(s, run, reassessmentDue ? enrolment : null);
-        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, assessmentDate);
+        const autoEnrolmentDate = getAutoEnrolmentDate(s, run, reassessmentDue ? enrolment : null);
+        const eligibility = assessPensionEligibility(s, grossForTax, run.pay_frequency, pensionConf, autoEnrolmentDate);
         if (eligibility.assumedMissingDob) {
           missingDobPensionStaff.add(`${s.id} (${s.name})`);
           notesParts.push('WARNING: Missing DOB — pension assessment assumed age 22+ based on earnings');
         }
         if (eligibility.shouldAutoEnrol) {
-          const autoEnrolmentDate = assessmentDate;
           await pensionRepo.upsertEnrolment(homeId, {
             staff_id: s.id, status: 'eligible_enrolled',
             enrolled_date: autoEnrolmentDate,
@@ -659,8 +682,9 @@ export async function approveRun(runId, homeId, homeSlug, username) {
       );
     }
 
-    const taxYear  = getTaxYear(new Date(run.period_end));
-    const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
+    const payDate  = getRunPayDate(run);
+    const taxYear  = getTaxYear(new Date(payDate));
+    const taxMonth = getHMRCTaxMonth(new Date(payDate));
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
     // Write YTD increments for all staff in a single batch INSERT ... ON CONFLICT
@@ -752,8 +776,9 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
         throw e;
       }
 
-    const taxYear  = getTaxYear(new Date(run.period_end));
-    const taxMonth = getHMRCTaxMonth(new Date(run.period_end));
+    const payDate  = getRunPayDate(run);
+    const taxYear  = getTaxYear(new Date(payDate));
+    const taxMonth = getHMRCTaxMonth(new Date(payDate));
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
 
     if (run.ytd_applied && lines.length > 0) {
@@ -794,8 +819,8 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
       // Reverse SSP weeks that were incremented during approval — prevents
       // premature 28-week cap triggers when a run is voided and recalculated.
       const sspDaysByStaff = await payrollRunRepo.getSSPDaysByRun(runId, homeId, client);
-      for (const { staff_id, ssp_days } of sspDaysByStaff) {
-        if (ssp_days <= 0) continue;
+      for (const { staff_id, ssp_days, waiting_days_used } of sspDaysByStaff) {
+        if (ssp_days <= 0 && waiting_days_used <= 0) continue;
         // FOR UPDATE locks the row to prevent a concurrent approval from reading
         // the same ssp_weeks_paid value before this void decrements it.
         const sickPeriod = await sspRepo.getActiveSickPeriod(
@@ -805,6 +830,7 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
         const qualDaysPerWeek = sickPeriod.qualifying_days_per_week || 5;
         const weeksToSubtract = round2(ssp_days / qualDaysPerWeek);
         await sspRepo.updateSickPeriod(sickPeriod.id, homeId, {
+          waiting_days_served: Math.max(0, (sickPeriod.waiting_days_served || 0) - (waiting_days_used || 0)),
           ssp_weeks_paid: Math.max(0, round2((sickPeriod.ssp_weeks_paid || 0) - weeksToSubtract)),
         }, client);
       }
@@ -816,6 +842,9 @@ export async function voidApprovedRun(runId, homeId, homeSlug, username, version
       if (updated === null) {
         throw new ValidationError('Record was modified by another user. Please refresh and try again.');
       }
+
+      // Restore editable approved timesheets after the payroll lock is removed.
+      await timesheetRepo.unlockByPeriod(homeId, run.period_start, run.period_end, client);
 
       return updated;
     });
@@ -844,12 +873,11 @@ export async function exportRunCSV(runId, homeId, homeSlug, username, format) {
       }
 
     const lines    = await payrollRunRepo.findLinesByRun(runId, homeId, client);
-    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
-    const allStaff = allStaffResult.rows;
+    const allStaff = await loadAllStaffByHome(homeId, client);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
     // Load YTD for each staff member for the CSV
-    const taxYear = getTaxYear(new Date(run.period_end));
+    const taxYear = getTaxYear(new Date(getRunPayDate(run)));
     const staffIds = [...new Set(lines.map(l => l.staff_id))];
     const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
 
@@ -887,10 +915,9 @@ export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, fo
       }
 
     const lines = await payrollRunRepo.findLinesByRun(runId, homeId, client);
-    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
-    const allStaff = allStaffResult.rows;
+    const allStaff = await loadAllStaffByHome(homeId, client);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
-    const taxYear = getTaxYear(new Date(run.period_end));
+    const taxYear = getTaxYear(new Date(getRunPayDate(run)));
     const staffIds = [...new Set(lines.map(l => l.staff_id))];
     const ytdMap = await taxRepo.getYTDBatch(homeId, staffIds, taxYear, client);
     const csv = format === 'sage'
@@ -899,10 +926,10 @@ export async function exportRunCSVReadOnly(runId, homeId, homeSlug, username, fo
     const filename = `payroll_${homeSlug}_${run.period_start}_to_${run.period_end}_${format}.csv`;
       return { csv, filename };
     });
-    await logPayrollAction('payroll_export', homeSlug, username, `Run ID ${runId} format=${format}`);
+    await logPayrollAction('payroll_export_download', homeSlug, username, `Run ID ${runId} format=${format}`);
     return result;
   } catch (err) {
-    await logPayrollFailure('payroll_export', homeSlug, username, runId, err);
+    await logPayrollFailure('payroll_export_download', homeSlug, username, runId, err);
     throw err;
   }
 }
@@ -979,8 +1006,7 @@ export async function assemblePayslipData(runId, homeId, staffId) {
     const lines = await payrollRunRepo.findLinesByRun(runId, homeId, client);
     const shifts = await payrollRunRepo.findShiftsByRun(runId, homeId, client);
 
-    const allStaffResult = await staffRepo.findByHome(homeId, {}, client);
-    const allStaff = allStaffResult.rows;
+    const allStaff = await loadAllStaffByHome(homeId, client);
     const staffMap = new Map(allStaff.map(s => [s.id, s]));
 
     // Group shifts by staff_id
@@ -996,7 +1022,7 @@ export async function assemblePayslipData(runId, homeId, staffId) {
 
     // Fetch YTD for approved runs (null for draft/calculated — payslip shows "Estimated")
     const isApproved = ['approved', 'exported', 'locked'].includes(run.status);
-    const taxYear = getTaxYear(new Date(run.period_end));
+    const taxYear = getTaxYear(new Date(getRunPayDate(run)));
     let ytdMap = new Map();
     if (isApproved) {
       const staffIds = [...new Set(targetLines.map(l => l.staff_id))];

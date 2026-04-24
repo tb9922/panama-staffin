@@ -45,6 +45,7 @@ import { getActualShift, getLeaveYear, getShiftHours, isWorkingShift } from '../
 
 const router = Router();
 const SENSITIVE_DOWNLOAD_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
+const OWN_DATA_PAYROLL_STATUSES = ['approved', 'exported', 'locked'];
 
 /**
  * For own-data roles (staff_member): require a linked staff_id.
@@ -70,6 +71,82 @@ function blockOwnDataRole(req, res, moduleId) {
     return true;
   }
   return false;
+}
+
+function shapeOwnPayrollRunSummary(run) {
+  if (!run) return run;
+  return {
+    id: run.id,
+    period_start: run.period_start,
+    period_end: run.period_end,
+    pay_date: run.pay_date,
+    pay_frequency: run.pay_frequency,
+    status: run.status,
+    exported_at: run.exported_at || null,
+  };
+}
+
+function shapeOwnPayrollRunDetail(run) {
+  if (!run) return run;
+  return {
+    id: run.id,
+    period_start: run.period_start,
+    period_end: run.period_end,
+    pay_date: run.pay_date,
+    pay_frequency: run.pay_frequency,
+    status: run.status,
+    exported_at: run.exported_at || null,
+  };
+}
+
+function shapeOwnPayslipData(payslip) {
+  if (!payslip) return payslip;
+  return {
+    ...payslip,
+    run: shapeOwnPayrollRunDetail(payslip.run),
+    home: payslip.home ? { name: payslip.home.name } : null,
+  };
+}
+
+async function assertPayrollStaffExists(homeId, staffId, client) {
+  const staff = await staffRepo.findById(homeId, staffId, client);
+  if (!staff) throw new NotFoundError('Staff member not found');
+  return staff;
+}
+
+function dayDiffIso(laterIso, earlierIso) {
+  const later = Date.parse(`${laterIso}T00:00:00Z`);
+  const earlier = Date.parse(`${earlierIso}T00:00:00Z`);
+  return Math.floor((later - earlier) / 86400000);
+}
+
+async function resolveLinkedSickPeriod(homeId, staffId, startDate, linkedToPeriodId, client) {
+  if (!linkedToPeriodId) {
+    return sspRepo.findRecentClosedPeriod(homeId, staffId, startDate, 56, client);
+  }
+
+  const linked = await sspRepo.findSickPeriodById(linkedToPeriodId, homeId, client);
+  if (!linked) throw new ValidationError('Linked sick period not found');
+  if (linked.staff_id !== staffId) {
+    throw new ValidationError('Linked sick period must belong to the same staff member');
+  }
+  if (!linked.end_date) {
+    throw new ValidationError('Linked sick period must be closed before it can be linked');
+  }
+  if (linked.end_date >= startDate) {
+    throw new ValidationError('Linked sick period must end before the new period starts');
+  }
+  if (dayDiffIso(startDate, linked.end_date) > 56) {
+    throw new ValidationError('Linked sick period must have ended within the last 56 days');
+  }
+  return linked;
+}
+
+async function assertNoSickPeriodOverlap(homeId, staffId, startDate, endDate, excludeId, client) {
+  const overlaps = await sspRepo.findOverlappingSickPeriods(homeId, staffId, startDate, endDate, excludeId, client);
+  if (overlaps.length > 0) {
+    throw new ValidationError('Sick period overlaps an existing period for this staff member');
+  }
 }
 
 // ── Zod Schemas ───────────────────────────────────────────────────────────────
@@ -111,6 +188,7 @@ const timesheetBodySchema = z.object({
 const runBodySchema = z.object({
   period_start:   dateSchema,
   period_end:     dateSchema,
+  pay_date:       dateSchema.optional(),
   pay_frequency:  z.enum(['weekly', 'fortnightly', 'monthly']).default('monthly'),
   notes:          z.string().max(500).nullable().optional(),
 });
@@ -501,13 +579,15 @@ router.get('/runs', readRateLimiter, requireAuth, requireHomeAccess, requireModu
     const rawOffset = Number.parseInt(req.query.offset, 10);
     const limit = Math.min(500, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 100));
     const offset = Math.max(0, Number.isFinite(rawOffset) ? rawOffset : 0);
-    const { rows, total } = await payrollRunRepo.findByHome(req.home.id, { limit, offset });
-    // staff_member: strip aggregate totals from run list
+    const ownData = isOwnDataOnly(req.homeRole, 'payroll');
+    const { rows, total } = await payrollRunRepo.findByHome(req.home.id, {
+      limit,
+      offset,
+      staffId: ownData ? req.staffId : null,
+      statuses: ownData ? OWN_DATA_PAYROLL_STATUSES : null,
+    });
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
-      for (const r of rows) {
-        delete r.total_gross; delete r.total_enhancements;
-        delete r.total_sleep_ins; delete r.staff_count;
-      }
+      return res.json({ rows: rows.map(shapeOwnPayrollRunSummary), total });
     }
     res.json({ rows, total });
   } catch (err) { next(err); }
@@ -520,6 +600,9 @@ router.post('/runs', writeRateLimiter, requireAuth, requireHomeAccess, requireMo
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     if (parsed.data.period_start >= parsed.data.period_end) {
       return res.status(400).json({ error: 'period_start must be before period_end' });
+    }
+    if (parsed.data.pay_date && parsed.data.pay_date < parsed.data.period_end) {
+      return res.status(400).json({ error: 'pay_date cannot be before period_end' });
     }
     // Wrap check+create in a transaction to prevent TOCTOU: without this, two
     // concurrent requests can both pass the overlap check and create duplicate runs.
@@ -547,9 +630,12 @@ router.get('/runs/:runId', readRateLimiter, requireAuth, requireHomeAccess, requ
     let lines = await payrollRunRepo.findLinesByRun(runIdP.data, req.home.id);
     // staff_member: own payslip only, no aggregate totals
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
+      if (!OWN_DATA_PAYROLL_STATUSES.includes(run.status)) {
+        return res.status(404).json({ error: 'Run not found' });
+      }
       lines = lines.filter(l => l.staff_id === req.staffId);
-      const { total_gross: _tg, total_enhancements: _te, total_sleep_ins: _ts, staff_count: _sc, ...safeRun } = run;
-      return res.json({ run: safeRun, lines });
+      if (lines.length === 0) return res.status(404).json({ error: 'Run not found' });
+      return res.json({ run: shapeOwnPayrollRunDetail(run), lines });
     }
     res.json({ run, lines });
   } catch (err) { next(err); }
@@ -673,6 +759,10 @@ router.get('/runs/:runId/payslips/:staffId', readRateLimiter, requireAuth, requi
     if (isOwnDataOnly(req.homeRole, 'payroll')) {
       if (!req.staffId) return res.status(403).json({ error: 'No staff link configured' });
       if (staffId !== req.staffId) return res.status(403).json({ error: 'Access denied — you can only view your own payslip' });
+      const run = await payrollRunRepo.findById(runIdP.data, req.home.id);
+      if (!run || !OWN_DATA_PAYROLL_STATUSES.includes(run.status)) {
+        return res.status(404).json({ error: 'No payslip data found for this staff member' });
+      }
     }
     const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffId);
     if (!payslips.length) return res.status(404).json({ error: 'No payslip data found for this staff member' });
@@ -691,8 +781,19 @@ router.get('/runs/:runId/payslips', readRateLimiter, requireAuth, requireHomeAcc
     if (!runIdP.success) return res.status(400).json({ error: 'Invalid run ID' });
     if (requireStaffLink(req, res, 'payroll')) return;
     // staff_member: only own payslip
-    const staffFilter = isOwnDataOnly(req.homeRole, 'payroll') ? req.staffId : null;
+    const ownData = isOwnDataOnly(req.homeRole, 'payroll');
+    if (ownData) {
+      const run = await payrollRunRepo.findById(runIdP.data, req.home.id);
+      if (!run || !OWN_DATA_PAYROLL_STATUSES.includes(run.status)) {
+        return res.status(404).json({ error: 'No payslip data found for this staff member' });
+      }
+    }
+    const staffFilter = ownData ? req.staffId : null;
     const payslips = await payrollService.assemblePayslipData(runIdP.data, req.home.id, staffFilter);
+    if (ownData) {
+      if (payslips.length === 0) return res.status(404).json({ error: 'No payslip data found for this staff member' });
+      return res.json(payslips.map(shapeOwnPayslipData));
+    }
     res.json(payslips);
   } catch (err) { next(err); }
 });
@@ -792,7 +893,7 @@ const taxCodeBodySchema = z.object({
   previous_pay:      z.number().nonnegative().optional().default(0),
   previous_tax:      z.number().nonnegative().optional().default(0),
   student_loan_plan: z.string().max(20).nullable().optional(),
-  source:            z.enum(['manual', 'p45', 'hmrc_notice']).optional().default('manual'),
+  source:            z.enum(['manual', 'p45', 'starter', 'hmrc', 'hmrc_notice']).optional().default('manual'),
   notes:             z.string().max(1000).nullable().optional(),
 });
 
@@ -813,8 +914,13 @@ router.post('/tax-codes', writeRateLimiter, requireAuth, requireHomeAccess, requ
   try {
     const parsed = taxCodeBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await taxRepo.upsertTaxCode(req.home.id, parsed.data);
-    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'tax_code', staff_id: parsed.data.staff_id });
+    await assertPayrollStaffExists(req.home.id, parsed.data.staff_id);
+    const payload = {
+      ...parsed.data,
+      source: parsed.data.source === 'hmrc_notice' ? 'hmrc' : parsed.data.source,
+    };
+    const result = await taxRepo.upsertTaxCode(req.home.id, payload);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'tax_code', staff_id: payload.staff_id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -851,6 +957,14 @@ const enrolmentBodySchema = z.object({
   contribution_override_employee: z.number().min(0).max(1).nullable().optional(),
   contribution_override_employer: z.number().min(0).max(1).nullable().optional(),
   notes:             z.string().max(1000).nullable().optional(),
+}).superRefine((data, ctx) => {
+  if (data.status === 'postponed' && !data.postponed_until) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['postponed_until'],
+      message: 'postponed_until is required when status is postponed',
+    });
+  }
 });
 
 // GET /api/payroll/pensions?home=X
@@ -870,8 +984,14 @@ router.post('/pensions', writeRateLimiter, requireAuth, requireHomeAccess, requi
   try {
     const parsed = enrolmentBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    const result = await pensionRepo.upsertEnrolment(req.home.id, parsed.data);
-    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'pension_enrolment', staff_id: parsed.data.staff_id });
+    await assertPayrollStaffExists(req.home.id, parsed.data.staff_id);
+    const payload = {
+      ...parsed.data,
+      postponed_until: parsed.data.status === 'postponed' ? parsed.data.postponed_until || null : null,
+      reassessment_date: parsed.data.status === 'opted_out' ? parsed.data.reassessment_date || null : null,
+    };
+    const result = await pensionRepo.upsertEnrolment(req.home.id, payload);
+    await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'pension_enrolment', staff_id: payload.staff_id });
     res.status(201).json(result);
   } catch (err) { next(err); }
 });
@@ -937,17 +1057,32 @@ router.post('/sick-periods', writeRateLimiter, requireAuth, requireHomeAccess, r
   try {
     const parsed = sickPeriodBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-    // Auto-link if previous sick period ended within 56 days (SSP Regs: no new waiting period within 8 weeks)
-    if (!parsed.data.linked_to_period_id) {
-      const previous = await sspRepo.findRecentClosedPeriod(
-        req.home.id, parsed.data.staff_id, parsed.data.start_date, 56,
-      );
-      if (previous) {
-        parsed.data.linked_to_period_id = previous.id;
-        parsed.data.waiting_days_served = 3;
+    const result = await withTransaction(async (client) => {
+      await assertPayrollStaffExists(req.home.id, parsed.data.staff_id, client);
+      if (parsed.data.end_date && parsed.data.end_date < parsed.data.start_date) {
+        throw new ValidationError('end_date cannot be before start_date');
       }
-    }
-    const result = await sspRepo.createSickPeriod(req.home.id, parsed.data);
+      const linked = await resolveLinkedSickPeriod(
+        req.home.id,
+        parsed.data.staff_id,
+        parsed.data.start_date,
+        parsed.data.linked_to_period_id || null,
+        client,
+      );
+      await assertNoSickPeriodOverlap(
+        req.home.id,
+        parsed.data.staff_id,
+        parsed.data.start_date,
+        parsed.data.end_date || null,
+        null,
+        client,
+      );
+      return sspRepo.createSickPeriod(req.home.id, {
+        ...parsed.data,
+        linked_to_period_id: linked?.id || null,
+        waiting_days_served: linked ? (linked.waiting_days_served || 0) : (parsed.data.waiting_days_served ?? 0),
+      }, client);
+    });
     await auditService.log('payroll_create', req.home.slug, req.user.username, { id: result.id, entity: 'sick_period', staff_id: parsed.data.staff_id });
     res.status(201).json(result);
   } catch (err) { next(err); }
@@ -961,13 +1096,34 @@ router.put('/sick-periods/:id', writeRateLimiter, requireAuth, requireHomeAccess
     const parsed = sickPeriodUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
     const { _version, ...changes } = parsed.data;
-    const updated = await sspRepo.updateSickPeriod(idP.data, req.home.id, changes, undefined, _version ?? null);
-    if (!updated) {
-      const existing = await sspRepo.findSickPeriodById(idP.data, req.home.id);
-      if (!existing) return res.status(404).json({ error: 'Sick period not found' });
-      if (_version != null) return res.status(409).json({ error: 'Sick period was updated by someone else. Refresh and try again.' });
-      return res.status(404).json({ error: 'Sick period not found' });
+    const result = await withTransaction(async (client) => {
+      const existing = await sspRepo.findSickPeriodById(idP.data, req.home.id, client);
+      if (!existing) return { kind: 'missing' };
+      const nextEndDate = Object.prototype.hasOwnProperty.call(changes, 'end_date')
+        ? changes.end_date
+        : existing.end_date;
+      if (nextEndDate && nextEndDate < existing.start_date) {
+        throw new ValidationError('end_date cannot be before start_date');
+      }
+      if (Object.prototype.hasOwnProperty.call(changes, 'end_date')) {
+        await assertNoSickPeriodOverlap(
+          req.home.id,
+          existing.staff_id,
+          existing.start_date,
+          nextEndDate || null,
+          idP.data,
+          client,
+        );
+      }
+      const updated = await sspRepo.updateSickPeriod(idP.data, req.home.id, changes, client, _version ?? null);
+      if (!updated) return { kind: _version != null ? 'stale' : 'missing' };
+      return { kind: 'updated', updated };
+    });
+    if (result.kind === 'missing') return res.status(404).json({ error: 'Sick period not found' });
+    if (result.kind === 'stale') {
+      return res.status(409).json({ error: 'Sick period was updated by someone else. Refresh and try again.' });
     }
+    const updated = result.updated;
     await auditService.log('payroll_update', req.home.slug, req.user.username, { id: idP.data, entity: 'sick_period' });
     res.json(updated);
   } catch (err) { next(err); }

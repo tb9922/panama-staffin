@@ -33,6 +33,7 @@ const MOCK_RUNS = [
     id: 'run-1',
     period_start: '2026-02-01',
     period_end: '2026-02-28',
+    pay_date: '2026-02-28',
     pay_frequency: 'monthly',
     status: 'approved',
     staff_count: 12,
@@ -44,6 +45,7 @@ const MOCK_RUNS = [
     id: 'run-2',
     period_start: '2026-01-01',
     period_end: '2026-01-31',
+    pay_date: '2026-01-31',
     pay_frequency: 'monthly',
     status: 'draft',
     staff_count: 11,
@@ -120,6 +122,64 @@ describe('PayrollDashboard', () => {
     expect(screen.getByText('New Payroll Run')).toBeInTheDocument();
     expect(screen.getByText('Pay Frequency')).toBeInTheDocument();
     expect(screen.getByText('Period Start')).toBeInTheDocument();
+    expect(screen.getByText('Payment Date')).toBeInTheDocument();
+  });
+
+  it('loads additional payroll pages so older runs still appear in the table', async () => {
+    api.getPayrollRuns
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 500 }, (_, index) => ({
+          id: `run-${index}`,
+          period_start: `2099-01-${String((index % 28) + 1).padStart(2, '0')}`,
+          period_end: `2099-01-${String((index % 28) + 1).padStart(2, '0')}`,
+          pay_date: `2099-01-${String((index % 28) + 1).padStart(2, '0')}`,
+          pay_frequency: 'weekly',
+          status: 'approved',
+          staff_count: 5,
+          total_gross: '1000.00',
+          total_enhancements: '0.00',
+          exported_at: null,
+        })),
+        total: 501,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'run-oldest',
+            period_start: '2025-12-01',
+            period_end: '2025-12-31',
+            pay_date: '2026-01-05',
+            pay_frequency: 'monthly',
+            status: 'draft',
+            staff_count: 3,
+            total_gross: null,
+            total_enhancements: null,
+            exported_at: null,
+          },
+        ],
+        total: 501,
+      });
+
+    renderWithProviders(<PayrollDashboard />);
+    await waitFor(() => expect(screen.getByText('2025-12-01')).toBeInTheDocument());
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(1, 'test-home', { limit: 500, offset: 0 });
+    expect(api.getPayrollRuns).toHaveBeenNthCalledWith(2, 'test-home', { limit: 500, offset: 500 });
+  });
+
+  it('carries forward the previous run pay lag when suggesting the next pay date', async () => {
+    const user = userEvent.setup();
+    api.getPayrollRuns.mockResolvedValue([
+      {
+        ...MOCK_RUNS[0],
+        period_end: '2026-02-28',
+        pay_date: '2026-03-05',
+      },
+    ]);
+
+    renderWithProviders(<PayrollDashboard />);
+    await waitFor(() => expect(screen.getByText('Approved')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /new payroll run/i }));
+    expect(screen.getByDisplayValue('2026-04-05')).toBeInTheDocument();
   });
 
   it('shows error message on API failure', async () => {

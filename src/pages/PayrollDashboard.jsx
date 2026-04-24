@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '../hooks/useConfirm.jsx';
 import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
 import Modal from '../components/Modal.jsx';
-import { getPayrollRuns, createPayrollRun, voidPayrollRun, getCurrentHome } from '../lib/api.js';
+import { createPayrollRun, voidPayrollRun, getCurrentHome } from '../lib/api.js';
 import { suggestNextPeriod } from '../lib/payroll.js';
+import { loadAllPayrollRuns, suggestNextPayrollPayDate } from '../lib/payrollRuns.js';
 import { useData } from '../contexts/DataContext.jsx';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import LoadingState from '../components/LoadingState.jsx';
@@ -57,7 +58,7 @@ export default function PayrollDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ period_start: '', period_end: '', pay_frequency: 'monthly', notes: '' });
+  const [form, setForm] = useState({ period_start: '', period_end: '', pay_date: '', pay_frequency: 'monthly', notes: '' });
   const [creating, setCreating] = useState(false);
   const [voidingRunId, setVoidingRunId] = useState(null);
   useDirtyGuard(showCreate);
@@ -67,8 +68,7 @@ export default function PayrollDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const res = await getPayrollRuns(homeSlug);
-      const nextRuns = Array.isArray(res) ? res : (res.rows || []);
+      const nextRuns = await loadAllPayrollRuns(homeSlug);
       setRuns(nextRuns);
       const lastRun = nextRuns.length > 0 ? nextRuns[0] : null;
       const next = suggestNextPeriod(lastRun, lastRun?.pay_frequency || 'monthly');
@@ -76,6 +76,9 @@ export default function PayrollDashboard() {
         ...current,
         period_start: next.start,
         period_end: next.end,
+        pay_date: !current.pay_date || current.pay_date === current.period_end
+          ? suggestNextPayrollPayDate(lastRun, next.end)
+          : current.pay_date,
         pay_frequency: lastRun?.pay_frequency || 'monthly',
       }));
     } catch (e) {
@@ -92,11 +95,19 @@ export default function PayrollDashboard() {
   function handleFreqChange(freq) {
     const lastRun = runs.length > 0 ? runs[0] : null;
     const next = suggestNextPeriod(lastRun, freq);
-    setForm(current => ({ ...current, pay_frequency: freq, period_start: next.start, period_end: next.end }));
+    setForm(current => ({
+      ...current,
+      pay_frequency: freq,
+      period_start: next.start,
+      period_end: next.end,
+      pay_date: !current.pay_date || current.pay_date === current.period_end
+        ? suggestNextPayrollPayDate(lastRun, next.end)
+        : current.pay_date,
+    }));
   }
 
   async function handleCreate() {
-    if (!form.period_start || !form.period_end) return;
+    if (!form.period_start || !form.period_end || !form.pay_date) return;
     setCreating(true);
     try {
       const run = await createPayrollRun(homeSlug, form);
@@ -337,9 +348,27 @@ export default function PayrollDashboard() {
                 type="date"
                 className={INPUT.base}
                 value={form.period_end}
-                onChange={e => setForm(current => ({ ...current, period_end: e.target.value }))}
+                onChange={e => {
+                  const nextEnd = e.target.value;
+                  setForm(current => ({
+                    ...current,
+                    period_end: nextEnd,
+                    pay_date: !current.pay_date || current.pay_date === current.period_end
+                      ? suggestNextPayrollPayDate(runs[0] || null, nextEnd)
+                      : current.pay_date,
+                  }));
+                }}
               />
             </div>
+          </div>
+          <div>
+            <label className={INPUT.label}>Payment Date</label>
+            <input
+              type="date"
+              className={INPUT.base}
+              value={form.pay_date}
+              onChange={e => setForm(current => ({ ...current, pay_date: e.target.value }))}
+            />
           </div>
           <div>
             <label className={INPUT.label}>Notes (optional)</label>

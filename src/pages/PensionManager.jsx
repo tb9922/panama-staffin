@@ -13,21 +13,21 @@ import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 
 const STATUS_BADGE = {
-  eligible_enrolled:       BADGE.green,
-  opt_in_enrolled:         BADGE.green,
-  pending_assessment:      BADGE.amber,
-  postponed:               BADGE.amber,
-  opted_out:               BADGE.gray,
-  entitled_not_enrolled:   BADGE.gray,
+  eligible_enrolled: BADGE.green,
+  opt_in_enrolled: BADGE.green,
+  pending_assessment: BADGE.amber,
+  postponed: BADGE.amber,
+  opted_out: BADGE.gray,
+  entitled_not_enrolled: BADGE.gray,
 };
 
 const STATUS_LABEL = {
-  eligible_enrolled:       'Auto-enrolled',
-  opt_in_enrolled:         'Opted in',
-  pending_assessment:      'Pending assessment',
-  postponed:               'Postponed',
-  opted_out:               'Opted out',
-  entitled_not_enrolled:   'Entitled (not enrolled)',
+  eligible_enrolled: 'Auto-enrolled',
+  opt_in_enrolled: 'Opted in',
+  pending_assessment: 'Pending assessment',
+  postponed: 'Postponed',
+  opted_out: 'Opted out',
+  entitled_not_enrolled: 'Entitled (not enrolled)',
 };
 
 const STATUSES = [
@@ -40,19 +40,24 @@ const STATUSES = [
 ];
 
 const EMPTY_FORM = {
-  staff_id: '', status: 'pending_assessment',
-  enrolled_date: '', opted_out_date: '', reassessment_date: '',
-  contribution_override_employee: '', contribution_override_employer: '',
+  staff_id: '',
+  status: 'pending_assessment',
+  enrolled_date: '',
+  opted_out_date: '',
+  postponed_until: '',
+  reassessment_date: '',
+  contribution_override_employee: '',
+  contribution_override_employer: '',
   notes: '',
 };
 
 function fmt(n) {
-  if (n == null) return '—';
+  if (n == null) return '-';
   return `£${parseFloat(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtPct(n) {
-  if (n == null) return '—';
+  if (n == null) return '-';
   return `${(parseFloat(n) * 100).toFixed(1)}%`;
 }
 
@@ -63,29 +68,29 @@ export default function PensionManager() {
   const { notice, showNotice, clearNotice } = useTransientNotice();
   const { showToast } = useToast();
 
-  const [schedData, setSchedData]   = useState(null);
+  const [schedData, setSchedData] = useState(null);
   const [enrolments, setEnrolments] = useState([]);
-  const [config, setConfig]         = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
-  const [saving, setSaving]         = useState(false);
-  const [showModal, setShowModal]   = useState(false);
-  const [form, setForm]             = useState(EMPTY_FORM);
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [editStaffId, setEditStaffId] = useState(null);
   useDirtyGuard(!!showModal);
 
   useEffect(() => {
     if (!homeSlug) return;
-    getSchedulingData(homeSlug).then(setSchedData).catch(e => setError(e.message || 'Failed to load'));
+    getSchedulingData(homeSlug).then(setSchedData).catch((e) => setError(e.message || 'Failed to load'));
   }, [homeSlug]);
 
   const staffMap = useMemo(() => {
     const map = {};
-    (schedData?.staff || []).forEach(s => { map[s.id] = s; });
+    (schedData?.staff || []).forEach((s) => { map[s.id] = s; });
     return map;
   }, [schedData]);
 
-  const activeStaff = useMemo(() => (schedData?.staff || []).filter(s => s.active !== false), [schedData]);
+  const activeStaff = useMemo(() => (schedData?.staff || []).filter((s) => s.active !== false), [schedData]);
 
   const load = useCallback(async () => {
     if (!homeSlug) return;
@@ -105,17 +110,14 @@ export default function PensionManager() {
     }
   }, [homeSlug]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const enrolled = enrolments.filter(e =>
-    e.status === 'eligible_enrolled' || e.status === 'opt_in_enrolled'
-  );
-  const pending  = enrolments.filter(e => e.status === 'pending_assessment');
-  const optedOut = enrolments.filter(e => e.status === 'opted_out');
+  const enrolled = enrolments.filter((e) => e.status === 'eligible_enrolled' || e.status === 'opt_in_enrolled');
+  const pending = enrolments.filter((e) => e.status === 'pending_assessment');
+  const optedOut = enrolments.filter((e) => e.status === 'opted_out');
 
-  // Staff with no enrolment record
-  const enrolledIds = new Set(enrolments.map(e => e.staff_id));
-  const unrecorded  = activeStaff.filter(s => !enrolledIds.has(s.id));
+  const enrolmentIds = new Set(enrolments.map((e) => e.staff_id));
+  const unrecorded = activeStaff.filter((s) => !enrolmentIds.has(s.id));
 
   function openNew(preStaffId = '') {
     setEditStaffId(null);
@@ -123,40 +125,51 @@ export default function PensionManager() {
     setShowModal(true);
   }
 
-  function openEdit(enr) {
-    setEditStaffId(enr.staff_id);
+  function openEdit(enrolment) {
+    setEditStaffId(enrolment.staff_id);
     setForm({
-      staff_id:                       enr.staff_id,
-      status:                         enr.status,
-      enrolled_date:                 enr.enrolled_date || '',
-      opted_out_date:                enr.opted_out_date || '',
-      reassessment_date:             enr.reassessment_date || '',
-      contribution_override_employee: enr.contribution_override_employee != null
-        ? String(enr.contribution_override_employee * 100) : '',
-      contribution_override_employer: enr.contribution_override_employer != null
-        ? String(enr.contribution_override_employer * 100) : '',
-      notes:                          enr.notes || '',
+      staff_id: enrolment.staff_id,
+      status: enrolment.status,
+      enrolled_date: enrolment.enrolled_date || '',
+      opted_out_date: enrolment.opted_out_date || '',
+      postponed_until: enrolment.postponed_until || '',
+      reassessment_date: enrolment.reassessment_date || '',
+      contribution_override_employee: enrolment.contribution_override_employee != null
+        ? String(enrolment.contribution_override_employee * 100)
+        : '',
+      contribution_override_employer: enrolment.contribution_override_employer != null
+        ? String(enrolment.contribution_override_employer * 100)
+        : '',
+      notes: enrolment.notes || '',
     });
     setShowModal(true);
   }
 
-  function field(k, v) {
-    setForm(f => ({ ...f, [k]: v }));
+  function field(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function handleSave() {
     if (!form.staff_id || !form.status) return;
+    if (form.status === 'postponed' && !form.postponed_until) {
+      setError('Postponed status requires a postponement end date.');
+      return;
+    }
+
     setSaving(true);
     try {
       await upsertPensionEnrolment(homeSlug, {
         ...form,
         contribution_override_employee: form.contribution_override_employee !== ''
-          ? parseFloat(form.contribution_override_employee) / 100 : null,
+          ? parseFloat(form.contribution_override_employee) / 100
+          : null,
         contribution_override_employer: form.contribution_override_employer !== ''
-          ? parseFloat(form.contribution_override_employer) / 100 : null,
-        enrolled_date:     form.enrolled_date || null,
-        opted_out_date:    form.opted_out_date || null,
-        reassessment_date: form.reassessment_date || null,
+          ? parseFloat(form.contribution_override_employer) / 100
+          : null,
+        enrolled_date: ['eligible_enrolled', 'opt_in_enrolled'].includes(form.status) ? (form.enrolled_date || null) : null,
+        opted_out_date: form.status === 'opted_out' ? (form.opted_out_date || null) : null,
+        postponed_until: form.status === 'postponed' ? (form.postponed_until || null) : null,
+        reassessment_date: form.status === 'opted_out' ? (form.reassessment_date || null) : null,
       });
       showNotice(editStaffId ? 'Pension enrolment updated.' : 'Pension enrolment recorded.');
       showToast({
@@ -181,36 +194,35 @@ export default function PensionManager() {
           {notice.content}
         </InlineNotice>
       )}
-      {/* Header */}
+
       <div className={PAGE.header}>
         <div>
           <h1 className={PAGE.title}>Pension Auto-Enrolment</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage pension enrolment status, track opt-outs, and review upcoming re-enrolment dates.
+            Manage pension enrolment status, track opt-outs, and review upcoming pension dates.
           </p>
         </div>
         {canEdit && (
-          <button className={BTN.primary} onClick={() => openNew()}>Add / Update Enrolment</button>
+          <button className={BTN.primary} onClick={() => openNew()}>
+            Add / Update Enrolment
+          </button>
         )}
       </div>
 
-      {/* Error */}
       {error && (
         <ErrorState title="Pension action needs attention" message={error} onRetry={() => void load()} className="mb-4" />
       )}
 
-      {/* Unrecorded alert */}
       {unrecorded.length > 0 && (
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <strong>{unrecorded.length} staff member{unrecorded.length !== 1 ? 's' : ''} have no pension enrolment record:</strong>{' '}
-          {unrecorded.map(s => s.name).join(', ')}.{' '}
-          These staff will not have pension deductions calculated during payroll. Add their enrolment status.
+          {unrecorded.map((s) => s.name).join(', ')}. Payroll may auto-assess these staff when a run is calculated,
+          but you should still record their enrolment status explicitly.
         </div>
       )}
 
-      {/* Pension config summary */}
       {config && (
-        <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
             { label: 'Employee contribution', value: fmtPct(config.employee_rate) },
             { label: 'Employer contribution', value: fmtPct(config.employer_rate) },
@@ -218,27 +230,19 @@ export default function PensionManager() {
             { label: 'Upper earnings', value: `${fmt(config.upper_qualifying_weekly)} /wk` },
           ].map(({ label, value }) => (
             <div key={label} className={`${CARD.padded} text-center`}>
-              <div className="text-xs text-gray-500 mb-1">{label}</div>
+              <div className="mb-1 text-xs text-gray-500">{label}</div>
               <div className="text-lg font-semibold text-gray-900">{value}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Summary pills */}
-      <div className="mb-4 flex gap-3 flex-wrap text-sm">
-        <span className={`px-3 py-1 rounded-full ${BADGE.green}`}>
-          {enrolled.length} enrolled
-        </span>
-        <span className={`px-3 py-1 rounded-full ${BADGE.amber}`}>
-          {pending.length} pending assessment
-        </span>
-        <span className={`px-3 py-1 rounded-full ${BADGE.gray}`}>
-          {optedOut.length} opted out
-        </span>
+      <div className="mb-4 flex flex-wrap gap-3 text-sm">
+        <span className={`rounded-full px-3 py-1 ${BADGE.green}`}>{enrolled.length} enrolled</span>
+        <span className={`rounded-full px-3 py-1 ${BADGE.amber}`}>{pending.length} pending assessment</span>
+        <span className={`rounded-full px-3 py-1 ${BADGE.gray}`}>{optedOut.length} opted out</span>
       </div>
 
-      {/* Enrolments table */}
       <div className={CARD.flush}>
         <table className={TABLE.table}>
           <thead className={TABLE.thead}>
@@ -247,7 +251,7 @@ export default function PensionManager() {
               <th scope="col" className={TABLE.th}>Status</th>
               <th scope="col" className={TABLE.th}>Enrolment Date</th>
               <th scope="col" className={TABLE.th}>Opt-Out Date</th>
-              <th scope="col" className={TABLE.th}>Re-enrolment Due</th>
+              <th scope="col" className={TABLE.th}>Review Date</th>
               <th scope="col" className={TABLE.th}>EE Rate</th>
               <th scope="col" className={TABLE.th}>ER Rate</th>
               <th scope="col" className={TABLE.th}>Notes</th>
@@ -268,47 +272,47 @@ export default function PensionManager() {
                 </td>
               </tr>
             )}
-            {enrolments.map(enr => {
-              const staff = staffMap[enr.staff_id];
-              const reEnrolmentWarning = enr.reassessment_date &&
-                new Date(enr.reassessment_date) <= new Date(Date.now() + 30 * 86400 * 1000);
-              const eeRate = enr.contribution_override_employee != null
-                ? fmtPct(enr.contribution_override_employee)
-                : config ? fmtPct(config.employee_rate) : '—';
-              const erRate = enr.contribution_override_employer != null
-                ? fmtPct(enr.contribution_override_employer)
-                : config ? fmtPct(config.employer_rate) : '—';
+            {enrolments.map((enrolment) => {
+              const staff = staffMap[enrolment.staff_id];
+              const reviewDate = enrolment.status === 'postponed' ? enrolment.postponed_until : enrolment.reassessment_date;
+              const reviewWarning = reviewDate && new Date(reviewDate) <= new Date(Date.now() + 30 * 86400 * 1000);
+              const eeRate = enrolment.contribution_override_employee != null
+                ? fmtPct(enrolment.contribution_override_employee)
+                : config ? fmtPct(config.employee_rate) : '-';
+              const erRate = enrolment.contribution_override_employer != null
+                ? fmtPct(enrolment.contribution_override_employer)
+                : config ? fmtPct(config.employer_rate) : '-';
               return (
-                <tr key={enr.staff_id} className={TABLE.tr}>
+                <tr key={enrolment.staff_id} className={TABLE.tr}>
                   <td className={TABLE.td}>
-                    <div className="font-medium text-gray-900">{staff?.name || enr.staff_id}</div>
+                    <div className="font-medium text-gray-900">{staff?.name || enrolment.staff_id}</div>
                     {staff?.role && <div className="text-xs text-gray-400">{staff.role}</div>}
                   </td>
                   <td className={TABLE.td}>
-                    <span className={`text-xs px-2 py-0.5 rounded ${STATUS_BADGE[enr.status] || BADGE.gray}`}>
-                      {STATUS_LABEL[enr.status] || enr.status}
+                    <span className={`rounded px-2 py-0.5 text-xs ${STATUS_BADGE[enrolment.status] || BADGE.gray}`}>
+                      {STATUS_LABEL[enrolment.status] || enrolment.status}
                     </span>
                   </td>
-                  <td className={TABLE.td}>{enr.enrolled_date || <span className="text-gray-400">—</span>}</td>
-                  <td className={TABLE.td}>{enr.opted_out_date || <span className="text-gray-400">—</span>}</td>
+                  <td className={TABLE.td}>{enrolment.enrolled_date || <span className="text-gray-400">-</span>}</td>
+                  <td className={TABLE.td}>{enrolment.opted_out_date || <span className="text-gray-400">-</span>}</td>
                   <td className={TABLE.td}>
-                    {enr.reassessment_date ? (
-                      <span className={reEnrolmentWarning ? 'text-amber-700 font-medium' : ''}>
-                        {enr.reassessment_date}
-                        {reEnrolmentWarning && ' ⚠'}
+                    {reviewDate ? (
+                      <span className={reviewWarning ? 'font-medium text-amber-700' : ''}>
+                        {reviewDate}
+                        {reviewWarning && ' *'}
                       </span>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-400">-</span>
                     )}
                   </td>
                   <td className={TABLE.td}>{eeRate}</td>
                   <td className={TABLE.td}>{erRate}</td>
                   <td className={TABLE.td}>
-                    <span className="text-xs text-gray-500 truncate max-w-[120px] block">{enr.notes || '—'}</span>
+                    <span className="block max-w-[120px] truncate text-xs text-gray-500">{enrolment.notes || '-'}</span>
                   </td>
                   {canEdit && (
                     <td className={TABLE.td}>
-                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(enr)}>
+                      <button className={`${BTN.ghost} ${BTN.xs}`} onClick={() => openEdit(enrolment)}>
                         Edit
                       </button>
                     </td>
@@ -320,7 +324,6 @@ export default function PensionManager() {
         </table>
       </div>
 
-      {/* Unrecorded staff footer */}
       {unrecorded.length > 0 && (
         <div className={`${CARD.flush} mt-4`}>
           <table className={TABLE.table}>
@@ -332,21 +335,18 @@ export default function PensionManager() {
               </tr>
             </thead>
             <tbody>
-              {unrecorded.map(s => (
-                <tr key={s.id} className="bg-amber-50">
+              {unrecorded.map((staff) => (
+                <tr key={staff.id} className="bg-amber-50">
                   <td className={TABLE.td}>
-                    <div className="font-medium text-gray-900">{s.name}</div>
-                    <div className="text-xs text-gray-400">{s.role}</div>
+                    <div className="font-medium text-gray-900">{staff.name}</div>
+                    <div className="text-xs text-gray-400">{staff.role}</div>
                   </td>
                   <td className={TABLE.td} colSpan={canEdit ? 7 : 7}>
-                    <span className="text-amber-700 text-xs">No enrolment status recorded</span>
+                    <span className="text-xs text-amber-700">No enrolment status recorded</span>
                   </td>
                   {canEdit && (
                     <td className={TABLE.td}>
-                      <button
-                        className={BTN.primary + ' ' + BTN.xs}
-                        onClick={() => openNew(s.id)}
-                      >
+                      <button className={`${BTN.primary} ${BTN.xs}`} onClick={() => openNew(staff.id)}>
                         Assess
                       </button>
                     </td>
@@ -358,15 +358,14 @@ export default function PensionManager() {
         </div>
       )}
 
-      {/* Notes */}
-      <div className="mt-4 text-xs text-gray-400 space-y-1">
+      <div className="mt-4 space-y-1 text-xs text-gray-400">
         <p>
           <strong>Auto-enrolment eligibility:</strong> Workers aged 22-SPA earning above the trigger
           (£10,000/yr) must be auto-enrolled. Workers aged 16-74 above the lower threshold can opt in.
         </p>
         <p>
-          <strong>Re-enrolment:</strong> Opted-out workers must be re-enrolled every 3 years. The
-          re-enrolment date triggers an amber warning 30 days in advance.
+          <strong>Postponement and re-enrolment:</strong> Postponed workers need a postponement end date,
+          and opted-out workers should carry a re-enrolment date. Upcoming review dates trigger an amber warning 30 days in advance.
         </p>
         <p>
           <strong>Contribution overrides:</strong> Leave blank to use the scheme default rates
@@ -375,31 +374,28 @@ export default function PensionManager() {
         </p>
       </div>
 
-      {/* Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editStaffId ? 'Update Pension Enrolment' : 'Add Pension Enrolment'}>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editStaffId ? 'Update Pension Enrolment' : 'Add Pension Enrolment'}
+      >
         <div className="space-y-4">
-          {/* Staff */}
           <div>
             <label className={INPUT.label}>Staff Member</label>
             {editStaffId ? (
-              <div className="text-sm font-medium text-gray-900 py-2">
+              <div className="py-2 text-sm font-medium text-gray-900">
                 {staffMap[editStaffId]?.name || editStaffId}
               </div>
             ) : (
-              <StaffPicker
-                value={form.staff_id}
-                onChange={v => field('staff_id', v)}
-                required
-              />
+              <StaffPicker value={form.staff_id} onChange={(v) => field('staff_id', v)} required />
             )}
           </div>
 
-          {/* Status */}
           <div>
-            <label className={INPUT.label}>Enrolment Status</label>
-            <select className={INPUT.select} value={form.status} onChange={e => field('status', e.target.value)}>
-              {STATUSES.map(s => (
-                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+            <label htmlFor="pension-status" className={INPUT.label}>Enrolment Status</label>
+            <select id="pension-status" className={INPUT.select} value={form.status} onChange={(e) => field('status', e.target.value)}>
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>{STATUS_LABEL[status]}</option>
               ))}
             </select>
           </div>
@@ -407,49 +403,89 @@ export default function PensionManager() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>Enrolment Date</label>
-              <input type="date" className={INPUT.base}
+              <input
+                type="date"
+                className={INPUT.base}
                 value={form.enrolled_date}
-                onChange={e => field('enrolled_date', e.target.value)} />
+                onChange={(e) => field('enrolled_date', e.target.value)}
+              />
             </div>
             <div>
               <label className={INPUT.label}>Opt-Out Date</label>
-              <input type="date" className={INPUT.base}
+              <input
+                type="date"
+                className={INPUT.base}
                 value={form.opted_out_date}
-                onChange={e => field('opted_out_date', e.target.value)} />
+                onChange={(e) => field('opted_out_date', e.target.value)}
+              />
             </div>
           </div>
 
-          <div>
-            <label className={INPUT.label}>Re-enrolment Date</label>
-            <input type="date" className={INPUT.base}
-              value={form.reassessment_date}
-              onChange={e => field('reassessment_date', e.target.value)} />
-            <p className="text-xs text-gray-400 mt-1">Typically 3 years after opt-out date.</p>
-          </div>
+          {form.status === 'postponed' && (
+            <div>
+              <label htmlFor="pension-postponed-until" className={INPUT.label}>Postponed Until</label>
+              <input
+                id="pension-postponed-until"
+                type="date"
+                className={INPUT.base}
+                value={form.postponed_until}
+                onChange={(e) => field('postponed_until', e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-400">Required so payroll knows when to reassess postponement.</p>
+            </div>
+          )}
+
+          {form.status === 'opted_out' && (
+            <div>
+              <label className={INPUT.label}>Re-enrolment Date</label>
+              <input
+                type="date"
+                className={INPUT.base}
+                value={form.reassessment_date}
+                onChange={(e) => field('reassessment_date', e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-400">Typically 3 years after opt-out date.</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={INPUT.label}>EE Contribution Override (%)</label>
-              <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                className={INPUT.base}
                 value={form.contribution_override_employee}
-                onChange={e => field('contribution_override_employee', e.target.value)}
-                placeholder={config ? `${(config.employee_rate * 100).toFixed(1)} (default)` : ''} />
+                onChange={(e) => field('contribution_override_employee', e.target.value)}
+                placeholder={config ? `${(config.employee_rate * 100).toFixed(1)} (default)` : ''}
+              />
             </div>
             <div>
               <label className={INPUT.label}>ER Contribution Override (%)</label>
-              <input type="number" step="0.1" min="0" max="100" className={INPUT.base}
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                className={INPUT.base}
                 value={form.contribution_override_employer}
-                onChange={e => field('contribution_override_employer', e.target.value)}
-                placeholder={config ? `${(config.employer_rate * 100).toFixed(1)} (default)` : ''} />
+                onChange={(e) => field('contribution_override_employer', e.target.value)}
+                placeholder={config ? `${(config.employer_rate * 100).toFixed(1)} (default)` : ''}
+              />
             </div>
           </div>
 
           <div>
             <label className={INPUT.label}>Notes</label>
-            <textarea className={INPUT.base} rows={2}
+            <textarea
+              className={INPUT.base}
+              rows={2}
               value={form.notes}
-              onChange={e => field('notes', e.target.value)}
-              placeholder="e.g. Opted out by written notice 15 Jan 2026" />
+              onChange={(e) => field('notes', e.target.value)}
+              placeholder="e.g. Opted out by written notice 15 Jan 2026"
+            />
           </div>
         </div>
 
@@ -460,7 +496,7 @@ export default function PensionManager() {
           <button
             className={BTN.primary}
             onClick={handleSave}
-            disabled={saving || !form.staff_id || !form.status}
+            disabled={saving || !form.staff_id || !form.status || (form.status === 'postponed' && !form.postponed_until)}
           >
             {saving ? 'Saving...' : 'Save Enrolment'}
           </button>

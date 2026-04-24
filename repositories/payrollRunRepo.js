@@ -2,7 +2,7 @@ import { pool } from '../db.js';
 
 // ── payroll_runs ──────────────────────────────────────────────────────────────
 
-const RUN_COLS = `id, home_id, period_start, period_end, pay_frequency, status,
+const RUN_COLS = `id, home_id, period_start, period_end, pay_date, pay_frequency, status,
   total_gross, total_enhancements, total_sleep_ins, staff_count,
   calculated_at, approved_by, approved_at, exported_at, export_format,
   ytd_applied, notes, version, created_at, updated_at`;
@@ -33,6 +33,7 @@ function shapeRun(row) {
     home_id: row.home_id,
     period_start: toDate(row.period_start),
     period_end: toDate(row.period_end),
+    pay_date: toDate(row.pay_date),
     pay_frequency: row.pay_frequency,
     status: row.status,
     total_gross: row.total_gross != null ? parseFloat(row.total_gross) : null,
@@ -52,13 +53,30 @@ function shapeRun(row) {
   };
 }
 
-export async function findByHome(homeId, { limit = 100, offset = 0 } = {}) {
+export async function findByHome(homeId, { limit = 100, offset = 0, staffId = null, statuses = null } = {}) {
+  const params = [homeId, Math.min(limit, 500), Math.max(offset, 0)];
+  let staffClause = '';
+  let statusClause = '';
+  if (staffId) {
+    params.push(staffId);
+    staffClause = ` AND EXISTS (
+      SELECT 1
+      FROM payroll_lines pl
+      WHERE pl.payroll_run_id = payroll_runs.id
+        AND pl.staff_id = $4
+    )`;
+  }
+  if (Array.isArray(statuses) && statuses.length > 0) {
+    params.push(statuses);
+    statusClause = ` AND status = ANY($${params.length}::text[])`;
+  }
   const { rows } = await pool.query(
     `SELECT ${RUN_COLS}, COUNT(*) OVER() AS _total
-     FROM payroll_runs WHERE home_id = $1
+     FROM payroll_runs
+     WHERE home_id = $1${staffClause}${statusClause}
      ORDER BY period_start DESC
      LIMIT $2 OFFSET $3`,
-    [homeId, Math.min(limit, 500), Math.max(offset, 0)],
+    params,
   );
   const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
   return { rows: rows.map(shapeRun), total };
@@ -98,10 +116,10 @@ export async function hasOverlap(homeId, periodStart, periodEnd, client) {
 export async function create(homeId, run, client) {
   const conn = client || pool;
   const { rows } = await conn.query(
-    `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_frequency, notes)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO payroll_runs (home_id, period_start, period_end, pay_date, pay_frequency, notes)
+     VALUES ($1,$2,$3,$4,$5,$6)
      RETURNING ${RUN_COLS}`,
-    [homeId, run.period_start, run.period_end, run.pay_frequency, run.notes || null],
+    [homeId, run.period_start, run.period_end, run.pay_date || run.period_end, run.pay_frequency, run.notes || null],
   );
   return shapeRun(rows[0]);
 }
@@ -260,6 +278,42 @@ export async function findLinesByRun(runId, homeId, client) {
     [runId, homeId],
   );
   return rows.map(shapeLine);
+}
+
+export async function findPayslipRunSummariesByStaff(homeId, staffId, {
+  statuses = ['approved', 'exported', 'locked'],
+  limit = 500,
+  offset = 0,
+} = {}, client) {
+  const conn = client || pool;
+  const safeLimit = Math.min(limit, 500);
+  const safeOffset = Math.max(offset, 0);
+  const params = [homeId, staffId, statuses, safeLimit, safeOffset];
+  const { rows } = await conn.query(
+    `SELECT
+        ${RUN_COLS.split(',').map(c => `pr.${c.trim()}`).join(', ')},
+        pl.gross_pay,
+        pl.net_pay,
+        COUNT(*) OVER() AS _total
+     FROM payroll_runs pr
+     JOIN payroll_lines pl
+       ON pl.payroll_run_id = pr.id
+     WHERE pr.home_id = $1
+       AND pl.staff_id = $2
+       AND pr.status = ANY($3::text[])
+     ORDER BY pr.period_start DESC, pr.id DESC
+     LIMIT $4 OFFSET $5`,
+    params,
+  );
+  const total = rows.length > 0 ? parseInt(rows[0]._total, 10) : 0;
+  return {
+    rows: rows.map((row) => ({
+      ...shapeRun(row),
+      gross_pay: row.gross_pay != null ? parseFloat(row.gross_pay) : null,
+      net_pay: row.net_pay != null ? parseFloat(row.net_pay) : null,
+    })),
+    total,
+  };
 }
 
 export async function createLine(runId, staffId, client) {
@@ -501,14 +555,15 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
   const { rows } = await conn.query(
     `SELECT pr.period_start::text,
             pr.period_end::text,
+            COALESCE(pr.pay_date, pr.period_end)::text AS pay_date,
             COALESCE(pl.gross_pay, 0)::numeric AS gross_pay
      FROM payroll_lines pl
      JOIN payroll_runs pr ON pr.id = pl.payroll_run_id
      WHERE pr.home_id = $1
        AND pl.staff_id = $2
        AND pr.status IN ('approved', 'exported', 'locked')
-       AND pr.period_end < $3
-     ORDER BY pr.period_end DESC
+       AND COALESCE(pr.pay_date, pr.period_end) < $3
+     ORDER BY COALESCE(pr.pay_date, pr.period_end) DESC
      LIMIT 260`,
     [homeId, staffId, refStr],
   );
@@ -516,10 +571,11 @@ export async function findAverageWeeklyPay(homeId, staffId, referenceDate, clien
     .map(row => ({
       period_start: row.period_start,
       period_end: row.period_end,
+      pay_date: row.pay_date,
       gross_pay: parseFloat(row.gross_pay) || 0,
     }))
     .filter(row => row.gross_pay > 0)
-    .sort((a, b) => b.period_end.localeCompare(a.period_end));
+    .sort((a, b) => b.pay_date.localeCompare(a.pay_date));
 
   if (paidRows.length < 1) return null;
 

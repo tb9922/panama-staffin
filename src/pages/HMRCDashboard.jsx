@@ -5,12 +5,14 @@ import InlineNotice from '../components/InlineNotice.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import { getHMRCLiabilities, markHMRCPaid, getCurrentHome, getPayrollRuns } from '../lib/api.js';
+import { getHMRCLiabilities, markHMRCPaid, getCurrentHome } from '../lib/api.js';
 import { useData } from '../contexts/DataContext.jsx';
 import { useToast } from '../contexts/useToast.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import useTransientNotice from '../hooks/useTransientNotice.js';
 import { todayLocalISO } from '../lib/localDates.js';
+import { currentTaxYearForDate } from '../lib/hmrcDates.js';
+import { loadAllPayrollRuns } from '../lib/payrollRuns.js';
 
 const STATUS_BADGE = {
   unpaid:  BADGE.amber,
@@ -40,11 +42,7 @@ function fmt(n) {
 }
 
 function currentTaxYear() {
-  const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  if (m > 4 || (m === 4 && d >= 6)) return now.getUTCFullYear();
-  return now.getUTCFullYear() - 1;
+  return currentTaxYearForDate();
 }
 
 function addDaysIso(isoDate, days) {
@@ -53,10 +51,18 @@ function addDaysIso(isoDate, days) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function getRunPayDate(run) {
+  return run?.pay_date || run?.period_end || null;
+}
+
 function buildRtiAlerts(runs, today = todayLocalISO()) {
-  const late = runs.filter((run) => !run.exported_at && run.period_end && run.period_end < today);
-  const ready = runs.filter((run) => run.status === 'approved' && !run.exported_at);
-  const dueSoon = runs.filter((run) => !run.exported_at && run.period_end && run.period_end >= today && run.period_end <= addDaysIso(today, 2));
+  const actionable = runs.filter((run) => ['approved', 'locked'].includes(run.status));
+  const late = actionable.filter((run) => !run.exported_at && getRunPayDate(run) && getRunPayDate(run) < today);
+  const ready = actionable.filter((run) => !run.exported_at);
+  const dueSoon = runs.filter((run) => {
+    const payDate = getRunPayDate(run);
+    return ['approved', 'locked'].includes(run.status) && !run.exported_at && payDate && payDate >= today && payDate <= addDaysIso(today, 2);
+  });
 
   return [
     late.length > 0
@@ -92,6 +98,7 @@ export default function HMRCDashboard() {
 
   const [liabilities, setLiabilities] = useState([]);
   const [payrollRuns, setPayrollRuns] = useState([]);
+  const [payrollRunsDegraded, setPayrollRunsDegraded] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [saving, setSaving]           = useState(false);
@@ -105,12 +112,21 @@ export default function HMRCDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const [result, runs] = await Promise.all([
+      setPayrollRunsDegraded(false);
+      const [liabilitiesResult, payrollRunsResult] = await Promise.allSettled([
         getHMRCLiabilities(homeSlug, taxYear),
-        getPayrollRuns(homeSlug).catch(() => []),
+        loadAllPayrollRuns(homeSlug),
       ]);
-      setLiabilities(result);
-      setPayrollRuns(Array.isArray(runs) ? runs : []);
+      if (liabilitiesResult.status !== 'fulfilled') {
+        throw liabilitiesResult.reason;
+      }
+      setLiabilities(liabilitiesResult.value);
+      if (payrollRunsResult.status === 'fulfilled') {
+        setPayrollRuns(payrollRunsResult.value);
+      } else {
+        setPayrollRuns([]);
+        setPayrollRunsDegraded(true);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -208,11 +224,16 @@ export default function HMRCDashboard() {
           {alert.text}
         </InlineNotice>
       ))}
+      {payrollRunsDegraded && (
+        <InlineNotice className="mb-4" variant="warning">
+          RTI/FPS readiness alerts are temporarily unavailable because payroll runs could not be loaded.
+        </InlineNotice>
+      )}
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total PAYE year', value: fmt(totalDue), badge: null },
+          { label: 'Total Due Year', value: fmt(totalDue), badge: null },
           { label: 'Outstanding', value: fmt(totalOwed), badge: totalOwed > 0 ? 'amber' : 'green' },
           { label: 'Paid', value: fmt(totalPaid), badge: 'green' },
           { label: 'Overdue', value: fmt(overdue.reduce((s, l) => s + parseFloat(l.total_due || 0), 0)), badge: overdue.length > 0 ? 'red' : null },
