@@ -151,6 +151,25 @@ describe('Dashboard', () => {
     expect(status).toBeInTheDocument();
   });
 
+  it('masks training compliance metrics without compliance read access', async () => {
+    useData.mockReturnValue({
+      canRead: module => module !== 'compliance',
+      canWrite: () => false,
+      homeRole: 'viewer',
+      staffId: null,
+    });
+
+    renderDashboard({ username: 'viewer', role: 'viewer' });
+
+    await waitFor(() =>
+      expect(screen.getByText('Training Compliance')).toBeInTheDocument()
+    );
+    expect(screen.getByText('Compliance access required')).toBeInTheDocument();
+    expect(screen.queryByText('Compliant')).not.toBeInTheDocument();
+    expect(screen.queryByText('At Risk')).not.toBeInTheDocument();
+    expect(screen.queryByText('Non-Compliant')).not.toBeInTheDocument();
+  });
+
   it('renders the 28-Day Coverage Heatmap section with 28 day buttons', async () => {
     renderDashboard();
 
@@ -236,6 +255,27 @@ describe('Dashboard', () => {
     expect(screen.queryByText('All clear — full coverage this cycle')).not.toBeInTheDocument();
   });
 
+  it('does not show all-clear while summary alerts are still loading', async () => {
+    api.getSchedulingData.mockResolvedValue(buildCleanDashboardData());
+    let resolveSummary;
+    api.getDashboardSummary.mockReturnValue(new Promise(resolve => { resolveSummary = resolve; }));
+
+    renderDashboard();
+
+    await waitFor(() =>
+      expect(screen.getByText('Loading compliance alerts...')).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/All clear/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSummary({ modules: {}, alerts: [], weekActions: [] });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/All clear/)).toBeInTheDocument()
+    );
+  });
+
   it('shows Print button in header area', async () => {
     renderDashboard();
 
@@ -245,7 +285,7 @@ describe('Dashboard', () => {
     expect(screen.getByRole('button', { name: 'Print' })).toBeInTheDocument();
   });
 
-  it('renders Action This Week card when summary has weekActions', async () => {
+  it('renders High Priority Actions card when summary has weekActions', async () => {
     api.getDashboardSummary.mockResolvedValue({
       modules: {},
       alerts: [
@@ -260,13 +300,13 @@ describe('Dashboard', () => {
     renderDashboard();
 
     await waitFor(() =>
-      expect(screen.getByText('Action This Week')).toBeInTheDocument()
+      expect(screen.getByText('High Priority Actions')).toBeInTheDocument()
     );
     expect(screen.getAllByText('CQC overdue').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('3 expired training').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not render Action This Week card when weekActions is empty', async () => {
+  it('does not render High Priority Actions card when weekActions is empty', async () => {
     api.getDashboardSummary.mockResolvedValue({
       modules: {},
       alerts: [],
@@ -277,10 +317,10 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Alerts')).toBeInTheDocument()
     );
-    expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+    expect(screen.queryByText('High Priority Actions')).not.toBeInTheDocument();
   });
 
-  it('does not render Action This Week card for viewer role', async () => {
+  it('does not render High Priority Actions card for viewer role', async () => {
     api.getLoggedInUser.mockReturnValue({ username: 'viewer', role: 'viewer' });
     api.getDashboardSummary.mockResolvedValue({
       modules: {},
@@ -294,7 +334,7 @@ describe('Dashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Alerts')).toBeInTheDocument()
     );
-    expect(screen.queryByText('Action This Week')).not.toBeInTheDocument();
+    expect(screen.queryByText('High Priority Actions')).not.toBeInTheDocument();
   });
 
   it('renders the coverage heatmap legend', async () => {

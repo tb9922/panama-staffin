@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCycleDates, getStaffForDay, formatDate, isWorkingShift, isCareRole } from '../lib/rotation.js';
+import { getCycleDates, getStaffForDay, formatDate, parseDate, addDays, isWorkingShift, isCareRole } from '../lib/rotation.js';
 import { getDayCoverageStatus, calculateDayCost, checkFatigueRisk } from '../lib/escalation.js';
 import { calculateAccrual } from '../lib/accrual.js';
 import { getTrainingTypes, buildComplianceMatrix, getComplianceStats } from '../lib/training.js';
@@ -10,7 +10,7 @@ import { getCurrentHome, getSchedulingData, getHrStats, getHrWarnings, getFinanc
 import { getFinanceAlertsForDashboard } from '../lib/finance.js';
 import { CARD, BADGE, ESC_COLORS, HEATMAP } from '../lib/design.js';
 import { useData } from '../contexts/DataContext.jsx';
-import { todayLocalISO } from '../lib/localDates.js';
+import { useLiveDate } from '../hooks/useLiveDate.js';
 import LoadingState from '../components/LoadingState.jsx';
 import ErrorState from '../components/ErrorState.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -160,23 +160,22 @@ export default function Dashboard() {
 function StaffSelfServiceDashboard({ schedData, payrollRuns }) {
   const navigate = useNavigate();
   const staffMember = schedData.staff?.[0] || null;
+  const todayIso = useLiveDate();
   const upcomingShifts = useMemo(() => {
     if (!staffMember) return [];
     const list = [];
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    const start = parseDate(todayIso);
     for (let index = 0; index < 7; index += 1) {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
+      const date = addDays(start, index);
       const [staffForDay] = getStaffForDay(schedData.staff, date, schedData.overrides || {}, schedData.config) || [];
       list.push({
-        date: todayLocalISO(date),
-        label: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+        date: formatDate(date),
+        label: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }),
         shift: staffForDay?.shift || 'OFF',
       });
     }
     return list;
-  }, [schedData, staffMember]);
+  }, [schedData, staffMember, todayIso]);
 
   const upcomingLeave = useMemo(() => upcomingShifts.filter(shift => shift.shift === 'AL').length, [upcomingShifts]);
   const nextWorkingShift = upcomingShifts.find(shift => !['OFF', 'AL', 'SICK', 'NS'].includes(shift.shift));
@@ -287,19 +286,16 @@ function DashboardInner({ schedData }) {
   const canEdit = canWrite('scheduling');
   const canViewHr = canRead('hr');
   const canViewFinance = canRead('finance');
+  const canViewCompliance = canRead('compliance');
   const navigate = useNavigate();
 
-  const [today, setToday] = useState(() => new Date());
-  useEffect(() => {
-    const now = new Date();
-    const utcTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-    const timer = setTimeout(() => setToday(new Date()), utcTomorrow - now.getTime());
-    return () => clearTimeout(timer);
-  }, [today]);
+  const todayIso = useLiveDate();
+  const today = useMemo(() => parseDate(todayIso), [todayIso]);
 
   const [hrData, setHrData] = useState({ stats: null, warnings: [] });
   const [financeAlerts, setFinanceAlerts] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [auxLoading, setAuxLoading] = useState(true);
   const [auxFailures, setAuxFailures] = useState([]);
   const home = getCurrentHome();
 
@@ -311,6 +307,7 @@ function DashboardInner({ schedData }) {
       setHrData({ stats: null, warnings: [] });
       setFinanceAlerts([]);
       setSummary(null);
+      setAuxLoading(true);
       setAuxFailures([]);
 
       const [statsResult, warningsResult, financeResult, summaryResult] = await Promise.all([
@@ -356,6 +353,7 @@ function DashboardInner({ schedData }) {
       }
 
       setAuxFailures(failures);
+      setAuxLoading(false);
     }
 
     void loadAuxData();
@@ -464,6 +462,9 @@ function DashboardInner({ schedData }) {
     list.sort(sortAlerts);
     return list.slice(0, 24);
   })();
+  const highPriorityActions = Array.isArray(summary?.highPriorityActions)
+    ? summary.highPriorityActions
+    : (summary?.weekActions || []);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -625,7 +626,7 @@ function DashboardInner({ schedData }) {
           </div>
         </div>
 
-        {(() => {
+        {canViewCompliance ? (() => {
           const trainingTypes = getTrainingTypes(config);
           const activeStaff = staff.filter(s => s.active !== false);
           const matrix = buildComplianceMatrix(activeStaff, trainingTypes, training, today);
@@ -676,16 +677,21 @@ function DashboardInner({ schedData }) {
               </div>
             </button>
           );
-        })()}
+        })() : (
+          <div className={CARD.padded}>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Training Compliance</h2>
+            <p className="text-sm text-gray-600">Compliance access required</p>
+          </div>
+        )}
 
-        {canEdit && summary?.weekActions?.length > 0 && (
+        {canEdit && highPriorityActions.length > 0 && (
           <div className={`${CARD.padded} lg:col-span-2`}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Action This Week</h2>
-              <span className={BADGE.red}>{summary.weekActions.length}</span>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">High Priority Actions</h2>
+              <span className={BADGE.red}>{highPriorityActions.length}</span>
             </div>
             <ul className="space-y-2">
-              {summary.weekActions.slice(0, 10).map((action, i) => (
+              {highPriorityActions.slice(0, 10).map((action, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
                     action.priority >= 5 ? 'bg-red-500' :
@@ -704,6 +710,15 @@ function DashboardInner({ schedData }) {
         <div className={`${CARD.padded} lg:col-span-2`}>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Alerts</h2>
           {alerts.length === 0 ? (
+            auxLoading ? (
+              <div className="flex items-center gap-2 text-sm text-blue-700 font-medium">
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                Loading compliance alerts...
+              </div>
+            ) :
             degradedSources.length > 0 ? (
               <div className="flex items-center gap-2 text-sm text-amber-700 font-medium">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -13,7 +13,7 @@ router.get('/summary', requireAuth, requireHomeAccess, requireModule('scheduling
     if (isOwnDataOnly(req.homeRole, 'scheduling')) {
       return res.status(403).json({ error: 'Dashboard summary is not available for own-data users' });
     }
-    res.json(await dashboardService.getDashboardSummary(req.home.id));
+    res.json(await dashboardService.getDashboardSummary(req.home.id, { homeRole: req.homeRole }));
   } catch (err) { next(err); }
 });
 

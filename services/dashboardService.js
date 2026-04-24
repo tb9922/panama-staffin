@@ -1,6 +1,7 @@
 import logger from '../logger.js';
 import * as dashboardRepo from '../repositories/dashboardRepo.js';
 import { todayLocalISO } from '../lib/dateOnly.js';
+import { hasModuleAccess, isOwnDataOnly } from '../shared/roles.js';
 
 export function invalidateDashboardCache(homeId) {
   void homeId;
@@ -8,12 +9,63 @@ export function invalidateDashboardCache(homeId) {
 
 const TYPE_ORDER = { error: 0, warning: 1, info: 2 };
 
+const MODULE_PERMISSION = {
+  incidents: 'compliance',
+  complaints: 'compliance',
+  maintenance: 'compliance',
+  training: 'compliance',
+  supervisions: 'compliance',
+  appraisals: 'compliance',
+  fireDrills: 'compliance',
+  ipc: 'compliance',
+  dols: 'compliance',
+  careCertificate: 'compliance',
+  risks: 'governance',
+  policies: 'governance',
+  whistleblowing: 'governance',
+  beds: 'finance',
+};
+
 function pushIf(alerts, condition, id, type, module, message, link, priority = 1, dueDate = null) {
   if (condition) alerts.push({ id, type, module, message, link, priority, dueDate });
 }
 
-function buildAlerts(m) {
+function canViewSummaryModule(homeRole, moduleKey) {
+  if (!homeRole) return true;
+  const permissionModule = MODULE_PERMISSION[moduleKey];
+  if (!permissionModule) return false;
+  if (isOwnDataOnly(homeRole, permissionModule)) return false;
+  return hasModuleAccess(homeRole, permissionModule, 'read', { includeOwn: false });
+}
+
+function filterSummaryForRole(summary, homeRole) {
+  if (!homeRole) return summary;
+  const visibleModuleKeys = new Set(MODULE_KEYS.filter((key) => canViewSummaryModule(homeRole, key)));
+  const modules = {};
+  for (const key of visibleModuleKeys) {
+    modules[key] = summary.modules[key];
+  }
+  const visibleAlerts = (summary.alerts || []).filter((alert) => visibleModuleKeys.has(alert.module));
+  const highPrioritySource = Array.isArray(summary.highPriorityActions)
+    ? summary.highPriorityActions
+    : (summary.weekActions || []);
+  const visibleHighPriorityActions = highPrioritySource
+    .filter((alert) => visibleModuleKeys.has(alert.module));
+  const failedModules = (summary._failedModules || []).filter((key) => visibleModuleKeys.has(key));
+  return {
+    ...summary,
+    modules,
+    alerts: visibleAlerts,
+    highPriorityActions: visibleHighPriorityActions,
+    weekActions: visibleHighPriorityActions,
+    _degraded: failedModules.length > 0,
+    _failedModules: failedModules,
+  };
+}
+
+function buildAlerts(m, { excludedModules = [] } = {}) {
   const alerts = [];
+  const excluded = new Set(excludedModules);
   const n = (obj, key) => (obj && typeof obj[key] === 'number') ? obj[key] : 0;
   const b = (obj, key) => !!(obj && obj[key]);
 
@@ -45,6 +97,8 @@ function buildAlerts(m) {
     `${n(m.maintenance, 'expiredCerts')} expired certificate(s)`, '/maintenance', 3);
   pushIf(alerts, n(m.training, 'expired') > 0, 'training.expired', 'warning', 'training',
     `${n(m.training, 'expired')} expired training record(s)`, '/training', 3);
+  pushIf(alerts, n(m.training, 'notStarted') > 0, 'training.not_started', 'warning', 'training',
+    `${n(m.training, 'notStarted')} mandatory training record(s) not started`, '/training', 3);
   pushIf(alerts, n(m.supervisions, 'overdue') > 0, 'supervisions.overdue', 'warning', 'supervisions',
     `${n(m.supervisions, 'overdue')} overdue supervision(s)`, '/training', 3);
   pushIf(alerts, n(m.appraisals, 'overdue') > 0, 'appraisals.overdue', 'warning', 'appraisals',
@@ -99,19 +153,19 @@ function buildAlerts(m) {
     `${n(m.beds, 'available')} bed(s) available`, '/beds', 1);
 
   alerts.sort((a, b) => (b.priority - a.priority) || (TYPE_ORDER[a.type] - TYPE_ORDER[b.type]));
-  return alerts;
+  return alerts.filter((alert) => !excluded.has(alert.module));
 }
 
-export { buildAlerts as _buildAlerts };
+export { buildAlerts as _buildAlerts, filterSummaryForRole as _filterSummaryForRole, MODULE_PERMISSION as _MODULE_PERMISSION };
 
 const DEFAULTS = {
   incidents:       { open: 0, cqcOverdue: 0, riddorOverdue: 0, docOverdue: 0, overdueActions: 0 },
   complaints:      { open: 0, unacknowledged: 0, overdueResponse: 0 },
   maintenance:     { total: 0, overdue: 0, dueSoon: 0, expiredCerts: 0, compliancePct: 100 },
-  training:        { expired: 0, expiringSoon: 0 },
+  training:        { expired: 0, expiringSoon: 0, notStarted: 0 },
   supervisions:    { overdue: 0, dueSoon: 0, noRecord: 0 },
   appraisals:      { overdue: 0, dueSoon: 0, noRecord: 0 },
-  fireDrills:      { lastDate: null, drillsThisYear: 0, overdue: true },
+  fireDrills:      { lastDate: null, drillsThisYear: 0, overdue: false },
   ipc:             { activeOutbreaks: 0, overdueActions: 0, latestScore: null },
   risks:           { total: 0, critical: 0, overdueReviews: 0, overdueActions: 0 },
   policies:        { total: 0, overdue: 0, dueSoon: 0, compliancePct: 100 },
@@ -125,7 +179,7 @@ const DEFAULTS = {
 
 const MODULE_KEYS = Object.keys(DEFAULTS);
 
-export async function getDashboardSummary(homeId) {
+export async function getDashboardSummary(homeId, { homeRole = null } = {}) {
   const today = todayLocalISO();
 
   const results = await Promise.allSettled([
@@ -157,13 +211,24 @@ export async function getDashboardSummary(homeId) {
     }
   });
 
-  const alerts = buildAlerts(modules);
-  const weekActions = alerts.filter((alert) => alert.priority >= 3);
+  const alerts = buildAlerts(modules, { excludedModules: failedModules });
+  const highPriorityActions = alerts.filter((alert) => alert.priority >= 3);
 
   logger.info(
-    { homeId, alertCount: alerts.length, weekActionCount: weekActions.length, bedOccupancy: modules.beds?.occupancyRate },
+    { homeId, alertCount: alerts.length, highPriorityActionCount: highPriorityActions.length, bedOccupancy: modules.beds?.occupancyRate },
     'Dashboard summary generated',
   );
 
-  return { modules, alerts, weekActions, _degraded: failedModules.length > 0, _failedModules: failedModules };
+  return filterSummaryForRole(
+    {
+      modules,
+      alerts,
+      highPriorityActions,
+      // Back-compat for existing clients; semantically this is not time-bound.
+      weekActions: highPriorityActions,
+      _degraded: failedModules.length > 0,
+      _failedModules: failedModules,
+    },
+    homeRole,
+  );
 }

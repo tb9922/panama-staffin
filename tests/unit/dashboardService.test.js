@@ -6,14 +6,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { _buildAlerts as buildAlerts } from '../../services/dashboardService.js';
+import { _buildAlerts as buildAlerts, _filterSummaryForRole as filterSummaryForRole } from '../../services/dashboardService.js';
 
 // All-zeros baseline — no alerts expected
 const EMPTY = {
   incidents: { open: 0, cqcOverdue: 0, riddorOverdue: 0, docOverdue: 0, overdueActions: 0 },
   complaints: { open: 0, unacknowledged: 0, overdueResponse: 0 },
   maintenance: { total: 0, overdue: 0, dueSoon: 0, expiredCerts: 0, compliancePct: 100 },
-  training: { expired: 0, expiringSoon: 0 },
+  training: { expired: 0, expiringSoon: 0, notStarted: 0 },
   supervisions: { overdue: 0, dueSoon: 0, noRecord: 0 },
   appraisals: { overdue: 0, dueSoon: 0, noRecord: 0 },
   fireDrills: { lastDate: null, drillsThisYear: 4, overdue: false },
@@ -92,6 +92,14 @@ describe('buildAlerts priority scoring', () => {
     const alerts = buildAlerts(withOverride({ training: { expired: 5 } }));
     const trainingAlert = alerts.find(a => a.message.includes('expired training'));
     expect(trainingAlert).toBeDefined();
+    expect(trainingAlert.priority).toBe(3);
+  });
+
+  it('missing mandatory training has priority 3', () => {
+    const alerts = buildAlerts(withOverride({ training: { notStarted: 4 } }));
+    const trainingAlert = alerts.find(a => a.id === 'training.not_started');
+    expect(trainingAlert).toBeDefined();
+    expect(trainingAlert.message).toContain('mandatory training');
     expect(trainingAlert.priority).toBe(3);
   });
 
@@ -190,7 +198,7 @@ describe('buildAlerts priority scoring', () => {
       incidents: { cqcOverdue: 1, riddorOverdue: 1, docOverdue: 1, open: 2, overdueActions: 1 },
       complaints: { unacknowledged: 1, overdueResponse: 1 },
       maintenance: { overdue: 1, expiredCerts: 1, dueSoon: 1 },
-      training: { expired: 3, expiringSoon: 2 },
+      training: { expired: 3, expiringSoon: 2, notStarted: 1 },
       risks: { critical: 1, overdueReviews: 1, overdueActions: 1 },
     }));
 
@@ -215,5 +223,46 @@ describe('buildAlerts priority scoring', () => {
     expect(a.module).toBe('incidents');
     expect(a.message).toContain('CQC notification');
     expect(a.link).toBe('/incidents');
+  });
+
+  it('excludes alerts from failed modules', () => {
+    const alerts = buildAlerts(withOverride({
+      fireDrills: { lastDate: null, drillsThisYear: 0, overdue: true },
+      incidents: { cqcOverdue: 1 },
+    }), { excludedModules: ['fireDrills'] });
+    expect(alerts.some(a => a.module === 'fireDrills')).toBe(false);
+    expect(alerts.some(a => a.module === 'incidents')).toBe(true);
+  });
+
+  it('filters summary modules and alerts to the caller role', () => {
+    const summary = {
+      modules: withOverride({
+        incidents: { cqcOverdue: 1 },
+        risks: { critical: 1 },
+        beds: { occupancyRate: 75 },
+      }),
+      alerts: [
+        { id: 'incidents.cqc_overdue', module: 'incidents', type: 'error', message: 'CQC overdue', link: '/incidents', priority: 5 },
+        { id: 'risks.critical', module: 'risks', type: 'error', message: 'Critical risk', link: '/risks', priority: 4 },
+        { id: 'beds.occupancy_below_80', module: 'beds', type: 'error', message: 'Occupancy low', link: '/beds', priority: 4 },
+      ],
+      weekActions: [
+        { id: 'incidents.cqc_overdue', module: 'incidents', type: 'error', message: 'CQC overdue', link: '/incidents', priority: 5 },
+      ],
+      highPriorityActions: [
+        { id: 'risks.critical', module: 'risks', type: 'error', message: 'Critical risk', link: '/risks', priority: 4 },
+      ],
+      _degraded: true,
+      _failedModules: ['incidents', 'beds'],
+    };
+
+    const filtered = filterSummaryForRole(summary, 'viewer');
+
+    expect(filtered.modules).toEqual({});
+    expect(filtered.alerts).toEqual([]);
+    expect(filtered.weekActions).toEqual([]);
+    expect(filtered.highPriorityActions).toEqual([]);
+    expect(filtered._degraded).toBe(false);
+    expect(filtered._failedModules).toEqual([]);
   });
 });

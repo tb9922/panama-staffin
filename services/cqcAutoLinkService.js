@@ -297,8 +297,28 @@ export async function autoLinkRecord(homeId, module, record, username = 'system'
   return syncAutoLinksForRecord(homeId, module, record, username, client);
 }
 
+export async function clearAutoLinksForSource(homeId, module, sourceId, client = null) {
+  if (!homeId || !module || !sourceId) return [];
+
+  const conn = client || undefined;
+  const existingLinks = await cqcEvidenceLinksRepo.findBySource(homeId, module, String(sourceId), conn);
+  const autoLinks = existingLinks.filter((link) => link.autoLinked);
+
+  for (const link of autoLinks) {
+    await cqcEvidenceLinksRepo.softDelete(link.id, homeId, conn);
+  }
+
+  return autoLinks;
+}
+
 export function queueAutoLinkSync(homeId, module, record, username = 'system') {
   void syncAutoLinksForRecord(homeId, module, record, username).catch((err) => {
     logger.warn({ err, homeId, module, sourceId: record?.id }, 'CQC auto-link sync failed');
+  });
+}
+
+export function queueAutoLinkClear(homeId, module, sourceId) {
+  void clearAutoLinksForSource(homeId, module, sourceId).catch((err) => {
+    logger.warn({ err, homeId, module, sourceId }, 'CQC auto-link cleanup failed');
   });
 }

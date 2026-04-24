@@ -147,45 +147,53 @@ export async function getTrainingCounts(homeId, today) {
        WHERE id = $1
          AND jsonb_typeof(config -> 'training_types') = 'array'
      ),
+     active_staff AS (
+       SELECT id AS staff_id, role AS staff_role
+       FROM staff
+       WHERE home_id = $1
+         AND deleted_at IS NULL
+         AND active = true
+     ),
+     required_training AS (
+       SELECT ast.staff_id, ast.staff_role, t->>'id' AS training_type_id
+       FROM active_staff ast
+       CROSS JOIN active_types
+       WHERE (t->>'active')::boolean IS NOT FALSE
+         -- roles: null/missing = required for all staff; array = check membership
+         AND (t->>'roles' IS NULL OR t->'roles' @> to_jsonb(ast.staff_role))
+     ),
      latest_records AS (
-       -- Include staff.role so role-applicability can be checked per record below.
        SELECT DISTINCT ON (tr.staff_id, tr.training_type_id)
-              tr.staff_id, tr.training_type_id, tr.expiry, s.role AS staff_role
+              tr.staff_id, tr.training_type_id, tr.completed, tr.expiry
        FROM training_records tr
-       JOIN staff s ON s.home_id = tr.home_id AND s.id = tr.staff_id
+       JOIN active_staff ast ON ast.staff_id = tr.staff_id
        WHERE tr.home_id = $1
          AND tr.deleted_at IS NULL
-         AND s.deleted_at IS NULL AND s.active = true
-         AND tr.expiry IS NOT NULL
-       ORDER BY tr.staff_id, tr.training_type_id, tr.expiry DESC
+       ORDER BY tr.staff_id, tr.training_type_id, tr.expiry DESC NULLS LAST, tr.completed DESC NULLS LAST
      )
      SELECT
        COUNT(*) FILTER (
          WHERE lr.expiry < $2
-           AND EXISTS (
-             SELECT 1 FROM active_types
-             WHERE t->>'id' = lr.training_type_id
-               AND (t->>'active')::boolean IS NOT FALSE
-               -- roles: null/missing = required for all staff; array = check membership
-               AND (t->>'roles' IS NULL OR t->'roles' @> to_jsonb(lr.staff_role))
-           )
+           AND lr.completed IS NOT NULL
        )::int AS expired,
        COUNT(*) FILTER (
          WHERE lr.expiry >= $2 AND lr.expiry <= ($2::date + INTERVAL '30 days')
-           AND EXISTS (
-             SELECT 1 FROM active_types
-             WHERE t->>'id' = lr.training_type_id
-               AND (t->>'active')::boolean IS NOT FALSE
-               AND (t->>'roles' IS NULL OR t->'roles' @> to_jsonb(lr.staff_role))
-           )
-       )::int AS expiring_soon
-     FROM latest_records lr`,
+           AND lr.completed IS NOT NULL
+       )::int AS expiring_soon,
+       COUNT(*) FILTER (
+         WHERE lr.staff_id IS NULL OR lr.completed IS NULL
+       )::int AS not_started
+     FROM required_training rt
+     LEFT JOIN latest_records lr
+       ON lr.staff_id = rt.staff_id
+      AND lr.training_type_id = rt.training_type_id`,
     [homeId, today]
   );
   const r = rows[0];
   return {
     expired: r.expired,
     expiringSoon: r.expiring_soon,
+    notStarted: r.not_started,
   };
 }
 

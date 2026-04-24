@@ -167,9 +167,9 @@ describe('parseTaxCode', () => {
     expect(r.country).toBe('scotland');
     expect(r.annualAllowance).toBe(12570);
   });
-  it('C1000N → Wales (uses england_wales tax bands)', () => {
+  it('C1000N → Wales tax code prefix', () => {
     const r = parseTaxCode('C1000N');
-    expect(r.country).toBe('england_wales');
+    expect(r.country).toBe('wales');
     expect(r.annualAllowance).toBe(10000);
   });
   it('BR → flat 20% code', () => {

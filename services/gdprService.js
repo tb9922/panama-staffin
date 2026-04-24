@@ -1157,6 +1157,17 @@ export async function executeResidentErasure(subjectId, homeId, requestId, usern
     if (residentByIdRows.length > 0) {
       residentPk = residentByIdRows[0].id;
       matchName = subjectName || residentByIdRows[0].resident_name || matchName;
+      if (matchName) {
+        const { rows: [nameMatch] } = await client.query(
+          `SELECT COUNT(*)::int AS count
+             FROM finance_residents
+            WHERE home_id = $1
+              AND resident_name = $2
+              AND deleted_at IS NULL`,
+          [homeId, matchName]
+        );
+        allowNameFallback = Number(nameMatch?.count || 0) === 1;
+      }
     } else if (matchName) {
       const { rows: residentByNameRows } = await client.query(
         `SELECT id, resident_name

@@ -265,7 +265,14 @@ describe('dashboard and export routes', () => {
       modules: expect.any(Object),
       alerts: expect.any(Array),
       weekActions: expect.any(Array),
+      highPriorityActions: expect.any(Array),
     });
+
+    const viewerSummaryRes = await authGet(`/api/dashboard/summary?home=${homeASlug}`, viewerToken).expect(200);
+    expect(viewerSummaryRes.body.modules).not.toHaveProperty('incidents');
+    expect(viewerSummaryRes.body.modules).not.toHaveProperty('risks');
+    expect(viewerSummaryRes.body.modules).not.toHaveProperty('beds');
+    expect(viewerSummaryRes.body.alerts.some(alert => ['incidents', 'risks', 'beds'].includes(alert.module))).toBe(false);
 
     const exportRes = await authGet(`/api/export?home=${homeASlug}`, viewerToken).expect(200);
     expect(exportRes.headers['content-type']).toMatch(/application\/json/);

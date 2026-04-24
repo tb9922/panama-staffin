@@ -13,6 +13,7 @@ import * as cqcEvidenceFileRepo from '../repositories/cqcEvidenceFileRepo.js';
 import * as cqcNarrativeRepo from '../repositories/cqcNarrativeRepo.js';
 import * as auditService from '../services/auditService.js';
 import { computeCqcReadiness } from '../services/assessmentService.js';
+import { queueAutoLinkClear, queueAutoLinkSync } from '../services/cqcAutoLinkService.js';
 import { diffFields } from '../lib/audit.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import { paginationSchema } from '../lib/pagination.js';
@@ -131,6 +132,7 @@ router.post('/', writeRateLimiter, requireAuth, requireHomeAccess, requireModule
     }
     const item = await cqcEvidenceRepo.upsert(req.home.id, { ...parsed.data, added_by: req.user.username });
     await auditService.log('cqc_evidence_create', req.home.slug, req.user.username, { id: item?.id });
+    queueAutoLinkSync(req.home.id, 'cqc_evidence', item, req.user.username);
     res.status(201).json(item);
   } catch (err) {
     next(err);
@@ -183,6 +185,7 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     }
     const changes = diffFields(existing, item);
     await auditService.log('cqc_evidence_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
+    queueAutoLinkSync(req.home.id, 'cqc_evidence', item, req.user.username);
     res.json(item);
   } catch (err) {
     next(err);
@@ -196,6 +199,7 @@ router.delete('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireM
     const deleted = await cqcEvidenceRepo.softDelete(idParsed.data, req.home.id);
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     await auditService.log('cqc_evidence_delete', req.home.slug, req.user.username, { id: idParsed.data });
+    queueAutoLinkClear(req.home.id, 'cqc_evidence', idParsed.data);
     res.json({ ok: true });
   } catch (err) {
     next(err);
