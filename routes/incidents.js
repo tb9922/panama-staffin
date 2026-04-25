@@ -235,7 +235,10 @@ router.put('/:id', writeRateLimiter, requireAuth, requireHomeAccess, requireModu
     if (incident === null) {
       return res.status(409).json({ error: 'Record was modified by another user. Please refresh and try again.' });
     }
-    const changes = diffFields(existing, incident);
+    // Redact description text from audit diff — incident narratives routinely contain
+    // Article 9 special-category health data (falls, medication errors, dementia
+    // behavioural context). Only the fact of change is logged, not the text.
+    const changes = diffFields(existing, incident, { extraSensitive: ['description', 'immediate_action', 'investigation_findings', 'safeguarding_referral_narrative'] });
     await auditService.log('incident_update', req.home.slug, req.user.username, { id: idParsed.data, changes });
     res.json(incident);
   } catch (err) { next(err); }

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { pool } from '../db.js';
 import { paginateResult } from '../lib/pagination.js';
-import { normalizeEvidenceCategory } from '../src/lib/cqcEvidenceCategories.js';
+import { normalizeEvidenceCategory } from '../shared/cqcEvidenceCategories.js';
 
 const EVIDENCE_COLS = `
   id, home_id, version, quality_statement, type, title, description,

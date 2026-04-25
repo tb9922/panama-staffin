@@ -7,7 +7,7 @@ import { paginationSchema } from '../lib/pagination.js';
 import { splitVersion } from '../lib/versionedPayload.js';
 import * as auditService from '../services/auditService.js';
 import * as cqcEvidenceLinksRepo from '../repositories/cqcEvidenceLinksRepo.js';
-import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
+import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../shared/cqcEvidenceCategories.js';
 
 const router = Router();
 

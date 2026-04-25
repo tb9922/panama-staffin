@@ -22,7 +22,7 @@ import { nullableDateInput } from '../lib/zodHelpers.js';
 import { isPathInsideRoot } from '../lib/pathSafety.js';
 import { config } from '../config.js';
 import { splitVersion } from '../lib/versionedPayload.js';
-import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../src/lib/cqcEvidenceCategories.js';
+import { ALLOWED_CQC_EVIDENCE_CATEGORY_VALUES } from '../shared/cqcEvidenceCategories.js';
 
 const router = Router();
 const idSchema = z.string().min(1).max(100);

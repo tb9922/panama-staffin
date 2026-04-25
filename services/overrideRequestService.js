@@ -7,7 +7,7 @@ import * as overrideRequestRepo from '../repositories/overrideRequestRepo.js';
 import * as staffRepo from '../repositories/staffRepo.js';
 import * as auditService from './auditService.js';
 import { dispatchEvent } from './webhookService.js';
-import { calculateAccrual } from '../src/lib/accrual.js';
+import { calculateAccrual } from '../shared/accrual.js';
 import { getALDeductionHours, getLeaveYear } from '../shared/rotation.js';
 
 export async function submitALRequest({ homeId, staffId, date, reason }) {
