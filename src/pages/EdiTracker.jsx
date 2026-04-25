@@ -82,6 +82,7 @@ export default function EdiTracker() {
   const respondentRoleId = useId();
   const handlingRouteId = useId();
   const conditionDescriptionId = useId();
+  const reasonableStepsEvidenceId = useId();
   const adjustmentsId = useId();
   const accessToWorkAppliedId = useId();
   const accessToWorkReferenceId = useId();
@@ -404,8 +405,8 @@ export default function EdiTracker() {
                     <textarea id={conditionDescriptionId} className={INPUT.base} rows={2} value={form.condition_description} onChange={e => set('condition_description', e.target.value)} placeholder="Describe the condition or disability" />
                   </div>
                   <div>
-                    <label className={INPUT.label}>Reasonable Steps Evidence</label>
-                    <textarea className={INPUT.base} rows={3} value={form.reasonable_steps_evidence} onChange={e => set('reasonable_steps_evidence', e.target.value)} placeholder="One evidence point per line" />
+                    <label htmlFor={reasonableStepsEvidenceId} className={INPUT.label}>Reasonable Steps Evidence</label>
+                    <textarea id={reasonableStepsEvidenceId} className={INPUT.base} rows={3} value={form.reasonable_steps_evidence} onChange={e => set('reasonable_steps_evidence', e.target.value)} placeholder="One evidence point per line" />
                   </div>
                   <div>
                     <label htmlFor={adjustmentsId} className={INPUT.label}>Adjustments</label>
@@ -425,7 +426,7 @@ export default function EdiTracker() {
                         </div>
                         <div>
                           <label htmlFor={accessToWorkAmountId} className={INPUT.label}>AtW Amount Awarded (£)</label>
-                          <input id={accessToWorkAmountId} type="number" step="0.01" className={INPUT.base} value={form.access_to_work_amount} onChange={e => set('access_to_work_amount', e.target.value)} />
+                          <input id={accessToWorkAmountId} type="number" step="0.01" inputMode="decimal" className={INPUT.base} value={form.access_to_work_amount} onChange={e => set('access_to_work_amount', e.target.value)} />
                         </div>
                       </div>
                     )}

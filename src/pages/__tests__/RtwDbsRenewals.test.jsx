@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/renderWithProviders.jsx';
 import RtwDbsRenewals from '../RtwDbsRenewals.jsx';
+import { addDaysLocalISO, todayLocalISO } from '../../lib/localDates.js';
 
 // ── Module mocks ───────────────────────────────────────────────────────────────
 
@@ -51,6 +52,13 @@ const MOCK_EXPIRED_RTW = {
   checked_by: 'Admin',
   document_type: 'BRP',
   version: 1,
+};
+
+const MOCK_DUE_SOON_DBS = {
+  ...MOCK_DBS_CHECK,
+  id: 'REN-003',
+  expiry_date: addDaysLocalISO(todayLocalISO(), 10),
+  status: 'current',
 };
 
 const MOCK_RESPONSE = { rows: [MOCK_DBS_CHECK], total: 1 };
@@ -113,6 +121,15 @@ describe('RtwDbsRenewals', () => {
     await waitFor(() => {
       expect(screen.getByText(/1 overdue\/expired/)).toBeInTheDocument();
     });
+  });
+
+  it('warns before RTW or DBS checks expire', async () => {
+    api.getHrRenewals.mockResolvedValue({ rows: [MOCK_DUE_SOON_DBS], total: 1 });
+    renderWithProviders(<RtwDbsRenewals />);
+    await waitFor(() => {
+      expect(screen.getByText(/1 due within 30 days/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/\(due in 10d\)/)).toBeInTheDocument();
   });
 
   it('shows empty state when no records exist', async () => {

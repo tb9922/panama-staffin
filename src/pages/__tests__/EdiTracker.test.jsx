@@ -154,11 +154,12 @@ describe('EdiTracker', () => {
 
     await user.selectOptions(screen.getByLabelText('Record Type *'), 'reasonable_adjustment');
     expect(screen.getByLabelText('Condition Description')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reasonable Steps Evidence')).toBeInTheDocument();
     expect(screen.getByLabelText('Adjustments')).toBeInTheDocument();
 
     await user.click(screen.getByLabelText(/Access to Work Applied For/i));
     expect(screen.getByLabelText('AtW Reference')).toBeInTheDocument();
-    expect(screen.getByLabelText(/AtW Amount Awarded/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/AtW Amount Awarded/i)).toHaveAttribute('inputmode', 'decimal');
     expect(screen.getByLabelText('Outcome')).toBeInTheDocument();
   });
 });

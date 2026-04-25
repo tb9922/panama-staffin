@@ -239,5 +239,7 @@ describe('AbsenceManager', () => {
     await user.click(screen.getByRole('button', { name: 'Consent' }));
     await user.click(screen.getByLabelText('Consent Obtained'));
     expect(screen.getByLabelText('Consent Date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Consent Method')).toBeInTheDocument();
+    expect(screen.getByLabelText('Consent Witness')).toBeInTheDocument();
   });
 });

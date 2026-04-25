@@ -38,11 +38,13 @@ describe('HR schema blank-select handling', () => {
       reason: 'Back pain review',
       fit_for_role: '',
       disability_likely: '',
+      consent_method: '',
       questions_for_oh: '',
     });
     expect(result.success).toBe(true);
     expect(result.data.fit_for_role).toBeNull();
     expect(result.data.disability_likely).toBeNull();
+    expect(result.data.consent_method).toBeNull();
     expect(result.data.questions_for_oh).toBe('');
   });
 

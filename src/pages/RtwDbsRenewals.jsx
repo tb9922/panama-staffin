@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useId } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, ESC_COLORS } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -11,6 +11,7 @@ import StaffPicker from '../components/StaffPicker.jsx';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
 const RTW_DOCUMENT_TYPE_OPTIONS = [
   { id: 'passport', name: 'Passport' },
@@ -28,8 +29,26 @@ function statusName(id) {
   return RENEWAL_STATUSES.find(s => s.id === id)?.name || id;
 }
 
-function isHighlighted(item) {
-  return item.status === 'overdue' || item.status === 'expired';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysUntil(dateStr) {
+  const date = parseLocalDate(dateStr);
+  const today = parseLocalDate(todayLocalISO());
+  if (!date || !today) return null;
+  return Math.ceil((date.getTime() - today.getTime()) / DAY_MS);
+}
+
+function getRenewalUrgency(item) {
+  if (item.status === 'overdue' || item.status === 'expired') {
+    return { level: 'red', label: item.status === 'expired' ? 'expired' : 'overdue' };
+  }
+  if (!item.expiry_date) return null;
+  const days = daysUntil(item.expiry_date);
+  if (days == null) return null;
+  if (days < 0) return { level: 'red', label: `overdue by ${Math.abs(days)}d` };
+  if (days <= 14) return { level: 'amber', label: days === 0 ? 'due today' : `due in ${days}d` };
+  if (days <= 30) return { level: 'yellow', label: `due in ${days}d` };
+  return null;
 }
 
 const blankForm = () => ({
@@ -191,7 +210,12 @@ export default function RtwDbsRenewals() {
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading renewal data..." card /></div>;
 
-  const overdueCount = items.filter(isHighlighted).length;
+  const urgencyCounts = items.reduce((counts, item) => {
+    const urgency = getRenewalUrgency(item);
+    if (urgency?.level === 'red') counts.red += 1;
+    if (urgency?.level === 'amber' || urgency?.level === 'yellow') counts.soon += 1;
+    return counts;
+  }, { red: 0, soon: 0 });
 
   return (
     <div className={PAGE.container}>
@@ -200,7 +224,8 @@ export default function RtwDbsRenewals() {
           <h1 className={PAGE.title}>RTW & DBS Renewals</h1>
           <p className={PAGE.subtitle}>
             Right to Work and DBS check tracking — CQC Reg 19 (Fit & proper persons employed)
-            {overdueCount > 0 && <span className="text-red-600 font-semibold ml-2">{overdueCount} overdue/expired</span>}
+            {urgencyCounts.red > 0 && <span className="text-red-600 font-semibold ml-2">{urgencyCounts.red} overdue/expired</span>}
+            {urgencyCounts.soon > 0 && <span className={`${ESC_COLORS.amber.text} font-semibold ml-2`}>{urgencyCounts.soon} due within 30 days</span>}
           </p>
         </div>
         <div className="flex gap-2">
@@ -254,15 +279,17 @@ export default function RtwDbsRenewals() {
                 </tr>
               )}
               {items.map(item => {
-                const highlighted = isHighlighted(item);
+                const urgency = getRenewalUrgency(item);
+                const highlighted = urgency ? ESC_COLORS[urgency.level].card : '';
                 return (
-                  <tr key={item.id} className={`${TABLE.tr} ${highlighted ? 'bg-red-50' : ''}`}>
+                  <tr key={item.id} className={`${TABLE.tr} ${highlighted}`}>
                     <td className={TABLE.td}>{item.staff_id}</td>
                     <td className={TABLE.td}>{checkTypeName(item.check_type)}</td>
                     <td className={TABLE.td}>{item.last_checked || '—'}</td>
                     <td className={TABLE.td}>
-                      <span className={highlighted ? 'text-red-600 font-semibold' : ''}>
+                      <span className={urgency ? `${ESC_COLORS[urgency.level].text} font-semibold` : ''}>
                         {item.expiry_date || '—'}
+                        {urgency && ` (${urgency.label})`}
                       </span>
                     </td>
                     <td className={TABLE.td}><span className={BADGE[getStatusBadge(item.status, RENEWAL_STATUSES)]}>{statusName(item.status)}</span></td>

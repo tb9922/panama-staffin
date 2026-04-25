@@ -17,6 +17,7 @@ let homeId;
 
 beforeAll(async () => {
   await pool.query(`DELETE FROM hr_flexible_working WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_oh_referrals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_edi_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_tupe_transfers WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_rtw_dbs_renewals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
@@ -59,6 +60,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query(`DELETE FROM hr_flexible_working WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
+  await pool.query(`DELETE FROM hr_oh_referrals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_edi_records WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_tupe_transfers WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
   await pool.query(`DELETE FROM hr_rtw_dbs_renewals WHERE home_id IN (SELECT id FROM homes WHERE slug = $1)`, [HOME_SLUG]).catch(() => {});
@@ -161,6 +163,34 @@ describe('HR route save seams', () => {
 
     expect(noteRes.body.subject_type).toBe('staff');
     expect(noteRes.body.subject_id).toBe(STAFF_ID);
+  });
+
+  it('persists OH referral consent audit fields on create and update', async () => {
+    const createRes = await authed('post', '/api/hr/oh-referrals').send({
+      staff_id: STAFF_ID,
+      referral_date: '2026-03-12',
+      referred_by: 'HR Seam Manager',
+      reason: 'Back pain review',
+      employee_consent_obtained: true,
+      consent_date: '2026-03-11',
+      consent_method: 'written',
+      consent_witness: 'Deputy Manager',
+      questions_for_oh: 'Can they return safely?',
+    }).expect(201);
+
+    expect(createRes.body.employee_consent_obtained).toBe(true);
+    expect(createRes.body.consent_date).toBe('2026-03-11');
+    expect(createRes.body.consent_method).toBe('written');
+    expect(createRes.body.consent_witness).toBe('Deputy Manager');
+
+    const updateRes = await authed('put', `/api/hr/oh-referrals/${createRes.body.id}`).send({
+      _version: createRes.body.version,
+      consent_method: 'email',
+      consent_witness: 'Registered Manager',
+    }).expect(200);
+
+    expect(updateRes.body.consent_method).toBe('email');
+    expect(updateRes.body.consent_witness).toBe('Registered Manager');
   });
 
   it('rejects TUPE consultation windows shorter than 30 days', async () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useId } from 'react';
-import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE } from '../lib/design.js';
+import { BTN, CARD, TABLE, INPUT, MODAL, BADGE, PAGE, ESC_COLORS } from '../lib/design.js';
 import useDirtyGuard from '../hooks/useDirtyGuard.js';
 import Modal from '../components/Modal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -10,11 +10,51 @@ import { TUPE_STATUSES, getStatusBadge } from '../lib/hr.js';
 import FileAttachments from '../components/FileAttachments.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { useData } from '../contexts/DataContext.jsx';
+import { addDaysLocalISO, parseLocalDate, todayLocalISO } from '../lib/localDates.js';
 
 const TRANSFER_TYPES = [
   { id: 'incoming', name: 'Incoming' },
   { id: 'outgoing', name: 'Outgoing' },
 ];
+
+const TUPE_CONSULTATION_MIN_DAYS = 30;
+const OPEN_CONSULTATION_STATUSES = new Set(['planned', 'consultation']);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysUntil(dateStr) {
+  const date = parseLocalDate(dateStr);
+  const today = parseLocalDate(todayLocalISO());
+  if (!date || !today) return null;
+  return Math.ceil((date.getTime() - today.getTime()) / DAY_MS);
+}
+
+function getConsultationDeadline(item) {
+  if (!item.consultation_start) return '';
+  return addDaysLocalISO(item.consultation_start, TUPE_CONSULTATION_MIN_DAYS);
+}
+
+function getConsultationState(item) {
+  const deadline = getConsultationDeadline(item);
+  if (!deadline) return { deadline: '', level: 'gray', label: 'Not started', detail: '' };
+
+  if (item.consultation_end) {
+    if (item.consultation_end >= deadline) {
+      return { deadline, level: 'green', label: '30-day window met', detail: `Minimum window ended ${deadline}` };
+    }
+    return { deadline, level: 'red', label: 'Too short', detail: `Minimum consultation end date is ${deadline}` };
+  }
+
+  if (!OPEN_CONSULTATION_STATUSES.has(item.status)) {
+    return { deadline, level: 'gray', label: 'No end date', detail: `Minimum consultation end date is ${deadline}` };
+  }
+
+  const days = daysUntil(deadline);
+  if (days == null) return { deadline, level: 'gray', label: 'Pending', detail: `Minimum consultation end date is ${deadline}` };
+  if (days < 0) return { deadline, level: 'red', label: `Overdue by ${Math.abs(days)}d`, detail: 'Consultation end date has not been recorded.' };
+  if (days <= 7) return { deadline, level: 'amber', label: days === 0 ? 'Due today' : `Due in ${days}d`, detail: 'Record the consultation outcome or extend the plan.' };
+  if (days <= TUPE_CONSULTATION_MIN_DAYS) return { deadline, level: 'yellow', label: `Due in ${days}d`, detail: `Minimum consultation end date is ${deadline}` };
+  return { deadline, level: 'gray', label: 'Pending', detail: `Minimum consultation end date is ${deadline}` };
+}
 
 const emptyForm = () => ({
   transfer_type: 'incoming', transfer_date: '', transferor_name: '', transferee_name: '',
@@ -142,18 +182,20 @@ export default function TupeManager() {
     const { downloadXLSX } = await import('../lib/excel.js');
     downloadXLSX('tupe_transfers', [{
       name: 'TUPE',
-      headers: ['Transfer Type', 'Transfer Date', 'Transferor', 'Transferee', 'Status', 'Staff Affected', 'Consultation Start', 'Consultation End', 'ELI Sent'],
+      headers: ['Transfer Type', 'Transfer Date', 'Transferor', 'Transferee', 'Status', 'Reg 13 Deadline', 'Staff Affected', 'Consultation Start', 'Consultation End', 'ELI Sent'],
       rows: items.map(i => [
         TRANSFER_TYPES.find(t => t.id === i.transfer_type)?.name || i.transfer_type,
         i.transfer_date || '', i.transferor_name || '', i.transferee_name || '',
         TUPE_STATUSES.find(s => s.id === i.status)?.name || i.status,
-        i.staff_affected ?? '', i.consultation_start || '', i.consultation_end || '',
+        getConsultationDeadline(i), i.staff_affected ?? '', i.consultation_start || '', i.consultation_end || '',
         i.eli_sent_date || '',
       ]),
     }]);
   }
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+  const tableColumnCount = canEdit ? 8 : 7;
+  const formConsultationState = getConsultationState(form);
 
   if (loading) return <div className={PAGE.container}><LoadingState message="Loading TUPE transfers..." card /></div>;
 
@@ -183,6 +225,7 @@ export default function TupeManager() {
                 <th scope="col" className={TABLE.th}>Transferor</th>
                 <th scope="col" className={TABLE.th}>Transferee</th>
                 <th scope="col" className={TABLE.th}>Status</th>
+                <th scope="col" className={TABLE.th}>Reg 13 Deadline</th>
                 <th scope="col" className={TABLE.th}>Staff Affected</th>
                 {canEdit && <th scope="col" className={TABLE.th}>Actions</th>}
               </tr>
@@ -190,7 +233,7 @@ export default function TupeManager() {
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={TABLE.empty}>
+                  <td colSpan={tableColumnCount} className={TABLE.empty}>
                     <EmptyState
                       title="No TUPE transfers"
                       description={canEdit ? 'Create the first transfer record to track consultation, due diligence, and staff numbers.' : 'TUPE transfers will appear here once they have been recorded.'}
@@ -201,27 +244,43 @@ export default function TupeManager() {
                   </td>
                 </tr>
               )}
-              {items.map(item => (
-                <tr key={item.id} className={TABLE.tr}>
-                  <td className={TABLE.td}>
-                    <span className={BADGE[item.transfer_type === 'incoming' ? 'blue' : 'amber']}>
-                      {TRANSFER_TYPES.find(t => t.id === item.transfer_type)?.name || item.transfer_type}
-                    </span>
-                  </td>
-                  <td className={TABLE.td}>{item.transfer_date || '—'}</td>
-                  <td className={TABLE.td}>{item.transferor_name || '—'}</td>
-                  <td className={TABLE.td}>{item.transferee_name || '—'}</td>
-                  <td className={TABLE.td}>
-                    <span className={BADGE[getStatusBadge(item.status, TUPE_STATUSES)]}>
-                      {TUPE_STATUSES.find(s => s.id === item.status)?.name || item.status}
-                    </span>
-                  </td>
-                  <td className={TABLE.tdMono}>{item.staff_affected ?? '—'}</td>
-                  {canEdit && <td className={TABLE.td}>
-                    <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
-                  </td>}
-                </tr>
-              ))}
+              {items.map(item => {
+                const consultationState = getConsultationState(item);
+                const highlight = consultationState.level !== 'gray' && consultationState.level !== 'green'
+                  ? ESC_COLORS[consultationState.level].card
+                  : '';
+                return (
+                  <tr key={item.id} className={`${TABLE.tr} ${highlight}`}>
+                    <td className={TABLE.td}>
+                      <span className={BADGE[item.transfer_type === 'incoming' ? 'blue' : 'amber']}>
+                        {TRANSFER_TYPES.find(t => t.id === item.transfer_type)?.name || item.transfer_type}
+                      </span>
+                    </td>
+                    <td className={TABLE.td}>{item.transfer_date || '—'}</td>
+                    <td className={TABLE.td}>{item.transferor_name || '—'}</td>
+                    <td className={TABLE.td}>{item.transferee_name || '—'}</td>
+                    <td className={TABLE.td}>
+                      <span className={BADGE[getStatusBadge(item.status, TUPE_STATUSES)]}>
+                        {TUPE_STATUSES.find(s => s.id === item.status)?.name || item.status}
+                      </span>
+                    </td>
+                    <td className={TABLE.td}>
+                      {consultationState.deadline ? (
+                        <div className="space-y-1">
+                          <div className="font-mono text-xs">{consultationState.deadline}</div>
+                          <span className={BADGE[consultationState.level === 'yellow' ? 'orange' : consultationState.level]}>
+                            {consultationState.label}
+                          </span>
+                        </div>
+                      ) : '—'}
+                    </td>
+                    <td className={TABLE.tdMono}>{item.staff_affected ?? '—'}</td>
+                    {canEdit && <td className={TABLE.td}>
+                      <button className={BTN.ghost + ' ' + BTN.xs} onClick={() => openEdit(item)}>Edit</button>
+                    </td>}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -267,7 +326,7 @@ export default function TupeManager() {
                 </div>
                 <div>
                   <label htmlFor={staffAffectedId} className={INPUT.label}>Staff Affected</label>
-                  <input id={staffAffectedId} type="number" className={INPUT.base} value={form.staff_affected} onChange={e => f('staff_affected', e.target.value)} />
+                  <input id={staffAffectedId} type="number" min="0" inputMode="numeric" className={INPUT.base} value={form.staff_affected} onChange={e => f('staff_affected', e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -280,12 +339,20 @@ export default function TupeManager() {
                   <input id={consultationEndId} type="date" className={INPUT.base} value={form.consultation_end} onChange={e => f('consultation_end', e.target.value)} />
                 </div>
               </div>
+              {formConsultationState.deadline && (
+                <div className={`rounded-lg border px-3 py-2 text-sm ${ESC_COLORS[formConsultationState.level === 'gray' ? 'yellow' : formConsultationState.level].card}`}>
+                  <div className={`font-semibold ${ESC_COLORS[formConsultationState.level === 'gray' ? 'yellow' : formConsultationState.level].text}`}>
+                    Reg 13 consultation deadline: {formConsultationState.deadline}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-600">{formConsultationState.detail}</p>
+                </div>
+              )}
               <div>
                 <label htmlFor={eliSentDateId} className={INPUT.label}>ELI Sent Date</label>
                 <input id={eliSentDateId} type="date" className={INPUT.base} value={form.eli_sent_date} onChange={e => f('eli_sent_date', e.target.value)} />
               </div>
               <div className="border-t pt-3 mt-3 space-y-3">
-                <p className={`text-xs font-semibold ${TABLE.th}`}>Consultation & ELI</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Consultation & ELI</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label htmlFor={measuresLetterDateId} className={INPUT.label}>Measures Letter Date</label>
@@ -312,7 +379,7 @@ export default function TupeManager() {
                 <textarea id={measuresProposedId} className={INPUT.base} rows={3} value={form.measures_proposed} onChange={e => f('measures_proposed', e.target.value)} placeholder="Proposed measures affecting transferred staff..." />
               </div>
               <div className="border-t pt-3 mt-3 space-y-3">
-                <p className={`text-xs font-semibold ${TABLE.th}`}>Due Diligence & Claims</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Due Diligence & Claims</p>
                 <div>
                   <label htmlFor={ddNotesId} className={INPUT.label}>Due Diligence Notes</label>
                   <textarea id={ddNotesId} className={INPUT.base} rows={3} value={form.dd_notes} onChange={e => f('dd_notes', e.target.value)} />

@@ -28,6 +28,15 @@ const TABS = [
   { id: 'oh', label: 'OH Referrals' },
 ];
 
+const CONSENT_METHOD_OPTIONS = [
+  { id: '', name: 'Select method...' },
+  { id: 'written', name: 'Written' },
+  { id: 'email', name: 'Email' },
+  { id: 'digital', name: 'Digital' },
+  { id: 'verbal', name: 'Verbal' },
+  { id: 'other', name: 'Other' },
+];
+
 const emptyRtw = () => ({
   staff_id: '', absence_start_date: '', absence_end_date: '',
   rtw_date: todayLocalISO(), conducted_by: '',
@@ -42,7 +51,7 @@ const emptyOh = () => ({
   staff_id: '', referral_date: todayLocalISO(),
   reason: '', referred_by: '', provider: '', appointment_date: '',
   report_received: false, report_date: '', recommendations: '',
-  employee_consent_obtained: false, consent_date: '', questions_for_oh: '',
+  employee_consent_obtained: false, consent_date: '', consent_method: '', consent_witness: '', questions_for_oh: '',
   report_summary: '', fit_for_role: '', disability_likely: '', estimated_return_date: '',
   follow_up_date: '', notes: '',
 });
@@ -112,6 +121,8 @@ export default function AbsenceManager() {
   const ohAppointmentDateId = useId();
   const ohConsentObtainedId = useId();
   const ohConsentDateId = useId();
+  const ohConsentMethodId = useId();
+  const ohConsentWitnessId = useId();
   const ohQuestionsId = useId();
   const ohReportDateId = useId();
   const ohReportReceivedId = useId();
@@ -244,7 +255,8 @@ export default function AbsenceManager() {
       appointment_date: item.appointment_date || '',
       report_received: item.report_received ?? false, report_date: item.report_date || '',
       recommendations: item.recommendations || '', employee_consent_obtained: item.employee_consent_obtained ?? false,
-      consent_date: item.consent_date || '', questions_for_oh: Array.isArray(item.questions_for_oh) ? item.questions_for_oh.join('\n') : (item.questions_for_oh || ''),
+      consent_date: item.consent_date || '', consent_method: item.consent_method || '', consent_witness: item.consent_witness || '',
+      questions_for_oh: Array.isArray(item.questions_for_oh) ? item.questions_for_oh.join('\n') : (item.questions_for_oh || ''),
       report_summary: item.report_summary || '', fit_for_role: item.fit_for_role || '', disability_likely: item.disability_likely || '',
       estimated_return_date: item.estimated_return_date || '', follow_up_date: item.follow_up_date || '',
       notes: item.notes || '',
@@ -692,7 +704,7 @@ export default function AbsenceManager() {
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label htmlFor={rtwBradfordScoreId} className={INPUT.label}>Bradford Score After RTW</label>
-                    <input id={rtwBradfordScoreId} type="number" className={INPUT.base} value={rtwForm.bradford_score_after} onChange={e => rf('bradford_score_after', e.target.value)} />
+                    <input id={rtwBradfordScoreId} type="number" min="0" inputMode="numeric" className={INPUT.base} value={rtwForm.bradford_score_after} onChange={e => rf('bradford_score_after', e.target.value)} />
                     <p className="mt-1 text-xs text-gray-500">Bradford score = spells squared × days absent.</p>
                   </div>
                   <div>
@@ -803,9 +815,23 @@ export default function AbsenceManager() {
                 <label htmlFor={ohConsentObtainedId} className="text-sm text-gray-700">Consent Obtained</label>
               </div>
               {ohForm.employee_consent_obtained && (
-                <div>
-                  <label htmlFor={ohConsentDateId} className={INPUT.label}>Consent Date</label>
-                  <input id={ohConsentDateId} type="date" className={INPUT.base} value={ohForm.consent_date} onChange={e => ohf('consent_date', e.target.value)} />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor={ohConsentDateId} className={INPUT.label}>Consent Date</label>
+                      <input id={ohConsentDateId} type="date" className={INPUT.base} value={ohForm.consent_date} onChange={e => ohf('consent_date', e.target.value)} />
+                    </div>
+                    <div>
+                      <label htmlFor={ohConsentMethodId} className={INPUT.label}>Consent Method</label>
+                      <select id={ohConsentMethodId} className={INPUT.select} value={ohForm.consent_method} onChange={e => ohf('consent_method', e.target.value)}>
+                        {CONSENT_METHOD_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor={ohConsentWitnessId} className={INPUT.label}>Consent Witness</label>
+                    <input id={ohConsentWitnessId} className={INPUT.base} value={ohForm.consent_witness} onChange={e => ohf('consent_witness', e.target.value)} placeholder="Name or role of person who recorded consent" />
+                  </div>
                 </div>
               )}
             </div>

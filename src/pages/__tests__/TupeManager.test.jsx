@@ -105,6 +105,8 @@ describe('TupeManager', () => {
     });
     expect(screen.getByText('NewCo Care Group')).toBeInTheDocument();
     expect(screen.getByText('2026-06-01')).toBeInTheDocument();
+    expect(screen.getByText('2026-05-01')).toBeInTheDocument();
+    expect(screen.getByText('30-day window met')).toBeInTheDocument();
   });
 
   it('shows Incoming badge for incoming transfer type', async () => {
@@ -164,6 +166,8 @@ describe('TupeManager', () => {
 
     await user.click(screen.getByRole('button', { name: /New Transfer/i }));
     expect(screen.getByLabelText('Signed Date')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Consultation Start'), '2026-04-01');
+    expect(screen.getByText(/Reg 13 consultation deadline: 2026-05-01/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Measures Letter Date')).toBeInTheDocument();
     expect(screen.getByLabelText('ELI Complete')).toBeInTheDocument();
 

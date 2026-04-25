@@ -2,7 +2,7 @@ import { pool, createShaper, paginate } from './shared.js';
 
 const COLS = `id, home_id, staff_id,
   referral_date, referred_by, reason, questions_for_oh,
-  employee_consent_obtained, consent_date, oh_provider, appointment_date,
+  employee_consent_obtained, consent_date, consent_method, consent_witness, oh_provider, appointment_date,
   report_received_date, report_summary, fit_for_role, adjustments_recommended,
   estimated_return_date, disability_likely, follow_up_date, adjustments_implemented,
   notes, status, created_by, created_at, updated_at, deleted_at, version`;
@@ -11,7 +11,7 @@ const shapeOh = createShaper({
   fields: [
     'id', 'home_id', 'staff_id',
     'referral_date', 'referred_by', 'reason', 'questions_for_oh',
-    'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date',
+    'employee_consent_obtained', 'consent_date', 'consent_method', 'consent_witness', 'oh_provider', 'appointment_date',
     'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
     'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
     'notes', 'status', 'created_by', 'created_at', 'updated_at', 'version',
@@ -47,13 +47,14 @@ export async function createOhReferral(homeId, data, client) {
   const { rows } = await conn.query(
     `INSERT INTO hr_oh_referrals
        (home_id, staff_id, referral_date, referred_by, reason, questions_for_oh,
-         employee_consent_obtained, consent_date, oh_provider, appointment_date,
+         employee_consent_obtained, consent_date, consent_method, consent_witness, oh_provider, appointment_date,
          report_received_date, report_summary, fit_for_role, adjustments_recommended,
          estimated_return_date, disability_likely, follow_up_date, status, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING ${COLS}`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING ${COLS}`,
     [homeId, data.staff_id, data.referral_date, data.referred_by,
       data.reason, JSON.stringify(data.questions_for_oh || []),
       data.employee_consent_obtained ?? false, data.consent_date || null,
+      data.consent_method || null, data.consent_witness || null,
       data.oh_provider || null, data.appointment_date || null,
       data.report_received_date || null, data.report_summary || null, data.fit_for_role || null,
       data.adjustments_recommended || null, data.estimated_return_date || null,
@@ -69,7 +70,7 @@ export async function updateOhReferral(id, homeId, data, client, version) {
   const params = [id, homeId];
   const settable = [
     'referral_date', 'reason', 'referred_by',
-    'employee_consent_obtained', 'consent_date', 'oh_provider', 'appointment_date', 'status',
+    'employee_consent_obtained', 'consent_date', 'consent_method', 'consent_witness', 'oh_provider', 'appointment_date', 'status',
     'report_received_date', 'report_summary', 'fit_for_role', 'adjustments_recommended',
     'estimated_return_date', 'disability_likely', 'follow_up_date', 'adjustments_implemented',
     'questions_for_oh', 'notes',
