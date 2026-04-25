@@ -19,9 +19,18 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ -f "${SCRIPT_DIR}/load-env-file.sh" ]; then
+  # shellcheck source=scripts/load-env-file.sh
+  . "${SCRIPT_DIR}/load-env-file.sh"
+  load_env_keys "${APP_DIR}/.env" DB_PASSWORD DB_NAME DB_HOST DB_PORT DB_USER HEALTHCHECK_URL
+fi
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-BACKUP_DIR="${BACKUP_DIR:-./backups/db}"
+BACKUP_DIR="${BACKUP_DIR:-${APP_DIR}/backups/db}"
 VERIFY_DB="panama_verify_$$"  # PID-suffixed to avoid collisions
 
 DB_HOST="${DB_HOST:-localhost}"
