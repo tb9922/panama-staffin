@@ -4,6 +4,8 @@
 
 Run `bash scripts/verify-baseline.sh` before starting a new round. If VPS access is available, include `VPS_HOST`, `VPS_USER`, `VPS_PATH`, and optionally `VPS_SSH_KEY` so local, `origin/main`, and deployed code are compared.
 
+The full source-of-truth and release gate lives in [MAINLINE.md](MAINLINE.md).
+
 ## 2. Review Before Changing
 
 For each module, create or update a file from `docs/MODULE_REVIEW_TEMPLATE.md`. Cover:
@@ -27,6 +29,7 @@ Use the narrowest fast tests first, then broaden:
 npm run test:frontend -- src/pages/__tests__/ModuleName.test.jsx
 npm test -- tests/unit/specific.test.js
 npm run build
+npm run test:golden
 ```
 
 For route or database changes, run integration tests against a real test database:

@@ -67,19 +67,71 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    const adminHash = await bcrypt.hash('admin12345', 12);
-    const viewerHash = await bcrypt.hash('viewer12345', 12);
+    const testUsers = [
+      {
+        username: 'admin',
+        password: 'admin12345',
+        role: 'admin',
+        displayName: 'Admin',
+        isPlatformAdmin: true,
+        homeRole: 'home_manager',
+      },
+      {
+        username: 'manager',
+        password: 'manager12345',
+        role: 'viewer',
+        displayName: 'Home Manager',
+        isPlatformAdmin: false,
+        homeRole: 'home_manager',
+      },
+      {
+        username: 'coordinator',
+        password: 'coordinator12345',
+        role: 'viewer',
+        displayName: 'Shift Coordinator',
+        isPlatformAdmin: false,
+        homeRole: 'shift_coordinator',
+      },
+      {
+        username: 'viewer',
+        password: 'viewer12345',
+        role: 'viewer',
+        displayName: 'Viewer',
+        isPlatformAdmin: false,
+        homeRole: 'viewer',
+      },
+    ];
+
+    const userRows = await Promise.all(testUsers.map(async (user) => ({
+      ...user,
+      passwordHash: await bcrypt.hash(user.password, 12),
+    })));
 
     await client.query(
       `INSERT INTO users (username, password_hash, role, display_name, is_platform_admin)
-       VALUES ('admin', $1, 'admin', 'Admin', true), ('viewer', $2, 'viewer', 'Viewer', false)
+       SELECT username, password_hash, role, display_name, is_platform_admin
+       FROM jsonb_to_recordset($1::jsonb) AS users(
+         username text,
+         password_hash text,
+         role text,
+         display_name text,
+         is_platform_admin boolean
+       )
        ON CONFLICT (username) DO UPDATE
          SET password_hash = EXCLUDED.password_hash,
              role = EXCLUDED.role,
              display_name = EXCLUDED.display_name,
              is_platform_admin = EXCLUDED.is_platform_admin,
-             active = true`,
-      [adminHash, viewerHash]
+             active = true,
+             failed_login_count = 0,
+             locked_until = NULL`,
+      [JSON.stringify(userRows.map(user => ({
+        username: user.username,
+        password_hash: user.passwordHash,
+        role: user.role,
+        display_name: user.displayName,
+        is_platform_admin: user.isPlatformAdmin,
+      })))]
     );
 
     const { rows } = await client.query(
@@ -165,9 +217,16 @@ async function seed() {
 
     await client.query(
       `INSERT INTO user_home_roles (username, home_id, role_id, granted_by)
-       VALUES ('admin', $1, 'home_manager', 'seed-e2e'), ('viewer', $1, 'viewer', 'seed-e2e')
-       ON CONFLICT (username, home_id) DO NOTHING`,
-      [homeId]
+       SELECT username, $1, role_id, 'seed-e2e'
+       FROM jsonb_to_recordset($2::jsonb) AS roles(username text, role_id text)
+       ON CONFLICT (username, home_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             staff_id = NULL,
+             granted_by = EXCLUDED.granted_by`,
+      [
+        homeId,
+        JSON.stringify(userRows.map(user => ({ username: user.username, role_id: user.homeRole }))),
+      ]
     );
 
     await client.query(

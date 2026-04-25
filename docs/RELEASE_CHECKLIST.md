@@ -6,15 +6,18 @@ Current expected baseline is documented in
 ## Pre-Deploy
 
 - [ ] All changes committed and pushed
-- [ ] `npm test` - backend and integration suite passes
+- [ ] `bash scripts/verify-baseline.sh` confirms the work started from the expected mainline
+- [ ] `npm run lint` - lint passes
+- [ ] `npm run build` - production build passes
 - [ ] `npm run test:frontend` - frontend-focused suite passes
+- [ ] `npm run test:golden` - golden journey and role matrix pass
 - [ ] `npm run test:e2e` or the agreed targeted smoke slice passes
-- [ ] `npx eslint .` - 0 errors, 0 warnings
+- [ ] `npm run test:integration` passes for route, auth, migration, compliance, payroll, HR, GDPR, CQC, incident, or cross-module changes
 - [ ] `npm run audit:routes` - exit 0
 - [ ] `npm audit --omit=dev --json` - 0 production vulnerabilities
 - [ ] New migrations reviewed (if any)
 - [ ] `CLAUDE.md` updated if schema/API/test counts changed
-- [ ] `docs/HARDENING_SUMMARY_2026-03-29.md` updated if the baseline changed
+- [ ] `docs/CURRENT_BASELINE.md` and `docs/MAINLINE.md` updated if the baseline or release gate changed
 - [ ] Backup confirmed: `scripts/backup-db.sh` ran successfully within last hour
 - [ ] No open critical/blocking issues
 

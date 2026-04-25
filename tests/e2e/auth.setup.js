@@ -6,6 +6,8 @@ const UI_BASE = process.env.E2E_BASE_URL || 'http://localhost:5173';
 
 const USERS = [
   { username: 'admin', password: 'admin12345', stateFile: '.playwright/admin-state.json' },
+  { username: 'manager', password: 'manager12345', stateFile: '.playwright/manager-state.json' },
+  { username: 'coordinator', password: 'coordinator12345', stateFile: '.playwright/coordinator-state.json' },
   { username: 'viewer', password: 'viewer12345', stateFile: '.playwright/viewer-state.json' },
 ];
 

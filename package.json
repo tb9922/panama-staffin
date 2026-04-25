@@ -16,10 +16,12 @@
     "test": "vitest run",
     "test:ci": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "bash scripts/test-integration.sh",
+    "test:integration": "node scripts/run-bash-script.mjs scripts/test-integration.sh",
     "test:frontend": "vitest run --config vitest.config.frontend.js",
     "test:frontend:watch": "vitest --config vitest.config.frontend.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:golden": "playwright test tests/e2e/golden-journey.spec.js tests/e2e/role-matrix.spec.js --project=chromium",
+    "test:release": "npm run lint && npm run build && npm run test:frontend && npm run test:e2e"
   },
   "dependencies": {
     "@sentry/node": "^10.40.0",
