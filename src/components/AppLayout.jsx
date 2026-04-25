@@ -100,9 +100,13 @@ export default function AppLayout() {
   const activeSectionId = activeNavContext.section?.id || null;
   const expandedSections = useMemo(() => {
     const next = {};
+    const platformRouteActive = isPlatformAdmin && activeSectionId === 'platform';
     visibleSectionIds.forEach((sectionId) => {
-      const shouldForceOpen = isPlatformAdmin && activeSectionId === 'platform' && sectionId === 'platform';
-      next[sectionId] = sectionOverrides[sectionId] ?? (shouldForceOpen || Boolean(defaultExpandedSections[sectionId]));
+      next[sectionId] = sectionOverrides[sectionId] ?? (
+        platformRouteActive
+          ? sectionId === 'platform'
+          : Boolean(defaultExpandedSections[sectionId])
+      );
     });
     return next;
   }, [activeSectionId, defaultExpandedSections, isPlatformAdmin, sectionOverrides, visibleSectionIds]);
