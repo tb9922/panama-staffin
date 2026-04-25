@@ -101,10 +101,11 @@ export default function AppLayout() {
   const expandedSections = useMemo(() => {
     const next = {};
     visibleSectionIds.forEach((sectionId) => {
-      next[sectionId] = sectionOverrides[sectionId] ?? (sectionId === activeSectionId || Boolean(defaultExpandedSections[sectionId]));
+      const shouldForceOpen = isPlatformAdmin && activeSectionId === 'platform' && sectionId === 'platform';
+      next[sectionId] = sectionOverrides[sectionId] ?? (shouldForceOpen || Boolean(defaultExpandedSections[sectionId]));
     });
     return next;
-  }, [activeSectionId, defaultExpandedSections, sectionOverrides, visibleSectionIds]);
+  }, [activeSectionId, defaultExpandedSections, isPlatformAdmin, sectionOverrides, visibleSectionIds]);
   const notificationOpen = notificationPath === location.pathname;
 
   function toggleNotificationPanel() {
