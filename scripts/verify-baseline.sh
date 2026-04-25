@@ -21,7 +21,15 @@ fi
 
 if [[ -n "${VPS_HOST:-}" && -n "${VPS_PATH:-}" ]]; then
   ssh_target="${VPS_USER:-root}@$VPS_HOST"
-  vps_head="$(ssh "$ssh_target" "cd '$VPS_PATH' && git rev-parse --short HEAD")"
+  ssh_cmd=(ssh)
+  if [[ -n "${VPS_SSH_KEY:-}" ]]; then
+    ssh_cmd+=(-i "$VPS_SSH_KEY")
+  fi
+  if [[ -n "${VPS_SSH_OPTS:-}" ]]; then
+    # shellcheck disable=SC2206
+    ssh_cmd+=(${VPS_SSH_OPTS})
+  fi
+  vps_head="$("${ssh_cmd[@]}" "$ssh_target" "cd '$VPS_PATH' && git rev-parse --short HEAD")"
   echo "VPS HEAD:     $vps_head"
   if [[ "$vps_head" != "$local_short" ]]; then
     echo "WARNING: local HEAD does not match VPS HEAD" >&2

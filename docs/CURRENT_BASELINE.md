@@ -4,7 +4,7 @@ Last updated: 2026-04-25
 
 ## Source Of Truth
 
-- Current release tag: `v2026.04.25-hr-ui-compliance`
+- Current release tag: `v2026.04.25-hr-ui-compliance-verify`
 - Previous baseline tag: `v2026.04.25-auth-audit` at `ce1c4c6`
 - Working rule: future feature, UI, and compliance work should branch from the current release tag or a newer tagged baseline.
 - Verification rule: local `HEAD`, `origin/main`, and the VPS checkout must resolve to the same commit before a release is treated as current.
@@ -29,7 +29,7 @@ bash scripts/verify-baseline.sh
 With VPS checking enabled:
 
 ```bash
-VPS_HOST=your-host VPS_USER=your-user VPS_PATH=/path/to/panama-staffing bash scripts/verify-baseline.sh
+VPS_HOST=your-host VPS_USER=your-user VPS_PATH=/path/to/panama-staffing VPS_SSH_KEY=~/.ssh/id_ed25519 bash scripts/verify-baseline.sh
 ```
 
 For authenticated smoke checks:
