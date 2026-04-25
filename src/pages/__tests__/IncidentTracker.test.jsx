@@ -180,7 +180,7 @@ describe('IncidentTracker', () => {
     await waitFor(() => {
       expect(screen.getByText('No incidents recorded yet')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'New Incident' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Log first incident' })).toBeInTheDocument();
   });
 
   it('shows CQC "Pending" badge for notifiable but un-notified incidents (well within deadline)', async () => {
