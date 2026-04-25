@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, requireHomeAccess, requireModule } from '../middleware/auth.js';
+import { requireAuth, requireHomeAccess, requireModule } from '../middleware/auth.js';
 import { writeRateLimiter, readRateLimiter } from '../lib/rateLimiter.js';
 import * as homeRepo from '../repositories/homeRepo.js';  // kept for access-log optional home lookup
-import { hasAccess, findHomeSlugsForUser } from '../repositories/userHomeRepo.js';
+import { hasAccess, findHomeSlugsForUser, getHomeRole } from '../repositories/userHomeRepo.js';
+import { hasModuleAccess } from '../shared/roles.js';
 import * as gdprService from '../services/gdprService.js';
 import * as auditService from '../services/auditService.js';
 import { diffFields } from '../lib/audit.js';
@@ -418,20 +419,36 @@ router.put('/complaints/:id', writeRateLimiter, requireAuth, requireHomeAccess, 
 // ── Access Log ───────────────────────────────────────────────────────────────
 
 // GET /api/gdpr/access-log?home=X — access log scoped to home (or user's homes if omitted)
-router.get('/access-log', readRateLimiter, requireAuth, requireAdmin, async (req, res, next) => {
+// Permission: requires gdpr:read on the relevant home(s). Previously locked to JWT-claim
+// admin role only; home managers and DPOs (deputy_manager) need this for SAR responses.
+router.get('/access-log', readRateLimiter, requireAuth, async (req, res, next) => {
   try {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const homeP = homeIdSchema.safeParse(req.query.home);
+    const isPlatformAdmin = !!req.user?.is_platform_admin;
     let homeSlugs;
     if (homeP.success && homeP.data) {
       const home = await homeRepo.findBySlug(homeP.data);
       if (!home) return res.status(404).json({ error: 'Home not found' });
-      const allowed = await hasAccess(req.user.username, home.id);
-      if (!allowed) return res.status(403).json({ error: 'You do not have access to this home' });
+      const role = isPlatformAdmin ? null : await getHomeRole(req.user.username, home.id);
+      if (!isPlatformAdmin && (!role || !hasModuleAccess(role, 'gdpr', 'read'))) {
+        return res.status(403).json({ error: 'You do not have GDPR read access for this home' });
+      }
       homeSlugs = [home.slug];
     } else {
-      homeSlugs = await findHomeSlugsForUser(req.user.username);
+      const allSlugs = await findHomeSlugsForUser(req.user.username);
+      if (allSlugs.length === 0) return res.status(403).json({ error: 'No accessible homes for access log' });
+      const eligible = [];
+      for (const slug of allSlugs) {
+        const home = await homeRepo.findBySlug(slug);
+        if (!home) continue;
+        if (isPlatformAdmin) { eligible.push(slug); continue; }
+        const role = await getHomeRole(req.user.username, home.id);
+        if (role && hasModuleAccess(role, 'gdpr', 'read')) eligible.push(slug);
+      }
+      if (eligible.length === 0) return res.status(403).json({ error: 'No GDPR read permission on any accessible home' });
+      homeSlugs = eligible;
     }
     res.json(await gdprService.getAccessLog({ limit, offset, homeSlugs }));
   } catch (err) { next(err); }
