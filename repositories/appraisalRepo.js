@@ -117,7 +117,7 @@ export async function upsertAppraisal(homeId, staffId, record) {
            development_plan = $8,
            next_due = $9,
            notes = $10,
-           updated_at = NOW(),
+           updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
            deleted_at = NULL
        WHERE home_id = $1
          AND id = $2
@@ -138,7 +138,7 @@ export async function upsertAppraisal(homeId, staffId, record) {
   const { rows } = await pool.query(
     `INSERT INTO appraisals
        (id, home_id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp())
       ON CONFLICT (home_id, id) DO NOTHING
       RETURNING id, staff_id, date, appraiser, objectives, training_needs, development_plan, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.appraiser || null,

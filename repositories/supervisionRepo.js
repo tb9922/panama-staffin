@@ -116,7 +116,7 @@ export async function upsertSession(homeId, staffId, record) {
            actions = $7,
            next_due = $8,
            notes = $9,
-           updated_at = NOW(),
+           updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
            deleted_at = NULL
        WHERE home_id = $1
          AND id = $2
@@ -135,7 +135,7 @@ export async function upsertSession(homeId, staffId, record) {
 
   const { rows } = await pool.query(
     `INSERT INTO supervisions (id, home_id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp())
       ON CONFLICT (home_id, id) DO NOTHING
       RETURNING id, staff_id, date, supervisor, topics, actions, next_due, notes, updated_at`,
     [record.id, homeId, staffId, record.date, record.supervisor || null,

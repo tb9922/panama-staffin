@@ -14,7 +14,7 @@
     "audit:routes": "node scripts/audit-routes.js",
     "invite:staff": "node scripts/invite-staff.js",
     "test": "vitest run",
-    "test:ci": "vitest run --retry 1",
+    "test:ci": "vitest run",
     "test:watch": "vitest",
     "test:integration": "bash scripts/test-integration.sh",
     "test:frontend": "vitest run --config vitest.config.frontend.js",

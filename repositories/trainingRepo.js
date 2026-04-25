@@ -142,7 +142,7 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
             evidence_ref = $9,
             level = $10,
             notes = $11,
-            updated_at = NOW(),
+            updated_at = GREATEST(clock_timestamp(), date_trunc('milliseconds', updated_at) + interval '1 millisecond'),
             deleted_at = NULL
        WHERE home_id = $1
          AND staff_id = $2
@@ -177,7 +177,7 @@ export async function upsertRecord(homeId, staffId, typeId, record, client) {
     `INSERT INTO training_records
        (home_id, staff_id, training_type_id, completed, expiry, trainer, method,
          certificate_ref, evidence_ref, level, notes, updated_at, deleted_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NULL)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,clock_timestamp(),NULL)
        ON CONFLICT (home_id, staff_id, training_type_id) DO NOTHING
        RETURNING staff_id, training_type_id, completed, expiry, trainer, method, certificate_ref, evidence_ref, level, notes, updated_at`,
     [homeId, staffId, typeId,
