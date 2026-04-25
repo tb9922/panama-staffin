@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SENTRY_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
 
     services:
       postgres:
@@ -53,7 +55,7 @@ jobs:
           exit-code: 1
 
       - name: Upload frontend source maps to Sentry
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != ''
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && env.SENTRY_CONFIGURED == 'true'
         uses: getsentry/action-release@v3
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
