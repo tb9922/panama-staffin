@@ -468,6 +468,7 @@ export default function IncidentTracker() {
                       title="No incidents recorded yet"
                       description={canEdit ? 'Click "New Incident" to log the first incident for this home.' : 'No incidents have been logged for this home yet.'}
                       actionLabel={canEdit ? 'New Incident' : undefined}
+                      actionAriaLabel={canEdit ? 'Log first incident' : undefined}
                       onAction={canEdit ? openAdd : undefined}
                     />
                   </td>

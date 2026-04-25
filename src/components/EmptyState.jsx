@@ -5,6 +5,7 @@ export default function EmptyState({
   title,
   description,
   actionLabel,
+  actionAriaLabel,
   onAction,
   actionTo,
   className = '',
@@ -16,14 +17,14 @@ export default function EmptyState({
       {description && <p className="mt-1 text-sm text-[var(--ink-3)]">{description}</p>}
       {actionLabel && onAction && (
         <div className="mt-4">
-          <button type="button" onClick={onAction} className={`${BTN.primary} ${BTN.sm}`}>
+          <button type="button" onClick={onAction} className={`${BTN.primary} ${BTN.sm}`} aria-label={actionAriaLabel}>
             {actionLabel}
           </button>
         </div>
       )}
       {actionLabel && actionTo && (
         <div className="mt-4">
-          <Link to={actionTo} className={`${BTN.primary} ${BTN.sm}`}>
+          <Link to={actionTo} className={`${BTN.primary} ${BTN.sm}`} aria-label={actionAriaLabel}>
             {actionLabel}
           </Link>
         </div>
