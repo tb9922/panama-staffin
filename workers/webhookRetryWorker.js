@@ -8,7 +8,6 @@ function startInterval(fn, ms) {
   const timer = setInterval(() => {
     fn().catch((err) => logger.warn({ err: err?.message }, 'webhook worker task failed'));
   }, ms);
-  timer.unref();
   return timer;
 }
 
